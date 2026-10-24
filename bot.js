@@ -1,6 +1,6 @@
 import { Telegraf, Markup } from 'telegraf';
 
-const BOT_TOKEN = "8522267001:AAFEqwWem2UoBCYZvBtObWhggZaijbYHM"; 
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const WEB_APP_URL = "https://maiklshetinin.github.io/english-tma/";
 
 const bot = new Telegraf(BOT_TOKEN);
