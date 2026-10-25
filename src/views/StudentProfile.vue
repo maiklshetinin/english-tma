@@ -6,6 +6,7 @@ import StatsGrid from '../components/StatsGrid.vue'
 import PaymentCard from '../components/PaymentCard.vue'
 import DemoSwitch from '../components/DemoSwitch.vue'
 import AppVersion from '../components/AppVersion.vue'
+import LogoutButton from '../components/LogoutButton.vue'
 </script>
 <template>
   <div class="page">
@@ -15,6 +16,7 @@ import AppVersion from '../components/AppVersion.vue'
         <div class="hint">{{ auth.user?.username ? '@' + auth.user.username : 'Ученик' }} · {{ student.level }}</div></div>
     </div>
     <StatsGrid /><PaymentCard /><DemoSwitch />
+    <LogoutButton />
     <AppVersion />
   </div>
 </template>

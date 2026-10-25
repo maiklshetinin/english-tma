@@ -11,8 +11,13 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          VITE_BROWSER_USER: ${{ vars.BROWSER_USER }}   # необязательно: ваш @username — для открытия сайта в обычном браузере (подтянется аватарка из Telegram)
-          VITE_TEACHERS: ${{ vars.TEACHERS }}   # Settings → Secrets and variables → Actions → Variables: TEACHERS = ваш Telegram id или @username
+          # Settings → Secrets and variables → Actions → Variables (это не секреты: всё попадает в публичный JS)
+          VITE_API_URL: ${{ vars.API_URL }}                           # https://ваш-сервис.onrender.com
+          VITE_BOT_USERNAME: ${{ vars.BOT_USERNAME }}                 # без @, для кнопки входа в браузере
+          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}         # web-конфиг: Firebase → Project settings → Your apps
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }
   deploy:

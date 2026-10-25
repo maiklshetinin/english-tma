@@ -4,16 +4,13 @@ npm run build                   # сборка в dist/
 Для Telegram: захостите dist/ по HTTPS (Vercel/Netlify/GitHub Pages) и укажите URL в @BotFather → /newapp или Menu Button.
 Для теста на телефоне: ngrok http 5173 / cloudflared tunnel.
 
-## Роль в Telegram (без бэкенда)
-Задайте своего преподавателя: переменная сборки `VITE_TEACHERS` — Telegram id или @username через запятую (`.env` локально; на GitHub Pages — Settings → Secrets and variables → Actions → **Variables** → `TEACHERS`, затем перезапустите деплой). Такой пользователь открывает режим преподавателя, а в «Профиле» видит переключатель «Я ученик / Я преподаватель» (ученикам он не показывается). С бэкендом роль приходит из `/auth/telegram`.
-
-Открытие в обычном браузере: переменная `VITE_BROWSER_USER` — ваш @username (на GitHub — Variables → `BROWSER_USER`). Без неё вне Telegram приложение просит открыть его через бота. С ней в «Профиле» подтянется аватарка с `t.me/i/userpic` (нужен публичный username и фото, видимое всем); если `username` есть в `TEACHERS`, откроется режим преподавателя. Это не авторизация — пока данные mock, но с бэкендом нужен настоящий вход.
-
 ## Авторизация
-- Фронт: `src/composables/useTelegramAuth.js` — берёт `Telegram.WebApp.initData`, шлёт `Authorization: tma <initData>`.
-- Бэк: `server/validate-init-data.example.js` — проверка HMAC-подписи; роль и studentId определяются по user.id в БД.
-- Переменная `VITE_API_URL` в `.env`; без неё приложение работает на mock-данных.
-- Демо-переключатель ролей виден в `npm run dev` или с `?demo` в URL.
+Telegram подписывает данные пользователя → сервер на Render (`server/`) проверяет подпись, находит роль в Firestore и выдаёт Firebase-токен → фронт входит в Firebase (`src/composables/useTelegramAuth.js`).
+- **В Telegram** вход автоматический. **В обычном браузере** — кнопка «Войти через Telegram» (сессия сохраняется; «Выйти» — в «Профиле»). Домен сайта привяжите к боту: @BotFather → `/setdomain`.
+- **Преподаватель** — Telegram id в `TEACHER_IDS` на сервере. **Ученик** — преподаватель нажимает «Пригласить в приложение» в карточке ученика, отправляет ссылку; открыв её, ученик привязывается к своей записи (ссылка одноразовая). Остальным вход закрыт.
+- Настройка: `server/README.md` (Render), переменные фронта — `.env.example` / GitHub Variables (`API_URL`, `BOT_USERNAME`, `FIREBASE_*`), правила базы — `firestore.rules`.
+- В `npm run dev` вне Telegram включается демо-пользователь. Переключатель ролей виден в `npm run dev`, с `?demo` в URL и самому преподавателю.
+- Пока данные (расписание, путь, колоды) остаются на `mock.js`; вход и роли уже настоящие.
 
 ## Режим преподавателя
 Вкладки: Главная (расписание + ученики) · Путь (пресеты пути) · Ученики (CRM) · Слова (Anki) · Профиль.

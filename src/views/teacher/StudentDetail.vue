@@ -7,12 +7,23 @@ import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import PathEditor from '../../components/PathEditor.vue'
 import StudentDecks from '../../components/StudentDecks.vue'
+import { createInvite } from '../../composables/useTelegramAuth'
 const props = defineProps({ id: { type: Number, required: true }, backLabel: { type: String, default: 'Ученики' } })
 defineEmits(['back'])
 const { notify, haptic } = useTelegram()
 const s = computed(() => state.students.find(x => x.id === props.id))
 const PRESETS = ['Урок скоро', 'Сделай ДЗ', 'Пора оплатить', 'Повтори слова']
 const remind = (t) => { haptic('medium'); notify(`Отправлено: ${s.value.name} — ${t}`) }   // TODO: бэкенд → Bot API sendMessage
+
+// Ссылка-приглашение: ученик открывает её в Telegram, и его аккаунт привязывается к этой записи (одноразовая)
+const inviteUrl = ref(''), inviteBusy = ref(false)
+async function invite() {
+  inviteBusy.value = true
+  try {
+    inviteUrl.value = await createInvite(s.value.id)
+    try { await navigator.clipboard.writeText(inviteUrl.value); showToast('Ссылка скопирована — отправьте её ученику') } catch { /* покажем ссылку на экране */ }
+  } catch (e) { notify(e.message) } finally { inviteBusy.value = false }
+}
 
 // Пресеты пути: добавить в путь ученика / сохранить его путь как новый пресет
 const pid = ref(state.presets[0]?.id ?? null), pname = ref('')
@@ -35,6 +46,8 @@ const saveAsPreset = () => {
         <span class="badge ok">🔥 {{ s.streak }}</span><span class="badge ok">{{ s.coins }} монет</span>
         <span class="badge" :class="s.payment.status === 'paid' ? 'ok' : 'warn'">Уроков осталось: {{ s.payment.lessonsLeft }}</span>
       </div>
+      <div class="row2" style="margin-top:12px"><button class="btn ghost" :disabled="inviteBusy" @click="invite">Пригласить в приложение</button>
+        <input v-if="inviteUrl" :value="inviteUrl" readonly aria-label="Ссылка-приглашение" style="flex:1;min-width:180px;margin:0" @focus="$event.target.select()" /></div>
       <div class="row2" style="margin-top:12px"><AppIcon name="bell" :size="18" />
         <button v-for="p in PRESETS" :key="p" class="btn ghost" @click="remind(p)">{{ p }}</button></div>
     </div>

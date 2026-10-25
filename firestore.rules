@@ -1,0 +1,12 @@
+// Firebase → Firestore → Rules → вставить и опубликовать.
+// Пользователей и приглашения пишет только сервер (Admin SDK обходит правила), клиент их менять не может.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    match /users/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || request.auth.token.role == 'teacher');
+      allow write: if false;
+    }
+    match /{document=**} { allow read, write: if false; }   // всё остальное закрыто, пока не добавим правила для данных
+  }
+}

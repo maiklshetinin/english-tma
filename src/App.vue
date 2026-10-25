@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { state, setRole } from './store/mock'
-import { auth, authenticate } from './composables/useTelegramAuth'
+import { auth, authenticate, BOT_USERNAME } from './composables/useTelegramAuth'
+import TelegramLogin from './components/TelegramLogin.vue'
 import BottomNav from './components/BottomNav.vue'
 import Toast from './components/Toast.vue'
 import DragGhost from './components/DragGhost.vue'
@@ -27,6 +28,10 @@ onMounted(() => authenticate().then(() => { const r = new URLSearchParams(locati
 
 <template>
   <div v-if="auth.status === 'loading'" class="splash"><div class="spin" /></div>
+  <div v-else-if="auth.status === 'login'" class="splash card">
+    <h3>Вход</h3><p class="hint">Войдите через Telegram. Ученикам сначала нужна ссылка-приглашение от преподавателя: открыв её в Telegram, вы попадёте в приложение, и дальше можно входить здесь.</p>
+    <TelegramLogin v-if="BOT_USERNAME" />
+  </div>
   <div v-else-if="auth.status === 'error'" class="splash card">
     <h3>Не удалось войти</h3><p class="hint">{{ auth.error }}</p><button class="btn" @click="authenticate">Повторить</button>
   </div>
