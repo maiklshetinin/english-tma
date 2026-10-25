@@ -7,22 +7,26 @@ import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import PathEditor from '../../components/PathEditor.vue'
 import StudentDecks from '../../components/StudentDecks.vue'
-import { createInvite } from '../../composables/useTelegramAuth'
-const props = defineProps({ id: { type: Number, required: true }, backLabel: { type: String, default: 'Ученики' } })
+import { createInvite, archiveStudent, copyText, shareInvite } from '../../composables/useStudents'
+const props = defineProps({ id: { type: [String, Number], required: true }, backLabel: { type: String, default: 'Ученики' } })
 defineEmits(['back'])
 const { notify, haptic } = useTelegram()
 const s = computed(() => state.students.find(x => x.id === props.id))
 const PRESETS = ['Урок скоро', 'Сделай ДЗ', 'Пора оплатить', 'Повтори слова']
 const remind = (t) => { haptic('medium'); notify(`Отправлено: ${s.value.name} — ${t}`) }   // TODO: бэкенд → Bot API sendMessage
 
-// Ссылка-приглашение: ученик открывает её в Telegram, и его аккаунт привязывается к этой записи (одноразовая)
-const inviteUrl = ref(''), inviteBusy = ref(false)
+// Ссылка-приглашение: ученик открывает её в Telegram, и его аккаунт привязывается к этой записи (одноразовая).
+// Если запись уже привязана, новая ссылка переключит её на другой аккаунт — старый потеряет доступ.
+const inviteUrl = ref(''), inviteBusy = ref(false), confirmArchive = ref(false)
 async function invite() {
   inviteBusy.value = true
-  try {
-    inviteUrl.value = await createInvite(s.value.id)
-    try { await navigator.clipboard.writeText(inviteUrl.value); showToast('Ссылка скопирована — отправьте её ученику') } catch { /* покажем ссылку на экране */ }
-  } catch (e) { notify(e.message) } finally { inviteBusy.value = false }
+  try { inviteUrl.value = await createInvite(s.value.id); showToast((await copyText(inviteUrl.value)) ? 'Ссылка скопирована — отправьте её ученику' : 'Ссылка создана') }
+  catch (e) { notify(e.message) } finally { inviteBusy.value = false }
+}
+async function archive() {                                    // два нажатия: первое просит подтверждение
+  if (!confirmArchive.value) { confirmArchive.value = true; return }
+  try { const id = s.value.id; state.selectedStudentId = null; await archiveStudent(id); showToast('Ученик в архиве, доступ закрыт') }
+  catch (e) { notify(e.message) }
 }
 
 // Пресеты пути: добавить в путь ученика / сохранить его путь как новый пресет
@@ -38,7 +42,7 @@ const saveAsPreset = () => {
 }
 </script>
 <template>
-  <div class="page wide">
+  <div v-if="s" class="page wide">
     <button class="btn ghost" style="justify-self:start" @click="$emit('back')"><AppIcon name="back" :size="18" /> {{ backLabel }}</button>
     <div class="card">
       <div class="row2"><Avatar :s="s" :size="56" /><div><h3 style="margin:0">{{ s.name }}</h3><div class="hint">Уровень {{ s.level }} · прогресс {{ pctOf(pathOf(s.id)) }}%</div></div></div>
@@ -46,8 +50,14 @@ const saveAsPreset = () => {
         <span class="badge ok">🔥 {{ s.streak }}</span><span class="badge ok">{{ s.coins }} монет</span>
         <span class="badge" :class="s.payment.status === 'paid' ? 'ok' : 'warn'">Уроков осталось: {{ s.payment.lessonsLeft }}</span>
       </div>
-      <div class="row2" style="margin-top:12px"><button class="btn ghost" :disabled="inviteBusy" @click="invite">Пригласить в приложение</button>
-        <input v-if="inviteUrl" :value="inviteUrl" readonly aria-label="Ссылка-приглашение" style="flex:1;min-width:180px;margin:0" @focus="$event.target.select()" /></div>
+      <div class="row2" style="margin-top:12px">
+        <span class="badge" :class="s.status === 'active' ? 'ok' : 'warn'">{{ s.status === 'active' ? 'В приложении' : 'Ждёт приглашения' }}</span>
+        <button class="btn ghost" :disabled="inviteBusy" @click="invite">{{ s.status === 'active' ? 'Привязать другой аккаунт' : 'Пригласить в приложение' }}</button>
+      </div>
+      <div v-if="inviteUrl" class="row2" style="margin-top:8px">
+        <input :value="inviteUrl" readonly aria-label="Ссылка-приглашение" style="flex:1;min-width:180px;margin:0" @focus="$event.target.select()" />
+        <button class="btn ghost" @click="shareInvite(inviteUrl)">Отправить в Telegram</button>
+      </div>
       <div class="row2" style="margin-top:12px"><AppIcon name="bell" :size="18" />
         <button v-for="p in PRESETS" :key="p" class="btn ghost" @click="remind(p)">{{ p }}</button></div>
     </div>
@@ -61,5 +71,7 @@ const saveAsPreset = () => {
         <button class="btn ghost" @click="saveAsPreset">Сохранить путь как пресет</button></div>
     </div>
     <PathEditor :units="pathOf(s.id)" :student-id="s.id" />
+    <div class="card row2" style="justify-content:space-between"><span class="hint">Архив скрывает ученика и закрывает ему вход в приложение.</span>
+      <button class="btn ghost" style="color:var(--red)" @click="archive" @blur="confirmArchive = false">{{ confirmArchive ? 'Точно архивировать?' : 'Архивировать ученика' }}</button></div>
   </div>
 </template>

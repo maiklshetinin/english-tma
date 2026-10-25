@@ -5,7 +5,8 @@
 import { reactive } from 'vue'
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInWithCustomToken, signOut } from 'firebase/auth'
-import { state, setRole } from '../store/mock'
+import { state, setRole, loadDemoStudents } from '../store/mock'
+import { loadStudents, startRefresh, clearStudents } from './useStudents'
 
 const tg = window.Telegram?.WebApp
 const env = import.meta.env
@@ -31,8 +32,11 @@ function syncAvatar() {
 async function applySession(fbUser) {
   const c = (await fbUser.getIdTokenResult()).claims
   auth.user = { id: Number(String(fbUser.uid).replace('tg:', '')), first_name: c.tgName, username: c.tgUsername, photo_url: c.tgPhoto }
+  if (c.role === 'student') state.currentStudentId = c.studentId
+  await loadStudents()                                    // ученики с сервера (для ученика — только его запись)
+  startRefresh()
+  if (c.role === 'student' && !state.students.length) throw new Error('Ваша запись не найдена или в архиве. Попросите преподавателя прислать новое приглашение.')
   setRole(c.role); auth.teacher = c.role === 'teacher'
-  if (c.studentId) state.currentStudentId = c.studentId
   syncAvatar()
 }
 async function exchange(path, init) {
@@ -47,7 +51,7 @@ async function exchange(path, init) {
 export async function authenticate() {
   auth.status = 'loading'; auth.error = ''
   try {
-    if (!tg?.initData && env.DEV) { auth.user = { id: 0, first_name: 'Demo', username: 'demo' } }      // локальная разработка без Telegram
+    if (!tg?.initData && env.DEV) { auth.user = { id: 0, first_name: 'Demo', username: 'demo' }; loadDemoStudents() }      // локальная разработка без Telegram
     else if (!fb || !API) throw new Error('Не настроены переменные сервера и Firebase (см. README)')
     else if (tg?.initData) await exchange('/auth/telegram', { headers: { Authorization: `tma ${tg.initData}` } })
     else {
@@ -63,12 +67,5 @@ export async function loginWithWidget(data) {              // вызываетс
   try { await exchange('/auth/telegram-widget', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); auth.status = 'ready' }
   catch (e) { auth.error = e.message; auth.status = 'error' }
 }
-export async function logout() { await signOut(fb); auth.user = null; auth.teacher = false; auth.status = 'login' }
+export async function logout() { await signOut(fb); clearStudents(); auth.user = null; auth.teacher = false; auth.status = 'login' }
 export const canLogout = !tg?.initData && !!fb            // выход нужен только в браузере: в Telegram вход автоматический
-
-// Ссылка-приглашение ученику (только преподаватель)
-export async function createInvite(studentId) {
-  const r = await apiFetch('/invites', { method: 'POST', body: JSON.stringify({ studentId }) })
-  if (!r.ok) throw new Error(`Не удалось создать приглашение (${r.status})`)
-  return (await r.json()).url
-}

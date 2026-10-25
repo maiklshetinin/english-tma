@@ -8,6 +8,6 @@ const demo = import.meta.env.DEV || new URLSearchParams(location.search).has('de
 <template>
   <div v-if="demo || auth.teacher" class="card row">
     <div><b>{{ demo ? 'Демо-режим' : 'Режим просмотра' }}</b><div class="hint">Сейчас: {{ state.role === 'student' ? 'ученик' : 'преподаватель' }}</div></div>
-    <button class="btn ghost" @click="setRole(state.role === 'student' ? 'teacher' : 'student')">{{ state.role === 'student' ? 'Я преподаватель' : 'Я ученик' }}</button>
+    <button class="btn ghost" :disabled="state.role === 'teacher' && !state.students.length" :title="state.role === 'teacher' && !state.students.length ? 'Сначала добавьте ученика' : ''" @click="setRole(state.role === 'student' ? 'teacher' : 'student')">{{ state.role === 'student' ? 'Я преподаватель' : 'Я ученик' }}</button>
   </div>
 </template>

@@ -1,12 +1,12 @@
 <script setup>
 // Список учеников. Карточку можно перетащить в таблицу; урок из таблицы, брошенный сюда, снимается с расписания.
 import { ref, computed } from 'vue'
-import { state } from '../store/mock'
+import { state, handle } from '../store/mock'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
 const q = ref('')
-const list = computed(() => { const k = q.value.trim().toLowerCase(); return state.students.filter(s => !k || (s.name + ' ' + s.username).toLowerCase().includes(k)) })
+const list = computed(() => { const k = q.value.trim().toLowerCase(); return state.students.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
 const trash = computed(() => dnd.active && dnd.payload?.kind === 'lesson')
 const trashOver = computed(() => trash.value && dnd.over?.kind === 'panel')
 const open = (id) => { state.selectedStudentId = id }
@@ -21,7 +21,7 @@ const attention = (s) => s.payment.status !== 'paid'
       <div v-for="s in list" :key="s.id" class="st" role="button" tabindex="0" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
         @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
         <Avatar :s="s" :size="36" />
-        <span class="nm"><b>{{ s.name }}</b><small>@{{ s.username }}</small></span>
+        <span class="nm"><b>{{ s.name }}</b><small>{{ handle(s) }}</small></span>
         <i v-if="attention(s)" class="dot" title="Нужна оплата" />
         <AppIcon name="grip" :size="18" class="grip" />
       </div>

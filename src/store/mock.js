@@ -54,11 +54,8 @@ const BASIC = [card('deadline', 'крайний срок', 'The deadline is Frid
 const TRAVEL = [card('luggage', 'багаж'), card('boarding pass', 'посадочный талон'), card('delay', 'задержка рейса'), card('customs', 'таможня'), card('to book', 'бронировать', 'I booked a room.')]
 const PHRASAL = [card('to give up', 'сдаваться', 'Never give up!'), card('to look forward to', 'ждать с нетерпением'), card('to run out of', 'исчерпать запас'), card('to carry on', 'продолжать')]
 
-export const state = reactive({
-  role: 'student', tab: 'path',
-  selectedStudentId: null,
-  teacher: { name: 'Анна', username: 'your_teacher_username', color: '#58cc02' },   // photo_url подтягивается из Telegram (useTelegramAuth)
-  students: [
+// Демо-ученики — только для `npm run dev` вне Telegram (loadDemoStudents). В боевой версии ученики приходят из Firestore (useStudents.js).
+export const DEMO_STUDENTS = [
     { id: 1, name: 'Мария Д.', username: 'maria_d', color: '#ff4b4b', level: 'A2', streak: 3, coins: 80, payment: { status: 'due', until: iso(4), lessonsLeft: 0, packageSize: 8 } },
     { id: 2, name: 'Леня С.', username: 'lenya_eng', color: '#1cb0f6', level: 'B1', streak: 12, coins: 340, payment: { status: 'paid', until: iso(36), lessonsLeft: 2, packageSize: 8 } },
     { id: 3, name: 'Вика К.', username: 'vika_k', color: '#ce82ff', level: 'B2', streak: 27, coins: 910, payment: { status: 'paid', until: iso(60), lessonsLeft: 5, packageSize: 8 } },
@@ -66,7 +63,13 @@ export const state = reactive({
     { id: 5, name: 'Ярослав Н.', username: 'yaro_slav', color: '#ff9600', level: 'B1', streak: 15, coins: 520, payment: { status: 'paid', until: iso(40), lessonsLeft: 6, packageSize: 8 } },
     { id: 6, name: 'Егор Т.', username: 'egor_t', color: '#2b70c9', level: 'A1', streak: 1, coins: 20, payment: { status: 'overdue', until: iso(-3), lessonsLeft: 0, packageSize: 8 } },
     { id: 7, name: 'Анна М.', username: 'anya_m', color: '#ff86d0', level: 'B2', streak: 41, coins: 1280, payment: { status: 'paid', until: iso(50), lessonsLeft: 4, packageSize: 8 } },
-  ],
+]
+
+export const state = reactive({
+  role: 'student', tab: 'path',
+  selectedStudentId: null,
+  teacher: { name: 'Анна', username: 'your_teacher_username', color: '#58cc02' },   // photo_url подтягивается из Telegram (useTelegramAuth)
+  students: [],                                   // заполняется из Firestore (useStudents.js)
   currentStudentId: 1,
   presets: [                                    // пресеты пути — вкладка «Путь» преподавателя
     { id: nextId(), name: 'Базовый курс', units: presetBasic() },
@@ -94,13 +97,13 @@ const flat = (units) => units.flatMap(u => u.nodes)
 export const pathOf = (id) => state.paths[id] ?? []
 export const currentIdOf = (units) => flat(units).find(n => !n.done)?.id
 export const pctOf = (units) => { const a = flat(units); return a.length ? Math.round(a.filter(n => n.done).length / a.length * 100) : 0 }
-export const unitOf = (units) => units.find(u => u.nodes.some(n => !n.done))?.title ?? 'Курс завершён'
+export const unitOf = (units) => !units.length ? 'Путь не создан' : units.find(u => u.nodes.some(n => !n.done))?.title ?? 'Курс завершён'
 
 export const student = computed(() => state.students.find(s => s.id === state.currentStudentId))
 export const myPath = computed(() => pathOf(state.currentStudentId))
 export const currentNodeId = computed(() => currentIdOf(myPath.value))
 export const progressPct = computed(() => pctOf(myPath.value))
-export const needsPayment = computed(() => student.value.payment.status !== 'paid' || student.value.payment.lessonsLeft <= 2)
+export const needsPayment = computed(() => !!student.value && (student.value.payment.status !== 'paid' || student.value.payment.lessonsLeft <= 2))
 export const userKeyNow = computed(() => (state.role === 'teacher' ? 'teacher' : state.currentStudentId))
 export const decksFor = (userKey) => userKey === 'teacher' ? state.decks : state.decks.filter(d => d.forAll || d.assigned.includes(userKey))
 export const myDecks = computed(() => decksFor(state.currentStudentId))
@@ -232,4 +235,14 @@ export const TABS = {
     { id: 'profile', label: 'Профиль', icon: 'user' },
   ],
 }
-export function setRole(role) { state.role = role; state.tab = TABS[role][0].id; state.selectedStudentId = null }
+export const handle = (s) => (s.username ? '@' + s.username : s.status === 'invited' ? 'ждёт приглашения' : '')   // подпись под именем ученика
+export function loadDemoStudents() { state.students.splice(0, state.students.length, ...DEMO_STUDENTS) }
+// Режим «ученик» возможен, только если есть чьими глазами смотреть: преподаватель без учеников остаётся в своём режиме
+export function setRole(role) {
+  if (role === 'student' && !state.students.some(s => s.id === state.currentStudentId)) {
+    if (!state.students.length) return false
+    state.currentStudentId = state.students[0].id
+  }
+  state.role = role; state.tab = TABS[role][0].id; state.selectedStudentId = null
+  return true
+}

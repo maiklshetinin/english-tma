@@ -8,7 +8,7 @@ import TaskPath from './TaskPath.vue'
 import TaskSheet from './TaskSheet.vue'
 import NodeEditor from './NodeEditor.vue'
 import AppIcon from './AppIcon.vue'
-const props = defineProps({ units: { type: Array, required: true }, studentId: { type: Number, default: 0 }, preset: Boolean })
+const props = defineProps({ units: { type: Array, required: true }, studentId: { type: [String, Number], default: 0 }, preset: Boolean })
 const edit = ref(false), pos = ref(null), sel = ref(null)
 
 const add = ({ ui, type }) => { addNode(props.units, ui, type, !props.preset); pos.value = { ui, i: props.units[ui].nodes.length - 1 } }   // сразу открываем правку нового кружка

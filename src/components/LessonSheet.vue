@@ -1,7 +1,7 @@
 <script setup>
 // Шторка: либо карточка урока (отметить / открыть ученика / убрать), либо выбор ученика для пустого слота.
 import { computed } from 'vue'
-import { state, hourOf, fmtSlot } from '../store/mock'
+import { state, hourOf, fmtSlot, handle } from '../store/mock'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
 const props = defineProps({ lesson: Object, slot: Object })
@@ -21,7 +21,7 @@ const when = computed(() => props.lesson ? fmtSlot(props.lesson.node.date, hourO
       </template>
       <template v-else>
         <h2 style="margin:0">Кого назначить?</h2><div class="hint">{{ when }}</div>
-        <button v-for="st in state.students" :key="st.id" class="pick" @click="emit('pick', st.id)"><Avatar :s="st" :size="36" /><b>{{ st.name }}</b><small>@{{ st.username }}</small></button>
+        <button v-for="st in state.students" :key="st.id" class="pick" @click="emit('pick', st.id)"><Avatar :s="st" :size="36" /><b>{{ st.name }}</b><small>{{ handle(st) }}</small></button>
         <button class="btn ghost" style="color:var(--hint)" @click="emit('close')">Отмена</button>
       </template>
     </div>

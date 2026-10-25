@@ -4,7 +4,7 @@ import { state } from '../store/mock'
 import { deckCounts } from '../composables/useSrs'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
-const props = defineProps({ studentId: { type: Number, required: true } })
+const props = defineProps({ studentId: { type: [String, Number], required: true } })
 const has = (d) => d.forAll || d.assigned.includes(props.studentId)
 const cnt = (d) => deckCounts(d, props.studentId)
 function toggle(d) {
