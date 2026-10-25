@@ -11,6 +11,7 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
+          VITE_BROWSER_USER: ${{ vars.BROWSER_USER }}   # необязательно: ваш @username — для открытия сайта в обычном браузере (подтянется аватарка из Telegram)
           VITE_TEACHERS: ${{ vars.TEACHERS }}   # Settings → Secrets and variables → Actions → Variables: TEACHERS = ваш Telegram id или @username
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }

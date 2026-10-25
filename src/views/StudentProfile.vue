@@ -5,7 +5,6 @@ import Avatar from '../components/Avatar.vue'
 import StatsGrid from '../components/StatsGrid.vue'
 import PaymentCard from '../components/PaymentCard.vue'
 import DemoSwitch from '../components/DemoSwitch.vue'
-import FullscreenToggle from '../components/FullscreenToggle.vue'
 import AppVersion from '../components/AppVersion.vue'
 </script>
 <template>
@@ -15,7 +14,7 @@ import AppVersion from '../components/AppVersion.vue'
       <div><h3 style="margin:0">{{ auth.user?.first_name || student.name }}</h3>
         <div class="hint">{{ auth.user?.username ? '@' + auth.user.username : 'Ученик' }} · {{ student.level }}</div></div>
     </div>
-    <StatsGrid /><PaymentCard /><FullscreenToggle /><DemoSwitch />
+    <StatsGrid /><PaymentCard /><DemoSwitch />
     <AppVersion />
   </div>
 </template>

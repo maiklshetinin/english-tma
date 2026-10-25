@@ -7,6 +7,8 @@ npm run build                   # сборка в dist/
 ## Роль в Telegram (без бэкенда)
 Задайте своего преподавателя: переменная сборки `VITE_TEACHERS` — Telegram id или @username через запятую (`.env` локально; на GitHub Pages — Settings → Secrets and variables → Actions → **Variables** → `TEACHERS`, затем перезапустите деплой). Такой пользователь открывает режим преподавателя, а в «Профиле» видит переключатель «Я ученик / Я преподаватель» (ученикам он не показывается). С бэкендом роль приходит из `/auth/telegram`.
 
+Открытие в обычном браузере: переменная `VITE_BROWSER_USER` — ваш @username (на GitHub — Variables → `BROWSER_USER`). Без неё вне Telegram приложение просит открыть его через бота. С ней в «Профиле» подтянется аватарка с `t.me/i/userpic` (нужен публичный username и фото, видимое всем); если `username` есть в `TEACHERS`, откроется режим преподавателя. Это не авторизация — пока данные mock, но с бэкендом нужен настоящий вход.
+
 ## Авторизация
 - Фронт: `src/composables/useTelegramAuth.js` — берёт `Telegram.WebApp.initData`, шлёт `Authorization: tma <initData>`.
 - Бэк: `server/validate-init-data.example.js` — проверка HMAC-подписи; роль и studentId определяются по user.id в БД.
@@ -45,12 +47,12 @@ npm run build                   # сборка в dist/
 - Вместо плитки с монетами — круг прогресса пути, рядом круг выученных слов (`WordsRing.vue`; выучено = интервал повторения ≥ 7 дней), он есть и у преподавателя. Аватарки: `Avatar.vue` показывает фото из Telegram (`photo_url`), иначе инициал. Своё фото берётся из `initDataUnsafe.user.photo_url`; фото учеников для преподавателя отдаёт бэкенд (`GET /avatar/:tgId`, пример — `server/avatar.example.js`; у ученика нужно поле `tgId`).
 
 ## Версии
-- В «Профиле» внизу мелким текстом: `v0.2.0 · a1b2c3d · 25.10.2026, 11:30` — версия, метка коммита и время сборки. В GitHub Actions метку подставляет сам `GITHUB_SHA`, локально — `git`, без git будет `local` (`vite.config.js`, `AppVersion.vue`).
+- В «Профиле» внизу мелким текстом: `v0.2.0 · a1b2c3d` — версия и метка коммита. В GitHub Actions метку подставляет сам `GITHUB_SHA`, локально — `git`, без git будет `local` (`vite.config.js`, `AppVersion.vue`).
 - Выпуск: поднимите `version` в `package.json`, допишите `CHANGELOG.md`, закоммитьте и поставьте тег: `git tag v0.2.0 && git push --tags` (на GitHub: Releases → Draft a new release → выбрать тег).
 
 ## Стиль
 Duolingo: токены в `src/styles/theme.css` (цвета, толстые рамки, объёмные кнопки, шрифт Nunito), тёмная тема по Telegram/системе.
-Окно Telegram Desktop для мини-приложений узкое (размером управляет клиент). API мини-приложений не позволяет сделать «широкое окно» с кнопками свернуть/развернуть — есть только полноэкранный режим (Bot API 8.0+), который включает широкую раскладку, но на Windows перекрывает панель задач. Поэтому он включается только кнопкой «Полный экран» в «Профиле» (на `tdesktop`/`macos`); выбор запоминается (`useFullscreen.js`). На телефонах режим не трогается.
+Окно Telegram Desktop для мини-приложений узкое (размером управляет клиент); кнопка «Полный экран» удалена из проекта.
 Эксперимент: `useWindowSize.js` пробует на компьютере задать окну размер до 1600×800 (`window.resizeTo`); если окно Telegram не меняется — удалите файл и вызов в `useTelegram.js`.
 Демо-переключатель ролей — во вкладке «Профиль»; сразу открыть режим преподавателя: `?demo&role=teacher`.
 Данные: `src/store/mock.js` — students, paths[studentId], presets[], decks[].cards[], srs[userKey][cardId], log.

@@ -56,13 +56,14 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .tm { display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--hint-2) }
 .dh { display: grid; justify-items: center; padding: 4px 0; border-radius: 12px; font-size: 13px; color: var(--hint) }
 .dh small { font-weight: 800; font-size: 12px; color: var(--hint-2) } .dh.we b { color: var(--purple-d) }
-.dh.today { background: var(--blue); color: #fff; box-shadow: 0 3px 0 var(--blue-d) } .dh.today b, .dh.today small { color: #fff }
+/* «Сейчас» — красным и полупрозрачным (синий занят чипами уроков): день, время и ячейка на пересечении */
+.dh.today { background: rgba(255, 75, 75, .16); box-shadow: inset 0 0 0 2px rgba(255, 75, 75, .55), 0 3px 0 rgba(234, 43, 43, .45) } .dh.today b, .dh.today small { color: var(--red-d) }
 .cell { position: relative; height: 36px; border-radius: 10px; background: var(--surface); transition: background .1s, box-shadow .1s }
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
-/* Текущий час: время, день недели (.dh.today) и ячейка на пересечении подсвечены одним синим цветом */
-.tm.now { background: var(--blue-l); color: var(--blue); border: 2px solid var(--blue); border-bottom-width: 4px; border-radius: 10px; font-weight: 900 }
-.cell.now { background: var(--blue-l) }
-.cell.now::after { content: ''; position: absolute; inset: -3px; border: 2px solid var(--blue); border-radius: 12px; pointer-events: none }
+/* Текущий час: время, день недели (.dh.today) и ячейка на пересечении — один красный полупрозрачный цвет */
+.tm.now { background: rgba(255, 75, 75, .16); color: var(--red-d); border: 2px solid rgba(255, 75, 75, .55); border-bottom-width: 4px; border-radius: 10px; font-weight: 900 }
+.cell.now { background: rgba(255, 75, 75, .16) }
+.cell.now::after { content: ''; position: absolute; inset: -3px; border: 2px solid rgba(255, 75, 75, .6); border-radius: 12px; pointer-events: none }
 .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }

@@ -8,6 +8,10 @@ export const auth = reactive({ status: 'loading', user: null, error: '', teacher
 // Роль без бэкенда: Telegram-id или @username преподавателя(ей) в VITE_TEACHERS (через запятую), напр. "123456789,@my_username".
 // Это только удобство интерфейса — настоящая проверка роли должна быть на сервере (см. /auth/telegram).
 const TEACHERS = (import.meta.env.VITE_TEACHERS || '').split(',').map(x => x.trim().replace(/^@/, '').toLowerCase()).filter(Boolean)
+// Открытие в обычном браузере (не из Telegram): ник в VITE_BROWSER_USER → профиль и аватарка подтягиваются по нику.
+// Аватарка берётся с публичного адреса t.me/i/userpic (нужен публичный @username и фото, видимое всем). Это НЕ авторизация:
+// любой, у кого есть ссылка на сайт, увидит приложение так, будто он — этот пользователь. Пока данные mock — не страшно; с бэкендом нужен настоящий вход.
+const BROWSER_USER = (import.meta.env.VITE_BROWSER_USER || '').trim().replace(/^@/, '')
 const isListedTeacher = (u) => !!u && TEACHERS.some(t => t === String(u.id) || t === (u.username || '').toLowerCase())
 
 // Каждый запрос подписывается сырой строкой initData — токены и логины хранить не нужно.
@@ -25,8 +29,11 @@ export async function authenticate() {
   auth.status = 'loading'; auth.error = ''
   try {
     if (!tg?.initData) {                                   // открыто не из Telegram
-      if (!import.meta.env.DEV) throw new Error('Откройте приложение через Telegram-бота')
-      auth.user = { id: 0, first_name: 'Demo', username: 'demo' }
+      if (BROWSER_USER) {
+        auth.user = { id: 0, first_name: '', username: BROWSER_USER, photo_url: `https://t.me/i/userpic/320/${encodeURIComponent(BROWSER_USER)}.jpg` }
+        if (isListedTeacher(auth.user)) { setRole('teacher'); auth.teacher = true }
+      } else if (!import.meta.env.DEV) throw new Error('Откройте приложение через Telegram-бота')
+      else auth.user = { id: 0, first_name: 'Demo', username: 'demo' }
     } else {
       auth.user = tg.initDataUnsafe.user                   // только для мгновенного UI, ему доверять нельзя
       if (API) {                                           // источник истины — проверка подписи на сервере
