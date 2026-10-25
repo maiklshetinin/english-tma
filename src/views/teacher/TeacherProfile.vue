@@ -7,6 +7,7 @@ import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import DemoSwitch from '../../components/DemoSwitch.vue'
 import FullscreenToggle from '../../components/FullscreenToggle.vue'
+import AppVersion from '../../components/AppVersion.vue'
 const name = computed(() => auth.user?.first_name || state.teacher.name)
 const me = computed(() => ({ ...state.teacher, name: name.value }))     // запись преподавателя (photo_url — из Telegram)
 const weekLessons = computed(() => { const w = weekDates(0); return scheduleLessons.value.filter(l => w.includes(l.node.date)).length })
@@ -25,6 +26,7 @@ const needPay = computed(() => state.students.filter(s => s.payment.status !== '
     </section>
     <div class="card" style="display:grid;place-items:center"><WordsRing user-key="teacher" :size="76" /></div>
     <FullscreenToggle /><DemoSwitch />
+    <AppVersion />
   </div>
 </template>
 <style scoped>

@@ -6,6 +6,7 @@ import StatsGrid from '../components/StatsGrid.vue'
 import PaymentCard from '../components/PaymentCard.vue'
 import DemoSwitch from '../components/DemoSwitch.vue'
 import FullscreenToggle from '../components/FullscreenToggle.vue'
+import AppVersion from '../components/AppVersion.vue'
 </script>
 <template>
   <div class="page">
@@ -15,5 +16,6 @@ import FullscreenToggle from '../components/FullscreenToggle.vue'
         <div class="hint">{{ auth.user?.username ? '@' + auth.user.username : 'Ученик' }} · {{ student.level }}</div></div>
     </div>
     <StatsGrid /><PaymentCard /><FullscreenToggle /><DemoSwitch />
+    <AppVersion />
   </div>
 </template>
