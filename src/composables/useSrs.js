@@ -3,6 +3,7 @@
 // userKey — 'teacher' или id ученика, поэтому одну колоду можно назначить многим ученикам без смешения прогресса.
 import { state, ymd, relDay } from '../store/mock'
 
+export const LEARNED_DAYS = 7          // слово считается выученным, когда интервал повторения ≥ 7 дней
 export const today = () => ymd(new Date())
 const inDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d) }
 
@@ -80,7 +81,7 @@ export function userStats(userKey, decks) {
   let total = 0, learned = 0, mature = 0, newToday = 0
   for (const d of decks) for (const c of d.cards) {
     total++; const s = map[c.id]; if (!s) continue
-    learned++; if (s.interval >= 21) mature++; if (s.first === t) newToday++
+    learned++; if (s.interval >= LEARNED_DAYS) mature++; if (s.first === t) newToday++
   }
   const log = state.log[userKey] ?? {}
   const week = Array.from({ length: 7 }, (_, i) => { const d = inDays(i - 6); return { date: d, n: log[d] ?? 0 } })

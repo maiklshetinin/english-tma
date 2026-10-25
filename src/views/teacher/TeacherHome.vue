@@ -1,7 +1,7 @@
 <script setup>
 // Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок в его пути.
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { state, weekDates, weekRange, weekTitle, lessonMap, slotKey, isPastSlot, hourOf, fmtSlot,
+import { state, nowTick, weekDates, weekRange, weekTitle, lessonMap, slotKey, isPastSlot, hourOf, fmtSlot,
   scheduleLesson, relocateLesson, swapLessons, removeLesson, restoreLesson } from '../../store/mock'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
@@ -9,12 +9,11 @@ import { useTelegram } from '../../composables/useTelegram'
 import WeekGrid from '../../components/WeekGrid.vue'
 import StudentsPanel from '../../components/StudentsPanel.vue'
 import LessonSheet from '../../components/LessonSheet.vue'
-import AppIcon from '../../components/AppIcon.vue'
 import StudentDetail from './StudentDetail.vue'
 const { haptic } = useTelegram()
 
-const wk = ref(0)                                   // сдвиг окна «эта + следующая» в неделях (стрелки — в шапке первой таблицы)
-const w1 = computed(() => weekDates(wk.value)), w2 = computed(() => weekDates(wk.value + 1))
+// Без листания: сверху всегда текущая неделя, под ней следующая; даты подставляются сами (и обновляются при смене недели)
+const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (nowTick.value, weekDates(1)))
 const sheet = ref(null)                             // { lesson } | { slot }
 const name = (id) => state.students.find(s => s.id === id)?.name
 const occupant = (d, h) => lessonMap.value.get(slotKey(d, h))?.[0]
@@ -61,18 +60,11 @@ onUnmounted(() => setDropHandler(null))
     <section class="main">
       <div class="weeks">
         <div class="wcol">
-          <div class="wh">
-            <div><b>{{ weekTitle(wk) }}</b><span>{{ weekRange(w1) }}</span></div>
-            <div class="nav2">
-              <button class="btn ghost sm" aria-label="Назад на неделю" @click="wk--"><AppIcon name="back" :size="18" /></button>
-              <button class="btn ghost sm" :disabled="wk === 0" @click="wk = 0">Сегодня</button>
-              <button class="btn ghost sm" aria-label="Вперёд на неделю" @click="wk++"><AppIcon name="next" :size="18" /></button>
-            </div>
-          </div>
+          <div class="wh"><div><b>{{ weekTitle(0) }}</b><span>{{ weekRange(w1) }}</span></div></div>
           <WeekGrid :dates="w1" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
         </div>
         <div class="wcol">
-          <div class="wh"><div><b>{{ weekTitle(wk + 1) }}</b><span>{{ weekRange(w2) }}</span></div></div>
+          <div class="wh"><div><b>{{ weekTitle(1) }}</b><span>{{ weekRange(w2) }}</span></div></div>
           <WeekGrid :dates="w2" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
         </div>
       </div>
@@ -82,16 +74,14 @@ onUnmounted(() => setDropHandler(null))
 </template>
 
 <style scoped>
-.home { max-width: 1320px; margin: 0 auto; display: grid; gap: 12px; padding: 0 12px calc(100px + var(--safe-b)); grid-template-areas: 'side' 'main' }
+.home { max-width: 1140px; margin: 0 auto; display: grid; gap: 12px; padding: 0 12px calc(100px + var(--safe-b)); grid-template-areas: 'side' 'main' }
 .side { grid-area: side; position: sticky; top: 0; z-index: 8; padding: 10px 0 6px; background: var(--bg) }
 .main { grid-area: main; min-width: 0 }
-/* Две узкие таблицы стоят рядом, если помещаются, иначе друг под другом; таблица — с самого верха страницы */
-.weeks { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start }
-.wcol { display: grid; gap: 6px; flex: 1 1 100%; min-width: 0 }
-.nav2 { display: flex; gap: 6px }
-.wh { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 36px; padding: 0 4px; font-size: 14px; color: var(--hint) }
+/* Две таблицы друг под другом: сверху «Эта неделя», ниже «Следующая неделя» */
+.weeks { display: grid; gap: 14px }
+.wcol { display: grid; gap: 6px; min-width: 0 }
+.wh { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh b { display: block; font-weight: 900; letter-spacing: .5px; text-transform: uppercase; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
-@media (min-width: 720px) { .wcol { flex: 0 1 auto } }
 @media (min-width: 1024px) {
   .home { grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: 12px 0 40px }
   .side { position: sticky; top: 12px; height: calc(100vh - 24px); padding: 0; background: none; z-index: 1 }

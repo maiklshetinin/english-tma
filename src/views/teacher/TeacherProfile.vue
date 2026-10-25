@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { auth } from '../../composables/useTelegramAuth'
 import { state, scheduleLessons, weekDates } from '../../store/mock'
+import WordsRing from '../../components/WordsRing.vue'
 import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import DemoSwitch from '../../components/DemoSwitch.vue'
@@ -21,6 +22,7 @@ const needPay = computed(() => state.students.filter(s => s.payment.status !== '
       <div class="card m"><AppIcon name="calendar" :size="30" style="color:var(--green)" /><b>{{ weekLessons }}</b><span class="hint">уроков на неделе</span></div>
       <div class="card m wide"><AppIcon name="wallet" :size="30" style="color:var(--orange)" /><div><b>{{ needPay }}</b><div class="hint">учеников с оплатой, требующей внимания</div></div></div>
     </section>
+    <div class="card" style="display:grid;place-items:center"><WordsRing user-key="teacher" :size="76" /></div>
     <DemoSwitch />
   </div>
 </template>

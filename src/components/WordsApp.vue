@@ -36,7 +36,7 @@ const audience = (d) => {
         <div class="nums">
           <div><b>{{ stats.today }}</b><span class="hint">ответов сегодня</span></div>
           <div><b>{{ stats.learned }}<small>/{{ stats.total }}</small></b><span class="hint">слов начато</span></div>
-          <div><b>{{ stats.mature }}</b><span class="hint">выучено (21+ дн.)</span></div>
+          <div><b>{{ stats.mature }}</b><span class="hint">выучено (интервал 7+ дн.)</span></div>
         </div>
         <div class="bars" aria-label="Ответы за 7 дней">
           <div v-for="w in stats.week" :key="w.date" class="bw"><i :style="{ height: Math.max(4, w.n / max * 44) + 'px' }" :class="{ z: !w.n }" :title="w.n + ' ответов'" /><small>{{ dayName(w.date) }}</small></div>

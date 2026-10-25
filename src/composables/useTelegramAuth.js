@@ -3,7 +3,12 @@ import { state, setRole } from '../store/mock'
 
 const tg = window.Telegram?.WebApp
 const API = import.meta.env.VITE_API_URL          // напр. https://api.example.com ; без него — «мягкий» режим без бэкенда
-export const auth = reactive({ status: 'loading', user: null, error: '' })
+export const auth = reactive({ status: 'loading', user: null, error: '', teacher: false })
+
+// Роль без бэкенда: Telegram-id или @username преподавателя(ей) в VITE_TEACHERS (через запятую), напр. "123456789,@my_username".
+// Это только удобство интерфейса — настоящая проверка роли должна быть на сервере (см. /auth/telegram).
+const TEACHERS = (import.meta.env.VITE_TEACHERS || '').split(',').map(x => x.trim().replace(/^@/, '').toLowerCase()).filter(Boolean)
+const isListedTeacher = (u) => !!u && TEACHERS.some(t => t === String(u.id) || t === (u.username || '').toLowerCase())
 
 // Каждый запрос подписывается сырой строкой initData — токены и логины хранить не нужно.
 export const apiFetch = (path, opts = {}) => fetch(`${API}${path}`, {
@@ -28,9 +33,9 @@ export async function authenticate() {
         const r = await apiFetch('/auth/telegram', { method: 'POST' })
         if (!r.ok) throw new Error(`Не удалось подтвердить вход (${r.status})`)
         const { role, studentId } = await r.json()
-        setRole(role)
+        setRole(role); auth.teacher = role === 'teacher'
         if (studentId) state.currentStudentId = studentId
-      }
+      } else if (isListedTeacher(auth.user)) { setRole('teacher'); auth.teacher = true }   // без бэкенда: преподаватель из списка VITE_TEACHERS
     }
     syncAvatar()
     auth.status = 'ready'
