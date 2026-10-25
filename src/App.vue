@@ -39,6 +39,7 @@ onMounted(() => authenticate().then(() => { const r = new URLSearchParams(locati
 </template>
 
 <style>
+.shell { padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)) }
 .splash { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 12px; max-width: 360px; margin: 20vh auto 0; text-align: center }
 .spin { width: 40px; height: 40px; border-radius: 50%; border: 5px solid var(--border); border-top-color: var(--green); animation: r .8s linear infinite }
 @keyframes r { to { transform: rotate(360deg) } }

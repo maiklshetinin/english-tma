@@ -46,6 +46,7 @@ npm run build                   # сборка в dist/
 
 ## Стиль
 Duolingo: токены в `src/styles/theme.css` (цвета, толстые рамки, объёмные кнопки, шрифт Nunito), тёмная тема по Telegram/системе.
+Окно Telegram Desktop для мини-приложений узкое (размером управляет клиент). На компьютере (`tdesktop`/`macos`, Bot API 8.0+) приложение само запрашивает полноэкранный режим — тогда включается широкая раскладка; кнопка «Полный экран» в «Профиле» выключает/включает его, выбор запоминается (`useFullscreen.js`). На телефонах режим не трогается.
 Демо-переключатель ролей — во вкладке «Профиль»; сразу открыть режим преподавателя: `?demo&role=teacher`.
 Данные: `src/store/mock.js` — students, paths[studentId], presets[], decks[].cards[], srs[userKey][cardId], log.
 `vite.config.js` содержит `base: '/english-tma/'`: локально приложение открывается по http://localhost:5173/english-tma/.
