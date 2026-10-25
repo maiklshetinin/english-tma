@@ -18,11 +18,14 @@ function dropState(d, h) {                       // подсветка ячей�
   const o = dnd.over
   if (!dnd.active || o?.kind !== 'cell' || o.date !== d || o.hour !== h) return ''
   const occ = at(d, h)[0], p = dnd.payload
-  if (p.kind === 'lesson') return occ?.node.id === p.node.id ? '' : occ ? 'swap' : 'ok'
+  if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : occ ? 'swap' : 'ok'
   return occ ? 'bad' : 'ok'
 }
-const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payload.node.id === l.node.id
-const down = (e, l) => pressStart(e, { kind: 'lesson', node: l.node, studentId: l.studentId })
+const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payload.lesson.id === l.id
+const down = (e, l) => pressStart(e, { kind: 'lesson', lesson: l })
+// Подпись урока: ученик (у группы — первый, остальные «+N»). Ученика могли архивировать — тогда подписи нет, и ячейка просто пустая
+const first = (l) => stu(l.studentIds[0])
+const label = (l) => `${first(l)?.name ?? ''}${l.studentIds.length > 1 ? ` +${l.studentIds.length - 1}` : ''}, ${hh(l.hour)}`
 const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 </script>
 
@@ -36,11 +39,11 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
       <span class="tm" :class="{ now: rowNow(h) }">{{ hh(h) }}</span>
       <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h) }]"
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
-        <template v-for="l in at(d, h).slice(0, 1)" :key="l.node.id">
-          <button class="chip" :class="{ lifted: lifted(l) }" :title="`${stu(l.studentId).name}, ${l.node.time}`" :aria-label="`${stu(l.studentId).name}, ${l.node.time}`"
+        <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
+          <button v-if="first(l)" class="chip" :class="{ lifted: lifted(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
-            <Avatar :s="stu(l.studentId)" :size="20" /><span class="nm">{{ stu(l.studentId).name }}</span>
-            <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
+            <Avatar :s="first(l)" :size="20" /><span class="nm">{{ first(l).name }}</span>
+            <i v-if="l.studentIds.length > 1 || at(d, h).length > 1" class="more">+{{ l.studentIds.length - 1 + at(d, h).length - 1 }}</i>
           </button>
         </template>
       </div>

@@ -1,10 +1,10 @@
 <script setup>
 import { computed } from 'vue'
 import { dnd } from '../composables/useDnd'
-import { state, hourOf, hh } from '../store/mock'
+import { state, hh } from '../store/mock'
 import Avatar from './Avatar.vue'
 const p = computed(() => dnd.payload)
-const s = computed(() => p.value && state.students.find(x => x.id === (p.value.kind === 'student' ? p.value.id : p.value.studentId)))
+const s = computed(() => p.value && state.students.find(x => x.id === (p.value.kind === 'student' ? p.value.id : p.value.lesson.studentIds[0])))
 // Урок из таблицы: призрак — копия карточки того же размера, она лежит ровно поверх оригинала и просто едет за курсором (без «прыжка»).
 const lesson = computed(() => p.value?.kind === 'lesson' && dnd.grab)
 const pos = computed(() => lesson.value
@@ -15,7 +15,7 @@ const pos = computed(() => lesson.value
 <template>
   <div v-if="dnd.active && s" class="ghost" :class="{ lesson }" :style="pos" :title="s.name">
     <template v-if="lesson"><Avatar :s="s" :size="20" /><span class="nm">{{ s.name }}</span></template>
-    <template v-else><Avatar :s="s" :size="26" /><b>{{ s.name }}</b><small v-if="p.kind === 'lesson'">{{ hh(hourOf(p.node)) }}</small></template>
+    <template v-else><Avatar :s="s" :size="26" /><b>{{ s.name }}</b><small v-if="p.kind === 'lesson'">{{ hh(p.lesson.hour) }}</small></template>
   </div>
 </template>
 <style scoped>

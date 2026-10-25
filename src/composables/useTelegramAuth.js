@@ -7,6 +7,8 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, signInWithCustomToken, signOut } from 'firebase/auth'
 import { state, setRole, loadDemoStudents } from '../store/mock'
 import { loadStudents, startRefresh, clearStudents } from './useStudents'
+import { loadSchedule, startScheduleRefresh, clearSchedule } from './useSchedule'
+import { showToast } from './useToast'
 
 const tg = window.Telegram?.WebApp
 const env = import.meta.env
@@ -15,6 +17,7 @@ export const BOT_USERNAME = env.VITE_BOT_USERNAME            // для кноп�
 const fb = env.VITE_FIREBASE_API_KEY
   ? getAuth(initializeApp({ apiKey: env.VITE_FIREBASE_API_KEY, authDomain: env.VITE_FIREBASE_AUTH_DOMAIN, projectId: env.VITE_FIREBASE_PROJECT_ID, appId: env.VITE_FIREBASE_APP_ID }))
   : null
+export const isDemo = !tg?.initData && !!env.DEV             // локальная разработка без Telegram: сервера нет, данные — демо в памяти
 export const auth = reactive({ status: 'loading', user: null, error: '', teacher: false })   // status: loading | login | ready | error
 
 // Запросы к нашему серверу с Firebase ID-токеном (он сам обновляется)
@@ -35,6 +38,8 @@ async function applySession(fbUser) {
   if (c.role === 'student') state.currentStudentId = c.studentId
   await loadStudents()                                    // ученики с сервера (для ученика — только его запись)
   startRefresh()
+  loadSchedule().catch(() => showToast('Не удалось загрузить расписание', null, 'bad'))      // уроки двух недель (для ученика — только его)
+  startScheduleRefresh()
   if (c.role === 'student' && !state.students.length) throw new Error('Ваша запись не найдена или в архиве. Попросите преподавателя прислать новое приглашение.')
   setRole(c.role); auth.teacher = c.role === 'teacher'
   syncAvatar()
@@ -51,7 +56,7 @@ async function exchange(path, init) {
 export async function authenticate() {
   auth.status = 'loading'; auth.error = ''
   try {
-    if (!tg?.initData && env.DEV) { auth.user = { id: 0, first_name: 'Demo', username: 'demo' }; loadDemoStudents() }      // локальная разработка без Telegram
+    if (isDemo) { auth.user = { id: 0, first_name: 'Demo', username: 'demo' }; loadDemoStudents() }      // локальная разработка без Telegram
     else if (!fb || !API) throw new Error('Не настроены переменные сервера и Firebase (см. README)')
     else if (tg?.initData) await exchange('/auth/telegram', { headers: { Authorization: `tma ${tg.initData}` } })
     else {
@@ -67,5 +72,5 @@ export async function loginWithWidget(data) {              // вызываетс
   try { await exchange('/auth/telegram-widget', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); auth.status = 'ready' }
   catch (e) { auth.error = e.message; auth.status = 'error' }
 }
-export async function logout() { await signOut(fb); clearStudents(); auth.user = null; auth.teacher = false; auth.status = 'login' }
+export async function logout() { await signOut(fb); clearStudents(); clearSchedule(); auth.user = null; auth.teacher = false; auth.status = 'login' }
 export const canLogout = !tg?.initData && !!fb            // выход нужен только в браузере: в Telegram вход автоматический

@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { auth } from '../../composables/useTelegramAuth'
-import { state, scheduleLessons, weekDates } from '../../store/mock'
+import { state, weekDates } from '../../store/mock'
 import WordsRing from '../../components/WordsRing.vue'
 import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
@@ -11,7 +11,7 @@ import LogoutButton from '../../components/LogoutButton.vue'
 import PingButton from '../../components/PingButton.vue'
 const name = computed(() => auth.user?.first_name || state.teacher.name)
 const me = computed(() => ({ ...state.teacher, name: name.value }))     // запись преподавателя (photo_url — из Telegram)
-const weekLessons = computed(() => { const w = weekDates(0); return scheduleLessons.value.filter(l => w.includes(l.node.date)).length })
+const weekLessons = computed(() => { const w = weekDates(0); return state.lessons.filter(l => w.includes(l.date)).length })
 const needPay = computed(() => state.students.filter(s => s.payment.status !== 'paid' || s.payment.lessonsLeft <= 2).length)
 </script>
 <template>

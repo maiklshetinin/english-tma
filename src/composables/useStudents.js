@@ -1,8 +1,9 @@
 // Ученики. Сайт НЕ обращается к Firestore напрямую: всё идёт через наш сервер (Render), а он проверяет роль и работает с базой.
 // Realtime нет, поэтому список перечитывается: после входа, после каждого действия, при возврате в приложение и при открытии вкладки «Ученики».
-// Путь, расписание и колоды пока в mock.js (в памяти): у новых учеников они пустые.
+// Путь и колоды пока в mock.js (в памяти): у новых учеников они пустые. Расписание — в useSchedule.js (сохраняется на сервере).
 import { state } from '../store/mock'
 import { apiFetch } from './useTelegramAuth'
+import { loadSchedule } from './useSchedule'
 
 const fromApi = (x) => ({
   id: x.id, name: x.name || 'Без имени', level: x.level || 'A1', color: x.color, username: x.username || '', streak: x.streak ?? 0, coins: x.coins ?? 0,
@@ -46,7 +47,7 @@ export async function createInvite(studentId) {
 }
 export async function archiveStudent(studentId) {
   await call(`/students/${encodeURIComponent(studentId)}/archive`, { method: 'POST' }, 'Не удалось архивировать')
-  await loadStudents().catch(() => {})
+  await Promise.all([loadStudents().catch(() => {}), loadSchedule().catch(() => {})])      // сервер заодно убирает ученика из уроков
 }
 
 export async function copyText(text) {

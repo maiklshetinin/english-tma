@@ -1,8 +1,8 @@
 <script setup>
-// Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок в его пути.
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { state, nowTick, weekDates, weekRange, weekTitle, lessonMap, slotKey, hourOf, fmtSlot,
-  scheduleLesson, relocateLesson, swapLessons, removeLesson, restoreLesson } from '../../store/mock'
+// Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок (сохраняется на сервере).
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { state, nowTick, weekDates, weekRange, weekTitle, lessonMap, slotKey, fmtSlot } from '../../store/mock'
+import { createLesson, moveLesson, swapLessons, removeLesson, loadSchedule } from '../../composables/useSchedule'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
 import { useTelegram } from '../../composables/useTelegram'
@@ -16,39 +16,42 @@ const { haptic } = useTelegram()
 const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (nowTick.value, weekDates(1)))
 const sheet = ref(null)                             // { lesson } | { slot }
 const name = (id) => state.students.find(s => s.id === id)?.name
+const names = (l) => l.studentIds.map(name).filter(Boolean).join(', ')
 const occupant = (d, h) => lessonMap.value.get(slotKey(d, h))?.[0]
 
 function assign(sid, date, hour) {
-  const node = scheduleLesson(sid, date, hour); haptic('light')
-  showToast(`Урок назначен: ${name(sid)} · ${fmtSlot(date, hour)}`, () => removeLesson(sid, node.id))
+  const lesson = createLesson([sid], date, hour); haptic('light')
+  showToast(`Урок назначен: ${name(sid)} · ${fmtSlot(date, hour)}`, () => removeLesson(lesson))
 }
-function unassign(l) {
-  const node = removeLesson(l.studentId, l.node.id); sheet.value = null; haptic('light')
-  showToast(`Урок снят: ${name(l.studentId)}`, () => restoreLesson(l.studentId, node))
+function unassign(lesson) {
+  const copy = { studentIds: [...lesson.studentIds], date: lesson.date, hour: lesson.hour }
+  removeLesson(lesson); sheet.value = null; haptic('light')
+  showToast(`Урок снят: ${names(copy)}`, () => createLesson(copy.studentIds, copy.date, copy.hour))
 }
 function onDrop(p, t) {
-  if (t.kind === 'panel') return p.kind === 'lesson' ? unassign({ studentId: p.studentId, node: p.node }) : undefined
+  if (t.kind === 'panel') return p.kind === 'lesson' ? unassign(p.lesson) : undefined
   if (t.kind !== 'cell') return
   const occ = occupant(t.date, t.hour)
   if (p.kind === 'student') {
     if (occ) return showToast('Это время уже занято', null, 'bad')
     return assign(p.id, t.date, t.hour)
   }
-  if (occ?.node.id === p.node.id) return
-  const from = { date: p.node.date, hour: hourOf(p.node) }
+  const a = p.lesson
+  if (occ?.id === a.id) return
+  const from = { date: a.date, hour: a.hour }
   if (occ) {                                         // занято — меняем уроки местами
-    const a = { studentId: p.studentId, node: p.node }, b = { studentId: occ.studentId, node: occ.node }
-    swapLessons(a, b); haptic('light')
-    return showToast(`Уроки поменялись местами: ${name(a.studentId)} ⇄ ${name(b.studentId)}`, () => swapLessons(a, b))
+    swapLessons(a, occ); haptic('light')
+    return showToast(`Уроки поменялись местами: ${names(a)} ⇄ ${names(occ)}`, () => swapLessons(a, occ))
   }
-  relocateLesson(p.studentId, p.node.id, t.date, t.hour); haptic('light')
-  showToast(`Урок перенесён: ${name(p.studentId)} · ${fmtSlot(t.date, t.hour)}`, () => relocateLesson(p.studentId, p.node.id, from.date, from.hour))
+  moveLesson(a, t.date, t.hour); haptic('light')
+  showToast(`Урок перенесён: ${names(a)} · ${fmtSlot(t.date, t.hour)}`, () => moveLesson(a, from.date, from.hour))
 }
 const pick = (sid) => { const { date, hour } = sheet.value.slot; sheet.value = null; if (!occupant(date, hour)) assign(sid, date, hour) }
 const openStudent = (id) => { sheet.value = null; state.selectedStudentId = id }
 
-onMounted(() => setDropHandler(onDrop))
+onMounted(() => { setDropHandler(onDrop); loadSchedule().catch(() => {}) })      // при открытии вкладки перечитываем расписание
 onUnmounted(() => setDropHandler(null))
+watch(() => w1.value[0], () => loadSchedule().catch(() => {}))                    // наступила новая неделя: «следующая» стала «текущей», подгружаем новую «следующую»
 </script>
 
 <template>

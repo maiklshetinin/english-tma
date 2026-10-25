@@ -70,6 +70,7 @@ export const state = reactive({
   selectedStudentId: null,
   teacher: { name: 'Анна', username: 'your_teacher_username', color: '#58cc02' },   // photo_url подтягивается из Telegram (useTelegramAuth)
   students: [],                                   // заполняется из Firestore (useStudents.js)
+  lessons: [],                                    // уроки текущей и следующей недели: { id, date, hour, studentIds[] } — из Firestore (useSchedule.js)
   currentStudentId: 1,
   presets: [                                    // пресеты пути — вкладка «Путь» преподавателя
     { id: nextId(), name: 'Базовый курс', units: presetBasic() },
@@ -108,16 +109,14 @@ export const userKeyNow = computed(() => (state.role === 'teacher' ? 'teacher' :
 export const decksFor = (userKey) => userKey === 'teacher' ? state.decks : state.decks.filter(d => d.forAll || d.assigned.includes(userKey))
 export const myDecks = computed(() => decksFor(state.currentStudentId))
 export const deckOf = (n) => state.decks.find(d => d.id === n.deckId) || myDecks.value[0]
-export const allLessons = computed(() => state.students.flatMap(s => flat(pathOf(s.id)).filter(n => n.type === 'tutor')
-  .map(n => ({ ...n, studentId: s.id, studentName: s.name }))).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))
 
-// --- Расписание: уроки — это узлы пути с type 'tutor', date и time (целый час) ---
+// --- Расписание: урок — отдельная сущность { id, date, hour, studentIds[] } в state.lessons (в Firestore: коллекция lessons) ---
+// Учеников в уроке может быть несколько (группа). Изменения и сохранение — в composables/useSchedule.js.
 export const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const MONTHS = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
 export const HOURS = Array.from({ length: 15 }, (_, i) => i + 8)       // 08:00 … 22:00
 export const nowTick = ref(Date.now()); setInterval(() => { nowTick.value = Date.now() }, 60000)
 export const slotKey = (date, hour) => `${date}|${hour}`
-export const hourOf = (n) => parseInt(n.time, 10)
 
 export function weekDates(offsetWeeks = 0) {
   const d = new Date(); d.setHours(0, 0, 0, 0)
@@ -129,45 +128,15 @@ export const weekRange = (dates) => `${dm(dates[0])} — ${dm(dates[6])}`
 export const weekTitle = (off) => ({ '-1': 'Прошлая неделя', 0: 'Эта неделя', 1: 'Следующая неделя' }[off] ?? 'Неделя')
 export const fmtSlot = (date, hour) => `${DAYS[(new Date(date + 'T00:00').getDay() + 6) % 7]} ${dm(date)}, ${hh(hour)}`
 
-export const scheduleLessons = computed(() => state.students.flatMap(s => flat(pathOf(s.id))
-  .filter(n => n.type === 'tutor' && n.time).map(node => ({ node, studentId: s.id }))))
 export const lessonMap = computed(() => {            // слот → уроки (обычно один; если больше — в ячейке показывается значок)
   const m = new Map()
-  for (const l of scheduleLessons.value) { const k = slotKey(l.node.date, hourOf(l.node)); m.set(k, [...(m.get(k) ?? []), l]) }
+  for (const l of state.lessons) { const k = slotKey(l.date, l.hour); m.set(k, [...(m.get(k) ?? []), l]) }
   return m
 })
-
-const keyOf = (n) => n.date + (n.time || '')
-const nodeById = (sid, id) => flat(pathOf(sid)).find(n => n.id === id)
-function detach(sid, id) { for (const u of pathOf(sid)) { const i = u.nodes.findIndex(n => n.id === id); if (i >= 0) return u.nodes.splice(i, 1)[0] } }
-function attach(sid, node) {      // кладёт урок в путь ученика по дате, чтобы хронология пути не ломалась
-  if (!state.paths[sid]) state.paths[sid] = []
-  const us = state.paths[sid]
-  if (!us.length) us.push({ id: nextId(), title: 'Занятия', sub: '', nodes: [] })
-  const k = keyOf(node)
-  for (let ui = 0; ui < us.length; ui++) {
-    const i = us[ui].nodes.findIndex(n => keyOf(n) > k)
-    if (i < 0) continue
-    if (i === 0 && ui > 0) us[ui - 1].nodes.push(node); else us[ui].nodes.splice(i, 0, node)
-    return
-  }
-  us[us.length - 1].nodes.push(node)
-}
-export function scheduleLesson(sid, date, hour) {
-  const node = { id: nextId(), type: 'tutor', title: 'Урок', date, time: hh(hour), xp: 30, done: false }
-  attach(sid, node); return node
-}
-export function relocateLesson(sid, id, date, hour) {
-  const n = detach(sid, id); if (!n) return
-  n.date = date; n.time = hh(hour); attach(sid, n)
-}
-export function swapLessons(a, b) {
-  const [ad, ah, bd, bh] = [a.node.date, hourOf(a.node), b.node.date, hourOf(b.node)]
-  relocateLesson(a.studentId, a.node.id, bd, bh); relocateLesson(b.studentId, b.node.id, ad, ah)
-}
-export const removeLesson = (sid, id) => detach(sid, id)
-export const restoreLesson = (sid, node) => attach(sid, node)
-export const findLesson = (sid, id) => nodeById(sid, id)
+// Строки «ученик — урок» для вкладки «Уроки» (у группового урока по строке на каждого ученика)
+export const allLessons = computed(() => state.lessons.flatMap(l => l.studentIds.map(sid => ({
+  id: `${l.id}:${sid}`, title: 'Урок', date: l.date, time: hh(l.hour), done: false, studentId: sid, studentName: state.students.find(s => s.id === sid)?.name ?? '',
+}))).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))
 
 export const completeNode = (n, sid = state.currentStudentId) => { n.done = true; const s = state.students.find(x => x.id === sid); if (s) s.coins += n.xp }
 
@@ -236,7 +205,17 @@ export const TABS = {
   ],
 }
 export const handle = (s) => (s.username ? '@' + s.username : s.status === 'invited' ? 'ждёт приглашения' : '')   // подпись под именем ученика
-export function loadDemoStudents() { state.students.splice(0, state.students.length, ...DEMO_STUDENTS) }
+export function loadDemoStudents() {
+  state.students.splice(0, state.students.length, ...DEMO_STUDENTS)
+  // Демо-расписание: уроки из демо-путей, попавшие в текущую или следующую неделю (без этого таблица в `npm run dev` была бы пустой)
+  const wk = [...weekDates(0), ...weekDates(1)], used = new Set()
+  state.lessons.splice(0)
+  for (const st of DEMO_STUDENTS) for (const n of flat(state.paths[st.id])) {
+    const hour = parseInt(n.time, 10), k = slotKey(n.date, hour)
+    if (n.type !== 'tutor' || !wk.includes(n.date) || used.has(k)) continue
+    used.add(k); state.lessons.push({ id: `demo-${nextId()}`, date: n.date, hour, studentIds: [st.id] })
+  }
+}
 // Режим «ученик» возможен, только если есть чьими глазами смотреть: преподаватель без учеников остаётся в своём режиме
 export function setRole(role) {
   if (role === 'student' && !state.students.some(s => s.id === state.currentStudentId)) {
