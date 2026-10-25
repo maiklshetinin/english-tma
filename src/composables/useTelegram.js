@@ -1,5 +1,6 @@
 // Обёртка над Telegram WebApp SDK. Вне Telegram (браузер) безопасно работает "вхолостую".
 import { initFullscreen } from './useFullscreen'
+import { tryWideWindow } from './useWindowSize'
 const tg = window.Telegram?.WebApp
 
 // Тема: светлая/тёмная по Telegram или по системе. Цвета бренда фиксированные (Duolingo), меняются только поверхности.
@@ -16,6 +17,7 @@ export function initTelegram() {
   tg.expand()
   tg.onEvent?.('themeChanged', applyTheme)
   initFullscreen()
+  tryWideWindow()
 }
 export const useTelegram = () => ({
   tg,

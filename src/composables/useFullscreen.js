@@ -1,7 +1,7 @@
-// Окно Telegram Desktop для мини-приложений узкое, и размер им управляет клиент (expand() там ничего не делает).
-// Обойти можно полноэкранным режимом (Bot API 8.0+): на компьютере запрашиваем его сами при запуске,
-// и тогда включается широкая раскладка (панель учеников справа). Выключатель — в «Профиле»; выбор запоминается.
-// Телефоны не трогаем: там приложение и так открывается шторкой на весь экран.
+// Окно Telegram Desktop для мини-приложений узкое, и размер/положение окна задаёт сам клиент (expand() там ничего не делает;
+// «широкого окна с кнопками свернуть/развернуть» API не даёт). Единственное, что есть, — полноэкранный режим (Bot API 8.0+):
+// он включает широкую раскладку, но на Windows перекрывает панель задач. Поэтому сам он НЕ включается — только кнопкой в «Профиле».
+// Выбор запоминается: если полный экран был включён, при следующем запуске он включится снова. Телефоны не трогаем.
 import { reactive } from 'vue'
 
 const tg = window.Telegram?.WebApp
@@ -11,7 +11,7 @@ export const fs = reactive({
   available: !!tg && DESKTOP.includes(tg.platform) && typeof tg.requestFullscreen === 'function' && !!tg.isVersionAtLeast?.('8.0'),
   on: !!tg?.isFullscreen,
 })
-const wanted = () => { try { return localStorage.getItem(KEY) !== '0' } catch { return true } }   // по умолчанию включено
+const wanted = () => { try { return localStorage.getItem(KEY) === '1' } catch { return false } }   // по умолчанию выключено
 const remember = (v) => { try { localStorage.setItem(KEY, v ? '1' : '0') } catch { /* нет хранилища — не страшно */ } }
 
 export function initFullscreen() {
