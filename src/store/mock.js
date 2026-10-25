@@ -115,7 +115,6 @@ export const HOURS = Array.from({ length: 15 }, (_, i) => i + 8)       // 08:00 
 export const nowTick = ref(Date.now()); setInterval(() => { nowTick.value = Date.now() }, 60000)
 export const slotKey = (date, hour) => `${date}|${hour}`
 export const hourOf = (n) => parseInt(n.time, 10)
-export const isPastSlot = (date, hour) => new Date(`${date}T${pad(hour + 1)}:00`).getTime() <= nowTick.value   // слот прошёл, когда закончился его час
 
 export function weekDates(offsetWeeks = 0) {
   const d = new Date(); d.setHours(0, 0, 0, 0)

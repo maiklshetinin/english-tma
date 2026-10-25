@@ -1,43 +1,45 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
-import { HOURS, DAYS, hh, slotKey, lessonMap, isPastSlot, ymd, state } from '../store/mock'
+import { computed } from 'vue'
+import { HOURS, DAYS, hh, slotKey, lessonMap, nowTick, ymd, state } from '../store/mock'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
-import AppIcon from './AppIcon.vue'
-defineProps({ dates: { type: Array, required: true } })
+const props = defineProps({ dates: { type: Array, required: true } })
 const emit = defineEmits(['cell', 'lesson'])
-const today = ymd(new Date())
+// «Сейчас»: сегодняшний день и текущий час (обновляется раз в минуту). Подсвечивается только в той таблице, где есть сегодняшний день.
+const now = computed(() => { const d = new Date(nowTick.value); return { date: ymd(d), hour: d.getHours() } })
+const hasToday = computed(() => props.dates.includes(now.value.date))
+const rowNow = (h) => hasToday.value && h === now.value.hour
+const cellNow = (d, h) => d === now.value.date && h === now.value.hour
 const stu = (id) => state.students.find(s => s.id === id)
 const at = (d, h) => lessonMap.value.get(slotKey(d, h)) ?? []
 
-function dropState(d, h) {                       // подсветка ячейки под курсором: ok / swap / bad
+function dropState(d, h) {                       // подсветка ячейки под курсором: ok / swap / bad (в обеих таблицах одинаково)
   const o = dnd.over
   if (!dnd.active || o?.kind !== 'cell' || o.date !== d || o.hour !== h) return ''
-  if (isPastSlot(d, h)) return 'bad'
   const occ = at(d, h)[0], p = dnd.payload
-  if (p.kind === 'lesson') return occ?.node.id === p.node.id ? '' : occ ? (occ.node.done ? 'bad' : 'swap') : 'ok'
+  if (p.kind === 'lesson') return occ?.node.id === p.node.id ? '' : occ ? 'swap' : 'ok'
   return occ ? 'bad' : 'ok'
 }
 const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payload.node.id === l.node.id
-const down = (e, l) => { if (!l.node.done) pressStart(e, { kind: 'lesson', node: l.node, studentId: l.studentId }) }
-const clickCell = (d, h) => { if (!at(d, h).length && !isPastSlot(d, h)) emit('cell', { date: d, hour: h }) }
+const down = (e, l) => pressStart(e, { kind: 'lesson', node: l.node, studentId: l.studentId })
+const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 </script>
 
 <template>
   <div class="card wk">
     <div class="g head">
       <span class="corner" />
-      <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === today }"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
+      <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
-      <span class="tm">{{ hh(h) }}</span>
-      <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { past: isPastSlot(d, h), free: !at(d, h).length && !isPastSlot(d, h) }]"
+      <span class="tm" :class="{ now: rowNow(h) }">{{ hh(h) }}</span>
+      <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h) }]"
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.node.id">
-          <button class="chip" :class="{ done: l.node.done, lifted: lifted(l) }" :title="`${stu(l.studentId).name}, ${l.node.time}`" :aria-label="`${stu(l.studentId).name}, ${l.node.time}`"
+          <button class="chip" :class="{ lifted: lifted(l) }" :title="`${stu(l.studentId).name}, ${l.node.time}`" :aria-label="`${stu(l.studentId).name}, ${l.node.time}`"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <Avatar :s="stu(l.studentId)" :size="20" /><span class="nm">{{ stu(l.studentId).name }}</span>
-            <AppIcon v-if="l.node.done" name="check" :size="12" class="ok" />
             <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
           </button>
         </template>
@@ -57,7 +59,10 @@ const clickCell = (d, h) => { if (!at(d, h).length && !isPastSlot(d, h)) emit('c
 .dh.today { background: var(--blue); color: #fff; box-shadow: 0 3px 0 var(--blue-d) } .dh.today b, .dh.today small { color: #fff }
 .cell { position: relative; height: 36px; border-radius: 10px; background: var(--surface); transition: background .1s, box-shadow .1s }
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
-.cell.past { background: transparent; box-shadow: inset 0 0 0 2px var(--surface) }
+/* Текущий час: время, день недели (.dh.today) и ячейка на пересечении подсвечены одним синим цветом */
+.tm.now { background: var(--blue-l); color: var(--blue); border: 2px solid var(--blue); border-bottom-width: 4px; border-radius: 10px; font-weight: 900 }
+.cell.now { background: var(--blue-l) }
+.cell.now::after { content: ''; position: absolute; inset: -3px; border: 2px solid var(--blue); border-radius: 12px; pointer-events: none }
 .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
@@ -65,10 +70,8 @@ const clickCell = (d, h) => { if (!at(d, h).length && !isPastSlot(d, h)) emit('c
   border: 2px solid var(--blue); border-bottom-width: 4px; border-radius: 10px; background: var(--blue-l); color: var(--blue-d);
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
-.chip.done { border-color: var(--green); background: var(--green-l); color: var(--green-d); cursor: pointer }
 .chip :deep(.av) { width: 20px !important; height: 20px !important; font-size: 10px !important }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.chip .ok { flex: none }
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
 @media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px } .cell { height: 40px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
 @media (max-width: 420px) { .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 34px } }

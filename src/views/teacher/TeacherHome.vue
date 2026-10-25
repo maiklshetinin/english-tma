@@ -1,7 +1,7 @@
 <script setup>
 // Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок в его пути.
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { state, nowTick, weekDates, weekRange, weekTitle, lessonMap, slotKey, isPastSlot, hourOf, fmtSlot,
+import { state, nowTick, weekDates, weekRange, weekTitle, lessonMap, slotKey, hourOf, fmtSlot,
   scheduleLesson, relocateLesson, swapLessons, removeLesson, restoreLesson } from '../../store/mock'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
@@ -29,7 +29,6 @@ function unassign(l) {
 function onDrop(p, t) {
   if (t.kind === 'panel') return p.kind === 'lesson' ? unassign({ studentId: p.studentId, node: p.node }) : undefined
   if (t.kind !== 'cell') return
-  if (isPastSlot(t.date, t.hour)) return showToast('Нельзя назначить урок в прошедшее время', null, 'bad')
   const occ = occupant(t.date, t.hour)
   if (p.kind === 'student') {
     if (occ) return showToast('Это время уже занято', null, 'bad')
@@ -38,7 +37,6 @@ function onDrop(p, t) {
   if (occ?.node.id === p.node.id) return
   const from = { date: p.node.date, hour: hourOf(p.node) }
   if (occ) {                                         // занято — меняем уроки местами
-    if (occ.node.done) return showToast('Это время уже занято', null, 'bad')
     const a = { studentId: p.studentId, node: p.node }, b = { studentId: occ.studentId, node: occ.node }
     swapLessons(a, b); haptic('light')
     return showToast(`Уроки поменялись местами: ${name(a.studentId)} ⇄ ${name(b.studentId)}`, () => swapLessons(a, b))
