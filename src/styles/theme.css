@@ -1,31 +1,74 @@
+/* Стиль Duolingo: плоские цвета, толстые рамки, «объёмные» кнопки с нижней гранью, округлый шрифт. */
 :root {
-  /* Фолбэки действуют вне Telegram; внутри подставляются --tg-theme-* */
-  --bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
-  --card: var(--tg-theme-section-bg-color, #ffffff);
-  --text: var(--tg-theme-text-color, #111111);
-  --hint: var(--tg-theme-hint-color, #8e8e93);
-  --accent: var(--tg-theme-button-color, #2481cc);
-  --accent-text: var(--tg-theme-button-text-color, #ffffff);
-  --radius: 20px;
-  --shadow: 0 4px 18px rgba(0, 0, 0, .07);
-  --ok: #34c759; --warn: #ff9500; --bad: #ff3b30;
+  --green: #58cc02; --green-d: #58a700; --green-l: #d7ffb8;
+  --blue: #1cb0f6; --blue-d: #1899d6; --blue-l: #ddf4ff;
+  --red: #ff4b4b; --red-d: #ea2b2b; --red-l: #ffdfe0;
+  --orange: #ff9600; --orange-d: #cc7900; --orange-l: #fff0d0;
+  --yellow: #ffc800; --yellow-d: #e5a500;
+  --purple: #ce82ff; --purple-d: #a560e8; --purple-l: #f3e2ff;
+
+  --bg: #ffffff; --card: #ffffff; --surface: #f7f7f7; --border: #e5e5e5;
+  --text: #4b4b4b; --hint: #777777; --hint-2: #afafaf;
+
+  --accent: var(--green); --accent-d: var(--green-d); --accent-text: #ffffff;
+  --ok: var(--green); --warn: var(--orange); --bad: var(--red);
+  --radius: 16px; --shadow: 0 3px 0 var(--border);
   --safe-b: var(--tg-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --font: 'Nunito', 'DIN Rounded', 'SF Pro Rounded', ui-rounded, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
+html[data-theme='dark'] {
+  --bg: #131f24; --card: #131f24; --surface: #202f36; --border: #37464f;
+  --text: #f1f7fb; --hint: #9fb3bd; --hint-2: #6b808a;
+  --green-l: #22381a; --blue-l: #16323f; --red-l: #3d1f22; --orange-l: #3b2d16; --purple-l: #2e2140;
+}
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; background: var(--bg); color: var(--text);
-  font: 17px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', Roboto, sans-serif; }
-.page { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(110px + var(--safe-b)); display: grid; gap: 14px; }
-.card { background: var(--card); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 700 16px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-weight: 800; color: var(--text); }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+html.dragging, html.dragging * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+.page { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(100px + var(--safe-b)); display: grid; gap: 14px; }
+.page.wide { max-width: 920px; }
+.card { background: var(--card); border: 2px solid var(--border); border-bottom-width: 4px; border-radius: var(--radius); padding: 18px; }
 .card h3 { margin: 0 0 6px; font-size: 19px; }
-.hint { color: var(--hint); font-size: 14px; }
+.hint { color: var(--hint); font-size: 14px; font-weight: 600; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.btn { border: 0; border-radius: 14px; padding: 12px 18px; font: inherit; font-weight: 600;
-  background: var(--accent); color: var(--accent-text); cursor: pointer; }
-.btn.ghost { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
-.btn:active { transform: scale(.97); }
-input, textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg);
-  border: 0; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
-.badge { padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 600; }
-.badge.ok { background: #34c75922; color: var(--ok); }
-.badge.warn { background: #ff950022; color: var(--warn); }
-.badge.bad { background: #ff3b3022; color: var(--bad); }
+.row2 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lab { display: block; font-size: 13px; font-weight: 800; color: var(--hint); margin: 2px 0 4px; }
+
+/* Кнопки: цветная, объёмная, заглавные буквы */
+.btn { border: 0; border-radius: 16px; padding: 13px 20px; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase;
+  background: var(--green); color: #fff; box-shadow: 0 4px 0 var(--green-d); cursor: pointer; transition: transform .06s, box-shadow .06s; }
+.btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 0 0 var(--green-d); }
+.btn:disabled { background: var(--border); color: var(--hint-2); box-shadow: none; cursor: not-allowed; }
+.btn.ghost { background: var(--card); color: var(--blue); border: 2px solid var(--border); padding: 11px 18px; box-shadow: 0 4px 0 var(--border); }
+.btn.ghost:active:not(:disabled) { box-shadow: 0 0 0 var(--border); }
+.btn.ghost:disabled { color: var(--hint-2); background: var(--surface); }
+.btn.danger { background: var(--red); box-shadow: 0 4px 0 var(--red-d); }
+.btn.sm { padding: 8px 12px; font-size: 13px; border-radius: 12px; }
+.btn.ghost.sm { padding: 6px 10px; }
+
+input, textarea, select { width: 100%; font: inherit; font-weight: 700; color: var(--text); background: var(--surface);
+  border: 2px solid var(--border); border-radius: 14px; padding: 11px 14px; margin-bottom: 10px; outline: none; transition: border-color .12s; }
+input:focus, textarea:focus, select:focus { border-color: var(--blue); background: var(--card); }
+input::placeholder, textarea::placeholder { color: var(--hint-2); }
+input[type='checkbox'] { accent-color: var(--green); }
+
+.badge { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 800; }
+.badge.ok { background: var(--green-l); color: var(--green-d); }
+.badge.warn { background: var(--orange-l); color: var(--orange-d); }
+.badge.bad { background: var(--red-l); color: var(--red-d); }
+html[data-theme='dark'] .badge.ok { color: var(--green); } html[data-theme='dark'] .badge.warn { color: var(--orange); } html[data-theme='dark'] .badge.bad { color: var(--red); }
+
+.seg { display: inline-flex; background: var(--surface); border: 2px solid var(--border); border-radius: 14px; padding: 3px; }
+.seg button { border: 0; background: none; color: var(--hint); font: inherit; font-weight: 800; padding: 6px 14px; border-radius: 10px; cursor: pointer; }
+.seg button.on { background: var(--blue-l); color: var(--blue); box-shadow: inset 0 0 0 2px var(--blue); }
+
+/* Шторка (нижний лист) */
+.sheet-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+.sheet-box { width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; background: var(--card); border-radius: 24px 24px 0 0; padding: 22px 20px calc(24px + var(--safe-b)); display: grid; gap: 10px; animation: sheet-up .2s; }
+@keyframes sheet-up { from { transform: translateY(100%); } }
+@media (min-width: 768px) { .sheet-bg { align-items: center; } .sheet-box { border-radius: 24px; } }
+@media (min-width: 1024px) { .page.wide { padding-left: 0; padding-right: 0; } }

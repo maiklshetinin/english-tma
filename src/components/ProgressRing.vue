@@ -6,9 +6,9 @@ const offset = computed(() => c * (1 - props.value / 100))
 </script>
 <template>
   <svg :width="size" :height="size" viewBox="0 0 84 84">
-    <circle cx="42" cy="42" :r="r" fill="none" stroke="var(--bg)" stroke-width="9" />
-    <circle cx="42" cy="42" :r="r" fill="none" stroke="var(--accent)" stroke-width="9" stroke-linecap="round"
+    <circle cx="42" cy="42" :r="r" fill="none" stroke="var(--border)" stroke-width="9" />
+    <circle cx="42" cy="42" :r="r" fill="none" stroke="var(--yellow)" stroke-width="9" stroke-linecap="round"
       :stroke-dasharray="c" :stroke-dashoffset="offset" transform="rotate(-90 42 42)" style="transition: stroke-dashoffset .6s" />
-    <text x="42" y="48" text-anchor="middle" font-size="18" font-weight="700" fill="var(--text)">{{ value }}%</text>
+    <text x="42" y="48" text-anchor="middle" font-size="18" font-weight="900" fill="var(--text)">{{ value }}%</text>
   </svg>
 </template>

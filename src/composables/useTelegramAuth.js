@@ -10,6 +10,12 @@ export const apiFetch = (path, opts = {}) => fetch(`${API}${path}`, {
   ...opts, headers: { 'Content-Type': 'application/json', Authorization: `tma ${tg?.initData ?? ''}`, ...opts.headers },
 })
 
+// Своя аватарка берётся из Telegram: кладём её в запись преподавателя / ученика, чтобы она показывалась везде (список, таблица, профиль)
+function syncAvatar() {
+  const u = auth.user; if (!u?.photo_url) return
+  const me = state.role === 'teacher' ? state.teacher : state.students.find(x => x.id === state.currentStudentId)
+  if (me) { me.photo_url = u.photo_url; if (u.id) me.tgId = u.id }
+}
 export async function authenticate() {
   auth.status = 'loading'; auth.error = ''
   try {
@@ -26,6 +32,7 @@ export async function authenticate() {
         if (studentId) state.currentStudentId = studentId
       }
     }
+    syncAvatar()
     auth.status = 'ready'
   } catch (e) { auth.error = e.message; auth.status = 'error' }
 }

@@ -1,10 +1,19 @@
 // Обёртка над Telegram WebApp SDK. Вне Telegram (браузер) безопасно работает "вхолостую".
 const tg = window.Telegram?.WebApp
 
+// Тема: светлая/тёмная по Telegram или по системе. Цвета бренда фиксированные (Duolingo), меняются только поверхности.
+const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
+function applyTheme() {
+  const dark = tg?.colorScheme ? tg.colorScheme === 'dark' : !!mq?.matches
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+  try { tg?.setHeaderColor?.(dark ? '#131f24' : '#ffffff'); tg?.setBackgroundColor?.(dark ? '#131f24' : '#ffffff') } catch { /* старые версии клиента */ }
+}
 export function initTelegram() {
+  applyTheme(); mq?.addEventListener?.('change', applyTheme)
   if (!tg) return
   tg.ready()
   tg.expand()
+  tg.onEvent?.('themeChanged', applyTheme)
 }
 export const useTelegram = () => ({
   tg,
