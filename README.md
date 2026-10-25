@@ -1,16 +1,130 @@
 # Tutor TMA
-npm install && npm run dev      # локальная разработка (откройте в браузере)
-npm run build                   # сборка в dist/
-Для Telegram: захостите dist/ по HTTPS (Vercel/Netlify/GitHub Pages) и укажите URL в @BotFather → /newapp или Menu Button.
-Для теста на телефоне: ngrok http 5173 / cloudflared tunnel.
 
-## Авторизация
-Telegram подписывает данные пользователя → сервер на Render (`server/`) проверяет подпись, находит роль в Firestore и выдаёт Firebase-токен → фронт входит в Firebase (`src/composables/useTelegramAuth.js`).
-- **В Telegram** вход автоматический. **В обычном браузере** — кнопка «Войти через Telegram» (сессия сохраняется; «Выйти» — в «Профиле»). Домен сайта привяжите к боту: @BotFather → `/setdomain`.
-- **Преподаватель** — Telegram id в `TEACHER_IDS` на сервере. **Ученик** — преподаватель нажимает «Пригласить в приложение» в карточке ученика, отправляет ссылку; открыв её, ученик привязывается к своей записи (ссылка одноразовая). Остальным вход закрыт.
-- Настройка: `server/README.md` (Render), переменные фронта — `.env.example` / GitHub Variables (`API_URL`, `BOT_USERNAME`, `FIREBASE_*`), правила базы — `firestore.rules`.
-- В `npm run dev` вне Telegram включается демо-пользователь. Переключатель ролей виден в `npm run dev`, с `?demo` в URL и самому преподавателю.
-- Пока данные (расписание, путь, колоды) остаются на `mock.js`; вход и роли уже настоящие.
+Telegram Mini App для репетитора английского: расписание, путь ученика, колоды слов (мини-Anki), оплата. Два режима: **преподаватель** и **ученик**. Ученики заходят из Telegram, преподаватель — из Telegram или обычного браузера.
+
+> **Статус.** Вход, роли и приглашения учеников — настоящие (Telegram + Render + Firebase). Данные (расписание, путь, колоды, оплата) пока лежат в `src/store/mock.js` — перенос в Firestore следующий шаг.
+
+---
+
+## Из чего состоит проект
+
+| Часть | Где живёт | За что отвечает |
+|---|---|---|
+| **Фронт** (Vue 3 + Vite) | папка `src/`, хостится на **GitHub Pages** | весь интерфейс; собирается GitHub Actions при каждом push в `main` |
+| **Сервер** (Node 20 + Express) | папка **`server/`**, хостится на **Render** | проверяет подпись Telegram, определяет роль, выдаёт Firebase-токен, создаёт приглашения |
+| **База и вход** | **Firebase** (Firestore + Authentication) | хранит пользователей, роли и приглашения; принимает токен от сервера |
+| **Бот** | **Telegram** (@BotFather) | открывает приложение, подписывает данные пользователя |
+
+```mermaid
+flowchart LR
+  U["Пользователь<br/>Telegram или браузер"] -->|открывает| GH["GitHub Pages<br/>фронт: src/"]
+  GH -->|"1. данные Telegram (initData / виджет)"| R["Render<br/>сервер: server/"]
+  R -->|"2. проверка подписи токеном бота"| TG["Telegram Bot"]
+  R -->|"3. роль, приглашения"| FS[("Firebase Firestore")]
+  R -->|"4. Firebase custom token"| GH
+  GH -->|"5. вход по токену"| FA["Firebase Authentication"]
+```
+
+### Как проходит вход
+1. Пользователь открывает приложение. Telegram передаёт фронту подписанные данные о нём (`initData`); в обычном браузере — то же самое через кнопку «Войти через Telegram».
+2. Фронт отправляет их на сервер (`POST /auth/telegram` или `/auth/telegram-widget`).
+3. Сервер проверяет подпись токеном бота — подделать пользователя без токена нельзя.
+4. Сервер ищет пользователя в Firestore (`users/tg:<id>`):
+   - id есть в `TEACHER_IDS` → **преподаватель**;
+   - пользователь уже есть в базе → его сохранённая роль;
+   - иначе, если открыта ссылка-приглашение (`startapp=invite_…`) и она не использована → создаётся **ученик**, ссылка гасится;
+   - иначе **403, вход закрыт**.
+5. Сервер возвращает Firebase custom token (в нём роль, имя, ник, фото). Фронт входит в Firebase; в браузере сессия сохраняется до «Выйти».
+
+### Как ученик попадает в приложение
+Преподаватель открывает карточку ученика → **«Пригласить в приложение»** → ссылка копируется → отправляет её ученику в Telegram → ученик открывает → его аккаунт привязывается к записи (ссылка одноразовая). Дальше он просто открывает бота, без ссылки.
+
+---
+
+## Все переменные: что и где задавать
+
+Правило: **секреты (токен бота, ключ Firebase) — только на Render.** Всё, что задаётся на GitHub, попадает в публичный JS сайта, поэтому там только несекретные значения.
+
+### GitHub → фронт
+*Репозиторий → Settings → Secrets and variables → Actions → вкладка **Variables** → New repository variable.* Подставляются при сборке (`.github/workflows/deploy.yml`), поэтому после любого изменения нужно **перезапустить деплой** (Actions → Re-run).
+
+| Variable на GitHub | Во фронте | Что это | Где взять |
+|---|---|---|---|
+| `API_URL` | `VITE_API_URL` | адрес сервера, **без `/` на конце**: `https://….onrender.com` | Render → сервис → верх страницы |
+| `BOT_USERNAME` | `VITE_BOT_USERNAME` | ник бота без `@` (для кнопки входа в браузере) | @BotFather |
+| `FIREBASE_API_KEY` | `VITE_FIREBASE_API_KEY` | web-конфиг Firebase | Firebase → ⚙ Project settings → Your apps → Web app → `apiKey` |
+| `FIREBASE_AUTH_DOMAIN` | `VITE_FIREBASE_AUTH_DOMAIN` | там же | `authDomain` |
+| `FIREBASE_PROJECT_ID` | `VITE_FIREBASE_PROJECT_ID` | там же | `projectId` |
+| `FIREBASE_APP_ID` | `VITE_FIREBASE_APP_ID` | там же | `appId` |
+
+Дополнительно: Settings → **Pages** → Source: **GitHub Actions**.
+
+### Render → сервер (`server/`)
+*Render → сервис → **Environment** → Add Environment Variable → «Save, rebuild, and deploy».*
+
+| Переменная | Секрет? | Что это | Где взять |
+|---|---|---|---|
+| `BOT_TOKEN` | **да** | токен бота | @BotFather → `/mybots` → API Token |
+| `BOT_USERNAME` | нет | ник бота без `@` | @BotFather |
+| `FIREBASE_SERVICE_ACCOUNT` | **да** | весь JSON сервисного ключа (вставлять целиком) | Firebase → Project settings → Service accounts → Generate new private key |
+| `TEACHER_IDS` | нет | Telegram id преподавателей (**цифры**, через запятую, не ник) | бот @userinfobot |
+| `ALLOWED_ORIGIN` | нет | с каких адресов можно обращаться к серверу: `https://<ник>.github.io` (+ `,http://localhost:5173` для локальной проверки). **Только домен, без `/english-tma`, без `/` на конце, без пробелов** | адрес вашего сайта |
+| `APP_SHORT_NAME` | нет | short name мини-приложения для ссылок-приглашений (если приложение создано через `/newapp`; если задано как Main Mini App — не нужна) | @BotFather → `/newapp` |
+| `PORT` | — | Render задаёт сам | — |
+
+Настройки сервиса на Render: **Root Directory** `server`, **Build** `npm install`, **Start** `npm start`, Auto-Deploy включён.
+
+### Firebase → без переменных, но нужно включить
+- **Firestore Database** — создать (режим production), правила взять из файла `firestore.rules` (Firestore → Rules → Publish).
+- **Authentication** — нажать «Get started» (отдельные способы входа включать не нужно: вход идёт по токену от сервера).
+- Коллекции создаются сервером сами: `users` (профиль и роль, `users/tg:<id>`), `invites` (одноразовые приглашения).
+
+### Telegram (@BotFather)
+- `/newapp` (или Menu Button) → URL: `https://<ник>.github.io/english-tma/` — по нему открывается приложение.
+- `/setdomain` → `<ник>.github.io` — иначе кнопка «Войти через Telegram» в браузере не заработает.
+
+### Локально (для разработки)
+- Фронт: скопируйте `.env.example` → `.env.local` (в git не попадает), затем `npm install && npm run dev`. Вне Telegram включается демо-пользователь без входа.
+- Сервер: `server/.env` с теми же переменными, что на Render, затем `cd server && npm install && npm run dev`.
+
+---
+
+## Настройка с нуля (чек-лист)
+1. **Бот:** создать в @BotFather, записать токен и ник; `/newapp` с адресом сайта; `/setdomain`.
+2. **Firebase:** создать проект → Firestore + Authentication → Web app (взять конфиг) → сервисный ключ → вставить правила из `firestore.rules`.
+3. **Render:** New → Web Service из репозитория, Root Directory `server` → заполнить переменные из таблицы выше.
+4. **GitHub:** заполнить Variables, включить Pages (Source: GitHub Actions), push в `main`.
+5. **Проверка:** открыть приложение через бота; в логах Render появится `→ вход: tg:<id> @ник как teacher`, а в Firestore → `users` — ваша запись. Кнопка «Проверить связь с сервером» в «Профиле» преподавателя тоже пишет строку в логи.
+
+## Структура репозитория
+```
+.github/workflows/deploy.yml   сборка фронта и публикация на GitHub Pages
+src/                           фронт (Vue 3)
+  composables/useTelegramAuth.js   вход: Telegram → сервер → Firebase
+  store/mock.js                    данные-заглушки (расписание, путь, колоды)
+  views/, components/              экраны и компоненты
+server/                        сервер для Render
+  index.js                         маршруты: /auth/*, /invites, /avatar, /sheets/csv, /ping
+  telegram.js                      проверка подписи Telegram
+firestore.rules                правила Firestore (вставляются в консоли Firebase)
+.env.example                   шаблон переменных для локального запуска
+```
+
+## Частые проблемы
+| Симптом | Причина и решение |
+|---|---|
+| «Сервер не отвечает» | В консоли браузера (F12) ошибка CORS → `ALLOWED_ORIGIN` на Render пуст или записан неточно (см. таблицу). Либо сервер спит (бесплатный Render, до 30 с) — повторить |
+| «Не настроены переменные сервера и Firebase» | на GitHub нет `API_URL` / `FIREBASE_*` или после их добавления не перезапущен деплой |
+| «Нет доступа» (403) | вас нет в `TEACHER_IDS` (нужен числовой id), либо ученик открыл не ссылку-приглашение / она уже использована |
+| В логах `401` | подпись не прошла: `BOT_TOKEN` на Render от другого бота, чем тот, через которого открыто приложение |
+| В логах `500` | проблема с Firebase: не создан Firestore или неверный `FIREBASE_SERVICE_ACCOUNT` |
+| Нет кнопки входа в браузере | не выполнен `/setdomain` в @BotFather или не задан `BOT_USERNAME` |
+| Приглашение не открывает приложение | не задан `APP_SHORT_NAME` (если приложение создано через `/newapp`) |
+| Старая версия после деплоя | закрыть приложение в Telegram полностью; в браузере Ctrl+F5 |
+
+Логи сервера: Render → сервис → **Logs**. Время последнего входа каждого пользователя: Firestore → `users` → поле `lastLoginAt`.
+
+---
 
 ## Режим преподавателя
 Вкладки: Главная (расписание + ученики) · Путь (пресеты пути) · Ученики (CRM) · Слова (Anki) · Профиль.
