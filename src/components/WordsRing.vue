@@ -1,11 +1,12 @@
 <script setup>
 // Круг прогресса выученных слов: выучено = слова с интервалом повторения ≥ 7 дней, среди всех слов доступных колод пользователя.
 import { computed } from 'vue'
-import { decksFor } from '../store/mock'
 import { userStats } from '../composables/useSrs'
 import ProgressRing from './ProgressRing.vue'
+import { useDecksStore } from '../stores/decks'
+const deckStore = useDecksStore()
 const props = defineProps({ userKey: { type: [String, Number], required: true }, size: { type: Number, default: 76 } })
-const st = computed(() => userStats(props.userKey, decksFor(props.userKey)))
+const st = computed(() => userStats(props.userKey, deckStore.forUser(props.userKey)))
 const pct = computed(() => st.value.total ? Math.round(st.value.mature / st.value.total * 100) : 0)
 </script>
 <template>

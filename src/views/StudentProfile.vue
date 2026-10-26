@@ -1,12 +1,13 @@
 <script setup>
-import { auth } from '../composables/useTelegramAuth'
-import { student } from '../store/mock'
+import { student } from '../store/app'
 import Avatar from '../components/Avatar.vue'
 import StatsGrid from '../components/StatsGrid.vue'
 import PaymentCard from '../components/PaymentCard.vue'
 import DemoSwitch from '../components/DemoSwitch.vue'
 import AppVersion from '../components/AppVersion.vue'
 import LogoutButton from '../components/LogoutButton.vue'
+import { useAuthStore } from '../stores/auth'
+const auth = useAuthStore()
 </script>
 <template>
   <div class="page">

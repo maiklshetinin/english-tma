@@ -2,7 +2,7 @@
 // Путь из «кружков» по юнитам. В режиме правки: переименование и перемещение/удаление юнитов и кружков, добавление кружка нужного типа.
 // plain — для пресетов: без замков и «Начать», все кружки равнозначны.
 import { computed } from 'vue'
-import { currentIdOf, fmtDate, relDay, NODE_TYPES } from '../store/mock'
+import { currentIdOf, fmtDate, relDay, NODE_TYPES } from '../store/app'
 import AppIcon from './AppIcon.vue'
 const props = defineProps({ units: { type: Array, required: true }, editable: Boolean, plain: Boolean })
 defineEmits(['open', 'edit', 'move', 'add', 'remove', 'add-unit', 'move-unit', 'remove-unit'])

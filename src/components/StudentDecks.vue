@@ -1,9 +1,10 @@
 <script setup>
 // Блок в профиле ученика: какие колоды ему назначены и сколько у него к повторению.
-import { state } from '../store/mock'
 import { deckCounts } from '../composables/useSrs'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
+import { useDecksStore } from '../stores/decks'
+const deckStore = useDecksStore()
 const props = defineProps({ studentId: { type: [String, Number], required: true } })
 const has = (d) => d.forAll || d.assigned.includes(props.studentId)
 const cnt = (d) => deckCounts(d, props.studentId)
@@ -16,14 +17,14 @@ function toggle(d) {
 <template>
   <div class="card">
     <h3 class="h"><AppIcon name="cards" /> Колоды</h3>
-    <div v-for="d in state.decks" :key="d.id" class="r">
+    <div v-for="d in deckStore.list" :key="d.id" class="r">
       <div class="in"><b>{{ d.title }}</b>
         <div class="hint">{{ d.cards.length }} карт.<template v-if="has(d)"> · новых {{ cnt(d).new }} · к повторению {{ cnt(d).learn + cnt(d).due }}</template></div></div>
       <span v-if="d.forAll" class="badge ok">Для всех</span>
       <button v-else-if="has(d)" class="btn ghost sm" @click="toggle(d)"><AppIcon name="check" :size="16" /> Назначена</button>
       <button v-else class="btn sm" @click="toggle(d)"><AppIcon name="plus" :size="16" /> Добавить</button>
     </div>
-    <p v-if="!state.decks.length" class="hint" style="margin:0">Колод пока нет — создайте их во вкладке «Слова».</p>
+    <p v-if="!deckStore.list.length" class="hint" style="margin:0">Колод пока нет — создайте их во вкладке «Слова».</p>
   </div>
 </template>
 <style scoped>

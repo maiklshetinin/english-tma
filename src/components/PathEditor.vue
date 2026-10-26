@@ -2,12 +2,14 @@
 // Конструктор пути (для ученика и для пресета): «Просмотр / Правка», юниты и кружки добавляются, переименовываются, переставляются и удаляются.
 // preset — режим пресета: без дат и выполнения, без открытия кружков.
 import { ref } from 'vue'
-import { addNode, moveNode, removeNode, addUnit, moveUnit, removeUnit, sortAll, completeNode } from '../store/mock'
+import { addNode, moveNode, removeNode, addUnit, moveUnit, removeUnit, sortAll } from '../store/app'
 import { showToast } from '../composables/useToast'
 import TaskPath from './TaskPath.vue'
 import TaskSheet from './TaskSheet.vue'
 import NodeEditor from './NodeEditor.vue'
 import AppIcon from './AppIcon.vue'
+import { usePathStore } from '../stores/path'
+const pathStore = usePathStore()
 const props = defineProps({ units: { type: Array, required: true }, studentId: { type: [String, Number], default: 0 }, preset: Boolean })
 const edit = ref(false), pos = ref(null), sel = ref(null)
 
@@ -36,6 +38,6 @@ const open = (n) => { if (!props.preset) sel.value = n }
     <TaskPath :units="units" :editable="edit" :plain="preset" @open="open" @edit="pos = $event" @move="e => moveNode(units, e.ui, e.i, e.dir)"
       @add="add" @remove="removeAt" @add-unit="addUnit(units)" @move-unit="e => moveUnit(units, e.ui, e.dir)" @remove-unit="removeUnitAt" />
     <NodeEditor v-if="pos" :units="units" :pos="pos" :preset="preset" @close="pos = null" @move="move" @remove="remove" />
-    <TaskSheet v-if="sel" :node="sel" @close="sel = null" @complete="n => { completeNode(n, studentId); sel = null }" />
+    <TaskSheet v-if="sel" :node="sel" @close="sel = null" @complete="n => { pathStore.complete(n, studentId); sel = null }" />
   </div>
 </template>

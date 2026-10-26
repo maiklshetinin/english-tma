@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { apiFetch } from '../composables/useTelegramAuth'
+import { apiFetch } from '../firebase'
 import { showToast } from '../composables/useToast'
 const busy = ref(false)
 async function ping() {

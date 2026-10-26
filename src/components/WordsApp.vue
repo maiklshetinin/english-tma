@@ -1,19 +1,22 @@
 <script setup>
 // «Слова» = мини-Anki. Одинаковый для преподавателя и ученика; разница в правах:
 //  преподаватель (canManage) создаёт колоды (по ссылке на Google Таблицу), правит карточки, назначает колоды ученикам;
-//  ученик только учит назначенные ему колоды. Прогресс у каждого свой (state.srs[userKey]).
+//  ученик только учит назначенные ему колоды. Прогресс у каждого свой (stores/srs.ts).
 import { ref, computed } from 'vue'
-import { state, decksFor } from '../store/mock'
 import { deckCounts, userStats } from '../composables/useSrs'
 import AppIcon from './AppIcon.vue'
 import StudySession from './StudySession.vue'
 import CardBrowser from './CardBrowser.vue'
 import DeckSheet from './DeckSheet.vue'
+import { useStudentsStore } from '../stores/students'
+import { useDecksStore } from '../stores/decks'
+const deckStore = useDecksStore()
+const studentStore = useStudentsStore()
 const props = defineProps({ userKey: { type: [String, Number], required: true }, canManage: Boolean })
 
 const screen = ref('list'), deckId = ref(null), sheet = ref(null)
-const decks = computed(() => decksFor(props.userKey))
-const deck = computed(() => state.decks.find(d => d.id === deckId.value))
+const decks = computed(() => deckStore.forUser(props.userKey))
+const deck = computed(() => deckStore.byId(deckId.value))
 const stats = computed(() => userStats(props.userKey, decks.value))
 const max = computed(() => Math.max(1, ...stats.value.week.map(w => w.n)))
 const open = (s, d) => { deckId.value = d.id; screen.value = s }
@@ -22,7 +25,7 @@ const DAY = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 const dayName = (d) => DAY[new Date(d + 'T00:00').getDay()]
 const audience = (d) => {
   if (d.forAll) return 'всем ученикам'
-  const n = d.assigned.map(id => state.students.find(s => s.id === id)?.name).filter(Boolean)
+  const n = d.assigned.map(id => studentStore.list.find(s => s.id === id)?.name).filter(Boolean)
   return !n.length ? 'никому не назначена' : n.length <= 2 ? n.join(', ') : `${n[0]} и ещё ${n.length - 1}`
 }
 </script>

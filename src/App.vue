@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
-import { state, setRole } from './store/mock'
-import { auth, authenticate, BOT_USERNAME } from './composables/useTelegramAuth'
+import { state } from './store/app'
+import { BOT_USERNAME } from './firebase'
 import TelegramLogin from './components/TelegramLogin.vue'
 import BottomNav from './components/BottomNav.vue'
 import Toast from './components/Toast.vue'
@@ -15,15 +15,17 @@ import TeacherProfile from './views/teacher/TeacherProfile.vue'
 import TeacherPath from './views/teacher/TeacherPath.vue'
 import TeacherStudents from './views/teacher/TeacherStudents.vue'
 import TeacherWords from './views/teacher/TeacherWords.vue'
+import { useAuthStore } from './stores/auth'
+const auth = useAuthStore()
 
 const views = {
   student: { path: StudentPath, cards: StudentCards, lessons: Schedule, profile: StudentProfile },
   teacher: { home: TeacherHome, path: TeacherPath, students: TeacherStudents, words: TeacherWords, profile: TeacherProfile },
 }
-const current = computed(() => views[state.role][state.tab])
+const current = computed(() => views[auth.role][state.tab])
 // В демо-режиме роль можно задать в URL: ?demo&role=teacher (переключатель — в «Профиле»)
 const demo = import.meta.env.DEV || new URLSearchParams(location.search).has('demo')
-onMounted(() => authenticate().then(() => { const r = new URLSearchParams(location.search).get('role'); if (demo && (r === 'teacher' || r === 'student')) setRole(r) }))
+onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(location.search).get('role'); if (demo && (r === 'teacher' || r === 'student')) auth.setRole(r) }))
 </script>
 
 <template>
@@ -33,11 +35,11 @@ onMounted(() => authenticate().then(() => { const r = new URLSearchParams(locati
     <TelegramLogin v-if="BOT_USERNAME" />
   </div>
   <div v-else-if="auth.status === 'error'" class="splash card">
-    <h3>Не удалось войти</h3><p class="hint">{{ auth.error }}</p><button class="btn" @click="authenticate">Повторить</button>
+    <h3>Не удалось войти</h3><p class="hint">{{ auth.error }}</p><button class="btn" @click="auth.authenticate()">Повторить</button>
   </div>
   <template v-else>
     <div class="shell">
-      <main><component :is="current" :key="state.role + state.tab" /></main>
+      <main><component :is="current" :key="auth.role + state.tab" /></main>
     </div>
     <BottomNav /><Toast /><DragGhost />
   </template>

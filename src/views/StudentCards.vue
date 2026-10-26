@@ -1,5 +1,7 @@
 <script setup>
-import { state } from '../store/mock'
+
 import WordsApp from '../components/WordsApp.vue'
+import { useAuthStore } from '../stores/auth'
+const auth = useAuthStore()
 </script>
-<template><WordsApp :user-key="state.currentStudentId" :can-manage="false" /></template>
+<template><WordsApp :user-key="auth.currentStudentId" :can-manage="false" /></template>

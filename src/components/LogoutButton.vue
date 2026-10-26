@@ -1,4 +1,6 @@
 <script setup>
-import { canLogout, logout } from '../composables/useTelegramAuth'
+import { canLogout } from '../firebase'
+import { useAuthStore } from '../stores/auth'
+const auth = useAuthStore()
 </script>
-<template><button v-if="canLogout" class="btn ghost" @click="logout">Выйти</button></template>
+<template><button v-if="canLogout" class="btn ghost" @click="auth.logout()">Выйти</button></template>

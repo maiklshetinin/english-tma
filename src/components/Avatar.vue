@@ -1,5 +1,5 @@
 <script setup>
-// Аватарка из Telegram (photo_url / tgId), а если её нет или она не загрузилась — инициал на цветном фоне.
+// Аватарка из Telegram (photoUrl / tgId), а если её нет или она не загрузилась — инициал на цветном фоне.
 import { ref, computed, watch } from 'vue'
 import { avatarSrc } from '../composables/useAvatar'
 const props = defineProps({ s: { type: Object, required: true }, size: { type: Number, default: 40 } })

@@ -1,7 +1,7 @@
 <script setup>
 // Показывается над лентой только если оплата требует внимания; закрывается крестиком.
 import { ref, computed } from 'vue'
-import { student, state, needsPayment } from '../store/mock'
+import { student, state, needsPayment } from '../store/app'
 import AppIcon from './AppIcon.vue'
 const closed = ref(false)
 const text = computed(() => student.value.payment.status !== 'paid' ? 'Ожидается оплата занятий' : `Осталось уроков: ${student.value.payment.lessonsLeft}`)

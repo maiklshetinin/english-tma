@@ -1,10 +1,12 @@
 <script setup>
 import { computed } from 'vue'
 import { dnd } from '../composables/useDnd'
-import { state, hh } from '../store/mock'
+import { state, hh } from '../store/app'
 import Avatar from './Avatar.vue'
+import { useStudentsStore } from '../stores/students'
+const studentStore = useStudentsStore()
 const p = computed(() => dnd.payload)
-const s = computed(() => p.value && state.students.find(x => x.id === (p.value.kind === 'student' ? p.value.id : p.value.lesson.studentIds[0])))
+const s = computed(() => p.value && studentStore.list.find(x => x.id === (p.value.kind === 'student' ? p.value.id : p.value.lesson.studentIds[0])))
 // Урок из таблицы: призрак — копия карточки того же размера, она лежит ровно поверх оригинала и просто едет за курсором (без «прыжка»).
 const lesson = computed(() => p.value?.kind === 'lesson' && dnd.grab)
 const pos = computed(() => lesson.value

@@ -2,7 +2,8 @@
 // «Обозреватель» карточек колоды (как Browse в Anki): поиск, фильтр по состоянию, статус для данного пользователя.
 // Преподаватель (canManage) может добавлять, править, скрывать и удалять карточки.
 import { ref, reactive, computed } from 'vue'
-import { nextId, relDay } from '../store/mock'
+import { relDay } from '../store/app'
+import { newId } from '../utils/id'
 import { srsOf, kindOf, today } from '../composables/useSrs'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
@@ -28,7 +29,7 @@ const rows = computed(() => {
 })
 function add() {
   if (!f.front.trim() || !f.back.trim()) return
-  props.deck.cards.push({ id: nextId(), front: f.front.trim(), back: f.back.trim(), example: f.example.trim() })
+  props.deck.cards.push({ id: newId('c'), front: f.front.trim(), back: f.back.trim(), example: f.example.trim() })
   f.front = f.back = f.example = ''
 }
 function del(c) {

@@ -1,5 +1,5 @@
-import { apiFetch } from './useTelegramAuth'
-import { nextId } from '../store/mock'
+import { apiFetch } from '../firebase'
+import { newId } from '../utils/id'
 // Колонки таблицы: A — слово, B — перевод, C — пример (необязательно). Первая строка-заголовок пропускается.
 export function sheetUrlToCsv(url) {
   const m = url.match(/\/spreadsheets\/d\/([\w-]+)/)
@@ -46,7 +46,7 @@ export function mergeCards(deck, rows) {
     if (ex) {
       if (ex.back !== r.back || (r.example && ex.example !== r.example)) { ex.back = r.back; if (r.example) ex.example = r.example; updated++ }
     } else {
-      deck.cards.push({ id: nextId(), front: r.front, back: r.back, example: r.example })
+      deck.cards.push({ id: newId('c'), front: r.front, back: r.back, example: r.example })
       by.set(k, deck.cards[deck.cards.length - 1]); added++
     }
   }

@@ -12,6 +12,7 @@ const commit = (process.env.GITHUB_SHA || gitSha()).slice(0, 7) || 'local'
 export default defineConfig({
   plugins: [vue()],
   base: '/english-tma/', // Обязательно имя вашего репозитория с слэшами по бокам
+  test: { environment: 'jsdom', include: ['src/**/*.test.ts'] },     // npm test (vitest)
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __APP_COMMIT__: JSON.stringify(commit),

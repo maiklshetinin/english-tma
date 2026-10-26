@@ -1,10 +1,10 @@
-// Откуда берётся аватарка: photo_url (Telegram) → через сервер по tgId → инициал на цветном фоне.
+// Откуда берётся аватарка: photoUrl (Telegram) → через сервер по tgId → инициал на цветном фоне.
 //  • Своя аватарка (ученик/преподаватель, открывший приложение) приходит из Telegram.WebApp.initDataUnsafe.user.photo_url —
-//    useTelegramAuth кладёт её в state.teacher / запись ученика.
+//    stores/auth.ts кладёт её в auth.teacher / запись ученика.
 //  • Чужие аватарки (преподаватель видит учеников) Telegram в Mini App не отдаёт: бэкенд берёт их через Bot API
 //    (getUserProfilePhotos → getFile) и отдаёт по GET /avatar/:tgId — см. server/avatar.example.js.
 import { reactive } from 'vue'
-import { apiFetch } from './useTelegramAuth'
+import { apiFetch } from '../firebase'
 
 const API = import.meta.env.VITE_API_URL
 const blobs = reactive({})              // tgId → blob:URL
@@ -19,7 +19,7 @@ function loadViaApi(id) {
 }
 export function avatarSrc(s) {
   if (!s) return ''
-  if (s.photo_url) return s.photo_url
+  if (s.photoUrl) return s.photoUrl
   if (s.tgId && API) { loadViaApi(s.tgId); return blobs[s.tgId] || '' }
   return ''
 }

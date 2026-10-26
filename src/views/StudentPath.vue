@@ -1,18 +1,22 @@
 <script setup>
 import { ref } from 'vue'
-import { myPath, completeNode } from '../store/mock'
+import { myPath } from '../store/app'
 import TaskPath from '../components/TaskPath.vue'
 import TaskSheet from '../components/TaskSheet.vue'
 import PaymentAlert from '../components/PaymentAlert.vue'
 import StatsGrid from '../components/StatsGrid.vue'
 import PaymentCard from '../components/PaymentCard.vue'
+import { usePathStore } from '../stores/path'
+import { useAuthStore } from '../stores/auth'
+const pathStore = usePathStore()
+const auth = useAuthStore()
 const sel = ref(null)
 </script>
 <template>
   <div class="layout">
     <section class="main"><PaymentAlert /><TaskPath :units="myPath" @open="sel = $event" /></section>
     <aside class="aside"><StatsGrid /><PaymentCard /></aside>
-    <TaskSheet v-if="sel" :node="sel" @close="sel = null" @complete="n => { completeNode(n); sel = null }" />
+    <TaskSheet v-if="sel" :node="sel" @close="sel = null" @complete="n => { pathStore.complete(n, auth.currentStudentId); sel = null }" />
   </div>
 </template>
 <style scoped>

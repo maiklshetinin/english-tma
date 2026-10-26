@@ -1,9 +1,13 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
 import { computed } from 'vue'
-import { HOURS, DAYS, hh, slotKey, lessonMap, nowTick, ymd, state } from '../store/mock'
+import { HOURS, DAYS, hh, slotKey, nowTick, ymd, state } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
+import { useStudentsStore } from '../stores/students'
+import { useScheduleStore } from '../stores/schedule'
+const studentStore = useStudentsStore()
+const scheduleStore = useScheduleStore()
 const props = defineProps({ dates: { type: Array, required: true } })
 const emit = defineEmits(['cell', 'lesson'])
 // «Сейчас»: сегодняшний день и текущий час (обновляется раз в минуту). Подсвечивается только в той таблице, где есть сегодняшний день.
@@ -11,8 +15,8 @@ const now = computed(() => { const d = new Date(nowTick.value); return { date: y
 const hasToday = computed(() => props.dates.includes(now.value.date))
 const rowNow = (h) => hasToday.value && h === now.value.hour
 const cellNow = (d, h) => d === now.value.date && h === now.value.hour
-const stu = (id) => state.students.find(s => s.id === id)
-const at = (d, h) => lessonMap.value.get(slotKey(d, h)) ?? []
+const stu = (id) => studentStore.list.find(s => s.id === id)
+const at = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h)) ?? []
 
 function dropState(d, h) {                       // подсветка ячейки под курсором: ok / swap / bad (в обеих таблицах одинаково)
   const o = dnd.over

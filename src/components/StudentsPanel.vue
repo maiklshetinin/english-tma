@@ -1,12 +1,14 @@
 <script setup>
 // Список учеников. Карточку можно перетащить в таблицу; урок из таблицы, брошенный сюда, снимается с расписания.
 import { ref, computed } from 'vue'
-import { state, handle } from '../store/mock'
+import { state, handle } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
+import { useStudentsStore } from '../stores/students'
+const studentStore = useStudentsStore()
 const q = ref('')
-const list = computed(() => { const k = q.value.trim().toLowerCase(); return state.students.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
+const list = computed(() => { const k = q.value.trim().toLowerCase(); return studentStore.list.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
 const trash = computed(() => dnd.active && dnd.payload?.kind === 'lesson')
 const trashOver = computed(() => trash.value && dnd.over?.kind === 'panel')
 const open = (id) => { state.selectedStudentId = id }
@@ -15,7 +17,7 @@ const attention = (s) => s.payment.status !== 'paid'
 
 <template>
   <aside class="panel card" :class="{ trash, over: trashOver }" data-drop="panel">
-    <header class="ph"><AppIcon name="users" :size="20" /><b>Ученики</b><span class="cnt">{{ state.students.length }}</span></header>
+    <header class="ph"><AppIcon name="users" :size="20" /><b>Ученики</b><span class="cnt">{{ studentStore.list.length }}</span></header>
     <label class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Поиск ученика…" aria-label="Поиск ученика" /></label>
     <div class="list">
       <div v-for="s in list" :key="s.id" class="st" role="button" tabindex="0" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
@@ -27,7 +29,7 @@ const attention = (s) => s.payment.status !== 'paid'
       </div>
       <p v-if="!list.length" class="hint empty">Никого не нашли</p>
     </div>
-    <footer class="ft">Всего: <b>{{ state.students.length }}</b></footer>
+    <footer class="ft">Всего: <b>{{ studentStore.list.length }}</b></footer>
     <div v-if="trash" class="drophint"><AppIcon name="trash" :size="22" />Отпустите, чтобы снять урок</div>
   </aside>
 </template>

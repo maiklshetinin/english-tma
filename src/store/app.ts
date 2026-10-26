@@ -1,0 +1,56 @@
+// Общее состояние интерфейса и «вычисляемое про меня»: вкладка, выбранный ученик, текущий ученик / его путь / колоды, вкладки, подписи.
+// Данные (ученики, расписание, путь, колоды, повторения) и вход живут в Pinia — stores/*.ts. Здесь они только собираются вместе.
+import { reactive, computed } from 'vue'
+import type { Role } from '../../server/types'
+import { useAuthStore } from '../stores/auth'
+import { useDecksStore } from '../stores/decks'
+import { usePathStore } from '../stores/path'
+import { useScheduleStore } from '../stores/schedule'
+import { useStudentsStore } from '../stores/students'
+import { hh } from '../utils/dates'
+import { currentIdOf, pctOf } from '../utils/path'
+
+// Даты, подписи и расписание-утилиты — в utils/dates.ts, конструктор пути — в utils/path.ts; реэкспорт, чтобы компонентам хватало одного импорта
+export * from '../utils/dates'
+export * from '../utils/path'
+export { slotKey } from '../stores/schedule'
+
+export const state = reactive({
+  tab: 'path',                                    // роль и текущий ученик — stores/auth.ts
+  selectedStudentId: null as string | null,
+})
+
+export const student = computed(() => useStudentsStore().byId(useAuthStore().currentStudentId))
+export const myPath = computed(() => usePathStore().of(useAuthStore().currentStudentId))
+export const currentNodeId = computed(() => currentIdOf(myPath.value))
+export const progressPct = computed(() => pctOf(myPath.value))
+export const needsPayment = computed(() => !!student.value && (student.value.payment.status !== 'paid' || student.value.payment.lessonsLeft <= 2))
+export const userKeyNow = computed(() => { const a = useAuthStore(); return a.role === 'teacher' ? 'teacher' : a.currentStudentId })
+export const myDecks = computed(() => useDecksStore().forUser(useAuthStore().currentStudentId))
+/** Колода кружка; если не указана (или её нет) — первая доступная текущему ученику. */
+export const deckOf = (n: { deckId?: string }) => useDecksStore().byId(n.deckId) || myDecks.value[0]
+
+// Строки «ученик — урок» для вкладки «Уроки» (у группового урока по строке на каждого ученика)
+export const allLessons = computed(() => useScheduleStore().lessons.flatMap((l) => l.studentIds.map((sid) => ({
+  id: `${l.id}:${sid}`, title: 'Урок', date: l.date, time: hh(l.hour), done: false, studentId: sid, studentName: useStudentsStore().byId(sid)?.name ?? '',
+}))).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))
+
+export const TABS: Record<Role, { id: string; label: string; icon: string }[]> = {
+  student: [
+    { id: 'path', label: 'Путь', icon: 'route' }, { id: 'cards', label: 'Слова', icon: 'cards' },
+    { id: 'lessons', label: 'Уроки', icon: 'calendar' }, { id: 'profile', label: 'Профиль', icon: 'user' },
+  ],
+  teacher: [
+    { id: 'home', label: 'Главная', icon: 'home' }, { id: 'path', label: 'Путь', icon: 'route' },
+    { id: 'students', label: 'Ученики', icon: 'users' }, { id: 'words', label: 'Слова', icon: 'cards' },
+    { id: 'profile', label: 'Профиль', icon: 'user' },
+  ],
+}
+export const handle = (s: { username?: string; status?: string }) => (s.username ? '@' + s.username : s.status === 'invited' ? 'ждёт приглашения' : '')   // подпись под именем ученика
+
+/** Вызывается один раз в main.js, когда Pinia уже подключена: смена роли (auth.setRole) возвращает экран на первую вкладку нового режима. */
+export function linkStores() {
+  useAuthStore().$onAction(({ name, args, after }) => {
+    if (name === 'setRole') after((ok: unknown) => { if (ok) { state.tab = TABS[args[0] as Role][0].id; state.selectedStudentId = null } })
+  })
+}

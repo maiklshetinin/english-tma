@@ -2,25 +2,28 @@
 // Шторка преподавателя: создание колоды по ссылке на Google Таблицу или настройки существующей
 // (название, лимит новых в день, кому назначена, синхронизация, удаление).
 import { ref } from 'vue'
-import { state, addDeck, removeDeck, restoreDeck } from '../store/mock'
 import { showToast } from '../composables/useToast'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
 import SheetLink from './SheetLink.vue'
+import { useStudentsStore } from '../stores/students'
+import { useDecksStore } from '../stores/decks'
+const deckStore = useDecksStore()
+const studentStore = useStudentsStore()
 const props = defineProps({ deck: Object, create: Boolean })
 const emit = defineEmits(['close'])
 const d = ref(props.deck || null), name = ref(''), url = ref(''), auto = ref(false), sure = ref(false)
 
 function createDeck() {
   const link = url.value.trim()
-  d.value = addDeck(name.value.trim() || 'Новая колода', link)
+  d.value = deckStore.add(name.value.trim() || 'Новая колода', link)
   auto.value = !!link                                  // с ссылкой — сразу подтягиваем слова
 }
 const has = (id) => d.value.assigned.includes(id)
 const toggle = (id) => { const a = d.value.assigned; const i = a.indexOf(id); i >= 0 ? a.splice(i, 1) : a.push(id) }
 function remove() {
-  const gone = removeDeck(d.value); emit('close')
-  showToast(`Колода удалена: ${gone.deck.title}`, () => restoreDeck(gone))
+  const gone = deckStore.remove(d.value); emit('close')
+  showToast(`Колода удалена: ${gone.deck.title}`, () => deckStore.restore(gone))
 }
 </script>
 
@@ -42,7 +45,7 @@ function remove() {
         <label class="lab">Кому назначена</label>
         <label class="chk"><input v-model="d.forAll" type="checkbox" /> Всем ученикам</label>
         <template v-if="!d.forAll">
-          <button v-for="s in state.students" :key="s.id" class="who" :class="{ on: has(s.id) }" @click="toggle(s.id)">
+          <button v-for="s in studentStore.list" :key="s.id" class="who" :class="{ on: has(s.id) }" @click="toggle(s.id)">
             <Avatar :s="s" :size="28" /><b>{{ s.name }}</b><AppIcon v-if="has(s.id)" name="check" :size="18" />
           </button>
           <p class="hint" style="margin:0">Ученика можно добавить и из его профиля.</p>

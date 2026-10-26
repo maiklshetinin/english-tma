@@ -1,5 +1,5 @@
 <script setup>
-import { student, progressPct } from '../store/mock'
+import { student, progressPct } from '../store/app'
 import ProgressRing from './ProgressRing.vue'
 import WordsRing from './WordsRing.vue'
 </script>

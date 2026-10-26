@@ -1,8 +1,10 @@
 <script setup>
 // Правка кружка: тип (ДЗ / повторение слов / слова + ДЗ), название, дата, монеты, колода, текст задания.
 import { computed } from 'vue'
-import { state, NODE_TYPES } from '../store/mock'
+import { NODE_TYPES } from '../store/app'
 import AppIcon from './AppIcon.vue'
+import { useDecksStore } from '../stores/decks'
+const deckStore = useDecksStore()
 const props = defineProps({ units: Array, pos: Object, preset: Boolean })
 defineEmits(['close', 'move', 'remove'])
 const n = computed(() => props.units[props.pos.ui].nodes[props.pos.i])
@@ -28,7 +30,7 @@ const withDesc = computed(() => n.value.type !== 'cards' && n.value.type !== 'tu
     </div>
     <template v-if="withDeck">
       <label class="lab">Колода слов</label>
-      <select v-model="n.deckId"><option :value="undefined">Первая доступная</option><option v-for="d in state.decks" :key="d.id" :value="d.id">{{ d.title }}</option></select>
+      <select v-model="n.deckId"><option :value="undefined">Первая доступная</option><option v-for="d in deckStore.list" :key="d.id" :value="d.id">{{ d.title }}</option></select>
     </template>
     <template v-if="withDesc"><label class="lab">{{ n.type === 'combo' ? 'Текст домашнего задания' : 'Текст задания' }}</label><textarea v-model="n.desc" rows="3" /></template>
     <label v-if="!preset" class="row2" style="margin-bottom:8px"><input v-model="n.done" type="checkbox" style="width:auto;margin:0" /> Выполнено</label>

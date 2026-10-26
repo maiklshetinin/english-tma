@@ -1,13 +1,15 @@
 <script setup>
 import { computed } from 'vue'
-import { state, allLessons, fmtDate, relDay } from '../store/mock'
+import { allLessons, fmtDate, relDay } from '../store/app'
 import { useTelegram } from '../composables/useTelegram'
 import AppIcon from '../components/AppIcon.vue'
+import { useAuthStore } from '../stores/auth'
+const auth = useAuthStore()
 const { openChat } = useTelegram()
-const isTeacher = computed(() => state.role === 'teacher')
+const isTeacher = computed(() => auth.role === 'teacher')
 const groups = computed(() => {
   const m = {}
-  allLessons.value.filter(l => isTeacher.value || l.studentId === state.currentStudentId).forEach(l => (m[l.date] ??= []).push(l))
+  allLessons.value.filter(l => isTeacher.value || l.studentId === auth.currentStudentId).forEach(l => (m[l.date] ??= []).push(l))
   return Object.entries(m)
 })
 </script>
@@ -20,7 +22,7 @@ const groups = computed(() => {
         <span class="badge" :class="l.done ? 'ok' : 'warn'">{{ l.done ? 'Проведён' : 'Запланирован' }}</span>
       </div>
     </div>
-    <button v-if="!isTeacher" class="btn" @click="openChat(state.teacher.username)"><AppIcon name="chat" :size="18" /> Написать учителю</button>
+    <button v-if="!isTeacher" class="btn" @click="openChat(auth.teacher.username)"><AppIcon name="chat" :size="18" /> Написать учителю</button>
   </div>
 </template>
 <style scoped>.grp { display: grid; gap: 8px }</style>

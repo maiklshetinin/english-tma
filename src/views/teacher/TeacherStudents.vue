@@ -1,12 +1,17 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { loadStudents } from '../../composables/useStudents'
-import { state, pathOf, pctOf, unitOf } from '../../store/mock'
+import { state, pctOf, unitOf } from '../../store/app'
 import AddStudent from '../../components/AddStudent.vue'
 import Avatar from '../../components/Avatar.vue'
 import StudentDetail from './StudentDetail.vue'
+import { useStudentsStore } from '../../stores/students'
+import { usePathStore } from '../../stores/path'
+import { useContentStore } from '../../stores/content'
+const pathStore = usePathStore()
+const contentStore = useContentStore()
+const studentStore = useStudentsStore()
 const adding = ref(false)
-onMounted(() => loadStudents().catch(() => {}))      // подтянуть новых учеников и статусы «В приложении»
+onMounted(() => { studentStore.load().catch(() => {}); contentStore.load().catch(() => {}) })      // подтянуть новых учеников, статусы «В приложении» и отметки учеников в пути
 const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', 'warn'], overdue: ['Просрочено', 'bad'] }
 </script>
 <template>
@@ -14,14 +19,14 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
   <div v-else class="page wide">
     <div class="row2" style="justify-content:space-between"><h2 style="margin:6px 0">Ученики</h2><button v-if="!adding" class="btn" @click="adding = true">+ Добавить ученика</button></div>
     <AddStudent v-if="adding" @close="adding = false" />
-    <div v-if="!state.students.length && !adding" class="card" style="text-align:center"><b>Пока никого нет</b><p class="hint" style="margin:6px 0 0">Нажмите «Добавить ученика», введите имя и отправьте ему ссылку-приглашение.</p></div>
+    <div v-if="!studentStore.list.length && !adding" class="card" style="text-align:center"><b>Пока никого нет</b><p class="hint" style="margin:6px 0 0">Нажмите «Добавить ученика», введите имя и отправьте ему ссылку-приглашение.</p></div>
     <div v-else class="card tbl">
       <div class="tr th"><span>Ученик</span><span class="uc">Юнит</span><span>Оплата</span><span>Прогресс</span></div>
-      <button class="tr" v-for="s in state.students" :key="s.id" @click="state.selectedStudentId = s.id">
-        <span class="who"><Avatar :s="s" /><span><b>{{ s.name }}</b><small v-if="s.status === 'invited'" class="badge warn" style="justify-self:start">Ждёт приглашения</small><small class="hint ui">{{ unitOf(pathOf(s.id)) }}</small></span></span>
-        <span class="hint uc">{{ unitOf(pathOf(s.id)) }}</span>
+      <button class="tr" v-for="s in studentStore.list" :key="s.id" @click="state.selectedStudentId = s.id">
+        <span class="who"><Avatar :s="s" /><span><b>{{ s.name }}</b><small v-if="s.status === 'invited'" class="badge warn" style="justify-self:start">Ждёт приглашения</small><small class="hint ui">{{ unitOf(pathStore.of(s.id)) }}</small></span></span>
+        <span class="hint uc">{{ unitOf(pathStore.of(s.id)) }}</span>
         <span><span class="badge" :class="PAY[s.payment.status][1]">{{ PAY[s.payment.status][0] }}</span></span>
-        <span class="prog"><span class="bar"><i :style="{ width: pctOf(pathOf(s.id)) + '%' }" /></span>{{ pctOf(pathOf(s.id)) }}%</span>
+        <span class="prog"><span class="bar"><i :style="{ width: pctOf(pathStore.of(s.id)) + '%' }" /></span>{{ pctOf(pathStore.of(s.id)) }}%</span>
       </button>
     </div>
   </div>

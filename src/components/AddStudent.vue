@@ -2,8 +2,10 @@
 // «Добавить ученика»: имя + уровень → запись в Firestore → сразу ссылка-приглашение (скопировать / отправить в Telegram).
 // Ник вводить не нужно: ученик привяжется по ссылке, а не по нику.
 import { ref } from 'vue'
-import { addStudent, copyText, shareInvite } from '../composables/useStudents'
 import { showToast } from '../composables/useToast'
+import { useStudentsStore } from '../stores/students'
+import { copyText, shareInvite } from '../composables/useShare'
+const studentStore = useStudentsStore()
 const emit = defineEmits(['close'])
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 const name = ref(''), level = ref('A1'), pack = ref(8)
@@ -12,7 +14,7 @@ const busy = ref(false), error = ref(''), url = ref(''), added = ref('')
 async function submit() {
   if (!name.value.trim() || busy.value) return
   busy.value = true; error.value = ''
-  try { url.value = await addStudent({ name: name.value, level: level.value, packageSize: pack.value }); added.value = name.value.trim() }
+  try { url.value = await studentStore.add({ name: name.value, level: level.value, packageSize: pack.value }); added.value = name.value.trim() }
   catch (e) { error.value = e.message }
   busy.value = false
 }
