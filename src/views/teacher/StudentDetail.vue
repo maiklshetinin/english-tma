@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { pctOf } from '../../store/app'
+import { pctOf, state } from '../../store/app'
 import { showToast } from '../../composables/useToast'
 import { useTelegram } from '../../composables/useTelegram'
 import Avatar from '../../components/Avatar.vue'
@@ -21,6 +21,27 @@ const remind = (t) => { haptic('medium'); notify(`Отправлено: ${s.valu
 
 // Ссылка-приглашение: ученик открывает её в Telegram, и его аккаунт привязывается к этой записи (одноразовая).
 // Если запись уже привязана, новая ссылка переключит её на другой аккаунт — старый потеряет доступ.
+// Ник Telegram: можно добавить или поменять, пока ученик не открыл приглашение (потом ник и фото приходят из его аккаунта)
+const nick = ref(''), nickBusy = ref(false)
+const NICK = /^[A-Za-z][A-Za-z0-9_]{4,31}$/
+const cleanNick = () => nick.value.trim().replace(/^(https?:\/\/)?(www\.)?(t|telegram)\.me\//i, '').replace(/^@/, '').split(/[/?#\s]/)[0]
+async function saveNick() {
+  const u = cleanNick()
+  if (!NICK.test(u)) return notify('Ник в Telegram: 5–32 символа, латиница, цифры и _, начинается с буквы')
+  nickBusy.value = true
+  try { await studentStore.setUsername(s.value.id, u); nick.value = ''; showToast(s.value.photoUrl ? 'Ник сохранён, фото найдено' : 'Ник сохранён, фото в Telegram не найдено') }
+  catch (e) { notify(e.message) } finally { nickBusy.value = false }
+}
+// Цена урока: новая действует для уроков со следующего часа, прошедшие остаются по старой цене
+const priceIn = ref(''), priceBusy = ref(false)
+async function savePrice() {
+  const n = Number(String(priceIn.value).replace(',', '.'))
+  if (priceIn.value === '' || !Number.isFinite(n) || n < 0 || n > 100000) return notify('Цена — число от 0 до 100000')
+  if (n === s.value.price) { priceIn.value = ''; return }
+  priceBusy.value = true
+  try { await studentStore.setPrice(s.value.id, n); priceIn.value = ''; showToast('Цена сохранена: действует для следующих уроков, прошедшие не меняются') }
+  catch (e) { notify(e.message) } finally { priceBusy.value = false }
+}
 const inviteUrl = ref(''), inviteBusy = ref(false), confirmArchive = ref(false)
 async function invite() {
   inviteBusy.value = true
@@ -62,6 +83,15 @@ const saveAsPreset = () => {
       <div v-if="inviteUrl" class="row2" style="margin-top:8px">
         <input :value="inviteUrl" readonly aria-label="Ссылка-приглашение" style="flex:1;min-width:180px;margin:0" @focus="$event.target.select()" />
         <button class="btn ghost" @click="shareInvite(inviteUrl)">Отправить в Telegram</button>
+      </div>
+      <div class="row2" style="margin-top:12px">
+        <input v-model="priceIn" type="number" min="0" max="100000" step="any" inputmode="decimal" :placeholder="s.price ? 'Сейчас: ' + s.price : 'Цена урока'" aria-label="Цена урока" style="flex:1;min-width:180px;margin:0" @keydown.enter="savePrice" />
+        <button class="btn ghost" :disabled="priceIn === '' || priceBusy" @click="savePrice">{{ s.price ? 'Изменить цену' : 'Указать цену' }}</button>
+      </div>
+      <p class="hint" style="margin:4px 0 0">Новая цена — для уроков со следующего часа. Прошедшие остаются по старой.</p>
+      <div v-if="s.status === 'invited'" class="row2" style="margin-top:12px">
+        <input v-model="nick" :placeholder="s.username ? '@' + s.username : 'Ник в Telegram, например @maria'" aria-label="Ник в Telegram" autocapitalize="off" autocomplete="off" maxlength="60" style="flex:1;min-width:180px;margin:0" @keydown.enter="saveNick" />
+        <button class="btn ghost" :disabled="!nick.trim() || nickBusy" @click="saveNick">{{ s.username ? 'Сменить ник' : 'Добавить ник' }}</button>
       </div>
       <div class="row2" style="margin-top:12px"><AppIcon name="bell" :size="18" />
         <button v-for="p in PRESETS" :key="p" class="btn ghost" @click="remind(p)">{{ p }}</button></div>

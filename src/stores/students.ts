@@ -11,7 +11,7 @@ import { useScheduleStore } from './schedule'
 // Сервер уже отдаёт нужную форму; здесь только значения по умолчанию на случай неполных данных
 const normalize = (x: Student): Student => ({
   ...x, name: x.name || 'Без имени', level: x.level || 'A1', username: x.username || '', streak: x.streak ?? 0, coins: x.coins ?? 0,
-  status: x.status || 'invited', tgId: x.tgId ?? null, photoUrl: x.photoUrl || '', price: x.price ?? 0,
+  status: x.status || 'invited', tgId: x.tgId ?? null, photoUrl: x.photoUrl || '', price: x.price ?? 0, priceHistory: x.priceHistory ?? [{ from: '', price: x.price ?? 0 }],
 })
 
 async function call<T>(path: string, opts: RequestInit | undefined, what: string): Promise<T> {
@@ -50,10 +50,22 @@ export const useStudentsStore = defineStore('students', () => {
   async function invite(studentId: string): Promise<string> {
     return (await call<InviteResponse>('/invites', { method: 'POST', body: JSON.stringify({ studentId }) }, 'Не удалось создать приглашение')).url
   }
+  /** Ник Telegram у уже созданного ученика (пока он не открыл приглашение): сервер заново ищет фото по нику. */
+  async function setUsername(studentId: string, username: string): Promise<void> {
+    const r = await apiRequest(`/students/${encodeURIComponent(studentId)}/username`, { method: 'POST', body: JSON.stringify({ username }) })
+    if (!r.ok) throw new Error(r.status === 400 ? 'Ник в Telegram: 5–32 символа, латиница, цифры и _, начинается с буквы' : r.status === 409 ? 'Ученик уже вошёл в приложение — ник и фото берутся из его Telegram' : r.status === 404 ? 'Ученик не найден (возможно, уже в архиве)' : `Не удалось сохранить ник (${r.status})`)
+    await load().catch(() => {})
+  }
+  /** Новая цена урока: действует для уроков со следующего часа, прошедшие остаются по старой (история цен хранится на сервере). */
+  async function setPrice(studentId: string, price: number): Promise<void> {
+    const r = await apiRequest(`/students/${encodeURIComponent(studentId)}/price`, { method: 'POST', body: JSON.stringify({ price }) })
+    if (!r.ok) throw new Error(r.status === 400 ? 'Цена — число от 0 до 100000' : r.status === 404 ? 'Ученик не найден (возможно, уже в архиве)' : `Не удалось сохранить цену (${r.status})`)
+    await load().catch(() => {})
+  }
   async function archive(studentId: string): Promise<void> {
     await call(`/students/${encodeURIComponent(studentId)}/archive`, { method: 'POST' }, 'Не удалось архивировать')
     await Promise.all([load().catch(() => {}), useScheduleStore().load().catch(() => {})])      // сервер заодно убирает ученика из уроков
   }
 
-  return { list, byId, set, clear, load, startRefresh, stopRefresh, add, invite, archive }
+  return { list, byId, set, clear, load, startRefresh, stopRefresh, add, invite, setUsername, setPrice, archive }
 })

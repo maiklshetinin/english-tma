@@ -10,7 +10,7 @@ import { useStudentsStore } from './students'
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: async () => body } as Response)
 const err = (status: number) => Promise.resolve({ ok: false, status, json: async () => ({}) } as Response)
-const st = (id: string, name: string): Student => ({ id, name, level: 'A2', color: '#fff', username: '', streak: 0, coins: 0, status: 'invited', tgId: null, photoUrl: '', price: 0, payment: { status: 'due', until: '2026-11-01', lessonsLeft: 0, packageSize: 8 } })
+const st = (id: string, name: string): Student => ({ id, name, level: 'A2', color: '#fff', username: '', streak: 0, coins: 0, status: 'invited', tgId: null, photoUrl: '', price: 0, priceHistory: [{ from: '', price: 0 }], payment: { status: 'due', until: '2026-11-01', lessonsLeft: 0, packageSize: 8 } })
 
 describe('students store', () => {
   beforeEach(() => { setActivePinia(createPinia()); apiRequest.mockReset() })
@@ -46,6 +46,28 @@ describe('students store', () => {
     const s = useStudentsStore()
     await s.archive('1')
     expect(apiRequest.mock.calls.map((c) => c[0]).sort()).toEqual(['/schedule', '/students', '/students/1/archive'])
+  })
+
+  it('setUsername: отправляет ник и перечитывает список; ошибки понятные', async () => {
+    apiRequest.mockImplementation((path: string) => (path.endsWith('/username') ? ok(st('1', 'Маша')) : ok([st('1', 'Маша')])))
+    const s = useStudentsStore()
+    await s.setUsername('1', '@masha_en')
+    expect(apiRequest.mock.calls[0][0]).toBe('/students/1/username')
+    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ username: '@masha_en' })
+    expect(apiRequest.mock.calls.map((c) => c[0])).toContain('/students')
+    apiRequest.mockImplementation(() => err(400)); await expect(s.setUsername('1', 'x')).rejects.toThrow('5–32')
+    apiRequest.mockImplementation(() => err(409)); await expect(s.setUsername('1', 'masha_en')).rejects.toThrow('уже вошёл')
+  })
+
+  it('setPrice: отправляет цену и перечитывает список; ошибки понятные', async () => {
+    apiRequest.mockImplementation((path: string) => (path.endsWith('/price') ? ok(st('1', 'Маша')) : ok([st('1', 'Маша')])))
+    const s = useStudentsStore()
+    await s.setPrice('1', 150)
+    expect(apiRequest.mock.calls[0][0]).toBe('/students/1/price')
+    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ price: 150 })
+    expect(apiRequest.mock.calls.map((c) => c[0])).toContain('/students')
+    apiRequest.mockImplementation(() => err(400)); await expect(s.setPrice('1', -1)).rejects.toThrow('от 0')
+    apiRequest.mockImplementation(() => err(404)); await expect(s.setPrice('1', 5)).rejects.toThrow('не найден')
   })
 
   it('clear очищает список', () => {
