@@ -51,7 +51,7 @@ describe('все экраны в демо-режиме', () => {
     await go('cards'); await visit('student cards')
 
     // Правка в сторе отражается на экране
-    auth.setRole('teacher'); await go('words')
+    auth.setRole('teacher'); await flushPromises(); await go('words')      // дать App.vue увести со вкладки ученика, потом открыть «Слова»
     useDecksStore().list[0].title = 'Переименовано'; await visit('rename'); expect(w.text()).toContain('Переименовано')
     await go('path'); usePathStore().presets[0].name = 'Другой пресет'; await visit('rename preset'); expect(w.text()).toContain('Другой пресет')
 

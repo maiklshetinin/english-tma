@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { BOT_USERNAME } from './firebase'
 import TelegramLogin from './components/TelegramLogin.vue'
@@ -13,8 +13,9 @@ const auth = useAuthStore()
 
 const router = useRouter(), route = useRoute()
 // Роль становится известна только после входа: если адрес (закладка, обновление) не для этой роли — на первую вкладку роли
-watch(() => [auth.status, auth.role, route.fullPath], () => {
-  if (auth.status !== 'ready') return
+const booted = ref(false)      // вход закончен и демо-роль из адреса применена: до этого роль «временная» и адрес трогать нельзя
+watch(() => [booted.value, auth.status, auth.role, route.fullPath], () => {
+  if (!booted.value || auth.status !== 'ready') return
   const to = redirectFor(route, auth.role)
   if (to) router.replace(to)
 }, { immediate: true })
@@ -22,7 +23,7 @@ watch(() => [auth.status, auth.role, route.fullPath], () => {
 useBackButton(computed(() => auth.status === 'ready' && !!route.params.id), () => goUp(router))
 // В демо-режиме роль можно задать в URL: ?demo&role=teacher (переключатель — в «Профиле»)
 const demo = import.meta.env.DEV || new URLSearchParams(location.search).has('demo')
-onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(location.search).get('role'); if (demo && (r === 'teacher' || r === 'student')) auth.setRole(r) }))
+onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(location.search).get('role'); if (demo && (r === 'teacher' || r === 'student')) auth.setRole(r) }).finally(() => { booted.value = true }))
 </script>
 
 <template>
