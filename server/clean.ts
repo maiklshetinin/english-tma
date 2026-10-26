@@ -1,6 +1,7 @@
 // Проверка и очистка данных, которые присылает сайт: оставляем только известные поля нужных типов и размеров.
 // Всё, что не подходит, — ошибка 400 с понятным текстом. Файл чистый (без Firebase), его легко тестировать.
 import { fail } from './errors.js'
+import { isMediaUrl } from './media.js'
 import { NODE_TYPES } from './types.js'
 import type { Card, DeckInput, NodeType, PathNode, PathUnit, PresetInput, SrsRateInput, SrsState } from './types.js'
 
@@ -79,6 +80,12 @@ function cleanCard(x: unknown, seen: Set<string>): Card {
   seen.add(cardId)
   const c: Card = { id: cardId, front: str(x.front, 'card word', 300, true), back: str(x.back, 'card translation', 300, true) }
   const example = str(x.example, 'card example', 600); if (example) c.example = example
+  const exampleTr = str(x.exampleTr, 'card example translation', 600); if (exampleTr) c.exampleTr = exampleTr
+  for (const k of ['image', 'audio'] as const) {
+    const url = str(x[k], `card ${k}`, 400)
+    if (url && !isMediaUrl(url)) throw fail(400, `card ${k}: only https links to Google (Drive, Cloud Storage) are allowed`)
+    if (url) c[k] = url
+  }
   if (x.suspended === true) c.suspended = true
   return c
 }

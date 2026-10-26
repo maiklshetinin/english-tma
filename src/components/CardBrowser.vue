@@ -24,7 +24,7 @@ function status(c) {
 }
 const rows = computed(() => {
   const k = q.value.trim().toLowerCase()
-  return props.deck.cards.filter(c => (!k || (c.front + ' ' + c.back + ' ' + (c.example || '')).toLowerCase().includes(k))
+  return props.deck.cards.filter(c => (!k || (c.front + ' ' + c.back + ' ' + (c.example || '') + ' ' + (c.exampleTr || '')).toLowerCase().includes(k))
     && (filter.value === 'all' || status(c).k === filter.value))
 })
 function add() {
@@ -55,7 +55,7 @@ function del(c) {
       <label class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Поиск по карточкам…" aria-label="Поиск по карточкам" /></label>
       <div class="seg fl"><button v-for="x in FILTERS" :key="x[0]" :class="{ on: filter === x[0] }" @click="filter = x[0]">{{ x[1] }}</button></div>
       <div v-for="c in rows" :key="c.id" class="r" :class="{ off: c.suspended }">
-        <div class="tx"><b>{{ c.front }}</b> — {{ c.back }}<div v-if="c.example" class="hint">{{ c.example }}</div></div>
+        <div class="tx"><b>{{ c.front }}</b> — {{ c.back }}<span v-if="c.image" title="Есть фото"> 🖼</span><span v-if="c.audio" title="Есть озвучка"> 🔊</span><div v-if="c.example" class="hint">{{ c.example }}</div><div v-if="c.exampleTr" class="hint">{{ c.exampleTr }}</div></div>
         <span class="badge" :class="status(c).cls">{{ status(c).t }}</span>
         <template v-if="canManage">
           <button class="ib" :aria-label="c.suspended ? 'Показать карточку' : 'Скрыть карточку'" :title="c.suspended ? 'Вернуть в обучение' : 'Скрыть из обучения'" @click="c.suspended = !c.suspended"><AppIcon name="lock" :size="16" /></button>

@@ -8,11 +8,13 @@ const props = defineProps({ deck: { type: Object, required: true }, auto: Boolea
 const url = ref(props.deck.source?.url || ''), raw = ref(''), msg = ref(''), bad = ref(false), busy = ref(false)
 
 function apply(rows, withUrl) {
-  if (!rows.length) { bad.value = true; msg.value = 'Не найдено пар «слово — перевод». Колонки: A — слово, B — перевод, C — пример.'; return }
-  const { added, updated } = mergeCards(props.deck, rows)
+  if (!rows.length) { bad.value = true; msg.value = 'Не найдено пар «слово — перевод». Колонки: A — слово, B — перевод, C — пример, D — перевод примера, E — фото, F — озвучка.'; return }
+  const { added, updated, badLinks } = mergeCards(props.deck, rows)
   if (withUrl) props.deck.source = { url: url.value.trim(), lastSync: new Date().toISOString() }
   bad.value = false
-  msg.value = added || updated ? `Добавлено слов: ${added}, обновлено: ${updated}` : 'Всё уже актуально — новых слов нет'
+  msg.value = (added || updated ? `Добавлено слов: ${added}, обновлено: ${updated}` : 'Всё уже актуально — новых слов нет')
+    + (badLinks ? `. Ссылок пропущено: ${badLinks} — нужны https-ссылки на Google Диск или Cloud Storage` : '')
+  bad.value = badLinks > 0
 }
 async function sync() {
   msg.value = ''; busy.value = true
@@ -26,7 +28,7 @@ onMounted(() => { if (props.auto && url.value.trim()) sync() })
 <template>
   <div class="sl">
     <h3 class="h"><AppIcon name="sheet" /> Google Таблица</h3>
-    <p class="hint" style="margin:0 0 10px">Колонки: A — слово, B — перевод, C — пример. Доступ к таблице: «Все, у кого есть ссылка» (просмотр).</p>
+    <p class="hint" style="margin:0 0 10px">Колонки: A — слово, B — перевод, C — пример, D — перевод примера, E — ссылка на фото (450×300), F — ссылка на озвучку. Доступ к таблице и к файлам на Диске: «Все, у кого есть ссылка» (просмотр).</p>
     <input v-model="url" placeholder="https://docs.google.com/spreadsheets/d/…" aria-label="Ссылка на Google Таблицу" />
     <button class="btn" :disabled="busy || !url.trim()" @click="sync">
       <AppIcon v-if="deck.source?.lastSync" name="refresh" :size="16" /> {{ busy ? 'Загрузка…' : deck.source?.lastSync ? 'Обновить из таблицы' : 'Загрузить слова' }}

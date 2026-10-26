@@ -191,7 +191,9 @@ export interface PresetDoc { name: string; units: PathUnit[]; createdBy: string;
 export interface PresetInput { name: string; units: PathUnit[] }
 
 // ───────────────────────── Колода слов · коллекция decks ─────────────────────────
-export interface Card { id: string; front: string; back: string; example?: string; suspended?: boolean }
+/** Карточка слова. Колонки Google Таблицы: A — слово (front), B — перевод (back), C — пример (example), D — перевод примера (exampleTr),
+ *  E — ссылка на фото (image, рекомендуем 450×300), F — ссылка на озвучку слова (audio). Фото и озвучка — только https-ссылки на Google (server/media.ts). */
+export interface Card { id: string; front: string; back: string; example?: string; exampleTr?: string; image?: string; audio?: string; suspended?: boolean }
 export interface DeckSource { url: string; lastSync: string | null }     // ссылка на Google Таблицу и время последней синхронизации (ISO)
 export interface Deck {
   id: string

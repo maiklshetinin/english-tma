@@ -1,6 +1,8 @@
 import { apiFetch } from '../firebase'
 import { newId } from '../utils/id'
-// Колонки таблицы: A — слово, B — перевод, C — пример (необязательно). Первая строка-заголовок пропускается.
+import { isMediaUrl } from '../utils/media'
+// Колонки таблицы: A — слово, B — перевод, C — пример, D — перевод примера, E — ссылка на фото, F — ссылка на озвучку (C–F необязательны).
+// Первая строка-заголовок пропускается.
 export function sheetUrlToCsv(url) {
   const m = url.match(/\/spreadsheets\/d\/([\w-]+)/)
   if (!m) throw new Error('Это не похоже на ссылку Google Таблицы')
@@ -33,22 +35,30 @@ export function parseCsv(text) {
 export function parseCards(text) {
   const rows = parseCsv(text).map(r => r.map(c => c.trim())).filter(r => r[0] && r[1])
   if (rows[0] && /^(word|слово|front|english)/i.test(rows[0][0])) rows.shift()
-  return rows.map(([front, back, example = '']) => ({ front, back, example }))
+  return rows.map(([front, back, example = '', exampleTr = '', image = '', audio = '']) => ({ front, back, example, exampleTr, image, audio }))
 }
 
-// Вливает строки таблицы в колоду: новые слова добавляются, у существующих (по слову) обновляются перевод и пример.
-// Прогресс учеников не теряется: id карточки остаётся прежним.
+// Вливает строки таблицы в колоду: новые слова добавляются, у существующих (по слову) обновляются перевод, пример, его перевод, фото и озвучка.
+// Пустая ячейка ничего не стирает. Прогресс учеников не теряется: id карточки остаётся прежним.
+// Ссылки не на Google (или не https) пропускаются и считаются в badLinks — иначе сервер отклонил бы всю колоду.
+const FIELDS = ['example', 'exampleTr', 'image', 'audio']
 export function mergeCards(deck, rows) {
   const by = new Map(deck.cards.map(c => [c.front.trim().toLowerCase(), c]))
-  let added = 0, updated = 0
+  let added = 0, updated = 0, badLinks = 0
   for (const r of rows) {
-    const k = r.front.trim().toLowerCase(), ex = by.get(k)
+    const row = { ...r }
+    for (const f of ['image', 'audio']) if (row[f] && !isMediaUrl(row[f])) { row[f] = ''; badLinks++ }
+    const k = row.front.trim().toLowerCase(), ex = by.get(k)
     if (ex) {
-      if (ex.back !== r.back || (r.example && ex.example !== r.example)) { ex.back = r.back; if (r.example) ex.example = r.example; updated++ }
+      let changed = ex.back !== row.back
+      if (changed) ex.back = row.back
+      for (const f of FIELDS) if (row[f] && ex[f] !== row[f]) { ex[f] = row[f]; changed = true }
+      if (changed) updated++
     } else {
-      deck.cards.push({ id: newId('c'), front: r.front, back: r.back, example: r.example })
-      by.set(k, deck.cards[deck.cards.length - 1]); added++
+      const c = { id: newId('c'), front: row.front, back: row.back }
+      for (const f of FIELDS) if (row[f]) c[f] = row[f]
+      deck.cards.push(c); by.set(k, c); added++
     }
   }
-  return { added, updated }
+  return { added, updated, badLinks }
 }

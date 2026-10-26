@@ -2,8 +2,9 @@
 // Сессия повторения в стиле Anki: очередь (изучаю → к повторению → новые), «Показать ответ», 4 оценки с интервалами,
 // отмена последнего ответа, счётчики «новые / изучаю / к повторению». Клавиши: Пробел — ответ/«Хорошо», 1–4 — оценка, Z — отмена.
 // Используется и во вкладке «Слова», и внутри кружка пути (embedded).
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { buildQueue, srsOf, kindOf, rate, restore, snapshot, intervalLabel, nextDueInfo } from '../composables/useSrs'
+import { imageSrc, audioSrc } from '../utils/media'
 import AppIcon from './AppIcon.vue'
 import CardEditor from './CardEditor.vue'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, canEdit: Boolean, embedded: Boolean })
@@ -17,6 +18,23 @@ const counts = computed(() => { const o = { new: 0, learn: 0, due: 0 }; for (con
 const cur = computed(() => card.value && { new: 'new', learn: 'learn', review: 'due' }[kind(card.value)])
 const GRADES = [{ q: 0, t: 'Снова' }, { q: 1, t: 'Трудно' }, { q: 2, t: 'Хорошо' }, { q: 3, t: 'Легко' }]
 const next = computed(() => nextDueInfo(props.deck, props.userKey))
+
+// Фото и озвучка (необязательны). Озвучка слова включается сама при показе карточки (можно выключить), 🔊 — повторить.
+const hasAudio = computed(() => props.deck.cards.some((c) => c.audio))
+const store = (k, v) => { try { return v === undefined ? localStorage.getItem(k) : localStorage.setItem(k, v) } catch { return null } }
+const autoplay = ref(store('tma.autoplay') !== 'off')
+const toggleAuto = () => { autoplay.value = !autoplay.value; store('tma.autoplay', autoplay.value ? 'on' : 'off') }
+const imgBad = ref(false)
+let au = null
+function play() {
+  const c = card.value; if (!c?.audio) return
+  try { au?.pause(); au = new Audio(audioSrc(c.audio)); au.play().catch(() => {}) } catch { /* звук необязателен */ }      // автозапуск может быть запрещён браузером — не страшно
+}
+watch(card, (c) => {
+  imgBad.value = false
+  if (autoplay.value && c?.audio) play()
+  const n = queue.value[1]; if (n?.image) new Image().src = imageSrc(n.image)       // следующее фото грузится заранее
+}, { immediate: true })
 
 function answer(q) {
   const c = card.value; if (!c || !flipped.value) return
@@ -33,6 +51,7 @@ function onKey(e) {
   const tag = e.target?.tagName
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return
   if ((e.key === 'z' || e.key === 'я') && hist.value.length) return undo()
+  if ((e.key === 'r' || e.key === 'к') && card.value?.audio) return play()
   if (!card.value) return
   if (e.key === ' ' || e.key === 'Enter') {
     if (tag === 'BUTTON') return                                  // фокус на кнопке — пусть сработает сама кнопка
@@ -40,7 +59,7 @@ function onKey(e) {
   } else if (flipped.value && /^[1-4]$/.test(e.key)) answer(+e.key - 1)
 }
 onMounted(() => addEventListener('keydown', onKey))
-onUnmounted(() => removeEventListener('keydown', onKey))
+onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause() })
 </script>
 
 <template>
@@ -55,8 +74,12 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 
     <template v-if="card">
       <div class="card face" @click="flipped = true">
-        <div class="q">{{ card.front }}</div>
-        <template v-if="flipped"><hr /><div class="a">{{ card.back }}</div><div v-if="card.example" class="hint ex">{{ card.example }}</div></template>
+        <div class="wd"><div class="q">{{ card.front }}</div><button v-if="card.audio" class="spk" aria-label="Озвучить слово" title="Озвучить (R)" @click.stop="play">🔊</button></div>
+        <img v-if="card.image && !imgBad" :key="card.id" class="pic" :src="imageSrc(card.image)" width="450" height="300" alt="" @error="imgBad = true" />
+        <template v-if="flipped">
+          <hr /><div class="a">{{ card.back }}</div>
+          <div v-if="card.example" class="ex">{{ card.example }}</div><div v-if="card.exampleTr" class="hint ex2">{{ card.exampleTr }}</div>
+        </template>
       </div>
       <button v-if="!flipped" class="btn show" @click="flipped = true">Показать ответ</button>
       <div v-else class="grades">
@@ -65,7 +88,8 @@ onUnmounted(() => removeEventListener('keydown', onKey))
       <div class="tools">
         <button :disabled="!hist.length" @click="undo"><AppIcon name="undo" :size="16" /> Отменить</button>
         <button v-if="canEdit" @click="editing = true"><AppIcon name="pencil" :size="16" /> Править</button>
-        <span class="hint keys">Пробел · 1–4 · Z</span>
+        <button v-if="hasAudio" @click="toggleAuto">🔊 Автозвук: {{ autoplay ? 'вкл' : 'выкл' }}</button>
+        <span class="hint keys">Пробел · 1–4 · Z<template v-if="hasAudio"> · R</template></span>
       </div>
     </template>
 
@@ -90,7 +114,11 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .face { min-height: 220px; display: grid; align-content: center; justify-items: center; gap: 12px; text-align: center; padding: 24px 18px; cursor: pointer }
 .q { font-size: 32px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere }
 hr { width: 100%; border: 0; border-top: 2px solid var(--border); margin: 4px 0 }
-.a { font-size: 26px; font-weight: 800; color: var(--blue); overflow-wrap: anywhere } .ex { font-style: italic; margin: 0 }
+.a { font-size: 26px; font-weight: 800; color: var(--blue); overflow-wrap: anywhere }
+.ex { font-size: 18px; font-weight: 700; overflow-wrap: anywhere } .ex2 { margin: 0; font-size: 16px }
+.wd { display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 100% }
+.spk { border: 2px solid var(--border); background: var(--card); border-radius: 50%; width: 40px; height: 40px; font-size: 18px; cursor: pointer; flex: none }
+.pic { display: block; width: 100%; max-width: 450px; height: auto; aspect-ratio: 3 / 2; object-fit: contain; border-radius: 14px; background: var(--surface) }      /* фото 450×300 */
 .show { width: 100%; padding: 16px }
 .grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
 .g { border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 14px; padding: 10px 4px; font: inherit; font-weight: 800; cursor: pointer; background: var(--card); color: var(--text) }
