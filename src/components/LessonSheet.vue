@@ -8,9 +8,9 @@ import { useStudentsStore } from '../stores/students'
 import { priceAt } from '../utils/price'
 const studentStore = useStudentsStore()
 const props = defineProps({ lesson: Object, slot: Object })
-const emit = defineEmits(['close', 'remove', 'open', 'pick'])
+const emit = defineEmits(['close', 'remove', 'open', 'pick', 'done'])
 const members = computed(() => (props.lesson?.studentIds ?? []).map(id => studentStore.list.find(x => x.id === id)).filter(Boolean))   // архивных учеников в списке нет
-const cost = (st) => (props.lesson ? priceAt(st, props.lesson.date, props.lesson.hour) : 0)      // цена на время урока: прошедшие уроки не пересчитываются
+const cost = (st) => (!props.lesson ? 0 : props.lesson.done && props.lesson.prices?.[st.id] != null ? props.lesson.prices[st.id] : priceAt(st, props.lesson.date, props.lesson.hour))      // цена на время урока: прошедшие уроки не пересчитываются
 const when = computed(() => props.lesson ? fmtSlot(props.lesson.date, props.lesson.hour) : fmtSlot(props.slot.date, props.slot.hour))
 </script>
 
@@ -26,7 +26,9 @@ const when = computed(() => props.lesson ? fmtSlot(props.lesson.date, props.less
           <h2 style="margin:0">Групповой урок</h2><div class="hint">{{ when }}</div>
           <button v-for="st in members" :key="st.id" class="pick" @click="emit('open', st.id)"><Avatar :s="st" :size="36" /><b>{{ st.name }}</b><small v-if="cost(st)">{{ cost(st) }}</small><small>{{ handle(st) }}</small></button>
         </template>
-        <button class="btn ghost" style="color:var(--red)" @click="emit('remove', lesson)"><AppIcon name="trash" :size="16" /> Убрать урок</button>
+        <span class="badge" :class="lesson.done ? 'ok' : 'warn'" style="justify-self:start">{{ lesson.done ? 'Проведён' : 'Запланирован' }}</span>
+        <button class="btn" :class="{ ghost: lesson.done }" @click="emit('done', lesson)">{{ lesson.done ? 'Снять отметку «проведён»' : 'Урок проведён' }}</button>
+        <button class="btn ghost" style="color:var(--red)" :disabled="lesson.done" @click="emit('remove', lesson)"><AppIcon name="trash" :size="16" /> Убрать урок</button>
         <button class="btn ghost" style="color:var(--hint)" @click="emit('close')">Закрыть</button>
       </template>
       <template v-else>

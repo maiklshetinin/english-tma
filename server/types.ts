@@ -122,6 +122,9 @@ export interface LessonDoc {
   hour: number                 // 8–22
   weekStart: string            // понедельник той недели, где лежит дата
   studentIds: string[]         // один ученик или группа (до 12)
+  done?: boolean               // «урок проведён» (отмечает преподаватель; на всех учеников урока сразу)
+  doneAt?: ServerTime | null
+  prices?: Record<string, number>   // цена урока по ученикам, зафиксированная в момент отметки «проведён»: потом не меняется
   createdBy: string
   createdAt: ServerTime
 }
@@ -132,6 +135,8 @@ export interface Lesson {
   date: string
   hour: number
   studentIds: string[]         // у ученика — только он сам, чужих не видно
+  done?: boolean               // проведён ли урок (отмечает преподаватель)
+  prices?: Record<string, number>   // у проведённого урока — зафиксированная цена по ученикам (ученик видит только свою)
 }
 
 export interface LessonInput {             // POST /lessons
@@ -140,6 +145,7 @@ export interface LessonInput {             // POST /lessons
   date: string
   hour: number
 }
+export interface DoneInput { done: boolean }   // POST /lessons/:id/done
 export interface SlotInput { date: string; hour: number }   // POST /lessons/:id/move
 
 // ───────────────────────── Неделя · коллекция schedule ─────────────────────────

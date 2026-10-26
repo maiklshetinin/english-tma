@@ -27,6 +27,20 @@ describe('schedule store', () => {
     expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ studentIds: ['s1'], date: D, hour: 18 })
   })
 
+  it('setDone: статус меняется сразу, цену фиксирует сервер; снятие отметки убирает цены', async () => {
+    apiRequest.mockImplementation(() => ok({ id: 'a', date: D, hour: 9, studentIds: ['s1'], done: true, prices: { s1: 100 } }))
+    const s = useScheduleStore()
+    s.set([{ id: 'a', date: D, hour: 9, studentIds: ['s1'] }])
+    s.setDone(s.lessons[0], true)
+    expect(s.lessons[0].done).toBe(true)
+    await vi.waitFor(() => expect(s.lessons[0].prices).toEqual({ s1: 100 }))
+    expect(apiRequest.mock.calls[0][0]).toBe('/lessons/a/done')
+    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ done: true })
+    apiRequest.mockImplementation(() => ok({ id: 'a', date: D, hour: 9, studentIds: ['s1'], done: false }))
+    s.setDone(s.lessons[0], false)
+    expect(s.lessons[0].done).toBe(false); expect(s.lessons[0].prices).toBeUndefined()
+  })
+
   it('lessonMap раскладывает уроки по ячейкам «дата|час»', () => {
     const s = useScheduleStore()
     s.set([{ id: 'a', date: D, hour: 9, studentIds: ['s1'] }, { id: 'b', date: D, hour: 10, studentIds: ['s2'] }])

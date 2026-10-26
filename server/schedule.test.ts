@@ -99,6 +99,32 @@ ok('архивного ученика нельзя поставить в рас�
 store.set(`students/${masha.id}`, { ...store.get(`students/${masha.id}`), archived: true })
 ok('архивный ученик расписание не читает', ![...(await S.list(mUser)).current.lessons, ...(await S.list(mUser)).next.lessons].length)
 
+// --- «урок проведён»: статус и зафиксированная цена ---
+const kat = await ST.create({ name: 'Катя', price: 100 }, 'tg:1'), lev = await ST.create({ name: 'Лев', price: 80 }, 'tg:1')
+const D1 = '2026-10-30'
+const dl = await S.create({ studentId: kat.id, date: D1, hour: 8 }, 'tg:1')
+const dg = await S.create({ studentIds: [kat.id, lev.id], date: D1, hour: 22 }, 'tg:1')
+const find = async (u: TokenUser, id: string) => [...(await S.list(u)).current.lessons, ...(await S.list(u)).next.lessons].find(l => l.id === id)
+ok('новый урок: не проведён, цен нет', dl.done === false && !('prices' in dl))
+const dd = await S.setDone(dl.id, { done: true })
+ok('отметка: done и цена ученика зафиксирована', dd.done === true && dd.prices?.[kat.id] === 100 && store.get(`lessons/${dl.id}`).done === true && store.get(`lessons/${dl.id}`).prices[kat.id] === 100)
+// цена ученика потом меняется задним числом — у проведённого урока она остаётся прежней
+store.set(`students/${kat.id}`, { ...store.get(`students/${kat.id}`), price: 999, priceHistory: [{ from: '', price: 999 }] })
+ok('после смены цены проведённый урок остался по зафиксированной цене', (await find(teacher, dl.id))?.prices?.[kat.id] === 100)
+ok('повторная отметка ничего не пересчитывает', (await S.setDone(dl.id, { done: true })).prices?.[kat.id] === 100)
+ok('проведённый урок нельзя перенести, поменять, удалить → 409', (await code(S.move(dl.id, { date: D1, hour: 9 }))) === 409 && (await code(S.swap(dl.id, dg.id))) === 409 && (await code(S.swap(dg.id, dl.id))) === 409 && (await code(S.remove(dl.id))) === 409 && store.has(`lessons/${dl.id}`))
+const dg2 = await S.setDone(dg.id, { done: true })
+ok('групповой урок: цена у каждого ученика своя (по истории на время урока)', dg2.prices?.[lev.id] === 80 && dg2.prices?.[kat.id] === 999)
+store.set(`students/${kat.id}`, { ...store.get(`students/${kat.id}`), tgId: 21, status: 'active' })
+const kUser: TokenUser = { uid: 'tg:21', role: 'student', studentId: kat.id }
+const kDone = await find(kUser, dg.id)
+ok('ученик видит статус «проведён» и только свою цену', kDone?.done === true && JSON.stringify(kDone.prices) === JSON.stringify({ [kat.id]: 999 }) && kDone.studentIds.length === 1)
+ok('ученик видит и свой первый урок проведённым', (await find(kUser, dl.id))?.done === true)
+const un = await S.setDone(dl.id, { done: false })
+ok('снять отметку: done=false, цен нет, у ученика статус вернулся', un.done === false && !('prices' in un) && (await find(kUser, dl.id))?.done === false)
+ok('после снятия отметки урок снова можно перенести', (await S.move(dl.id, { date: D1, hour: 9 })).hour === 9)
+ok('setDone: не boolean → 400, мусорный id → 400, нет урока → 404', (await code(S.setDone(dl.id, { done: 'yes' as any }))) === 400 && (await code(S.setDone(dl.id, undefined))) === 400 && (await code(S.setDone('../x', { done: true }))) === 400 && (await code(S.setDone('nope', { done: true }))) === 404)
+
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
 clock = new Date('2026-10-25T23:30:00Z')                   // уже понедельник 26.10 по Варшаве
 v = await S.list(teacher)

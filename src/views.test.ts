@@ -30,6 +30,9 @@ describe('все экраны в демо-режиме', () => {
     // Карточка ученика: путь, пресеты, оплата
     state.tab = 'students'; state.selectedStudentId = '2'; await visit('student detail')
     expect(w.text()).toContain('Леня С.')
+    expect(w.text()).toContain('Запланирован')                 // по умолчанию открыта вкладка «Уроки» (как у ученика) с кнопкой «Проведён»
+    expect(w.text()).toContain('Проведён')
+    await w.findAll('.seg button').find((b) => b.text() === 'Путь и слова')!.trigger('click'); await visit('student detail path')
     expect(w.text()).toContain('Unit 1')                       // путь ученика отрисован
     state.selectedStudentId = null
 

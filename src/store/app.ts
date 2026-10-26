@@ -8,6 +8,7 @@ import { usePathStore } from '../stores/path'
 import { useScheduleStore } from '../stores/schedule'
 import { useStudentsStore } from '../stores/students'
 import { hh } from '../utils/dates'
+import { priceAt } from '../utils/price'
 import { currentIdOf, pctOf } from '../utils/path'
 
 // Даты, подписи и расписание-утилиты — в utils/dates.ts, конструктор пути — в utils/path.ts; реэкспорт, чтобы компонентам хватало одного импорта
@@ -30,10 +31,15 @@ export const myDecks = computed(() => useDecksStore().forUser(useAuthStore().cur
 /** Колода кружка; если не указана (или её нет) — первая доступная текущему ученику. */
 export const deckOf = (n: { deckId?: string }) => useDecksStore().byId(n.deckId) || myDecks.value[0]
 
-// Строки «ученик — урок» для вкладки «Уроки» (у группового урока по строке на каждого ученика)
-export const allLessons = computed(() => useScheduleStore().lessons.flatMap((l) => l.studentIds.map((sid) => ({
-  id: `${l.id}:${sid}`, title: 'Урок', date: l.date, time: hh(l.hour), done: false, studentId: sid, studentName: useStudentsStore().byId(sid)?.name ?? '',
-}))).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))
+// Строки «ученик — урок» для вкладки «Уроки» (у группового урока по строке на каждого ученика).
+// Цена: у проведённого урока — зафиксированная при отметке, у запланированного — по истории цен на время урока.
+export const allLessons = computed(() => useScheduleStore().lessons.flatMap((l) => l.studentIds.map((sid) => {
+  const st = useStudentsStore().byId(sid)
+  return {
+    id: `${l.id}:${sid}`, lesson: l, title: 'Урок', date: l.date, hour: l.hour, time: hh(l.hour), done: !!l.done, studentId: sid, studentName: st?.name ?? '',
+    price: l.done && l.prices?.[sid] != null ? l.prices[sid] : priceAt(st, l.date, l.hour),
+  }
+})).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))
 
 export const TABS: Record<Role, { id: string; label: string; icon: string }[]> = {
   student: [

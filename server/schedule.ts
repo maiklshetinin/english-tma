@@ -10,7 +10,8 @@
 // в понедельник следующая неделя сама становится текущей, а старые недели остаются в базе как история.
 import type { Firestore, FieldValue as FV, Transaction, DocumentReference } from 'firebase-admin/firestore'
 import { fail } from './login.js'
-import type { Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, TokenUser, WeekDoc } from './types.js'
+import { priceAt } from './price.js'
+import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, TokenUser, WeekDoc } from './types.js'
 
 export const HOUR_MIN = 8, HOUR_MAX = 22                 // как в таблице на сайте: 08:00 … 22:00
 const ID = /^[\w-]{1,64}$/
@@ -28,7 +29,8 @@ export const weekStartOf = (s: string) => addDays(s, -((parseYmd(s)!.getUTCDay()
 export const todayIn = (tz: string, now: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 export const slotKey = (date: string, hour: number) => `${date}_${pad(hour)}`
 
-const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds'>): Lesson => ({ id, date: x.date, hour: x.hour, studentIds: [...x.studentIds] })
+const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices'>): Lesson =>
+  ({ id, date: x.date, hour: x.hour, studentIds: [...x.studentIds], done: !!x.done, ...(x.done ? { prices: { ...(x.prices ?? {}) } } : {}) })
 const byTime = (a: Lesson, b: Lesson) => a.date.localeCompare(b.date) || a.hour - b.hour
 
 export interface ScheduleDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; tz?: string; now?: () => Date }
@@ -82,7 +84,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       const read = async (ws: string): Promise<ScheduleWeek> => {
         if (user.role !== 'teacher' && !me) return { weekStart: ws, lessons: [] }
         let docs = (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc))
-        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me] }))
+        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me], ...(l.prices ? { prices: me in l.prices ? { [me]: l.prices[me] } : {} } : {}) }))      // ученик: только он сам и только его цена
         return { weekStart: ws, lessons: docs.sort(byTime) }
       }
       return { current: await read(cur), next: await read(next) }
@@ -112,6 +114,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       await db.runTransaction(async (tx) => {
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
+        if (l.get('done')) throw fail(409, 'lesson already conducted')
         const W = weekLoader(tx), from = await W.get(l.get('weekStart')), to = await W.get(slot.ws)
         out = pub(id, { ...(l.data() as LessonDoc), date: slot.date, hour: slot.hour })
         const fromKey = slotKey(l.get('date'), l.get('hour'))
@@ -132,6 +135,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       await db.runTransaction(async (tx) => {
         const [a, b] = [await tx.get(lessons().doc(aId)), await tx.get(lessons().doc(bId))]
         if (!a.exists || !b.exists) throw fail(404, 'lesson not found')
+        if (a.get('done') || b.get('done')) throw fail(409, 'lesson already conducted')
         const W = weekLoader(tx), wa = await W.get(a.get('weekStart')), wb = await W.get(b.get('weekStart'))
         const ka = slotKey(a.get('date'), a.get('hour')), kb = slotKey(b.get('date'), b.get('hour'))
         wa.slots[ka] = bId; wb.slots[kb] = aId
@@ -141,12 +145,32 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       })
     },
 
+    // «Урок проведён» / снять отметку. При отметке цена каждого ученика фиксируется (по истории цен на время урока) и дальше не меняется.
+    // Проведённый урок нельзя переносить, менять местами и удалять — сначала снимите отметку.
+    async setDone(id: string, input: Partial<DoneInput> | undefined): Promise<Lesson> {
+      checkId(id)
+      if (typeof input?.done !== 'boolean') throw fail(400, 'done must be boolean')
+      const done = input.done; let out: Lesson | undefined
+      await db.runTransaction(async (tx) => {
+        const ref = lessons().doc(id), l = await tx.get(ref)
+        if (!l.exists) throw fail(404, 'lesson not found')
+        const d = l.data() as LessonDoc
+        if (!!d.done === done) { out = pub(id, d); return }                      // уже в нужном состоянии — ничего не меняем (цены не пересчитываются)
+        const prices: Record<string, number> = {}
+        if (done) for (const sid of d.studentIds) { const st = await tx.get(students().doc(sid)); prices[sid] = st.exists ? priceAt(st.data() as any, d.date, d.hour) : 0 }
+        tx.update(ref, done ? { done: true, prices, doneAt: FieldValue.serverTimestamp() } : { done: false, prices: {}, doneAt: null })
+        out = pub(id, { ...d, done, prices })
+      })
+      return out!
+    },
+
     // Урок удаляется, слот освобождается
     async remove(id: string): Promise<void> {
       checkId(id)
       await db.runTransaction(async (tx) => {
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
+        if (l.get('done')) throw fail(409, 'lesson already conducted')
         const W = weekLoader(tx), w = await W.get(l.get('weekStart')), k = slotKey(l.get('date'), l.get('hour'))
         if (w.slots[k] === id) delete w.slots[k]
         tx.delete(ref); W.save()

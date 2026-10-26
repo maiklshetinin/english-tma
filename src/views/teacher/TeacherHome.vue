@@ -27,6 +27,7 @@ function assign(sid, date, hour) {
   showToast(`Урок назначен: ${name(sid)} · ${fmtSlot(date, hour)}`, () => scheduleStore.remove(lesson))
 }
 function unassign(lesson) {
+  if (lesson.done) return showToast('Урок проведён — сначала снимите отметку', null, 'bad')
   const copy = { studentIds: [...lesson.studentIds], date: lesson.date, hour: lesson.hour }
   scheduleStore.remove(lesson); sheet.value = null; haptic('light')
   showToast(`Урок снят: ${names(copy)}`, () => scheduleStore.create(copy.studentIds, copy.date, copy.hour))
@@ -41,6 +42,7 @@ function onDrop(p, t) {
   }
   const a = p.lesson
   if (occ?.id === a.id) return
+  if (a.done || occ?.done) return showToast('Проведённый урок нельзя переносить — сначала снимите отметку', null, 'bad')
   const from = { date: a.date, hour: a.hour }
   if (occ) {                                         // занято — меняем уроки местами
     scheduleStore.swap(a, occ); haptic('light')
@@ -48,6 +50,11 @@ function onDrop(p, t) {
   }
   scheduleStore.move(a, t.date, t.hour); haptic('light')
   showToast(`Урок перенесён: ${names(a)} · ${fmtSlot(t.date, t.hour)}`, () => scheduleStore.move(a, from.date, from.hour))
+}
+function toggleDone(lesson) {
+  const was = !!lesson.done
+  scheduleStore.setDone(lesson, !was); sheet.value = null; haptic('light')
+  showToast(was ? 'Отметка «проведён» снята' : `Урок проведён: ${names(lesson)}`, () => scheduleStore.setDone(lesson, was))
 }
 const pick = (sid) => { const { date, hour } = sheet.value.slot; sheet.value = null; if (!occupant(date, hour)) assign(sid, date, hour) }
 const openStudent = (id) => { sheet.value = null; state.selectedStudentId = id }
@@ -73,7 +80,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
         </div>
       </div>
     </section>
-    <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @open="openStudent" @pick="pick" />
+    <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" />
   </div>
 </template>
 

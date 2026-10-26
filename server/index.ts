@@ -96,6 +96,7 @@ app.get('/schedule', requireUser, wrap(async (req, res) => res.json(await schedu
 app.post('/lessons', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.create(req.body, req.user.uid))))   // { studentId | studentIds, date, hour }
 app.post('/lessons/swap', requireUser, requireTeacher, wrap(async (req, res) => { await schedule.swap(String(req.body?.a || ''), String(req.body?.b || '')); res.json({ ok: true }) }))
 app.post('/lessons/:id/move', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.move(req.params.id, req.body))))   // { date, hour }
+app.post('/lessons/:id/done', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.setDone(req.params.id, req.body))))   // { done: true|false } → урок; цена фиксируется
 app.delete('/lessons/:id', requireUser, requireTeacher, wrap(async (req, res) => { await schedule.remove(req.params.id); res.json({ ok: true }) }))
 
 // Путь, пресеты, колоды (content.ts) и прогресс повторений (srs.ts). Сайт правит их целиком, сервер проверяет форму и роль.

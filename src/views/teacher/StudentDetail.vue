@@ -7,6 +7,7 @@ import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import PathEditor from '../../components/PathEditor.vue'
 import StudentDecks from '../../components/StudentDecks.vue'
+import LessonsList from '../../components/LessonsList.vue'
 import { useStudentsStore } from '../../stores/students'
 import { copyText, shareInvite } from '../../composables/useShare'
 import { usePathStore } from '../../stores/path'
@@ -16,6 +17,7 @@ const props = defineProps({ id: { type: [String, Number], required: true }, back
 defineEmits(['back'])
 const { notify, haptic } = useTelegram()
 const s = computed(() => studentStore.list.find(x => x.id === props.id))
+const tab = ref('lessons')                                       // «Уроки» (как у ученика + отметка «проведён») · «Путь и слова»
 const PRESETS = ['Урок скоро', 'Сделай ДЗ', 'Пора оплатить', 'Повтори слова']
 const remind = (t) => { haptic('medium'); notify(`Отправлено: ${s.value.name} — ${t}`) }   // TODO: бэкенд → Bot API sendMessage
 
@@ -96,6 +98,9 @@ const saveAsPreset = () => {
       <div class="row2" style="margin-top:12px"><AppIcon name="bell" :size="18" />
         <button v-for="p in PRESETS" :key="p" class="btn ghost" @click="remind(p)">{{ p }}</button></div>
     </div>
+    <div class="seg" style="justify-self:start"><button :class="{ on: tab === 'lessons' }" @click="tab = 'lessons'">Уроки</button><button :class="{ on: tab === 'path' }" @click="tab = 'path'">Путь и слова</button></div>
+    <LessonsList v-if="tab === 'lessons'" :student-id="s.id" can-mark />
+    <template v-else>
     <StudentDecks :student-id="s.id" />
     <div class="card">
       <h3>Путь ученика</h3>
@@ -106,6 +111,7 @@ const saveAsPreset = () => {
         <button class="btn ghost" @click="saveAsPreset">Сохранить путь как пресет</button></div>
     </div>
     <PathEditor :units="pathStore.of(s.id)" :student-id="s.id" />
+    </template>
     <div class="card row2" style="justify-content:space-between"><span class="hint">Архив скрывает ученика и закрывает ему вход в приложение.</span>
       <button class="btn ghost" style="color:var(--red)" @click="archive" @blur="confirmArchive = false">{{ confirmArchive ? 'Точно архивировать?' : 'Архивировать ученика' }}</button></div>
   </div>

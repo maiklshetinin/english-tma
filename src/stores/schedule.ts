@@ -18,7 +18,7 @@ export const slotKey = (date: string, hour: number) => `${date}|${hour}`
 
 async function call<T>(path: string, opts: RequestInit | undefined, what: string): Promise<T> {
   const r = await apiRequest(path, opts)
-  if (!r.ok) throw new Error(r.status === 409 ? 'Это время уже занято' : r.status === 404 ? 'Урок или ученик не найден — расписание обновлено' : r.status === 403 ? 'Нет прав на это действие' : `${what} (${r.status})`)
+  if (!r.ok) throw new Error(r.status === 409 ? 'Это время уже занято или урок уже проведён' : r.status === 404 ? 'Урок или ученик не найден — расписание обновлено' : r.status === 403 ? 'Нет прав на это действие' : `${what} (${r.status})`)
   return r.json() as Promise<T>
 }
 
@@ -81,11 +81,17 @@ export const useScheduleStore = defineStore('schedule', () => {
     ;[x.date, x.hour, y.date, y.hour] = [y.date, y.hour, x.date, x.hour]
     sync(async () => { if (!isTmp(x.id) && !isTmp(y.id)) await post('/lessons/swap', { a: x.id, b: y.id }, 'Не удалось поменять уроки') })
   }
+  /** «Урок проведён» / снять отметку. Цену на момент отметки фиксирует сервер; ученик увидит статус при следующем обновлении. */
+  function setDone(lesson: Lesson, done: boolean) {
+    const l = live(lesson) ?? lesson; rev++
+    l.done = done; if (!done) delete l.prices
+    sync(async () => { if (!isTmp(l.id)) { const r = await post<Lesson>(`/lessons/${encodeURIComponent(l.id)}/done`, { done }, 'Не удалось отметить урок'); if (r.prices) l.prices = r.prices } })
+  }
   function remove(lesson: Lesson) {
     const i = lessons.value.findIndex((x) => x.id === lesson.id); rev++
     if (i >= 0) lessons.value.splice(i, 1)
     sync(async () => { if (!isTmp(lesson.id)) await call(`/lessons/${encodeURIComponent(lesson.id)}`, { method: 'DELETE' }, 'Не удалось убрать урок') })
   }
 
-  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, remove }
+  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, remove }
 })
