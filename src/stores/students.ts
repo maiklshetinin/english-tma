@@ -11,7 +11,7 @@ import { useScheduleStore } from './schedule'
 // Сервер уже отдаёт нужную форму; здесь только значения по умолчанию на случай неполных данных
 const normalize = (x: Student): Student => ({
   ...x, name: x.name || 'Без имени', level: x.level || 'A1', username: x.username || '', streak: x.streak ?? 0, coins: x.coins ?? 0,
-  status: x.status || 'invited', tgId: x.tgId ?? null, photoUrl: x.photoUrl || '',
+  status: x.status || 'invited', tgId: x.tgId ?? null, photoUrl: x.photoUrl || '', price: x.price ?? 0,
 })
 
 async function call<T>(path: string, opts: RequestInit | undefined, what: string): Promise<T> {
@@ -40,9 +40,9 @@ export const useStudentsStore = defineStore('students', () => {
   }
   function stopRefresh() { if (onVisible) document.removeEventListener('visibilitychange', onVisible); onVisible = null }
 
-  /** Новый ученик: сервер создаёт запись и сразу ссылку-приглашение. Telegram-аккаунт привяжется, когда он откроет ссылку. */
-  async function add({ name, level, packageSize }: StudentInput): Promise<string> {
-    const { url } = await call<CreateStudentResponse>('/students', { method: 'POST', body: JSON.stringify({ name, level, packageSize }) }, 'Не удалось добавить ученика')
+  /** Новый ученик: сервер создаёт запись (если указан ник — сразу ищет фото в Telegram) и ссылку-приглашение. Telegram-аккаунт привяжется, когда он откроет ссылку. */
+  async function add({ name, level, packageSize, username, price }: StudentInput): Promise<string> {
+    const { url } = await call<CreateStudentResponse>('/students', { method: 'POST', body: JSON.stringify({ name, level, packageSize, username, price }) }, 'Не удалось добавить ученика')
     await load().catch(() => {})
     return url
   }

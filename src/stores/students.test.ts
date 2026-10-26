@@ -10,7 +10,7 @@ import { useStudentsStore } from './students'
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: async () => body } as Response)
 const err = (status: number) => Promise.resolve({ ok: false, status, json: async () => ({}) } as Response)
-const st = (id: string, name: string): Student => ({ id, name, level: 'A2', color: '#fff', username: '', streak: 0, coins: 0, status: 'invited', tgId: null, photoUrl: '', payment: { status: 'due', until: '2026-11-01', lessonsLeft: 0, packageSize: 8 } })
+const st = (id: string, name: string): Student => ({ id, name, level: 'A2', color: '#fff', username: '', streak: 0, coins: 0, status: 'invited', tgId: null, photoUrl: '', price: 0, payment: { status: 'due', until: '2026-11-01', lessonsLeft: 0, packageSize: 8 } })
 
 describe('students store', () => {
   beforeEach(() => { setActivePinia(createPinia()); apiRequest.mockReset() })
@@ -28,9 +28,9 @@ describe('students store', () => {
   it('add: отправляет данные, возвращает ссылку и перечитывает список', async () => {
     apiRequest.mockImplementation((path: string) => (path === '/students' && apiRequest.mock.calls.length === 1 ? ok({ student: st('1', 'Маша'), url: 'https://t.me/bot?startapp=invite_x' }) : ok([st('1', 'Маша')])))
     const s = useStudentsStore()
-    const url = await s.add({ name: 'Маша', level: 'A2', packageSize: 8 })
+    const url = await s.add({ name: 'Маша', level: 'A2', packageSize: 8, username: 'masha_en', price: 120 })
     expect(url).toBe('https://t.me/bot?startapp=invite_x')
-    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ name: 'Маша', level: 'A2', packageSize: 8 })
+    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ name: 'Маша', level: 'A2', packageSize: 8, username: 'masha_en', price: 120 })
     expect(s.list).toHaveLength(1)
   })
 

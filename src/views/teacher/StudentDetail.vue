@@ -53,6 +53,7 @@ const saveAsPreset = () => {
       <div class="row2" style="margin-top:12px">
         <span class="badge ok">🔥 {{ s.streak }}</span><span class="badge ok">{{ s.coins }} монет</span>
         <span class="badge" :class="s.payment.status === 'paid' ? 'ok' : 'warn'">Уроков осталось: {{ s.payment.lessonsLeft }}</span>
+        <span v-if="s.price" class="badge ok">Цена урока: {{ s.price }}</span>
       </div>
       <div class="row2" style="margin-top:12px">
         <span class="badge" :class="s.status === 'active' ? 'ok' : 'warn'">{{ s.status === 'active' ? 'В приложении' : 'Ждёт приглашения' }}</span>

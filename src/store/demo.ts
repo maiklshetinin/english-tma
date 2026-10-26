@@ -60,7 +60,7 @@ const TRAVEL = [card('luggage', 'багаж'), card('boarding pass', 'посад
 const PHRASAL = [card('to give up', 'сдаваться', 'Never give up!'), card('to look forward to', 'ждать с нетерпением'), card('to run out of', 'исчерпать запас'), card('to carry on', 'продолжать')]
 
 const student = (id: string, name: string, username: string, color: string, level: Student['level'], streak: number, coins: number, payment: Student['payment']): Student =>
-  ({ id, name, username, color, level, streak, coins, status: 'active', tgId: null, photoUrl: '', payment })
+  ({ id, name, username, color, level, streak, coins, status: 'active', tgId: null, photoUrl: '', price: 0, payment })
 export const DEMO_STUDENTS: Student[] = [
   student('1', 'Мария Д.', 'maria_d', '#ff4b4b', 'A2', 3, 80, { status: 'due', until: iso(4), lessonsLeft: 0, packageSize: 8 }),
   student('2', 'Леня С.', 'lenya_eng', '#1cb0f6', 'B1', 12, 340, { status: 'paid', until: iso(36), lessonsLeft: 2, packageSize: 8 }),

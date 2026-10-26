@@ -13,7 +13,7 @@ import { session } from './session'
 import { addNode, addUnit } from '../utils/path'
 
 const ok = (body: unknown = { ok: true }) => Promise.resolve({ ok: true, status: 200, json: async () => body } as Response)
-const st = (id: string): Student => ({ id, name: id, level: 'A1', color: '#fff', username: '', streak: 0, coins: 10, status: 'active', tgId: null, photoUrl: '', payment: { status: 'paid', until: '2026-12-01', lessonsLeft: 3, packageSize: 8 } })
+const st = (id: string): Student => ({ id, name: id, level: 'A1', color: '#fff', username: '', streak: 0, coins: 10, status: 'active', tgId: null, photoUrl: '', price: 0, payment: { status: 'paid', until: '2026-12-01', lessonsLeft: 3, packageSize: 8 } })
 const unit = (nodes: PathUnit['nodes'] = []): PathUnit => ({ id: 'u1', title: 'Unit', sub: '', nodes })
 const node = (id: string, xp = 20) => ({ id, type: 'hw' as const, title: id, xp, done: false })
 const calls = () => apiRequest.mock.calls.map((c) => [c[1]?.method ?? 'GET', c[0]] as const)

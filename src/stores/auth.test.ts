@@ -8,7 +8,7 @@ vi.mock('../firebase', () => ({ isDemo: false, tg: undefined, API: 'http://x', f
 import { useAuthStore } from './auth'
 import { useStudentsStore } from './students'
 
-const st = (id: string): Student => ({ id, name: id, level: 'A1', color: '#fff', username: '', streak: 0, coins: 0, status: 'active', tgId: null, photoUrl: '', payment: { status: 'paid', until: '2026-12-01', lessonsLeft: 3, packageSize: 8 } })
+const st = (id: string): Student => ({ id, name: id, level: 'A1', color: '#fff', username: '', streak: 0, coins: 0, status: 'active', tgId: null, photoUrl: '', price: 0, payment: { status: 'paid', until: '2026-12-01', lessonsLeft: 3, packageSize: 8 } })
 
 describe('auth store', () => {
   beforeEach(() => setActivePinia(createPinia()))
