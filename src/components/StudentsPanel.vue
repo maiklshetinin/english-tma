@@ -1,7 +1,8 @@
 <script setup>
 // Список учеников. Карточку можно перетащить в таблицу; урок из таблицы, брошенный сюда, снимается с расписания.
 import { ref, computed } from 'vue'
-import { state, handle } from '../store/app'
+import { useRouter } from 'vue-router'
+import { handle } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
@@ -11,7 +12,8 @@ const q = ref('')
 const list = computed(() => { const k = q.value.trim().toLowerCase(); return studentStore.list.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
 const trash = computed(() => dnd.active && dnd.payload?.kind === 'lesson')
 const trashOver = computed(() => trash.value && dnd.over?.kind === 'panel')
-const open = (id) => { state.selectedStudentId = id }
+const router = useRouter()
+const open = (id) => { router.push({ name: 'home', params: { id } }) }      // панель живёт на «Главной»: карточка открывается там же
 const attention = (s) => s.payment.status !== 'paid'
 </script>
 

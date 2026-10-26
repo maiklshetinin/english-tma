@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import App from './App.vue'
-import { linkStores, state } from './store/app'
+import { createMemoryHistory } from 'vue-router'
+import { createAppRouter } from './router'
 import { useAuthStore } from './stores/auth'
 import { useStudentsStore } from './stores/students'
 import { useScheduleStore } from './stores/schedule'
@@ -15,8 +16,8 @@ describe('приложение в демо-режиме', () => {
     history.pushState({}, '', '/?demo&role=teacher')
     const pinia = createPinia()
     setActivePinia(pinia)
-    linkStores()                                                   // как в main.js: после Pinia, до монтирования
-    const w = mount(App, { global: { plugins: [pinia] }, attachTo: document.body })
+    const router = createAppRouter(createMemoryHistory())       // как в main.js: после Pinia, до монтирования
+    const w = mount(App, { global: { plugins: [pinia, router] }, attachTo: document.body })
     await vi.waitFor(() => expect(useAuthStore().status).toBe('ready'))      // демо-данные подгружаются лениво
     await flushPromises()
 
@@ -26,7 +27,7 @@ describe('приложение в демо-режиме', () => {
     expect(schedule.lessons.length).toBeGreaterThan(0)
     expect(auth.role).toBe('teacher')
     expect(auth.status).toBe('ready')
-    expect(state.tab).toBe('home')                                 // смена роли открыла первую вкладку преподавателя
+    expect(router.currentRoute.value.name).toBe('home')                               // смена роли открыла первую вкладку преподавателя
     expect(w.text()).toContain('Мария Д.')                         // панель учеников
     expect(w.findAll('.wk .chip').length).toBeGreaterThan(0)       // уроки в сетке расписания
     for (const id of students.list.map((s) => s.id)) expect(path.paths[id]).toBeDefined()      // у каждого ученика есть путь
@@ -38,7 +39,7 @@ describe('приложение в демо-режиме', () => {
     expect(auth.setRole('student')).toBe(true)
     await flushPromises()
     expect(auth.role).toBe('student')
-    expect(state.tab).toBe('path')                                 // …и первую вкладку ученика
+    expect(router.currentRoute.value.name).toBe('path')                               // …и первую вкладку ученика
     expect(auth.currentStudentId).toBe('1')
     expect(w.text()).not.toContain('undefined')
     w.unmount()

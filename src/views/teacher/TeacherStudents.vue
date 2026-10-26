@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { state, pctOf, unitOf } from '../../store/app'
+import { useRoute, useRouter } from 'vue-router'
+import { pctOf, unitOf } from '../../store/app'
+import { goUp } from '../../router'
 import AddStudent from '../../components/AddStudent.vue'
 import Avatar from '../../components/Avatar.vue'
 import StudentDetail from './StudentDetail.vue'
@@ -11,18 +13,19 @@ const pathStore = usePathStore()
 const contentStore = useContentStore()
 const studentStore = useStudentsStore()
 const adding = ref(false)
+const route = useRoute(), router = useRouter()
 onMounted(() => { studentStore.load().catch(() => {}); contentStore.load().catch(() => {}) })      // подтянуть новых учеников, статусы «В приложении» и отметки учеников в пути
 const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', 'warn'], overdue: ['Просрочено', 'bad'] }
 </script>
 <template>
-  <StudentDetail v-if="state.selectedStudentId" :id="state.selectedStudentId" @back="state.selectedStudentId = null" />
+  <StudentDetail v-if="route.params.id" :id="route.params.id" @back="goUp(router)" />
   <div v-else class="page wide">
     <div class="row2" style="justify-content:space-between"><h2 style="margin:6px 0">Ученики</h2><button v-if="!adding" class="btn" @click="adding = true">+ Добавить ученика</button></div>
     <AddStudent v-if="adding" @close="adding = false" />
     <div v-if="!studentStore.list.length && !adding" class="card" style="text-align:center"><b>Пока никого нет</b><p class="hint" style="margin:6px 0 0">Нажмите «Добавить ученика», введите имя и отправьте ему ссылку-приглашение.</p></div>
     <div v-else class="card tbl">
       <div class="tr th"><span>Ученик</span><span class="uc">Юнит</span><span>Оплата</span><span>Прогресс</span></div>
-      <button class="tr" v-for="s in studentStore.list" :key="s.id" @click="state.selectedStudentId = s.id">
+      <button class="tr" v-for="s in studentStore.list" :key="s.id" @click="router.push({ name: 'students', params: { id: s.id } })">
         <span class="who"><Avatar :s="s" /><span><b>{{ s.name }}</b><small v-if="s.status === 'invited'" class="badge warn" style="justify-self:start">Ждёт приглашения</small><small class="hint ui">{{ unitOf(pathStore.of(s.id)) }}</small></span></span>
         <span class="hint uc">{{ unitOf(pathStore.of(s.id)) }}</span>
         <span><span class="badge" :class="PAY[s.payment.status][1]">{{ PAY[s.payment.status][0] }}</span></span>

@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { dnd } from '../composables/useDnd'
-import { state, hh } from '../store/app'
+import { hh } from '../store/app'
 import Avatar from './Avatar.vue'
 import { useStudentsStore } from '../stores/students'
 const studentStore = useStudentsStore()

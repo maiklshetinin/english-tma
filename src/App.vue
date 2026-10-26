@@ -1,28 +1,25 @@
 <script setup>
-import { computed, onMounted } from 'vue'
-import { state } from './store/app'
+import { computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { BOT_USERNAME } from './firebase'
 import TelegramLogin from './components/TelegramLogin.vue'
 import BottomNav from './components/BottomNav.vue'
 import Toast from './components/Toast.vue'
 import DragGhost from './components/DragGhost.vue'
-import StudentPath from './views/StudentPath.vue'
-import StudentCards from './views/StudentCards.vue'
-import StudentProfile from './views/StudentProfile.vue'
-import Schedule from './views/Schedule.vue'
-import TeacherHome from './views/teacher/TeacherHome.vue'
-import TeacherProfile from './views/teacher/TeacherProfile.vue'
-import TeacherPath from './views/teacher/TeacherPath.vue'
-import TeacherStudents from './views/teacher/TeacherStudents.vue'
-import TeacherWords from './views/teacher/TeacherWords.vue'
+import { redirectFor, goUp } from './router'
+import { useBackButton } from './composables/useBackButton'
 import { useAuthStore } from './stores/auth'
 const auth = useAuthStore()
 
-const views = {
-  student: { path: StudentPath, cards: StudentCards, lessons: Schedule, profile: StudentProfile },
-  teacher: { home: TeacherHome, path: TeacherPath, students: TeacherStudents, words: TeacherWords, profile: TeacherProfile },
-}
-const current = computed(() => views[auth.role][state.tab])
+const router = useRouter(), route = useRoute()
+// Роль становится известна только после входа: если адрес (закладка, обновление) не для этой роли — на первую вкладку роли
+watch(() => [auth.status, auth.role, route.fullPath], () => {
+  if (auth.status !== 'ready') return
+  const to = redirectFor(route, auth.role)
+  if (to) router.replace(to)
+}, { immediate: true })
+// Открыта карточка ученика → в шапке Telegram появляется системная «Назад»
+useBackButton(computed(() => auth.status === 'ready' && !!route.params.id), () => goUp(router))
 // В демо-режиме роль можно задать в URL: ?demo&role=teacher (переключатель — в «Профиле»)
 const demo = import.meta.env.DEV || new URLSearchParams(location.search).has('demo')
 onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(location.search).get('role'); if (demo && (r === 'teacher' || r === 'student')) auth.setRole(r) }))
@@ -39,7 +36,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
   </div>
   <template v-else>
     <div class="shell">
-      <main><component :is="current" :key="auth.role + state.tab" /></main>
+      <main><RouterView v-slot="{ Component, route: r }"><component :is="Component" :key="auth.role + r.meta.tab" /></RouterView></main>
     </div>
     <BottomNav /><Toast /><DragGhost />
   </template>

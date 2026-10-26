@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { pctOf, state } from '../../store/app'
+import { useRoute, useRouter } from 'vue-router'
+import { pctOf } from '../../store/app'
 import { showToast } from '../../composables/useToast'
 import { useTelegram } from '../../composables/useTelegram'
 import Avatar from '../../components/Avatar.vue'
@@ -12,6 +13,7 @@ import { useStudentsStore } from '../../stores/students'
 import { copyText, shareInvite } from '../../composables/useShare'
 import { usePathStore } from '../../stores/path'
 const pathStore = usePathStore()
+const route = useRoute(), router = useRouter()
 const studentStore = useStudentsStore()
 const props = defineProps({ id: { type: [String, Number], required: true }, backLabel: { type: String, default: 'Ученики' } })
 defineEmits(['back'])
@@ -52,7 +54,7 @@ async function invite() {
 }
 async function archive() {                                    // два нажатия: первое просит подтверждение
   if (!confirmArchive.value) { confirmArchive.value = true; return }
-  try { const id = s.value.id; state.selectedStudentId = null; await studentStore.archive(id); showToast('Ученик в архиве, доступ закрыт') }
+  try { const id = s.value.id; router.replace({ name: route.name }); await studentStore.archive(id); showToast('Ученик в архиве, доступ закрыт') }
   catch (e) { notify(e.message) }
 }
 
@@ -114,5 +116,9 @@ const saveAsPreset = () => {
     </template>
     <div class="card row2" style="justify-content:space-between"><span class="hint">Архив скрывает ученика и закрывает ему вход в приложение.</span>
       <button class="btn ghost" style="color:var(--red)" @click="archive" @blur="confirmArchive = false">{{ confirmArchive ? 'Точно архивировать?' : 'Архивировать ученика' }}</button></div>
+  </div>
+  <div v-else class="page wide">      <!-- старая ссылка или ученик в архиве -->
+    <button class="btn ghost" style="justify-self:start" @click="$emit('back')"><AppIcon name="back" :size="18" /> {{ backLabel }}</button>
+    <div class="card" style="text-align:center"><b>Ученик не найден</b><p class="hint" style="margin:6px 0 0">Возможно, он в архиве.</p></div>
   </div>
 </template>

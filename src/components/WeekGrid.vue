@@ -1,7 +1,7 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
 import { computed } from 'vue'
-import { HOURS, DAYS, hh, slotKey, nowTick, ymd, state } from '../store/app'
+import { HOURS, DAYS, hh, slotKey, nowTick, ymd } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import { useStudentsStore } from '../stores/students'

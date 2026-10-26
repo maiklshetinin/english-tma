@@ -1,6 +1,6 @@
-// Общее состояние интерфейса и «вычисляемое про меня»: вкладка, выбранный ученик, текущий ученик / его путь / колоды, вкладки, подписи.
+// «Вычисляемое про меня»: текущий ученик / его путь / колоды, вкладки, подписи. Где сейчас пользователь (вкладка, открытый ученик) — в адресе, см. router.ts.
 // Данные (ученики, расписание, путь, колоды, повторения) и вход живут в Pinia — stores/*.ts. Здесь они только собираются вместе.
-import { reactive, computed } from 'vue'
+import { computed } from 'vue'
 import type { Role } from '../../server/types'
 import { useAuthStore } from '../stores/auth'
 import { useDecksStore } from '../stores/decks'
@@ -15,11 +15,6 @@ import { currentIdOf, pctOf } from '../utils/path'
 export * from '../utils/dates'
 export * from '../utils/path'
 export { slotKey } from '../stores/schedule'
-
-export const state = reactive({
-  tab: 'path',                                    // роль и текущий ученик — stores/auth.ts
-  selectedStudentId: null as string | null,
-})
 
 export const student = computed(() => useStudentsStore().byId(useAuthStore().currentStudentId))
 export const myPath = computed(() => usePathStore().of(useAuthStore().currentStudentId))
@@ -53,10 +48,3 @@ export const TABS: Record<Role, { id: string; label: string; icon: string }[]> =
   ],
 }
 export const handle = (s: { username?: string; status?: string }) => (s.username ? '@' + s.username : s.status === 'invited' ? 'ждёт приглашения' : '')   // подпись под именем ученика
-
-/** Вызывается один раз в main.js, когда Pinia уже подключена: смена роли (auth.setRole) возвращает экран на первую вкладку нового режима. */
-export function linkStores() {
-  useAuthStore().$onAction(({ name, args, after }) => {
-    if (name === 'setRole') after((ok: unknown) => { if (ok) { state.tab = TABS[args[0] as Role][0].id; state.selectedStudentId = null } })
-  })
-}

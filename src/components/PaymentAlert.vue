@@ -1,13 +1,15 @@
 <script setup>
 // Показывается над лентой только если оплата требует внимания; закрывается крестиком.
 import { ref, computed } from 'vue'
-import { student, state, needsPayment } from '../store/app'
+import { useRouter } from 'vue-router'
+import { student, needsPayment } from '../store/app'
 import AppIcon from './AppIcon.vue'
 const closed = ref(false)
+const router = useRouter()
 const text = computed(() => student.value.payment.status !== 'paid' ? 'Ожидается оплата занятий' : `Осталось уроков: ${student.value.payment.lessonsLeft}`)
 </script>
 <template>
-  <div v-if="needsPayment && !closed" class="alert card" @click="state.tab = 'profile'">
+  <div v-if="needsPayment && !closed" class="alert card" @click="router.push({ name: 'profile' })">
     <AppIcon name="wallet" /><span>{{ text }} · <u>Подробнее</u></span>
     <button @click.stop="closed = true" aria-label="Закрыть"><AppIcon name="x" :size="18" /></button>
   </div>

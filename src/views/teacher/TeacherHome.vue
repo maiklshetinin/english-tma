@@ -1,7 +1,9 @@
 <script setup>
 // Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок (сохраняется на сервере).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { state, nowTick, weekDates, weekRange, weekTitle, slotKey, fmtSlot } from '../../store/app'
+import { useRoute, useRouter } from 'vue-router'
+import { nowTick, weekDates, weekRange, weekTitle, slotKey, fmtSlot } from '../../store/app'
+import { goUp } from '../../router'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
 import { useTelegram } from '../../composables/useTelegram'
@@ -12,6 +14,7 @@ import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
 import { useScheduleStore } from '../../stores/schedule'
 const studentStore = useStudentsStore()
+const route = useRoute(), router = useRouter()
 const scheduleStore = useScheduleStore()
 const { haptic } = useTelegram()
 
@@ -57,7 +60,7 @@ function toggleDone(lesson) {
   showToast(was ? 'Отметка «проведён» снята' : `Урок проведён: ${names(lesson)}`, () => scheduleStore.setDone(lesson, was))
 }
 const pick = (sid) => { const { date, hour } = sheet.value.slot; sheet.value = null; if (!occupant(date, hour)) assign(sid, date, hour) }
-const openStudent = (id) => { sheet.value = null; state.selectedStudentId = id }
+const openStudent = (id) => { sheet.value = null; router.push({ name: 'home', params: { id } }) }
 
 onMounted(() => { setDropHandler(onDrop); scheduleStore.load().catch(() => {}) })      // при открытии вкладки перечитываем расписание
 onUnmounted(() => setDropHandler(null))
@@ -65,7 +68,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 </script>
 
 <template>
-  <StudentDetail v-if="state.selectedStudentId" :id="state.selectedStudentId" back-label="Главная" @back="state.selectedStudentId = null" />
+  <StudentDetail v-if="route.params.id" :id="route.params.id" back-label="Главная" @back="goUp(router)" />
   <div v-else class="home">
     <div class="side"><StudentsPanel /></div>
     <section class="main">

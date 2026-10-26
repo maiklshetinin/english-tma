@@ -1,16 +1,19 @@
 <script setup>
-import { state, TABS, needsPayment } from '../store/app'
+import { useRoute, useRouter } from 'vue-router'
+import { TABS, needsPayment } from '../store/app'
 import { useTelegram } from '../composables/useTelegram'
 import AppIcon from './AppIcon.vue'
 import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const { haptic } = useTelegram()
-const go = (id) => { state.tab = id; state.selectedStudentId = null; haptic('light') }
+const route = useRoute(), router = useRouter()
+// replace, а не push: переключение вкладок не забивает историю, «Назад» ведёт из карточки ученика к списку, а не по всем вкладкам
+const go = (id) => { router.replace({ name: id }); haptic('light') }
 </script>
 
 <template>
   <nav class="nav">
-    <button v-for="t in TABS[auth.role]" :key="t.id" :class="{ on: state.tab === t.id }" @click="go(t.id)">
+    <button v-for="t in TABS[auth.role]" :key="t.id" :class="{ on: route.meta.tab === t.id }" @click="go(t.id)">
       <span class="ic"><AppIcon :name="t.icon" :size="24" /><i v-if="auth.role === 'student' && t.id === 'profile' && needsPayment" class="dot" /></span>
       <span class="lb">{{ t.label }}</span>
     </button>

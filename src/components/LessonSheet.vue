@@ -1,7 +1,7 @@
 <script setup>
 // Шторка: либо карточка урока (ученики, открыть ученика, убрать урок), либо выбор ученика для пустого слота.
 import { computed } from 'vue'
-import { state, fmtSlot, handle } from '../store/app'
+import { fmtSlot, handle } from '../store/app'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
 import { useStudentsStore } from '../stores/students'

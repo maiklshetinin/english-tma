@@ -5,7 +5,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { vi } from 'vitest'
 import App from './App.vue'
-import { TABS, linkStores, state } from './store/app'
+import { createMemoryHistory } from 'vue-router'
+import { TABS } from './store/app'
+import { createAppRouter } from './router'
 import { useAuthStore } from './stores/auth'
 import { useDecksStore } from './stores/decks'
 import { usePathStore } from './stores/path'
@@ -14,8 +16,10 @@ describe('все экраны в демо-режиме', () => {
   it('ни одна вкладка и ни одна карточка не выдаёт предупреждений или ошибок', async () => {
     history.pushState({}, '', '/?demo&role=teacher')
     const problems: string[] = []
-    const pinia = createPinia(); setActivePinia(pinia); linkStores()
-    const w = mount(App, { attachTo: document.body, global: { plugins: [pinia], config: {
+    const pinia = createPinia(); setActivePinia(pinia)
+    const router = createAppRouter(createMemoryHistory())
+    const go = (name: string, id?: string) => router.push({ name, params: id ? { id } : {} })      // как нажатие на вкладку / на ученика
+    const w = mount(App, { attachTo: document.body, global: { plugins: [pinia, router], config: {
       warnHandler: (m: string) => { problems.push('WARN ' + m) }, errorHandler: (e: unknown) => { problems.push('ERROR ' + String(e)) } } } })
     const auth = useAuthStore()
     await vi.waitFor(() => expect(auth.status).toBe('ready'))
@@ -25,31 +29,31 @@ describe('все экраны в демо-режиме', () => {
 
     // Преподаватель: все вкладки
     expect(auth.setRole('teacher')).toBe(true)
-    for (const tab of TABS.teacher) { state.tab = tab.id; await visit('teacher/' + tab.id) }
+    for (const tab of TABS.teacher) { await go(tab.id); await visit('teacher/' + tab.id) }
 
     // Карточка ученика: путь, пресеты, оплата
-    state.tab = 'students'; state.selectedStudentId = '2'; await visit('student detail')
+    await go('students', '2'); await visit('student detail')
     expect(w.text()).toContain('Леня С.')
     expect(w.text()).toContain('Запланирован')                 // по умолчанию открыта вкладка «Уроки» (как у ученика) с кнопкой «Проведён»
     expect(w.text()).toContain('Проведён')
     await w.findAll('.seg button').find((b) => b.text() === 'Путь и слова')!.trigger('click'); await visit('student detail path')
     expect(w.text()).toContain('Unit 1')                       // путь ученика отрисован
-    state.selectedStudentId = null
+    await go('students')
 
     // Вкладка «Путь» преподавателя с пресетами и «Слова» с колодами
-    state.tab = 'path'; await visit('presets'); expect(w.text()).toContain('Базовый курс')
-    state.tab = 'words'; await visit('words'); expect(w.text()).toContain('Business Basics')
+    await go('path'); await visit('presets'); expect(w.text()).toContain('Базовый курс')
+    await go('words'); await visit('words'); expect(w.text()).toContain('Business Basics')
 
     // Ученик: все вкладки
     expect(auth.setRole('student')).toBe(true)
-    for (const tab of TABS.student) { state.tab = tab.id; await visit('student/' + tab.id) }
-    state.tab = 'path'; await visit('student path'); expect(w.text()).toContain('Unit 1')
-    state.tab = 'cards'; await visit('student cards')
+    for (const tab of TABS.student) { await go(tab.id); await visit('student/' + tab.id) }
+    await go('path'); await visit('student path'); expect(w.text()).toContain('Unit 1')
+    await go('cards'); await visit('student cards')
 
     // Правка в сторе отражается на экране
-    auth.setRole('teacher'); state.tab = 'words'
+    auth.setRole('teacher'); await go('words')
     useDecksStore().list[0].title = 'Переименовано'; await visit('rename'); expect(w.text()).toContain('Переименовано')
-    state.tab = 'path'; usePathStore().presets[0].name = 'Другой пресет'; await visit('rename preset'); expect(w.text()).toContain('Другой пресет')
+    await go('path'); usePathStore().presets[0].name = 'Другой пресет'; await visit('rename preset'); expect(w.text()).toContain('Другой пресет')
 
     expect(problems).toEqual([])
     w.unmount()

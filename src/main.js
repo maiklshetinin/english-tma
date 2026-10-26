@@ -3,8 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import './styles/theme.css'
 import { initTelegram } from './composables/useTelegram'
-import { linkStores } from './store/app'
+import { createAppRouter } from './router'
 initTelegram()
-const app = createApp(App).use(createPinia())
-linkStores()          // после подключения Pinia: смена роли возвращает экран на первую вкладку
-app.mount('#app')
+const router = createAppRouter()
+createApp(App).use(createPinia()).use(router).mount('#app')      // Pinia раньше роутера: проверки роли в роутере читают стор входа
