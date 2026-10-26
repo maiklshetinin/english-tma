@@ -38,7 +38,7 @@ New → Web Service → этот репозиторий, **Root Directory: `serv
 - `POST /paths/:studentId/complete` `{ nodeId }` → `{ coins }` — отметить кружок выполненным и начислить монеты (один раз). Преподаватель — любой кружок, ученик — только свой и только текущий (первый невыполненный), иначе 409
 - `PUT /presets/:id` `{ name, units }`, `DELETE /presets/:id` (преподаватель) — id придумывает сайт
 - `PUT /decks/:id` `{ title, forAll, assigned, newPerDay, source, cards }`, `DELETE /decks/:id` (преподаватель)
-  Карточка: `{ id, front, back, example?, exampleTr?, image?, audio?, suspended? }`. `image` (фото, рекомендуем 450×300) и `audio` (озвучка слова) — только `https`-ссылки на Google (Диск, Cloud Storage, Firebase Storage, `googleusercontent.com`, список в `media.ts`), иначе 400; пустые поля не сохраняются
+  Карточка: `{ id, front, back, example?, exampleTr?, image?, audio?, suspended? }`. `image` (фото, рекомендуем 450×300) и `audio` (озвучка слова) — любые ссылки, но только `https` (проверка в `media.ts`), иначе 400; пустые поля не сохраняются
 - `GET /srs` → `{ users }` — прогресс повторений: ученик — свой, преподаватель — всех учеников и свой (под ключом `teacher`)
 - `POST /srs/rate` `{ cardId, state | null, date, delta: 1 | -1 }` — ответ на карточку или его отмена; пишется **только в документ самого пользователя**
 

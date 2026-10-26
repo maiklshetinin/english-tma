@@ -83,7 +83,7 @@ function cleanCard(x: unknown, seen: Set<string>): Card {
   const exampleTr = str(x.exampleTr, 'card example translation', 600); if (exampleTr) c.exampleTr = exampleTr
   for (const k of ['image', 'audio'] as const) {
     const url = str(x[k], `card ${k}`, 400)
-    if (url && !isMediaUrl(url)) throw fail(400, `card ${k}: only https links to Google (Drive, Cloud Storage) are allowed`)
+    if (url && !isMediaUrl(url)) throw fail(400, `card ${k}: must be an https link`)
     if (url) c[k] = url
   }
   if (x.suspended === true) c.suspended = true

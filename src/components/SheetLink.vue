@@ -13,7 +13,7 @@ function apply(rows, withUrl) {
   if (withUrl) props.deck.source = { url: url.value.trim(), lastSync: new Date().toISOString() }
   bad.value = false
   msg.value = (added || updated ? `Добавлено слов: ${added}, обновлено: ${updated}` : 'Всё уже актуально — новых слов нет')
-    + (badLinks ? `. Ссылок пропущено: ${badLinks} — нужны https-ссылки на Google Диск или Cloud Storage` : '')
+    + (badLinks ? `. Ссылок пропущено: ${badLinks} — ссылки должны начинаться с https://` : '')
   bad.value = badLinks > 0
 }
 async function sync() {
@@ -28,7 +28,7 @@ onMounted(() => { if (props.auto && url.value.trim()) sync() })
 <template>
   <div class="sl">
     <h3 class="h"><AppIcon name="sheet" /> Google Таблица</h3>
-    <p class="hint" style="margin:0 0 10px">Колонки: A — слово, B — перевод, C — пример, D — перевод примера, E — ссылка на фото (450×300), F — ссылка на озвучку. Доступ к таблице и к файлам на Диске: «Все, у кого есть ссылка» (просмотр).</p>
+    <p class="hint" style="margin:0 0 10px">Колонки: A — слово, B — перевод, C — пример, D — перевод примера, E — ссылка на фото (450×300), F — ссылка на озвучку. Ссылки — любые, начинающиеся с https://. Доступ к таблице и к файлам на Диске: «Все, у кого есть ссылка» (просмотр).</p>
     <input v-model="url" placeholder="https://docs.google.com/spreadsheets/d/…" aria-label="Ссылка на Google Таблицу" />
     <button class="btn" :disabled="busy || !url.trim()" @click="sync">
       <AppIcon v-if="deck.source?.lastSync" name="refresh" :size="16" /> {{ busy ? 'Загрузка…' : deck.source?.lastSync ? 'Обновить из таблицы' : 'Загрузить слова' }}

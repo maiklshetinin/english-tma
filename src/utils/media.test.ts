@@ -15,12 +15,12 @@ describe('ссылки на фото и озвучку', () => {
     expect(imageSrc(' https://storage.googleapis.com/b/a.png ')).toBe('https://storage.googleapis.com/b/a.png')
     expect(imageSrc(undefined)).toBe('')
   })
-  it('можно только https и только Google', () => {
+  it('можно любые ссылки, но только https', () => {
     expect(isMediaUrl('https://drive.google.com/file/d/1/view')).toBe(true)
-    expect(isMediaUrl('https://bucket.storage.googleapis.com/a.mp3')).toBe(true)
-    expect(isMediaUrl('http://drive.google.com/file/d/1/view')).toBe(false)
-    expect(isMediaUrl('https://example.com/a.png')).toBe(false)
-    expect(isMediaUrl('https://drive.google.com.evil.io/a.png')).toBe(false)
+    expect(isMediaUrl('https://cdn.example.com/a.mp3')).toBe(true)
+    expect(isMediaUrl('http://cdn.example.com/a.mp3')).toBe(false)
+    expect(isMediaUrl('javascript:alert(1)')).toBe(false)
+    expect(isMediaUrl('сюжет')).toBe(false)
     expect(isMediaUrl('')).toBe(false)
   })
 })

@@ -1,4 +1,4 @@
-// Импорт колоды из таблицы: колонки A–F (слово, перевод, пример, перевод примера, фото, озвучка), обновление по слову, отсев чужих ссылок.
+// Импорт колоды из таблицы: колонки A–F (слово, перевод, пример, перевод примера, фото, озвучка), обновление по слову, отсев ссылок не по https.
 import { describe, expect, it } from 'vitest'
 import { mergeCards, parseCards } from './useSheetImport'
 
@@ -38,9 +38,9 @@ describe('mergeCards', () => {
     expect(d.cards[0]).toMatchObject({ id, back: 'сюжет (книги)', example: 'Ex.', exampleTr: 'Пр.', image: DRIVE, audio: SND })
     expect(mergeCards(d, parseCards(`plot,сюжет (книги),Ex.,Пр.,${DRIVE},${SND}`)).updated).toBe(0)       // ничего не изменилось
   })
-  it('ссылки не на Google пропускаются и считаются, слово при этом добавляется', () => {
+  it('ссылки не по https пропускаются и считаются, слово при этом добавляется', () => {
     const d = deck()
-    const r = mergeCards(d, parseCards('plot,сюжет,,,https://evil.example.com/a.png,http://drive.google.com/uc?id=1'))
+    const r = mergeCards(d, parseCards('plot,сюжет,,,http://example.com/a.png,javascript:alert(1)'))
     expect(r).toEqual({ added: 1, updated: 0, badLinks: 2 })
     expect(d.cards[0].image).toBeUndefined(); expect(d.cards[0].audio).toBeUndefined()
   })
