@@ -55,31 +55,35 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 
 <template>
   <div class="sheet-bg" @click.self="emit('close')">
-    <div class="sheet-box" :class="{ tgbox: !lesson }" role="dialog" aria-modal="true">
+    <div class="sheet-box" :class="lesson ? 'tgbox lsn' : 'tgbox'" role="dialog" aria-modal="true">
       <template v-if="lesson">
+        <!-- Шапка как «Информация» в Telegram: крупный кружок, имя, под ним время и статус текстом; закрыть — крестик справа -->
         <div class="head">
-          <AvatarStack v-if="members.length > 1" :students="members" :size="36" :max="3" />
-          <Avatar v-else-if="members[0]" :s="members[0]" :size="36" />
-          <div class="ttl"><h2 :title="isGroup ? `Групповой урок: ${size} ${word(size)}` : ''">{{ isGroup ? `Группа · ${size}` : members[0]?.name || gone.find(g => g.name)?.name || 'Урок' }}</h2><div class="hint">{{ when }}</div></div>
-          <span class="badge" :class="allOff ? 'bad' : lesson.done ? 'ok' : 'warn'">{{ allOff ? 'Отменён' : lesson.done ? 'Проведён' : 'Запланирован' }}</span>
+          <AvatarStack v-if="members.length > 1" :students="members" :size="52" :max="3" />
+          <Avatar v-else-if="members[0]" :s="members[0]" :size="56" />
+          <div class="ttl"><h2 :title="isGroup ? `Групповой урок: ${size} ${word(size)}` : ''">{{ isGroup ? `Группа · ${size}` : members[0]?.name || gone.find(g => g.name)?.name || 'Урок' }}</h2>
+            <div class="hint">{{ when }} · <span class="badge" :class="allOff ? 'bad' : lesson.done ? 'ok' : 'warn'">{{ allOff ? 'Отменён' : lesson.done ? 'Проведён' : 'Запланирован' }}</span></div></div>
+          <button class="close" aria-label="Закрыть" @click="emit('close')"><AppIcon name="x" :size="18" /></button>
         </div>
 
         <div v-if="!members.length && !gone.some(g => g.name)" class="hint orphan">Ученика этого урока больше нет в списке (удалён или в архиве). Добавьте ученика или уберите урок.</div>
-        <div class="box" :class="{ group: isGroup }">
-          <div class="tiles">
-            <div v-for="st in members" :key="st.id" class="tile" :class="{ off: off(st.id) }">
-              <button class="ava" :disabled="st.archived" :title="st.archived ? `${st.name} — в архиве` : `Открыть: ${st.name}`" @click="emit('open', st.id)"><Avatar :s="st" :size="48" /></button>
-              <button v-if="editable && members.length > 1 && !st.archived" class="x" :aria-label="`Убрать из урока: ${st.name}`" @click="drop(st.id)"><AppIcon name="x" :size="12" /></button>
-              <span class="nm">{{ st.name }}</span><span v-if="st.archived" class="arch-l">в архиве</span><span v-if="off(st.id)" class="pr offtxt">отменил</span><span v-else-if="cost(st)" class="pr">{{ cost(st) }}</span>
-            </div>
-            <div v-for="g in gone.filter(x => x.name)" :key="g.id" class="tile gone" :title="`${g.name} — удалён(а), урок сохранён в истории`">
-              <span class="ava"><span class="q">?</span></span><span class="nm">{{ g.name }} (удалён)</span><span v-if="g.price" class="pr">{{ g.price }}</span>
-            </div>
-            <div v-if="editable && !adding" class="tile">
-              <button class="ava plus" :disabled="full || !others.length" aria-label="Добавить ученика" @click="openAdd"><AppIcon name="plus" :size="22" /></button>
-              <span class="nm">Добавить</span>
-            </div>
+        <!-- Ученики урока — строками, как участники группы в Telegram -->
+        <div class="sec box" :class="{ group: isGroup }">
+          <div class="stitle">{{ isGroup ? `${size} ${word(size)}` : 'Ученик' }}</div>
+          <div v-for="st in members" :key="st.id" class="tile" :class="{ off: off(st.id) }">
+            <button class="ava" :disabled="st.archived" :title="st.archived ? `${st.name} — в архиве` : `Открыть: ${st.name}`" @click="emit('open', st.id)"><Avatar :s="st" :size="42" /></button>
+            <span class="tx"><b class="nm">{{ st.name }}</b>
+              <small v-if="st.archived" class="arch-l">в архиве{{ cost(st) ? ` · ${cost(st)}` : '' }}</small>
+              <small v-else-if="off(st.id)" class="pr offtxt">отменил — без оплаты</small>
+              <small v-else class="pr">{{ cost(st) ? `${cost(st)} за урок` : 'цена не указана' }}</small></span>
+            <button v-if="cancelable && isGroup && !st.archived" class="chipbtn" :class="{ on: off(st.id) }" :aria-pressed="off(st.id)" :aria-label="`${st.name}: ${off(st.id) ? 'вернуть в урок' : 'отменил'}`" @click="emit('cancel', lesson, st.id, !off(st.id))">{{ off(st.id) ? 'Вернуть' : 'Отменил' }}</button>
+            <button v-if="editable && members.length > 1 && !st.archived" class="x" :aria-label="`Убрать из урока: ${st.name}`" :title="`Убрать из урока: ${st.name}`" @click="drop(st.id)"><AppIcon name="x" :size="14" /></button>
           </div>
+          <div v-for="g in gone.filter(x => x.name)" :key="g.id" class="tile gone" :title="`${g.name} — удалён(а), урок сохранён в истории`">
+            <span class="ava"><span class="q">?</span></span><span class="tx"><b class="nm">{{ g.name }} (удалён)</b><small v-if="g.price" class="pr">{{ g.price }}</small></span>
+          </div>
+          <button v-if="editable && !adding" class="tile plus" :disabled="full || !others.length" aria-label="Добавить ученика" @click="openAdd">
+            <span class="pic"><AppIcon name="plus" :size="22" /></span><span class="tx"><b>Добавить ученика</b></span></button>
           <div v-if="total" class="total"><span>{{ isGroup ? 'Итого за урок' : 'Цена урока' }}</span><b>{{ total }}</b></div>
           <div v-if="lost" class="total lostrow"><span>Потеряно — отменил ученик</span><b>−{{ lost }}</b></div>
         </div>
@@ -94,32 +98,27 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
           <div v-if="!found.length" class="hint empty">{{ others.length ? 'Никого не нашли' : 'Все ученики уже в этом уроке' }}</div>
           <div class="foot"><span class="hint">{{ full ? `Не больше ${MAX_GROUP} в группе` : 'Нажмите, чтобы добавить' }}</span><button class="link" @click="adding = false">Готово</button></div>
         </div>
-        <div v-if="!editable && !locked" class="hint">Состав проведённого урока не меняется — сначала снимите отметку.</div>
+        <div v-if="!editable && !locked" class="hint note-l">Состав проведённого урока не меняется — сначала снимите отметку.</div>
+        <div v-if="locked" class="hint note-l">В уроке есть {{ members.some(st => st.archived) ? 'ученик из архива' : 'удалённый ученик' }}: урок сохранён в истории, его состав и отметку «проведён» не изменить.</div>
 
-        <div v-if="locked" class="hint">В уроке есть {{ members.some(st => st.archived) ? 'ученик из архива' : 'удалённый ученик' }}: урок сохранён в истории, его состав и отметку «проведён» не изменить.</div>
-        <div class="meta">
-          <div class="mrow"><span class="lab">Начало</span>
+        <!-- Время и заметка -->
+        <div class="sec meta">
+          <div class="mrow"><span class="ic"><AppIcon name="calendar" :size="20" /></span><span class="lab">Начало</span>
             <div class="seg mins" role="radiogroup" aria-label="Начало урока">
               <button v-for="m in MINUTES" :key="m" role="radio" :aria-checked="(lesson.minute || 0) === m" :class="{ on: (lesson.minute || 0) === m }" @click="emit('details', lesson, { minute: m })">{{ hh(lesson.hour, m) }}</button>
             </div></div>
-          <div class="mrow notes"><span class="lab">Заметка <small>видите только вы</small></span>
-            <textarea v-model="note" rows="2" maxlength="300" placeholder="Например: начнём в 18:30, повторить Present Perfect" aria-label="Заметка к уроку" @blur="saveNote" @keydown.enter.exact.prevent="saveNote(); $event.target.blur()" />
+          <div class="mrow notes"><span class="ic"><AppIcon name="pencil" :size="20" /></span>
+            <textarea v-model="note" rows="1" maxlength="300" placeholder="Заметка — видите только вы" aria-label="Заметка к уроку" @blur="saveNote" @keydown.enter.exact.prevent="saveNote(); $event.target.blur()" />
             <button v-if="noteDirty" class="link save" @mousedown.prevent @click="saveNote">Сохранить</button></div>
         </div>
-        <div v-if="cancelable" class="cancel">
-          <template v-if="members.length === 1">
-            <button class="btn ghost" :class="off(members[0].id) ? 'undo' : 'warnb'" @click="emit('cancel', lesson, members[0].id, !off(members[0].id))">
-              {{ off(members[0].id) ? 'Вернуть урок (ученик придёт)' : 'Ученик отменил — без оплаты' }}</button>
-          </template>
-          <template v-else>
-            <span class="hint">Отменил (без оплаты):</span>
-            <button v-for="st in members" :key="st.id" class="chipbtn" :class="{ on: off(st.id) }" :aria-pressed="off(st.id)" @click="emit('cancel', lesson, st.id, !off(st.id))">{{ off(st.id) ? '✕ ' : '' }}{{ st.name }}</button>
-          </template>
-        </div>
-        <button class="btn" :class="{ ghost: lesson.done }" :disabled="locked || (allOff && !lesson.done)" @click="emit('done', lesson)">{{ lesson.done ? 'Снять отметку «проведён»' : 'Урок проведён' }}</button>
-        <div class="row2 acts">
-          <button class="btn ghost" style="color:var(--red)" :disabled="lesson.done" @click="emit('remove', lesson)"><AppIcon name="trash" :size="16" /> Убрать урок</button>
-          <button class="btn ghost" style="color:var(--hint)" @click="emit('close')">Закрыть</button>
+
+        <!-- Действия — строками меню, как в Telegram: иконка и текст; опасное — красным внизу -->
+        <div class="sec menu">
+          <button class="mi" :class="lesson.done ? 'grey' : 'green'" :disabled="locked || (allOff && !lesson.done)" @click="emit('done', lesson)">
+            <AppIcon :name="lesson.done ? 'undo' : 'check'" :size="20" />{{ lesson.done ? 'Снять отметку «проведён»' : 'Урок проведён' }}</button>
+          <button v-if="cancelable && members.length === 1" class="mi cancel" :class="off(members[0].id) ? 'green' : 'orange'" @click="emit('cancel', lesson, members[0].id, !off(members[0].id))">
+            <AppIcon :name="off(members[0].id) ? 'undo' : 'x'" :size="20" />{{ off(members[0].id) ? 'Вернуть урок (ученик придёт)' : 'Ученик отменил — без оплаты' }}</button>
+          <button class="mi red" :disabled="lesson.done" @click="emit('remove', lesson)"><AppIcon name="trash" :size="20" />Убрать урок</button>
         </div>
       </template>
 
@@ -142,49 +141,49 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 </template>
 
 <style scoped>
-.head { display: flex; align-items: center; gap: 12px }
-.ttl { flex: 1; min-width: 0 } .ttl h2 { margin: 0; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .ttl .hint { font-size: 13px }
-.head .badge { flex: none; padding: 3px 8px; font-size: 12px }
-
-/* Сетка кружков: аватарка и имя под ней (2 строки), 4–5 в ряд */
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px 4px }
-.tile { position: relative; display: grid; justify-items: center; align-content: start; gap: 4px; padding: 4px 2px; border: 0; background: none; font: inherit; color: var(--text); text-align: center; min-width: 0 }
-.ava { position: relative; display: grid; place-items: center; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; transition: transform .08s }
-.ava:active:not(:disabled) { transform: scale(.94) }
-.nm { width: 100%; font-size: 12px; font-weight: 700; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word }
-.pr { font-size: 12px; font-weight: 900; color: var(--hint) }
-.x { position: absolute; top: 0; left: calc(50% + 12px); display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 2px solid var(--card); border-radius: 50%; background: var(--red); color: #fff; cursor: pointer; z-index: 1 }
-.plus { border: 2px dashed var(--hint-2); color: var(--hint) }
-.plus:hover:not(:disabled) { border-color: var(--green); color: var(--green); background: var(--green-l) }
-.plus:disabled { opacity: .4; cursor: not-allowed }
-.pickable { cursor: pointer; border-radius: 14px } .pickable:hover:not(:disabled) { background: var(--blue-l) }
-.pickable:disabled { opacity: .45; cursor: not-allowed }
-
-.box { display: grid; gap: 8px; padding: 10px 6px 8px; border-radius: 16px; border: 2px solid var(--border) }
-/* Групповой урок — фиолетовый, как его карточка в расписании (WeekGrid.vue) */
-.box.group { background: var(--purple-l); border-color: var(--purple) }
-.box.group .x { border-color: var(--purple-l) }
-.orphan { padding: 10px 12px; border: 2px dashed var(--border); border-radius: 14px }
-.total { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 0; border-top: 2px solid var(--border); font-size: 14px; color: var(--hint) }
-.box.group .total { border-color: rgba(165, 96, 232, .3) }
-.gone .ava { cursor: default } .gone .q { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--hint-2); color: #fff; font-size: 22px; font-weight: 900 }
-.gone .nm { color: var(--hint) }
-.ava:disabled { cursor: default } .arch-l { font-size: 11px; font-weight: 800; color: var(--hint-2); text-transform: uppercase; letter-spacing: .3px }
-/* Отменил ученик: аватарка бледная, имя зачёркнуто, вместо цены — красное «отменил» */
+/* Карточка урока в стиле Telegram («Информация о группе»): узкое окно без внешних отступов, разделы через серые полосы, строки во всю ширину */
+.sheet-box.lsn { display: block; overflow-y: auto; background: var(--surface) }
+.lsn > * { background: var(--card) }
+.lsn .sec, .lsn .add, .lsn .note-l, .lsn .orphan { margin-top: 8px }
+.head { display: flex; align-items: center; gap: 14px; padding: 18px 14px 16px 20px }
+.ttl { flex: 1; min-width: 0 } .ttl h2 { margin: 0; font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .ttl .hint { margin-top: 2px; font-size: 14px; font-weight: 600 }
+.head .badge { padding: 0; background: none; border: 0; font-size: 14px; font-weight: 700 }
+.close { flex: none; align-self: flex-start; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--hint); cursor: pointer } .close:hover { background: var(--surface) }
+.stitle { padding: 12px 20px 4px; font-size: 14px; font-weight: 800; color: var(--blue) }
+/* Строка ученика: кружок 42px, имя и серая подпись (цена / «отменил»), справа — «Отменил» и ✕ (убрать из группы) */
+.tile { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 6px 12px 6px 20px; border: 0; background: none; font: inherit; color: var(--text); text-align: left }
+.ava { flex: none; position: relative; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer }
+.ava:disabled { cursor: default }
+.tx { flex: 1; display: grid; min-width: 0; line-height: 1.25 } .nm, .tx b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pr, .arch-l { font-size: 13px; font-weight: 500; color: var(--hint) }
+.x { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer } .x:hover { background: var(--red-l); color: var(--red-d) }
+.plus { cursor: pointer; color: var(--blue) } .plus .pic { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--blue-l); color: var(--blue) } .plus b { color: var(--blue) }
+.plus:hover:not(:disabled) { background: var(--surface) } .plus:disabled { opacity: .4; cursor: not-allowed }
+.pickable { cursor: pointer; border-radius: 14px } .pickable:hover:not(:disabled) { background: var(--blue-l) } .pickable:disabled { opacity: .45; cursor: not-allowed }
+.gone .q { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--hint-2); color: #fff; font-size: 20px; font-weight: 900 } .gone .nm { color: var(--hint) }
 .tile.off .ava { opacity: .45 } .tile.off .nm { text-decoration: line-through; color: var(--hint) }
 .offtxt { color: var(--red-d) !important } html[data-theme='dark'] .offtxt { color: var(--red) !important }
+.orphan, .note-l { padding: 12px 20px; font-size: 13px }
+.total { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-top: 1px solid var(--border); font-size: 14px; font-weight: 600; color: var(--hint) }
+.total b { font-size: 17px; font-weight: 900; color: var(--text) }
 .lostrow { border-top: 0 !important; padding-top: 0 } .lostrow b { color: var(--red-d); font-size: 15px } html[data-theme='dark'] .lostrow b { color: var(--red) }
-.meta { display: grid; gap: 8px }
-.mrow { display: grid; gap: 4px } .mrow .lab { margin: 0 } .mrow .lab small { font-weight: 700; color: var(--hint-2); margin-left: 4px }
-.mins { display: grid; grid-template-columns: repeat(4, 1fr) } .mins button { padding: 6px 4px; font-size: 14px }
-.notes { position: relative } .notes textarea { margin: 0; resize: vertical; min-height: 44px; font-size: 14px; padding: 9px 12px }
-.save { justify-self: end; padding: 2px 4px; font-size: 14px }
-.cancel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px }
-.cancel > .btn { flex: 1 }
-.btn.warnb { color: var(--red-d) } .btn.undo { color: var(--green-d) }
-.chipbtn { padding: 6px 12px; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 99px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
-.chipbtn.on { border-color: var(--red); background: var(--red-l); color: var(--red-d) }
-.total b { font-size: 18px; font-weight: 900; color: var(--text) }
+/* Время и заметка: строки с иконкой слева, как настройки в Telegram */
+.meta { display: grid; padding: 4px 0 }
+.mrow { display: flex; align-items: center; gap: 14px; padding: 8px 14px 8px 20px } .ic { flex: none; display: grid; place-items: center; width: 42px; color: var(--hint) }
+.mrow .lab { flex: none; margin: 0; font-size: 15px; font-weight: 700 }
+.mins { margin-left: auto; display: grid; grid-template-columns: repeat(4, auto); padding: 2px; border-width: 1px; border-radius: 10px } .mins button { padding: 4px 8px; font-size: 13px }
+.notes { position: relative; align-items: flex-start } .notes .ic { padding-top: 8px }
+.notes textarea { flex: 1; margin: 0; resize: vertical; min-height: 38px; font-size: 14px; padding: 8px 10px; border-width: 1px; border-radius: 10px }
+.save { position: absolute; right: 18px; bottom: -4px; padding: 2px 4px; font-size: 13px }
+/* Меню действий */
+.menu { display: grid; padding: 4px 0 }
+.mi { display: flex; align-items: center; gap: 24px; width: 100%; padding: 13px 20px 13px 29px; border: 0; background: none; font: inherit; font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; color: var(--text) }
+.mi:hover:not(:disabled) { background: var(--surface) } .mi:disabled { opacity: .4; cursor: not-allowed }
+.mi.green { color: var(--green-d) } .mi.orange { color: var(--orange-d) } .mi.red { color: var(--red-d) } .mi.grey { color: var(--hint) }
+html[data-theme='dark'] .mi.green { color: var(--green) } html[data-theme='dark'] .mi.red { color: var(--red) }
+.chipbtn { flex: none; padding: 4px 10px; border: 1px solid var(--border); border-radius: 99px; background: var(--card); color: var(--hint); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer }
+.chipbtn:hover { border-color: var(--red); color: var(--red-d) } .chipbtn.on { border-color: var(--green); background: var(--green-l); color: var(--green-d) }
+.lsn .add { border: 0; border-radius: 0; padding: 8px 12px }
 
 /* Выбор ученика — как «Поделиться» в Telegram: поиск сверху, сетка с прокруткой, действия справа внизу */
 .add { display: grid; gap: 8px; border: 2px solid var(--border); border-radius: 16px; padding: 8px }

@@ -90,7 +90,7 @@ describe('урок с учеником, которого больше нет (у
     expect(w.find('.tile.off').text()).toContain('отменил')
     expect(w.find('.total').text()).toContain('80')
     expect(w.find('.lostrow').text()).toContain('100')
-    await w.findAll('.chipbtn').find(b => b.text().includes('Петя'))!.trigger('click')
+    await w.findAll('.tile').find(t => t.text().includes('Петя'))!.find('.chipbtn').trigger('click')
     expect(w.emitted('cancel')![0]).toEqual([lesson, 'b', true])
     await w.setProps({ lesson: { ...lesson, canceled: { a: 't', b: 't' } } })
     expect(w.find('.head .badge').text()).toBe('Отменён')
