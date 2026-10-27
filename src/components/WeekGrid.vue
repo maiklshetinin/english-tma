@@ -25,15 +25,17 @@ function dropState(d, h) {                       // подсветка ячей�
   const occ = at(d, h)[0], p = dnd.payload
   if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : occ ? 'swap' : 'ok'
   if (!occ) return 'ok'
-  return occ.done || occ.studentIds.includes(p.id) || occ.studentIds.length >= 12 ? 'bad' : 'join'      // ученик на урок — добавится в группу
+  return occ.done || occ.studentIds.includes(p.id) || group(occ).length >= 12 ? 'bad' : 'join'      // ученик на урок — добавится в группу
 }
-const isGroup = (l) => l.studentIds.length > 1
+// Ученики урока, которые есть в списке. Ученика могли удалить из базы или архивировать — его id остаётся в уроке, но показывать некого.
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)
+const isGroup = (l) => group(l).length > 1
+const orphan = (l) => !group(l).length                                      // урок, в котором не осталось известных учеников: показываем серым «?», чтобы его можно было убрать
 const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payload.lesson.id === l.id
-const down = (e, l) => { if (!l.done) pressStart(e, { kind: 'lesson', lesson: l }) }      // проведённый урок не перетаскиваем (сначала снять отметку)
-// Подпись урока: ученик (у группы — первый, остальные «+N»). Ученика могли архивировать — тогда подписи нет, и ячейка просто пустая
-const first = (l) => stu(l.studentIds[0])
-const label = (l) => isGroup(l) ? `Группа: ${l.studentIds.map(id => stu(id)?.name).filter(Boolean).join(', ')}, ${hh(l.hour)}` : `${first(l)?.name ?? ''}, ${hh(l.hour)}`
+const down = (e, l) => { if (!l.done && !orphan(l)) pressStart(e, { kind: 'lesson', lesson: l }) }      // проведённый (и «пустой») урок не перетаскиваем
+// Подпись урока: ученик или участники группы; у «пустого» урока — подсказка, что его ученика больше нет
+const first = (l) => group(l)[0]
+const label = (l) => orphan(l) ? `Урок без ученика (удалён или в архиве), ${hh(l.hour)} — нажмите, чтобы убрать` : isGroup(l) ? `Группа: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour)}` : `${first(l).name}, ${hh(l.hour)}`
 const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 </script>
 
@@ -48,12 +50,13 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
       <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h) }]"
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
-          <button v-if="first(l)" class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l) }" :title="label(l)" :aria-label="label(l)"
+          <button class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="20" :max="4" ring="var(--purple-l)" /><AvatarStack class="st-sm" :students="group(l)" :size="20" :max="2" ring="var(--purple-l)" />
               <span v-if="l.done" class="tick">✓</span>
             </template>
+            <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">Нет ученика</span></template>
             <template v-else><Avatar :s="first(l)" :size="20" /><span v-if="l.done" class="tick">✓</span><span class="nm">{{ first(l).name }}</span></template>
             <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
           </button>
@@ -95,6 +98,9 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .cell.join .chip.group :deep(.it) { box-shadow: 0 0 0 1.5px var(--purple-l) }
 html[data-theme='dark'] .chip.group { color: var(--purple) }
 .cell.join { box-shadow: inset 0 0 0 2px var(--purple) } .cell.join .chip { border-color: var(--purple); background: var(--purple-l) }
+/* Урок, ученика которого больше нет (удалён из базы / архив): серый пунктир с «?» — нажать и убрать */
+.chip.orphan { border-style: dashed; border-color: var(--hint-2); background: var(--surface); color: var(--hint); cursor: pointer }
+.chip .q { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--hint-2); color: #fff; font-weight: 900; font-size: 12px; flex: none }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 .chip :deep(.av) { width: 20px !important; height: 20px !important; font-size: 10px !important }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

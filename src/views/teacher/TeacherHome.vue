@@ -24,6 +24,7 @@ const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (n
 const sheet = ref(null)                             // { lesson } | { slot }
 const name = (id) => studentStore.list.find(s => s.id === id)?.name
 const names = (l) => l.studentIds.map(name).filter(Boolean).join(', ')
+const known = (l) => l.studentIds.filter(id => studentStore.byId(id))      // без удалённых / архивных: их id сервер не примет
 const occupant = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h))?.[0]
 
 function assign(sid, date, hour) {
@@ -40,7 +41,7 @@ function unassign(lesson) {
 function setStudents(lesson, ids) {
   if (lesson.done) return showToast('Урок проведён — сначала снимите отметку', null, 'bad')
   if (!ids.length) return
-  const was = [...lesson.studentIds]
+  const was = known(lesson)
   const added = ids.filter(id => !was.includes(id)), removed = was.filter(id => !ids.includes(id))
   scheduleStore.setStudents(lesson, ids); haptic('light')
   const msg = added.length ? `Добавлен в урок: ${added.map(name).join(', ')}` : `Убран из урока: ${removed.map(name).join(', ')}`
@@ -53,8 +54,8 @@ function onDrop(p, t) {
   if (p.kind === 'student') {
     if (!occ) return assign(p.id, t.date, t.hour)
     if (occ.studentIds.includes(p.id)) return showToast(`${name(p.id)} уже в этом уроке`, null, 'bad')
-    if (occ.studentIds.length >= MAX_GROUP) return showToast(`В группе не больше ${MAX_GROUP} учеников`, null, 'bad')
-    return setStudents(occ, [...occ.studentIds, p.id])      // ученик на занятую ячейку — добавляется в урок (группа)
+    if (known(occ).length >= MAX_GROUP) return showToast(`В группе не больше ${MAX_GROUP} учеников`, null, 'bad')
+    return setStudents(occ, [...known(occ), p.id])      // ученик на занятую ячейку — добавляется в урок (группа)
   }
   const a = p.lesson
   if (occ?.id === a.id) return

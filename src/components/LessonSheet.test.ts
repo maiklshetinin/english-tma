@@ -47,3 +47,32 @@ describe('LessonSheet', () => {
     expect(w.emitted('students')![1][1]).toEqual(['b'])
   })
 })
+
+describe('урок с учеником, которого больше нет (удалён из базы / в архиве)', () => {
+  beforeEach(() => { setActivePinia(createPinia()); useStudentsStore().set([st('a', 'Маша', 100), st('b', 'Петя', 80)]) })
+
+  it('шторка поясняет, а добавление отправляет только известных учеников', async () => {
+    const lesson = { id: 'L', date: D, hour: 9, studentIds: ['gone'] } as Lesson
+    const w = mount(LessonSheet, { props: { lesson } })
+    expect(w.find('.orphan').exists()).toBe(true)
+    await w.find('.plus').trigger('click')
+    await w.findAll('.add .tile').find(b => b.text().includes('Петя'))!.trigger('click')
+    expect(w.emitted('students')![0][1]).toEqual(['b'])                     // 'gone' не уходит на сервер (иначе 404)
+  })
+
+  it('сетка: «пустой» урок виден серым «?», группа без первого ученика не пропадает', async () => {
+    const { default: WeekGrid } = await import('./WeekGrid.vue')
+    const { useScheduleStore } = await import('../stores/schedule')
+    useScheduleStore().set([
+      { id: 'o', date: D, hour: 11, studentIds: ['gone'] },
+      { id: 'g', date: D, hour: 12, studentIds: ['gone', 'a', 'b'] },
+    ])
+    const w = mount(WeekGrid, { props: { dates: [D] } })
+    const chips = w.findAll('.chip')
+    expect(chips).toHaveLength(2)
+    expect(chips[0].classes()).toContain('orphan')
+    expect(chips[1].classes()).toContain('group')
+    await chips[0].trigger('click')
+    expect(w.emitted('lesson')![0][0]).toMatchObject({ id: 'o' })           // по нему можно нажать и убрать
+  })
+})

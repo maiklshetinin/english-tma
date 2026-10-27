@@ -23,12 +23,14 @@ const when = computed(() => props.lesson ? fmtSlot(props.lesson.date, props.less
 // Правка состава: проведённый урок не меняется (цены уже зафиксированы), последнего ученика не убрать — для этого «Убрать урок»
 const editable = computed(() => !!props.lesson && !props.lesson.done)
 const adding = ref(false), q = ref('')
-const full = computed(() => (props.lesson?.studentIds.length ?? 0) >= MAX_GROUP)
+// Только известные ученики: id удалённых из базы / архивных в уроке могут остаться, но сервер их не примет
+const ids = computed(() => members.value.map(st => st.id))
+const full = computed(() => ids.value.length >= MAX_GROUP)
 const others = computed(() => studentStore.list.filter(st => !props.lesson?.studentIds.includes(st.id)))
 const match = (st) => { const s = q.value.trim().toLowerCase().replace(/^@/, ''); return !s || st.name.toLowerCase().includes(s) || (st.username || '').toLowerCase().includes(s) }
 const found = computed(() => (props.lesson ? others.value : studentStore.list).filter(match))
-const add = (id) => { if (!full.value) emit('students', props.lesson, [...props.lesson.studentIds, id]) }
-const drop = (id) => emit('students', props.lesson, props.lesson.studentIds.filter(x => x !== id))
+const add = (id) => { if (!full.value) emit('students', props.lesson, [...ids.value, id]) }
+const drop = (id) => emit('students', props.lesson, ids.value.filter(x => x !== id))
 const openAdd = () => { q.value = ''; adding.value = true }
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'ученика' : 'учеников')
 </script>
@@ -44,6 +46,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
           <span class="badge" :class="lesson.done ? 'ok' : 'warn'">{{ lesson.done ? 'Проведён' : 'Запланирован' }}</span>
         </div>
 
+        <div v-if="!members.length" class="hint orphan">Ученика этого урока больше нет в списке (удалён или в архиве). Добавьте ученика или уберите урок.</div>
         <div class="box" :class="{ group: isGroup }">
           <div class="tiles">
             <div v-for="st in members" :key="st.id" class="tile">
@@ -118,8 +121,10 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 /* Групповой урок — фиолетовый, как его карточка в расписании (WeekGrid.vue) */
 .box.group { background: var(--purple-l); border-color: var(--purple) }
 .box.group .x { border-color: var(--purple-l) }
+.orphan { padding: 10px 12px; border: 2px dashed var(--border); border-radius: 14px }
 .total { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 0; border-top: 2px solid var(--border); font-size: 14px; color: var(--hint) }
-.box.group .total { border-color: rgba(165, 96, 232, .3) }
+.box.group .orphan { padding: 10px 12px; border: 2px dashed var(--border); border-radius: 14px }
+.total { border-color: rgba(165, 96, 232, .3) }
 .total b { font-size: 18px; font-weight: 900; color: var(--text) }
 
 /* Выбор ученика — как «Поделиться» в Telegram: поиск сверху, сетка с прокруткой, действия справа внизу */
