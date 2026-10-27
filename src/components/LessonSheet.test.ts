@@ -96,4 +96,16 @@ describe('урок с учеником, которого больше нет (у
     expect(w.find('.head .badge').text()).toBe('Отменён')
     expect(w.findAll('button').find(b => b.text() === 'Урок проведён')!.attributes('disabled')).toBeDefined()
   })
+
+  it('архивный ученик в проведённом уроке: серый, «в архиве», цена в итоге остаётся, карточку не открыть', async () => {
+    useStudentsStore().archived = [{ ...st('z', 'Зоя', 50), archivedAt: null, archived: true }]
+    const lesson = { id: 'L', date: D, hour: 9, studentIds: ['a', 'z'], done: true, prices: { a: 100, z: 50 } } as Lesson
+    const w = mount(LessonSheet, { props: { lesson } })
+    const tile = w.findAll('.tile').find(t => t.text().includes('Зоя'))!
+    expect(tile.text()).toContain('в архиве'); expect(tile.text()).toContain('50')
+    expect(tile.find('.av').classes()).toContain('arch')
+    expect(tile.find('button.ava').attributes('disabled')).toBeDefined()
+    expect(w.find('.total').text()).toContain('150')
+    expect(w.find('.orphan').exists()).toBe(false)
+  })
 })

@@ -249,6 +249,9 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
         const d = l.data() as LessonDoc
         if (!!d.done === done) { out = pub(id, d); return }                      // уже в нужном состоянии — ничего не меняем (цены не пересчитываются)
         if (!done && Object.keys(d.names ?? {}).length) throw fail(409, 'lesson has deleted students')   // в уроке ученик, удалённый навсегда: снять отметку — потерять его цену в истории
+        if (!done) for (const sid of d.studentIds) {                             // в уроке архивный ученик: без отметки его убрала бы самоочистка — и деньги с ним
+          const st = await tx.get(students().doc(sid)); if (!st.exists || st.get('archived')) throw fail(409, 'lesson has archived students')
+        }
         const off = canceledOf(d)
         if (done && d.studentIds.every((sid) => off[sid])) throw fail(409, 'all students canceled')     // отменили все — проводить нечего
         const prices: Record<string, number> = {}
@@ -273,13 +276,14 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       })
     },
 
-    // Ученика архивировали: убираем его из уроков двух живых недель; если урок остался без учеников — удаляем его
+    // Ученика архивировали: убираем его из НЕпроведённых уроков двух живых недель; если урок остался без учеников — удаляем его.
+    // Проведённые уроки не трогаем: ученик и его зафиксированная цена остаются (сайт показывает его серым, «в архиве»).
     async dropStudent(studentId: string): Promise<void> {
       for (const ws of liveWeeks()) {
         for (const d of (await lessons().where('weekStart', '==', ws).get()).docs) {
-          if (!d.get('studentIds').includes(studentId)) continue
+          if (!d.get('studentIds').includes(studentId) || d.get('done')) continue      // проведённый урок — история денег: ученик в нём остаётся
           await db.runTransaction(async (tx) => {
-            const l = await tx.get(d.ref); if (!l.exists) return
+            const l = await tx.get(d.ref); if (!l.exists || l.get('done')) return
             const rest = l.get('studentIds').filter((x: string) => x !== studentId)
             if (rest.length) return void tx.update(d.ref, { studentIds: rest })
             const W = weekLoader(tx), w = await W.get(ws), k = slotKey(l.get('date'), l.get('hour'))

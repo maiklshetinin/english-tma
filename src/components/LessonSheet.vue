@@ -16,13 +16,14 @@ const MAX_GROUP = 12                                              // как на
 const studentStore = useStudentsStore()
 const props = defineProps({ lesson: Object, slot: Object })
 const emit = defineEmits(['close', 'remove', 'open', 'pick', 'done', 'students', 'cancel'])
-const members = computed(() => (props.lesson?.studentIds ?? []).map(id => studentStore.list.find(x => x.id === id)).filter(Boolean))   // архивных учеников в списке нет
+const members = computed(() => (props.lesson?.studentIds ?? []).map(id => studentStore.findAny(id)).filter(Boolean))   // и архивные (в проведённых уроках остаются, серые)
 const cost = (st) => (!props.lesson ? 0 : props.lesson.done && props.lesson.prices?.[st.id] != null ? props.lesson.prices[st.id] : priceAt(st, props.lesson.date, props.lesson.hour))      // цена на время урока: прошедшие уроки не пересчитываются
 // Ученики урока, которых нет в списке: удалённые навсегда (у проведённого урока имя сохранено в names) или удалённые из базы вручную
-const gone = computed(() => (props.lesson?.studentIds ?? []).filter(id => !studentStore.byId(id)).map(id => ({ id, name: props.lesson.names?.[id] || '', price: props.lesson.done ? props.lesson.prices?.[id] ?? 0 : 0 })))
+const gone = computed(() => (props.lesson?.studentIds ?? []).filter(id => !studentStore.findAny(id)).map(id => ({ id, name: props.lesson.names?.[id] || '', price: props.lesson.done ? props.lesson.prices?.[id] ?? 0 : 0 })))
 const size = computed(() => members.value.length + gone.value.filter(g => g.name).length)      // все ученики урока, включая удалённых навсегда
 const isGroup = computed(() => size.value > 1)
-const locked = computed(() => !!props.lesson?.done && gone.value.some(g => g.name))       // в уроке есть удалённый навсегда: отметку не снять, иначе пропадёт история
+// В уроке есть удалённый навсегда или архивный ученик: отметку не снять, иначе урок (и деньги) потеряются
+const locked = computed(() => !!props.lesson?.done && (gone.value.length > 0 || members.value.some(st => st.archived)))
 const off = (id) => !!props.lesson?.canceled?.[id]                                                  // отменил ученик
 const total = computed(() => members.value.filter(st => !off(st.id)).reduce((sum, st) => sum + cost(st), 0) + gone.value.reduce((sum, g) => sum + g.price, 0))
 const lost = computed(() => members.value.filter(st => off(st.id)).reduce((sum, st) => sum + priceAt(st, props.lesson.date, props.lesson.hour), 0))
@@ -34,7 +35,7 @@ const when = computed(() => props.lesson ? fmtSlot(props.lesson.date, props.less
 const editable = computed(() => !!props.lesson && !props.lesson.done)
 const adding = ref(false), q = ref('')
 // Только известные ученики: id удалённых из базы / архивных в уроке могут остаться, но сервер их не примет
-const ids = computed(() => members.value.map(st => st.id))
+const ids = computed(() => members.value.filter(st => !st.archived).map(st => st.id))
 const full = computed(() => ids.value.length >= MAX_GROUP)
 const others = computed(() => studentStore.list.filter(st => !props.lesson?.studentIds.includes(st.id)))
 const match = (st) => { const s = q.value.trim().toLowerCase().replace(/^@/, ''); return !s || st.name.toLowerCase().includes(s) || (st.username || '').toLowerCase().includes(s) }
@@ -60,9 +61,9 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
         <div class="box" :class="{ group: isGroup }">
           <div class="tiles">
             <div v-for="st in members" :key="st.id" class="tile" :class="{ off: off(st.id) }">
-              <button class="ava" :title="`Открыть: ${st.name}`" @click="emit('open', st.id)"><Avatar :s="st" :size="48" /></button>
-              <button v-if="editable && members.length > 1" class="x" :aria-label="`Убрать из урока: ${st.name}`" @click="drop(st.id)"><AppIcon name="x" :size="12" /></button>
-              <span class="nm">{{ st.name }}</span><span v-if="off(st.id)" class="pr offtxt">отменил</span><span v-else-if="cost(st)" class="pr">{{ cost(st) }}</span>
+              <button class="ava" :disabled="st.archived" :title="st.archived ? `${st.name} — в архиве` : `Открыть: ${st.name}`" @click="emit('open', st.id)"><Avatar :s="st" :size="48" /></button>
+              <button v-if="editable && members.length > 1 && !st.archived" class="x" :aria-label="`Убрать из урока: ${st.name}`" @click="drop(st.id)"><AppIcon name="x" :size="12" /></button>
+              <span class="nm">{{ st.name }}</span><span v-if="st.archived" class="arch-l">в архиве</span><span v-if="off(st.id)" class="pr offtxt">отменил</span><span v-else-if="cost(st)" class="pr">{{ cost(st) }}</span>
             </div>
             <div v-for="g in gone.filter(x => x.name)" :key="g.id" class="tile gone" :title="`${g.name} — удалён(а), урок сохранён в истории`">
               <span class="ava"><span class="q">?</span></span><span class="nm">{{ g.name }} (удалён)</span><span v-if="g.price" class="pr">{{ g.price }}</span>
@@ -88,7 +89,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
         </div>
         <div v-if="!editable && !locked" class="hint">Состав проведённого урока не меняется — сначала снимите отметку.</div>
 
-        <div v-if="locked" class="hint">В уроке есть удалённый ученик: урок сохранён в истории, его состав и отметку «проведён» не изменить.</div>
+        <div v-if="locked" class="hint">В уроке есть {{ members.some(st => st.archived) ? 'ученик из архива' : 'удалённый ученик' }}: урок сохранён в истории, его состав и отметку «проведён» не изменить.</div>
         <div v-if="cancelable" class="cancel">
           <template v-if="members.length === 1">
             <button class="btn ghost" :class="off(members[0].id) ? 'undo' : 'warnb'" @click="emit('cancel', lesson, members[0].id, !off(members[0].id))">
@@ -151,6 +152,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 .box.group .total { border-color: rgba(165, 96, 232, .3) }
 .gone .ava { cursor: default } .gone .q { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--hint-2); color: #fff; font-size: 22px; font-weight: 900 }
 .gone .nm { color: var(--hint) }
+.ava:disabled { cursor: default } .arch-l { font-size: 11px; font-weight: 800; color: var(--hint-2); text-transform: uppercase; letter-spacing: .3px }
 /* Отменил ученик: аватарка бледная, имя зачёркнуто, вместо цены — красное «отменил» */
 .tile.off .ava { opacity: .45 } .tile.off .nm { text-decoration: line-through; color: var(--hint) }
 .offtxt { color: var(--red-d) !important } html[data-theme='dark'] .offtxt { color: var(--red) !important }

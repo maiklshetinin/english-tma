@@ -8,7 +8,7 @@ import { useStudentsStore } from '../stores/students'
 const studentStore = useStudentsStore()
 const p = computed(() => dnd.payload)
 const s = computed(() => p.value && studentStore.list.find(x => x.id === (p.value.kind === 'student' ? p.value.id : p.value.lesson.studentIds[0])))
-const members = computed(() => p.value?.kind === 'lesson' ? p.value.lesson.studentIds.map(id => studentStore.list.find(x => x.id === id)).filter(Boolean) : [])
+const members = computed(() => p.value?.kind === 'lesson' ? p.value.lesson.studentIds.map(id => studentStore.findAny(id)).filter(Boolean) : [])
 // Урок из таблицы: призрак — копия карточки того же размера, она лежит ровно поверх оригинала и просто едет за курсором (без «прыжка»).
 const lesson = computed(() => p.value?.kind === 'lesson' && dnd.grab)
 const pos = computed(() => lesson.value

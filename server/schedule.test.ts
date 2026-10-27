@@ -194,6 +194,19 @@ store.set(`students/${c1.id}`, { ...store.get(`students/${c1.id}`), tgId: 31, st
 const cMine = await find({ uid: 'tg:31', role: 'student', studentId: c1.id }, cl.id)
 ok('ученик видит свою отмену', !!cMine?.canceled?.[c1.id])
 
+// --- архивация не трогает проведённые уроки (деньги остаются) ---
+const a1 = await ST.create({ name: 'Ася', price: 90 }, 'tg:1'), a2 = await ST.create({ name: 'Боря', price: 40 }, 'tg:1')
+const aSoloDone = await S.create({ studentId: a1.id, date: D1, hour: 11 }, 'tg:1'); await S.setDone(aSoloDone.id, { done: true })
+const aGroupDone = await S.create({ studentIds: [a1.id, a2.id], date: D1, hour: 12 }, 'tg:1'); await S.setDone(aGroupDone.id, { done: true })
+const aPlanned = await S.create({ studentId: a1.id, date: D1, hour: 13 }, 'tg:1')
+await ST.archive(a1.id); await S.dropStudent(a1.id)
+ok('архив: проведённый одиночный урок остался с ценой', store.has(`lessons/${aSoloDone.id}`) && store.get(`lessons/${aSoloDone.id}`).prices[a1.id] === 90 && store.get('schedule/2026-10-26').slots['2026-10-30_11'] === aSoloDone.id)
+ok('архив: в проведённой группе ученик остался', JSON.stringify(store.get(`lessons/${aGroupDone.id}`).studentIds) === JSON.stringify([a1.id, a2.id]))
+ok('архив: запланированный урок удалён', !store.has(`lessons/${aPlanned.id}`))
+ok('архив: у проведённого урока с архивным отметку не снять → 409', (await code(S.setDone(aSoloDone.id, { done: false }))) === 409 && store.get(`lessons/${aSoloDone.id}`).done === true)
+await S.list(teacher)
+ok('самоочистка тоже не трогает проведённые уроки архивного', store.has(`lessons/${aSoloDone.id}`) && store.get(`lessons/${aGroupDone.id}`).studentIds.includes(a1.id))
+
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
 clock = new Date('2026-10-25T23:30:00Z')                   // уже понедельник 26.10 по Варшаве
 v = await S.list(teacher)

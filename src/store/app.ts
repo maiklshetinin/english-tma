@@ -29,9 +29,9 @@ export const deckOf = (n: { deckId?: string }) => useDecksStore().byId(n.deckId)
 // Строки «ученик — урок» для вкладки «Уроки» (у группового урока по строке на каждого ученика).
 // Цена: у проведённого урока — зафиксированная при отметке, у запланированного — по истории цен на время урока; отменённый учеником — без оплаты.
 export const allLessons = computed(() => useScheduleStore().lessons.flatMap((l) => l.studentIds.map((sid) => {
-  const st = useStudentsStore().byId(sid)
+  const st = useStudentsStore().findAny(sid)                                                 // и архивный: проведённые уроки с ним остаются в истории
   return {
-    id: `${l.id}:${sid}`, lesson: l, title: 'Урок', date: l.date, hour: l.hour, time: hh(l.hour), done: !!l.done, studentId: sid, studentName: st?.name ?? (l.names?.[sid] ? `${l.names[sid]} (удалён)` : ''),
+    id: `${l.id}:${sid}`, lesson: l, title: 'Урок', date: l.date, hour: l.hour, time: hh(l.hour), done: !!l.done, studentId: sid, studentName: st ? (st.archived ? `${st.name} (в архиве)` : st.name) : (l.names?.[sid] ? `${l.names[sid]} (удалён)` : ''),
     canceled: !!l.canceled?.[sid],                                                                // отменил ученик — без оплаты
     price: l.canceled?.[sid] ? 0 : l.done && l.prices?.[sid] != null ? l.prices[sid] : priceAt(st, l.date, l.hour),
   }

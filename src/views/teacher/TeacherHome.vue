@@ -27,7 +27,7 @@ const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (n
 const weekMoney = (dates) => sumMoney(scheduleStore.lessons.filter(l => dates.includes(l.date)), studentStore.byId)
 const m1 = computed(() => weekMoney(w1.value)), m2 = computed(() => weekMoney(w2.value))
 const sheet = ref(null)                             // { lesson } | { slot }
-const name = (id) => studentStore.list.find(s => s.id === id)?.name
+const name = (id) => studentStore.findAny(id)?.name
 const names = (l) => l.studentIds.map(name).filter(Boolean).join(', ')
 const known = (l) => l.studentIds.filter(id => studentStore.byId(id))      // без удалённых / архивных: их id сервер не примет
 const occupant = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h))?.[0]

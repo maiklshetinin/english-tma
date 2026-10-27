@@ -17,7 +17,7 @@ const now = computed(() => { const d = new Date(nowTick.value); return { date: y
 const hasToday = computed(() => props.dates.includes(now.value.date))
 const rowNow = (h) => hasToday.value && h === now.value.hour
 const cellNow = (d, h) => d === now.value.date && h === now.value.hour
-const stu = (id) => studentStore.list.find(s => s.id === id)
+const stu = (id) => studentStore.findAny(id)                               // и архивные: в проведённых уроках они остаются (серые, «в архиве»)
 const at = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h)) ?? []
 // Деньги дня: факт — проведённые уроки (зафиксированные цены), план — все уроки дня (utils/price.ts)
 const moneyByDay = computed(() => Object.fromEntries(props.dates.map(d => [d, sumMoney(scheduleStore.lessons.filter(l => l.date === d), studentStore.byId)])))

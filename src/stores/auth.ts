@@ -60,6 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
     await content.load().catch((e: Error) => showToast(e.message, null, 'bad'))          // путь, колоды, пресеты и прогресс слов
     content.startRefresh()
     schedule.load().catch(() => showToast('Не удалось загрузить расписание', null, 'bad'))      // уроки двух недель (для ученика — только его)
+    if (c.role === 'teacher') students.loadArchived().catch(() => {})      // архивные — чтобы проведённые уроки с ними показывались (серым, «в архиве»)
     schedule.startRefresh()
     setRole(c.role); isTeacher.value = c.role === 'teacher'
     syncAvatar()

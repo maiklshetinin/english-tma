@@ -22,9 +22,11 @@ async function call<T>(path: string, opts: RequestInit | undefined, what: string
 
 export const useStudentsStore = defineStore('students', () => {
   const list = ref<Student[]>([])
-  const archived = ref<ArchivedStudent[]>([])        // раздел «Архив» (грузится на вкладке «Ученики»)
+  const archived = ref<(ArchivedStudent & { archived?: boolean })[]>([])        // раздел «Архив» (грузится на вкладке «Ученики»)
 
   const byId = (id: string | null | undefined) => list.value.find((s) => s.id === id)
+  /** Активный или архивный ученик (для истории уроков). У архивного — поле archived: true. */
+  const findAny = (id: string | null | undefined): (Student & { archived?: boolean }) | undefined => byId(id) ?? archived.value.find((s) => s.id === id)
   const set = (items: Student[]) => { list.value = [...items].sort((a, b) => a.name.localeCompare(b.name, 'ru')) }
   const clear = () => { stopRefresh(); list.value = []; archived.value = [] }
 
@@ -69,7 +71,7 @@ export const useStudentsStore = defineStore('students', () => {
   }
 
   async function loadArchived(): Promise<ArchivedStudent[]> {
-    archived.value = (await call<ArchivedStudent[]>('/students/archived', undefined, 'Не удалось загрузить архив')).map((x) => ({ ...normalize(x), archivedAt: x.archivedAt ?? null }))
+    archived.value = (await call<ArchivedStudent[]>('/students/archived', undefined, 'Не удалось загрузить архив')).map((x) => ({ ...normalize(x), archivedAt: x.archivedAt ?? null, archived: true }))
     return archived.value
   }
   /** Вернуть из архива: ученик снова в списке и «ждёт приглашения». Возвращает новую ссылку-приглашение (старый аккаунт доступ потерял). */
@@ -86,5 +88,5 @@ export const useStudentsStore = defineStore('students', () => {
     await Promise.all([loadArchived().catch(() => {}), useScheduleStore().load().catch(() => {})])
   }
 
-  return { list, archived, byId, set, clear, load, loadArchived, startRefresh, stopRefresh, add, invite, setUsername, setPrice, archive, restore, purge }
+  return { list, archived, byId, findAny, set, clear, load, loadArchived, startRefresh, stopRefresh, add, invite, setUsername, setPrice, archive, restore, purge }
 })
