@@ -188,7 +188,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 .add { display: grid; gap: 8px; border: 2px solid var(--border); border-radius: 16px; padding: 8px }
 .search { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 2px solid var(--border); color: var(--hint-2) }
 .search input { margin: 0; padding: 10px 0; border: 0; background: none; border-radius: 0 }
-.search input:focus { background: none }
+.search input:focus { background: none } .search input:focus-visible { outline: none }
 .clr { display: grid; place-items: center; padding: 4px; border: 0; background: none; color: var(--hint-2); cursor: pointer }
 .scroll { max-height: 236px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px }
 .empty { text-align: center; padding: 8px 0 }

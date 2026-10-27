@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
-import { sumMoney, fmtMoney, fmtMoneyShort, fmtMoneyK } from '../utils/price'
+import { sumMoney, fmtMoney, fmtMoneyK } from '../utils/price'
 import AvatarStack from './AvatarStack.vue'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore } from '../stores/schedule'
@@ -57,9 +57,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
         <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
       </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
-        <span v-if="money(d).plan" class="money" :title="`Факт ${fmtMoney(money(d).real)} из плана ${fmtMoney(money(d).plan)}`">
-          <i class="real" :class="{ zero: !money(d).real }"><span class="w">{{ fmtMoneyShort(money(d).real) }}</span><span class="n">{{ fmtMoneyK(money(d).real) }}</span></i>
-          <i v-if="money(d).plan !== money(d).real" class="plan"><span class="w">из {{ fmtMoneyShort(money(d).plan) }}</span><span class="n">/{{ fmtMoneyK(money(d).plan) }}</span></i></span></span>
+        <span v-if="money(d).plan" class="dsum" :class="{ ok: money(d).real === money(d).plan }" :title="`Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}`">{{ fmtMoneyK(money(d).plan) }}</span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
       <span class="tm" :class="{ now: rowNow(h) }">{{ rowNow(h) ? hh(h, now.minute) : hh(h) }}</span>
@@ -102,20 +100,10 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .dh { display: grid; justify-items: center; padding: 4px 0; border-radius: 12px; font-size: 13px; color: var(--hint) }
 .dn { display: grid; justify-items: center }
 .dh small { font-weight: 800; font-size: 12px; color: var(--hint-2) } .dh.we b { color: var(--purple-d) }
-/* Деньги дня под датой: зелёным — факт (проведённые), серым — «из» плана; на узком экране суммы короткие (12,5к) */
-.head { align-items: start } .head .dh { align-content: start }
-/* Широкий экран: «Пн 26» слева, деньги справа в той же строке */
-@media (min-width: 720px) {
-  .dh { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; min-height: 40px }
-  .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px }
-  .dh .money { justify-items: end; margin-top: 0 }
-}
-.money .n { display: none } @media (max-width: 719px) { .money .w { display: none } .money .n { display: inline } }
-.money { display: grid; justify-items: center; margin-top: 2px; line-height: 1.15; font-style: normal; max-width: 100%; overflow: hidden }
-.money i { font-style: normal; white-space: nowrap }
-.money .real { font-size: 12px; font-weight: 900; color: var(--green-d) } .money .real.zero { color: var(--hint-2) }
-.money .plan { font-size: 10px; font-weight: 800; color: var(--hint-2) }
-html[data-theme='dark'] .money .real { color: var(--green) }
+/* Деньги дня — одна цифра под датой: сумма уроков дня; зелёная, когда все проведены */
+.dsum { margin-top: 2px; font-size: 12px; font-weight: 900; color: var(--hint-2); white-space: nowrap } .dsum.ok { color: var(--green-d) }
+html[data-theme='dark'] .dsum.ok { color: var(--green) }
+@media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
 /* «Сейчас» — красным и полупрозрачным (синий занят чипами уроков): день, время и ячейка на пересечении */
 .dh.today { background: rgba(255, 75, 75, .16); box-shadow: inset 0 0 0 2px rgba(255, 75, 75, .55), 0 3px 0 rgba(234, 43, 43, .45) } .dh.today b, .dh.today small { color: var(--red-d) }
 .cell { position: relative; height: 36px; border-radius: 10px; background: var(--surface); transition: background .1s, box-shadow .1s }
