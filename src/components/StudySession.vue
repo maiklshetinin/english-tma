@@ -25,6 +25,15 @@ const store = (k, v) => { try { return v === undefined ? localStorage.getItem(k)
 const autoplay = ref(store('tma.autoplay') !== 'off')
 const toggleAuto = () => { autoplay.value = !autoplay.value; store('tma.autoplay', autoplay.value ? 'on' : 'off') }
 const imgBad = ref(false)
+// Пример: после ответа показан перевод; клик по примеру переключает его на английский и обратно
+const exAlt = ref(false)
+const sentText = computed(() => {
+  const c = card.value; if (!c) return ''
+  return flipped.value && c.exampleTr && !exAlt.value ? c.exampleTr : c.example
+})
+const canToggleEx = computed(() => flipped.value && !!card.value?.exampleTr && !!card.value?.example)
+const toggleEx = () => { if (canToggleEx.value) exAlt.value = !exAlt.value }
+watch([card, flipped], () => { exAlt.value = false })
 let au = null
 function play() {
   const c = card.value; if (!c?.audio) return
@@ -73,17 +82,21 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause() })
     </header>
 
     <template v-if="card">
+      <!-- Как в Anki: слово и перевод — над фото, пример — под ним. Все блоки на месте до и после «Показать ответ», поэтому ничего не прыгает -->
       <div class="card face" @click="flipped = true">
-        <div class="wd"><div class="q">{{ card.front }}</div><button v-if="card.audio" class="spk" aria-label="Озвучить слово" title="Озвучить (R)" @click.stop="play">🔊</button></div>
-        <img v-if="card.image && !imgBad" :key="card.id" class="pic" :src="imageSrc(card.image)" width="450" height="300" alt="" @error="imgBad = true" />
-        <template v-if="flipped">
-          <hr /><div class="a">{{ card.back }}</div>
-          <div v-if="card.example" class="ex">{{ card.example }}</div><div v-if="card.exampleTr" class="hint ex2">{{ card.exampleTr }}</div>
-        </template>
+        <div class="head">
+          <div class="wd"><div class="q">{{ card.front }}</div><button v-if="card.audio" class="spk" aria-label="Озвучить слово" title="Озвучить (R)" @click.stop="play">🔊</button></div>
+          <div class="a" :class="{ hid: !flipped }">{{ card.back }}</div>
+        </div>
+        <div class="media"><img v-if="card.image && !imgBad" :key="card.id" class="pic" :src="imageSrc(card.image)" alt="" @error="imgBad = true" /></div>
+        <div class="sent" :class="{ tap: canToggleEx }" :title="canToggleEx ? 'Нажмите, чтобы переключить язык примера' : ''" @click.stop="toggleEx">{{ sentText }}</div>
       </div>
-      <button v-if="!flipped" class="btn show" @click="flipped = true">Показать ответ</button>
-      <div v-else class="grades">
-        <button v-for="g in GRADES" :key="g.q" :class="['g', 'g' + g.q]" @click="answer(g.q)">{{ g.t }}<small>{{ intervalLabel(userKey, card, g.q) }}</small></button>
+      <!-- «Показать ответ» и четыре оценки — в одном месте и одной высоты: нажатие меняет кнопки, но ничего не двигает -->
+      <div class="dock">
+        <button v-if="!flipped" class="btn show" @click="flipped = true">Показать ответ</button>
+        <div v-else class="grades">
+          <button v-for="g in GRADES" :key="g.q" :class="['g', 'g' + g.q]" @click="answer(g.q)">{{ g.t }}<small>{{ intervalLabel(userKey, card, g.q) }}</small></button>
+        </div>
       </div>
       <div class="tools">
         <button :disabled="!hist.length" @click="undo"><AppIcon name="undo" :size="16" /> Отменить</button>
@@ -111,22 +124,26 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause() })
 .bar { display: flex; align-items: center; gap: 10px } .dt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; text-align: center }
 .cnt { display: flex; gap: 10px; font-size: 16px } .cnt b { min-width: 14px; text-align: center; opacity: .55; border-bottom: 3px solid transparent } .cnt b.on { opacity: 1; border-bottom-color: currentColor }
 .n { color: var(--blue) } .l { color: var(--red) } .d { color: var(--green-d) }
-.face { min-height: 220px; display: grid; align-content: center; justify-items: center; gap: 12px; text-align: center; padding: 24px 18px; cursor: pointer }
-.q { font-size: 32px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere }
-hr { width: 100%; border: 0; border-top: 2px solid var(--border); margin: 4px 0 }
-.a { font-size: 26px; font-weight: 800; color: var(--blue); overflow-wrap: anywhere }
-.ex { font-size: 18px; font-weight: 700; overflow-wrap: anywhere } .ex2 { margin: 0; font-size: 16px }
+.face { height: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 16px 18px; cursor: pointer; overflow: hidden; box-sizing: border-box }      /* высота карточки зафиксирована — содержимое её не растягивает */
+.head { flex: none; height: 108px; width: 100%; display: grid; align-content: center; justify-items: center; gap: 4px; overflow: hidden }      /* слово + перевод: место занято всегда */
+.q { font-size: 32px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.a { font-size: 26px; font-weight: 800; line-height: 1.2; color: var(--blue); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden } .a.hid { visibility: hidden }      /* место под перевод занято и до ответа */
+.sent.tap { cursor: pointer }
+.sent { flex: none; width: 100%; height: 3.9em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; font-size: 18px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere }      /* пример под фото: до ответа — на одном языке, после — на другом, в том же месте */
 .wd { display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 100% }
 .spk { border: 2px solid var(--border); background: var(--card); border-radius: 50%; width: 40px; height: 40px; font-size: 18px; cursor: pointer; flex: none }
-.pic { display: block; width: 100%; max-width: 450px; height: auto; aspect-ratio: 3 / 2; object-fit: contain; border-radius: 14px; background: var(--surface) }      /* фото 450×300 */
-.show { width: 100%; padding: 16px }
+.media { position: relative; flex: none; width: 100%; max-width: 450px; aspect-ratio: 3 / 2; overflow: hidden; border-radius: 14px }      /* слот под фото занимает всё свободное место; нет фото — слот просто пустой */
+.pic { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: 14px; background: transparent }      /* фото вписывается в слот и не может наехать на пример */
+.dock { height: 70px; min-height: 60px; flex: none; display: grid; overflow: hidden }      /* одна высота для «Показать ответ» и для оценок */
+.show { width: 100%; height: 60px; padding: 0 }
 .grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
-.g { border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 14px; padding: 10px 4px; font: inherit; font-weight: 800; cursor: pointer; background: var(--card); color: var(--text) }
+.g { height: 60px; display: grid; align-content: center; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 14px; padding: 0 4px; font: inherit; font-weight: 800; cursor: pointer; background: var(--card); color: var(--text) }
 .g:active { transform: translateY(2px); border-bottom-width: 2px } .g small { display: block; font-weight: 600; color: var(--hint); font-size: 11px }
 .g0 { color: var(--red) } .g1 { color: var(--orange-d) } .g2 { color: var(--green-d) } .g3 { color: var(--blue) }
-.tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+.tools { height: 44px; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none }      /* одна строка фиксированной высоты — «Отменить / Править» не прыгают */
+.tools button { flex: none; white-space: nowrap }
 .tools button { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--border); background: var(--card); color: var(--hint); font: inherit; font-weight: 800; font-size: 13px; border-radius: 12px; padding: 6px 10px; cursor: pointer }
-.tools button:disabled { opacity: .45; cursor: default } .keys { margin-left: auto; font-size: 12px }
+.tools button:disabled { opacity: .45; cursor: default } .keys { margin-left: auto; font-size: 12px; white-space: nowrap }
 .done { text-align: center; display: grid; gap: 6px } .done p { margin: 0 }
-@media (max-width: 600px) { .keys { display: none } .q { font-size: 28px } }
+@media (max-width: 600px) { .keys { display: none } .q { font-size: 28px } .a { font-size: 24px } }
 </style>
