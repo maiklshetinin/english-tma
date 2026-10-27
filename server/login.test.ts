@@ -33,4 +33,16 @@ r = await tryLogin(12);                                     ok('ученик в 
 store.set('students/s2', { name: 'Петя', archived: true }); store.set('invites/inviteCodeCCCC', { studentId: 's2' })
 r = await tryLogin(13, 'invite_inviteCodeCCCC');            ok('приглашение на архивного → 403', r.err === 403)
 r = await tryLogin(1);                                      ok('преподаватель входит как раньше', r.role === 'teacher')
+// Запись ученика удалили (в т. ч. вручную в базе), а users/tg:<id> остался со старым studentId — новая ссылка должна пускать
+store.set('users/tg:20', { role: 'student', studentId: 'deleted', tgId: 20, createdAt: 'old' })
+r = await tryLogin(20);                                     ok('старая привязка на удалённую запись → 403', r.err === 403)
+store.set('students/s3', { name: 'Саша', archived: false, status: 'invited', tgId: null }); store.set('invites/inviteCodeDDDD', { studentId: 's3' })
+r = await tryLogin(20, 'invite_inviteCodeDDDD');            ok('новая ссылка при старой битой привязке → вход', r.role === 'student' && r.studentId === 's3')
+ok('users/tg:20 перепривязан к новой записи', store.get('users/tg:20')?.studentId === 's3' && store.get('users/tg:20')?.createdAt === 'old')
+ok('новая запись активна и привязана', store.get('students/s3').tgId === 20 && store.get('students/s3').status === 'active')
+r = await tryLogin(20);                                     ok('дальше входит без ссылки', r.role === 'student' && r.studentId === 's3')
+// Ученик с живой записью открыл ссылку на новую запись — переходит на неё, старая снова «ждёт приглашения»
+store.set('students/s4', { name: 'Саша 2', archived: false, status: 'invited', tgId: null }); store.set('invites/inviteCodeEEEE', { studentId: 's4' })
+r = await tryLogin(20, 'invite_inviteCodeEEEE');            ok('ссылка на другую запись → переход', r.studentId === 's4' && store.get('students/s3').tgId === null && store.get('students/s3').status === 'invited')
+r = await tryLogin(20, 'invite_inviteCodeEEEE');            ok('та же (уже использованная) ссылка не мешает входу', r.role === 'student' && r.studentId === 's4')
 process.exit(bad ? 1 : 0)

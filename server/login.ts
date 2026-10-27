@@ -24,28 +24,34 @@ export function makeLogin({ db, auth, FieldValue, teacherIds }: LoginDeps) {
       role = null; studentId = null                       // транзакция может выполниться повторно
       // Сначала все чтения, потом записи (требование Firestore)
       const snap = await tx.get(ref)
-      const inv = !snap.exists && code ? await tx.get(db.collection('invites').doc(code)) : null
+      const inv = code ? await tx.get(db.collection('invites').doc(code)) : null
       const useInvite = !!inv?.exists && !inv.get('usedBy')
-      const sid = snap.exists ? snap.get('studentId') : useInvite ? inv.get('studentId') : null
-      const stRef = sid != null ? db.collection('students').doc(String(sid)) : null
-      const st = stRef ? await tx.get(stRef) : null
-      const alive = !!st?.exists && !st.get('archived')   // запись ученика есть и не в архиве
+      const oldSid: string | null = snap.exists && snap.get('role') === 'student' ? String(snap.get('studentId') ?? '') || null : null
+      const invSid: string | null = useInvite ? String(inv!.get('studentId')) : null
+      const oldRef = oldSid ? db.collection('students').doc(oldSid) : null
+      const invRef = invSid && invSid !== oldSid ? db.collection('students').doc(invSid) : oldRef
+      const oldSt = oldRef ? await tx.get(oldRef) : null
+      const invSt = invRef && invRef !== oldRef ? await tx.get(invRef) : oldSt
+      const isAlive = (d: typeof oldSt) => !!d?.exists && !d.get('archived')      // запись ученика есть и не в архиве
 
       if (teacherIds.includes(String(u.id))) {
         role = 'teacher'; tx.set(ref, { ...profile, role }, { merge: true })
+      } else if (useInvite && isAlive(invSt)) {
+        // Свежая ссылка-приглашение важнее старой привязки: так ученик снова войдёт, даже если его прежнюю запись
+        // удалили (в т. ч. вручную в базе) или преподаватель завёл для него новую запись.
+        role = 'student'; studentId = invSid
+        const old = invSt!.get('tgId')                     // запись уже была привязана к другому аккаунту → старый теряет доступ
+        if (old && old !== u.id) tx.delete(db.collection('users').doc(`tg:${old}`))
+        if (oldSid && oldSid !== invSid && isAlive(oldSt) && oldSt!.get('tgId') === u.id) tx.update(oldRef!, { tgId: null, status: 'invited' })   // прежняя запись этого аккаунта снова «ждёт приглашения»
+        tx.update(inv!.ref, { usedBy: uid, usedAt: ts })
+        tx.update(invRef!, { tgId: u.id, status: 'active', photoUrl: profile.photoUrl || invSt!.get('photoUrl') || '', username: profile.username, joinedAt: ts })
+        tx.set(ref, { ...profile, role, studentId, createdAt: snap.exists ? snap.get('createdAt') ?? ts : ts })
       } else if (snap.exists) {
         const r = snap.get('role')
-        if (r === 'student' && !alive) return             // ученика архивировали — вход закрыт
+        if (r === 'student' && !isAlive(oldSt)) return      // запись ученика удалена или в архиве — вход закрыт (поможет новая ссылка-приглашение)
         role = r; studentId = snap.get('studentId') ?? null
         tx.update(ref, profile)
-        if (r === 'student') tx.update(stRef!, { photoUrl: profile.photoUrl || st!.get('photoUrl') || '', username: profile.username, lastLoginAt: ts })
-      } else if (useInvite && alive) {
-        role = 'student'; studentId = String(sid)
-        const old = st.get('tgId')                         // запись уже была привязана к другому аккаунту → старый теряет доступ
-        if (old && old !== u.id) tx.delete(db.collection('users').doc(`tg:${old}`))
-        tx.update(inv.ref, { usedBy: uid, usedAt: ts })
-        tx.update(stRef!, { tgId: u.id, status: 'active', photoUrl: profile.photoUrl || st.get('photoUrl') || '', username: profile.username, joinedAt: ts })
-        tx.set(ref, { ...profile, role, studentId, createdAt: ts })
+        if (r === 'student') tx.update(oldRef!, { photoUrl: profile.photoUrl || oldSt!.get('photoUrl') || '', username: profile.username, lastLoginAt: ts })
       }
     })
     if (!role) throw fail(403, 'no access')
