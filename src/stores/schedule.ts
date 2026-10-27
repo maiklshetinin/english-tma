@@ -43,7 +43,24 @@ export const useScheduleStore = defineStore('schedule', () => {
     lessons.value = [...d.current.lessons, ...d.next.lessons]
   }
   const set = (items: Lesson[]) => { lessons.value = items }
-  const clear = () => { stopRefresh(); lessons.value = [] }
+  const clear = () => { stopRefresh(); lessons.value = []; history.value = [] }
+
+  // История уроков одного ученика за всё время — для календаря по месяцам (GET /lessons/history).
+  // Две живые недели берутся из lessons (там свежие правки), остальное — из history.
+  const history = ref<Lesson[]>([])
+  async function loadHistory(studentId?: string | null): Promise<void> {
+    if (isDemo) return
+    const q = studentId ? `?studentId=${encodeURIComponent(studentId)}` : ''
+    history.value = await call<Lesson[]>(`/lessons/history${q}`, undefined, 'Не удалось загрузить историю уроков')
+  }
+  /** Все уроки ученика: история + свежие уроки двух недель (свежие важнее). */
+  const allOf = (studentId: string | null | undefined): Lesson[] => {
+    if (!studentId) return []
+    const m = new Map<string, Lesson>()
+    for (const l of history.value) if (l.studentIds.includes(studentId)) m.set(l.id, l)
+    for (const l of lessons.value) if (l.studentIds.includes(studentId)) m.set(l.id, l)
+    return [...m.values()].sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour)
+  }
 
   let onVisible: (() => void) | null = null
   function startRefresh() {                  // перечитывать, когда пользователь возвращается в приложение
@@ -116,5 +133,5 @@ export const useScheduleStore = defineStore('schedule', () => {
     sync(async () => { if (!isTmp(lesson.id)) await call(`/lessons/${encodeURIComponent(lesson.id)}`, { method: 'DELETE' }, 'Не удалось убрать урок') })
   }
 
-  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
+  return { lessons, lessonMap, history, loadHistory, allOf, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
 })
