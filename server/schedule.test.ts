@@ -171,6 +171,29 @@ const named = (await find(teacher, pDone.id))!
 ok('урок с удалённым навсегда: отметку «проведён» не снять → 409', (await code(S.setDone(pDone.id, { done: false }))) === 409 && store.get(`lessons/${pDone.id}`).done === true)
 ok('преподаватель видит имя удалённого в уроке', named.names?.[p1.id] === 'Рома')
 
+// --- «отменил ученик»: без оплаты, урок остаётся в слоте ---
+const c1 = await ST.create({ name: 'Ира', price: 100 }, 'tg:1'), c2 = await ST.create({ name: 'Юра', price: 60 }, 'tg:1')
+const cl = await S.create({ studentIds: [c1.id, c2.id], date: D1, hour: 10 }, 'tg:1')
+const cx = await S.setCanceled(cl.id, { studentId: c1.id, canceled: true })
+ok('отмена: отмечен один ученик группы, урок в слоте', !!cx.canceled?.[c1.id] && !cx.canceled?.[c2.id] && store.get('schedule/2026-10-26').slots['2026-10-30_10'] === cl.id)
+ok('отмена: мусор → 400, ученик не из урока → 404, нет урока → 404', (await code(S.setCanceled(cl.id, { studentId: c1.id, canceled: 'y' as any }))) === 400
+  && (await code(S.setCanceled(cl.id, { studentId: '../x', canceled: true }))) === 400 && (await code(S.setCanceled(cl.id, { studentId: zoe.id, canceled: true }))) === 404
+  && (await code(S.setCanceled('nope', { studentId: c1.id, canceled: true }))) === 404)
+const cd = await S.setDone(cl.id, { done: true })
+ok('проведён: отменивший не платит — его цены в уроке нет', cd.prices?.[c2.id] === 60 && !(c1.id in (cd.prices ?? {})))
+ok('проведённый урок: отмену не поменять → 409', (await code(S.setCanceled(cl.id, { studentId: c2.id, canceled: true }))) === 409)
+await S.setDone(cl.id, { done: false })
+await S.setCanceled(cl.id, { studentId: c2.id, canceled: true })
+ok('отменили все: «проведён» нельзя → 409', (await code(S.setDone(cl.id, { done: true }))) === 409)
+const back = await S.setCanceled(cl.id, { studentId: c1.id, canceled: false })
+ok('вернуть: отметка снята', !back.canceled?.[c1.id] && !!back.canceled?.[c2.id])
+await S.setStudents(cl.id, { studentIds: [c1.id] })
+ok('убрали ученика из урока — его отметка «отменил» тоже ушла', !store.get(`lessons/${cl.id}`).canceled[c2.id])
+await S.setCanceled(cl.id, { studentId: c1.id, canceled: true })
+store.set(`students/${c1.id}`, { ...store.get(`students/${c1.id}`), tgId: 31, status: 'active' })
+const cMine = await find({ uid: 'tg:31', role: 'student', studentId: c1.id }, cl.id)
+ok('ученик видит свою отмену', !!cMine?.canceled?.[c1.id])
+
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
 clock = new Date('2026-10-25T23:30:00Z')                   // уже понедельник 26.10 по Варшаве
 v = await S.list(teacher)

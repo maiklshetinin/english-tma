@@ -94,11 +94,19 @@ export const useScheduleStore = defineStore('schedule', () => {
     const ids = [...l.studentIds]
     sync(async () => { if (!isTmp(l.id)) await post(`/lessons/${encodeURIComponent(l.id)}/students`, { studentIds: ids }, 'Не удалось изменить состав урока') })
   }
+  /** «Отменил ученик» (без оплаты) / вернуть. Урок остаётся в ячейке; в группе — у каждого ученика отдельно. */
+  function setCanceled(lesson: Lesson, studentId: string, canceled: boolean) {
+    const l = live(lesson) ?? lesson; rev++
+    const next = { ...(l.canceled ?? {}) }
+    if (canceled) next[studentId] = next[studentId] || new Date().toISOString(); else delete next[studentId]
+    l.canceled = next
+    sync(async () => { if (!isTmp(l.id)) await post(`/lessons/${encodeURIComponent(l.id)}/cancel`, { studentId, canceled }, 'Не удалось изменить отмену') })
+  }
   function remove(lesson: Lesson) {
     const i = lessons.value.findIndex((x) => x.id === lesson.id); rev++
     if (i >= 0) lessons.value.splice(i, 1)
     sync(async () => { if (!isTmp(lesson.id)) await call(`/lessons/${encodeURIComponent(lesson.id)}`, { method: 'DELETE' }, 'Не удалось убрать урок') })
   }
 
-  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, remove }
+  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, setCanceled, remove }
 })

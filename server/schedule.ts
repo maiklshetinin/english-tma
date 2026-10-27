@@ -11,7 +11,7 @@
 import type { Firestore, FieldValue as FV, Transaction, DocumentReference } from 'firebase-admin/firestore'
 import { fail } from './login.js'
 import { priceAt } from './price.js'
-import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, StudentsInput, TokenUser, WeekDoc } from './types.js'
+import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, StudentsInput, TokenUser, WeekDoc, CancelInput } from './types.js'
 
 export const HOUR_MIN = 8, HOUR_MAX = 22                 // как в таблице на сайте: 08:00 … 22:00
 const ID = /^[\w-]{1,64}$/
@@ -29,8 +29,12 @@ export const weekStartOf = (s: string) => addDays(s, -((parseYmd(s)!.getUTCDay()
 export const todayIn = (tz: string, now: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 export const slotKey = (date: string, hour: number) => `${date}_${pad(hour)}`
 
-const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names'>): Lesson =>
-  ({ id, date: x.date, hour: x.hour, studentIds: [...x.studentIds], done: !!x.done, ...(x.done ? { prices: { ...(x.prices ?? {}) } } : {}), ...(x.names && Object.keys(x.names).length ? { names: { ...x.names } } : {}) })
+const canceledOf = (x: Pick<LessonDoc, 'studentIds' | 'canceled'>) => Object.fromEntries(Object.entries(x.canceled ?? {}).filter(([k]) => x.studentIds.includes(k)))   // только ученики этого урока
+const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names' | 'canceled'>): Lesson => {
+  const canceled = canceledOf(x)
+  return { id, date: x.date, hour: x.hour, studentIds: [...x.studentIds], done: !!x.done, ...(x.done ? { prices: { ...(x.prices ?? {}) } } : {}),
+    ...(x.names && Object.keys(x.names).length ? { names: { ...x.names } } : {}), ...(Object.keys(canceled).length ? { canceled } : {}) }
+}
 const byTime = (a: Lesson, b: Lesson) => a.date.localeCompare(b.date) || a.hour - b.hour
 
 export interface ScheduleDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; tz?: string; now?: () => Date }
@@ -136,7 +140,8 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       const read = async (ws: string): Promise<ScheduleWeek> => {
         if (user.role !== 'teacher' && !me) return { weekStart: ws, lessons: [] }
         let docs = (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc))
-        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me], ...(l.prices ? { prices: me in l.prices ? { [me]: l.prices[me] } : {} } : {}), names: undefined }))      // ученик: только он сам и только его цена
+        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me], ...(l.prices ? { prices: me in l.prices ? { [me]: l.prices[me] } : {} } : {}), names: undefined,
+          canceled: l.canceled?.[me] ? { [me]: l.canceled[me] } : undefined }))      // ученик: только он сам и только его цена
         return { weekStart: ws, lessons: docs.sort(byTime) }
       }
       return { current: await read(cur), next: await read(next) }
@@ -187,8 +192,30 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
         if (l.get('done')) throw fail(409, 'lesson already conducted')
-        tx.update(ref, { studentIds: ids })
-        out = pub(id, { ...(l.data() as LessonDoc), studentIds: ids })
+        const canceled = canceledOf({ studentIds: ids, canceled: l.get('canceled') })      // убранный из урока — и его отметка «отменил» уходит
+        tx.update(ref, { studentIds: ids, canceled })
+        out = pub(id, { ...(l.data() as LessonDoc), studentIds: ids, canceled })
+      })
+      return out!
+    },
+
+    // «Отменил ученик» (по его причине, без оплаты) или вернуть. Урок остаётся в слоте; в группе отмечается каждый ученик отдельно.
+    // Проведённый урок не трогаем (цены зафиксированы) — сначала снимите отметку «проведён».
+    async setCanceled(id: string, input: Partial<CancelInput> | undefined): Promise<Lesson> {
+      checkId(id)
+      const sid = checkId(input?.studentId)
+      if (typeof input?.canceled !== 'boolean') throw fail(400, 'canceled must be boolean')
+      const on = input.canceled; let out: Lesson | undefined
+      await db.runTransaction(async (tx) => {
+        const ref = lessons().doc(id), l = await tx.get(ref)
+        if (!l.exists) throw fail(404, 'lesson not found')
+        const d = l.data() as LessonDoc
+        if (!d.studentIds.includes(sid)) throw fail(404, 'student not in lesson')
+        if (d.done) throw fail(409, 'lesson already conducted')
+        const canceled = { ...canceledOf(d) }
+        if (on) canceled[sid] = canceled[sid] || now().toISOString(); else delete canceled[sid]
+        tx.update(ref, { canceled })
+        out = pub(id, { ...d, canceled })
       })
       return out!
     },
@@ -222,8 +249,11 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
         const d = l.data() as LessonDoc
         if (!!d.done === done) { out = pub(id, d); return }                      // уже в нужном состоянии — ничего не меняем (цены не пересчитываются)
         if (!done && Object.keys(d.names ?? {}).length) throw fail(409, 'lesson has deleted students')   // в уроке ученик, удалённый навсегда: снять отметку — потерять его цену в истории
+        const off = canceledOf(d)
+        if (done && d.studentIds.every((sid) => off[sid])) throw fail(409, 'all students canceled')     // отменили все — проводить нечего
         const prices: Record<string, number> = {}
-        if (done) for (const sid of d.studentIds) { const st = await tx.get(students().doc(sid)); prices[sid] = st.exists ? priceAt(st.data() as any, d.date, d.hour) : 0 }
+        // отменившие ученики не платят: их цены в урок не попадают
+        if (done) for (const sid of d.studentIds.filter((x) => !off[x])) { const st = await tx.get(students().doc(sid)); prices[sid] = st.exists ? priceAt(st.data() as any, d.date, d.hour) : 0 }
         tx.update(ref, done ? { done: true, prices, doneAt: FieldValue.serverTimestamp() } : { done: false, prices: {}, doneAt: null })
         out = pub(id, { ...d, done, prices })
       })

@@ -131,6 +131,7 @@ export interface LessonDoc {
   doneAt?: ServerTime | null
   prices?: Record<string, number>   // цена урока по ученикам, зафиксированная в момент отметки «проведён»: потом не меняется
   names?: Record<string, string>    // имена учеников, удалённых навсегда (id → имя): проведённый урок остаётся в истории и читается
+  canceled?: Record<string, string> // отменил ученик (id → ISO-время отметки): урок не оплачивается, слот остаётся занят
   createdBy: string
   createdAt: ServerTime
 }
@@ -144,6 +145,7 @@ export interface Lesson {
   done?: boolean               // проведён ли урок (отмечает преподаватель)
   prices?: Record<string, number>   // у проведённого урока — зафиксированная цена по ученикам (ученик видит только свою)
   names?: Record<string, string>    // имена удалённых навсегда учеников этого урока (только преподавателю)
+  canceled?: Record<string, string> // кто из учеников отменил урок (id → ISO-время); ученик видит только свою отметку
 }
 
 export interface LessonInput {             // POST /lessons
@@ -153,6 +155,7 @@ export interface LessonInput {             // POST /lessons
   hour: number
 }
 export interface DoneInput { done: boolean }   // POST /lessons/:id/done
+export interface CancelInput { studentId: string; canceled: boolean }   // POST /lessons/:id/cancel — «отменил ученик» (без оплаты) / вернуть
 export interface SlotInput { date: string; hour: number }   // POST /lessons/:id/move
 export interface StudentsInput { studentIds: string[] }      // POST /lessons/:id/students — новый состав урока целиком (1–12 учеников)
 

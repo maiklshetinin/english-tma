@@ -27,14 +27,18 @@ describe('деньги в расписании', () => {
   const st: Record<string, { price: number; priceHistory: { from: string; price: number }[] }> = { a: { price: 100, priceHistory: [{ from: '', price: 100 }] }, b: { price: 80, priceHistory: [{ from: '', price: 80 }] } }
   const find = (id: string) => st[id]
   it('запланированный урок: факт 0, план — сумма цен учеников (группа складывается)', () => {
-    expect(lessonMoney({ date: '2026-10-27', hour: 9, studentIds: ['a', 'b'] }, find)).toEqual({ real: 0, plan: 180 })
+    expect(lessonMoney({ date: '2026-10-27', hour: 9, studentIds: ['a', 'b'] }, find)).toEqual({ real: 0, plan: 180, lost: 0 })
   })
   it('проведённый: факт = план = зафиксированные цены (и удалённого ученика тоже)', () => {
-    expect(lessonMoney({ date: '2026-10-27', hour: 9, studentIds: ['a', 'gone'], done: true, prices: { a: 90, gone: 70 } }, find)).toEqual({ real: 160, plan: 160 })
+    expect(lessonMoney({ date: '2026-10-27', hour: 9, studentIds: ['a', 'gone'], done: true, prices: { a: 90, gone: 70 } }, find)).toEqual({ real: 160, plan: 160, lost: 0 })
+  })
+  it('отменил ученик: не в факте и не в плане, а в «потеряно»', () => {
+    expect(lessonMoney({ date: 'x', hour: 9, studentIds: ['a', 'b'], canceled: { a: 't' } }, find)).toEqual({ real: 0, plan: 80, lost: 100 })
+    expect(lessonMoney({ date: 'x', hour: 9, studentIds: ['a', 'b'], done: true, prices: { b: 80 }, canceled: { a: 't' } }, find)).toEqual({ real: 80, plan: 80, lost: 100 })
   })
   it('сумма за день/неделю и форматирование', () => {
     const m = sumMoney([{ date: 'x', hour: 9, studentIds: ['a'] }, { date: 'x', hour: 10, studentIds: ['b'], done: true, prices: { b: 80 } }], find)
-    expect(m).toEqual({ real: 80, plan: 180 })
+    expect(m).toEqual({ real: 80, plan: 180, lost: 0 })
     expect(fmtMoney(12500).replace(/\s/g, ' ')).toBe('12 500')
     expect(fmtMoneyShort(9500).replace(/\s/g, ' ')).toBe('9 500')
     expect(fmtMoneyShort(12500)).toBe('12,5к')

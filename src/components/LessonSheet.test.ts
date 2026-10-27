@@ -83,4 +83,17 @@ describe('урок с учеником, которого больше нет (у
     expect(w.find('.total').text()).toContain('170')
     expect(w.find('.orphan').exists()).toBe(false)
   })
+
+  it('отменил ученик: цена без него, «потеряно», кнопки отмены; отменили все — «проведён» нельзя', async () => {
+    const lesson = { id: 'L', date: D, hour: 9, studentIds: ['a', 'b'], canceled: { a: '2026-10-26T10:00:00Z' } } as Lesson
+    const w = mount(LessonSheet, { props: { lesson } })
+    expect(w.find('.tile.off').text()).toContain('отменил')
+    expect(w.find('.total').text()).toContain('80')
+    expect(w.find('.lostrow').text()).toContain('100')
+    await w.findAll('.chipbtn').find(b => b.text().includes('Петя'))!.trigger('click')
+    expect(w.emitted('cancel')![0]).toEqual([lesson, 'b', true])
+    await w.setProps({ lesson: { ...lesson, canceled: { a: 't', b: 't' } } })
+    expect(w.find('.head .badge').text()).toBe('Отменён')
+    expect(w.findAll('button').find(b => b.text() === 'Урок проведён')!.attributes('disabled')).toBeDefined()
+  })
 })

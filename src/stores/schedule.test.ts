@@ -52,6 +52,19 @@ describe('schedule store', () => {
     expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ studentIds: ['s1', 's2'] })
   })
 
+  it('setCanceled: отметка «отменил ученик» сразу на экране и уходит на сервер; снятие убирает её', async () => {
+    apiRequest.mockImplementation(() => ok({}))
+    const s = useScheduleStore()
+    s.set([{ id: 'a', date: D, hour: 9, studentIds: ['s1', 's2'] }])
+    s.setCanceled(s.lessons[0], 's1', true)
+    expect(s.lessons[0].canceled?.s1).toBeTruthy()
+    await vi.waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(1))
+    expect(apiRequest.mock.calls[0][0]).toBe('/lessons/a/cancel')
+    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ studentId: 's1', canceled: true })
+    s.setCanceled(s.lessons[0], 's1', false)
+    expect(s.lessons[0].canceled?.s1).toBeUndefined()
+  })
+
   it('lessonMap раскладывает уроки по ячейкам «дата|час»', () => {
     const s = useScheduleStore()
     s.set([{ id: 'a', date: D, hour: 9, studentIds: ['s1'] }, { id: 'b', date: D, hour: 10, studentIds: ['s2'] }])

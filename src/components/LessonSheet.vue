@@ -3,6 +3,8 @@
 // Урок — сущность со списком учеников: здесь можно добавить учеников (урок становится групповым) и убрать их.
 // Цена урока = сумма цен всех учеников (у каждого своя, на время урока; у проведённого — зафиксированная).
 // Ученики показаны компактной сеткой кружков (как «Поделиться» в Telegram): аватарка, имя под ней; выбор — через поиск.
+// «Отменил ученик» — по его причине, без оплаты: урок остаётся в ячейке, ученик не входит в цену, его сумма — «потеряно».
+// В группе отмечается каждый ученик отдельно. Ученик видит у себя статус «Отменён вами».
 import { computed, ref } from 'vue'
 import { fmtSlot } from '../store/app'
 import Avatar from './Avatar.vue'
@@ -13,7 +15,7 @@ import { priceAt } from '../utils/price'
 const MAX_GROUP = 12                                              // как на сервере (server/schedule.ts)
 const studentStore = useStudentsStore()
 const props = defineProps({ lesson: Object, slot: Object })
-const emit = defineEmits(['close', 'remove', 'open', 'pick', 'done', 'students'])
+const emit = defineEmits(['close', 'remove', 'open', 'pick', 'done', 'students', 'cancel'])
 const members = computed(() => (props.lesson?.studentIds ?? []).map(id => studentStore.list.find(x => x.id === id)).filter(Boolean))   // архивных учеников в списке нет
 const cost = (st) => (!props.lesson ? 0 : props.lesson.done && props.lesson.prices?.[st.id] != null ? props.lesson.prices[st.id] : priceAt(st, props.lesson.date, props.lesson.hour))      // цена на время урока: прошедшие уроки не пересчитываются
 // Ученики урока, которых нет в списке: удалённые навсегда (у проведённого урока имя сохранено в names) или удалённые из базы вручную
@@ -21,7 +23,11 @@ const gone = computed(() => (props.lesson?.studentIds ?? []).filter(id => !stude
 const size = computed(() => members.value.length + gone.value.filter(g => g.name).length)      // все ученики урока, включая удалённых навсегда
 const isGroup = computed(() => size.value > 1)
 const locked = computed(() => !!props.lesson?.done && gone.value.some(g => g.name))       // в уроке есть удалённый навсегда: отметку не снять, иначе пропадёт история
-const total = computed(() => members.value.reduce((sum, st) => sum + cost(st), 0) + gone.value.reduce((sum, g) => sum + g.price, 0))
+const off = (id) => !!props.lesson?.canceled?.[id]                                                  // отменил ученик
+const total = computed(() => members.value.filter(st => !off(st.id)).reduce((sum, st) => sum + cost(st), 0) + gone.value.reduce((sum, g) => sum + g.price, 0))
+const lost = computed(() => members.value.filter(st => off(st.id)).reduce((sum, st) => sum + priceAt(st, props.lesson.date, props.lesson.hour), 0))
+const allOff = computed(() => members.value.length > 0 && members.value.every(st => off(st.id)))
+const cancelable = computed(() => !!props.lesson && !props.lesson.done && members.value.length > 0)
 const when = computed(() => props.lesson ? fmtSlot(props.lesson.date, props.lesson.hour) : fmtSlot(props.slot.date, props.slot.hour))
 
 // Правка состава: проведённый урок не меняется (цены уже зафиксированы), последнего ученика не убрать — для этого «Убрать урок»
@@ -47,16 +53,16 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
           <AvatarStack v-if="members.length > 1" :students="members" :size="36" :max="3" />
           <Avatar v-else-if="members[0]" :s="members[0]" :size="36" />
           <div class="ttl"><h2 :title="isGroup ? `Групповой урок: ${size} ${word(size)}` : ''">{{ isGroup ? `Группа · ${size}` : members[0]?.name || gone.find(g => g.name)?.name || 'Урок' }}</h2><div class="hint">{{ when }}</div></div>
-          <span class="badge" :class="lesson.done ? 'ok' : 'warn'">{{ lesson.done ? 'Проведён' : 'Запланирован' }}</span>
+          <span class="badge" :class="allOff ? 'bad' : lesson.done ? 'ok' : 'warn'">{{ allOff ? 'Отменён' : lesson.done ? 'Проведён' : 'Запланирован' }}</span>
         </div>
 
         <div v-if="!members.length && !gone.some(g => g.name)" class="hint orphan">Ученика этого урока больше нет в списке (удалён или в архиве). Добавьте ученика или уберите урок.</div>
         <div class="box" :class="{ group: isGroup }">
           <div class="tiles">
-            <div v-for="st in members" :key="st.id" class="tile">
+            <div v-for="st in members" :key="st.id" class="tile" :class="{ off: off(st.id) }">
               <button class="ava" :title="`Открыть: ${st.name}`" @click="emit('open', st.id)"><Avatar :s="st" :size="48" /></button>
               <button v-if="editable && members.length > 1" class="x" :aria-label="`Убрать из урока: ${st.name}`" @click="drop(st.id)"><AppIcon name="x" :size="12" /></button>
-              <span class="nm">{{ st.name }}</span><span v-if="cost(st)" class="pr">{{ cost(st) }}</span>
+              <span class="nm">{{ st.name }}</span><span v-if="off(st.id)" class="pr offtxt">отменил</span><span v-else-if="cost(st)" class="pr">{{ cost(st) }}</span>
             </div>
             <div v-for="g in gone.filter(x => x.name)" :key="g.id" class="tile gone" :title="`${g.name} — удалён(а), урок сохранён в истории`">
               <span class="ava"><span class="q">?</span></span><span class="nm">{{ g.name }} (удалён)</span><span v-if="g.price" class="pr">{{ g.price }}</span>
@@ -67,6 +73,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
             </div>
           </div>
           <div v-if="total" class="total"><span>{{ isGroup ? 'Итого за урок' : 'Цена урока' }}</span><b>{{ total }}</b></div>
+          <div v-if="lost" class="total lostrow"><span>Потеряно — отменил ученик</span><b>−{{ lost }}</b></div>
         </div>
 
         <div v-if="editable && adding" class="add">
@@ -82,7 +89,17 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
         <div v-if="!editable && !locked" class="hint">Состав проведённого урока не меняется — сначала снимите отметку.</div>
 
         <div v-if="locked" class="hint">В уроке есть удалённый ученик: урок сохранён в истории, его состав и отметку «проведён» не изменить.</div>
-        <button class="btn" :class="{ ghost: lesson.done }" :disabled="locked" @click="emit('done', lesson)">{{ lesson.done ? 'Снять отметку «проведён»' : 'Урок проведён' }}</button>
+        <div v-if="cancelable" class="cancel">
+          <template v-if="members.length === 1">
+            <button class="btn ghost" :class="off(members[0].id) ? 'undo' : 'warnb'" @click="emit('cancel', lesson, members[0].id, !off(members[0].id))">
+              {{ off(members[0].id) ? 'Вернуть урок (ученик придёт)' : 'Ученик отменил — без оплаты' }}</button>
+          </template>
+          <template v-else>
+            <span class="hint">Отменил (без оплаты):</span>
+            <button v-for="st in members" :key="st.id" class="chipbtn" :class="{ on: off(st.id) }" :aria-pressed="off(st.id)" @click="emit('cancel', lesson, st.id, !off(st.id))">{{ off(st.id) ? '✕ ' : '' }}{{ st.name }}</button>
+          </template>
+        </div>
+        <button class="btn" :class="{ ghost: lesson.done }" :disabled="locked || (allOff && !lesson.done)" @click="emit('done', lesson)">{{ lesson.done ? 'Снять отметку «проведён»' : 'Урок проведён' }}</button>
         <div class="row2 acts">
           <button class="btn ghost" style="color:var(--red)" :disabled="lesson.done" @click="emit('remove', lesson)"><AppIcon name="trash" :size="16" /> Убрать урок</button>
           <button class="btn ghost" style="color:var(--hint)" @click="emit('close')">Закрыть</button>
@@ -134,6 +151,15 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 .box.group .total { border-color: rgba(165, 96, 232, .3) }
 .gone .ava { cursor: default } .gone .q { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--hint-2); color: #fff; font-size: 22px; font-weight: 900 }
 .gone .nm { color: var(--hint) }
+/* Отменил ученик: аватарка бледная, имя зачёркнуто, вместо цены — красное «отменил» */
+.tile.off .ava { opacity: .45 } .tile.off .nm { text-decoration: line-through; color: var(--hint) }
+.offtxt { color: var(--red-d) !important } html[data-theme='dark'] .offtxt { color: var(--red) !important }
+.lostrow { border-top: 0 !important; padding-top: 0 } .lostrow b { color: var(--red-d); font-size: 15px } html[data-theme='dark'] .lostrow b { color: var(--red) }
+.cancel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px }
+.cancel > .btn { flex: 1 }
+.btn.warnb { color: var(--red-d) } .btn.undo { color: var(--green-d) }
+.chipbtn { padding: 6px 12px; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 99px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
+.chipbtn.on { border-color: var(--red); background: var(--red-l); color: var(--red-d) }
 .total b { font-size: 18px; font-weight: 900; color: var(--text) }
 
 /* Выбор ученика — как «Поделиться» в Telegram: поиск сверху, сетка с прокруткой, действия справа внизу */

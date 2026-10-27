@@ -73,6 +73,12 @@ function onDrop(p, t) {
   scheduleStore.move(a, t.date, t.hour); haptic('light')
   showToast(`Урок перенесён: ${names(a)} · ${fmtSlot(t.date, t.hour)}`, () => scheduleStore.move(a, from.date, from.hour))
 }
+// «Отменил ученик» (без оплаты) / вернуть — с «Отменить» в тосте
+function setCanceled(lesson, sid, on) {
+  if (lesson.done) return showToast('Урок проведён — сначала снимите отметку', null, 'bad')
+  scheduleStore.setCanceled(lesson, sid, on); haptic('light')
+  showToast(on ? `${name(sid)} отменил(а) урок — без оплаты` : `${name(sid)} снова в уроке`, () => scheduleStore.setCanceled(lesson, sid, !on))
+}
 function toggleDone(lesson) {
   const was = !!lesson.done
   scheduleStore.setDone(lesson, !was); sheet.value = null; haptic('light')
@@ -102,7 +108,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
         </div>
       </div>
     </section>
-    <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" @students="setStudents" />
+    <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" @students="setStudents" @cancel="setCanceled" />
   </div>
 </template>
 

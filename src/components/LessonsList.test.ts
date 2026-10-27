@@ -51,4 +51,13 @@ describe('LessonsList', () => {
     expect(mount(LessonsList, { props: { studentId: 's1' } }).text()).toContain('Пока нет уроков')
     expect(mount(LessonsList, { props: { studentId: 's2' } }).text()).toContain('Запланирован')
   })
+
+  it('отменил ученик: у ученика «Отменён вами», у преподавателя «Отменил ученик», без оплаты и без кнопки', () => {
+    useStudentsStore().set([st('s1', 100, [{ from: '', price: 100 }])])
+    useScheduleStore().set([{ id: 'c', date: D, hour: 11, studentIds: ['s1'], canceled: { s1: 't' } }])
+    const w = mount(LessonsList, { props: { studentId: 's1' } })
+    expect(w.text()).toContain('Отменён вами'); expect(w.text()).toContain('Без оплаты'); expect(w.text()).not.toContain('Цена')
+    const t = mount(LessonsList, { props: { studentId: 's1', canMark: true } })
+    expect(t.text()).toContain('Отменил ученик'); expect(t.find('button').exists()).toBe(false)
+  })
 })

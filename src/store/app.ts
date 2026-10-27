@@ -27,12 +27,13 @@ export const myDecks = computed(() => useDecksStore().forUser(useAuthStore().cur
 export const deckOf = (n: { deckId?: string }) => useDecksStore().byId(n.deckId) || myDecks.value[0]
 
 // Строки «ученик — урок» для вкладки «Уроки» (у группового урока по строке на каждого ученика).
-// Цена: у проведённого урока — зафиксированная при отметке, у запланированного — по истории цен на время урока.
+// Цена: у проведённого урока — зафиксированная при отметке, у запланированного — по истории цен на время урока; отменённый учеником — без оплаты.
 export const allLessons = computed(() => useScheduleStore().lessons.flatMap((l) => l.studentIds.map((sid) => {
   const st = useStudentsStore().byId(sid)
   return {
     id: `${l.id}:${sid}`, lesson: l, title: 'Урок', date: l.date, hour: l.hour, time: hh(l.hour), done: !!l.done, studentId: sid, studentName: st?.name ?? (l.names?.[sid] ? `${l.names[sid]} (удалён)` : ''),
-    price: l.done && l.prices?.[sid] != null ? l.prices[sid] : priceAt(st, l.date, l.hour),
+    canceled: !!l.canceled?.[sid],                                                                // отменил ученик — без оплаты
+    price: l.canceled?.[sid] ? 0 : l.done && l.prices?.[sid] != null ? l.prices[sid] : priceAt(st, l.date, l.hour),
   }
 })).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))
 

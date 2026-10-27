@@ -16,16 +16,20 @@ export function priceAt(s: Pick<Student, 'price' | 'priceHistory'> | undefined, 
 // ───────────── Деньги в расписании ─────────────
 // «Факт» — только проведённые уроки, по цене, зафиксированной при отметке (включая учеников, удалённых навсегда).
 // «План» — все уроки: проведённые — как в факте, запланированные — по цене каждого ученика на время урока.
-type LessonLike = { date: string; hour: number; studentIds: string[]; done?: boolean; prices?: Record<string, number> }
+// «Потеряно» — ученики, отменившие урок (canceled): они не платят и не входят ни в факт, ни в план; считаем по их цене на время урока.
+type LessonLike = { date: string; hour: number; studentIds: string[]; done?: boolean; prices?: Record<string, number>; canceled?: Record<string, string> }
 type Find = (id: string) => Pick<Student, 'price' | 'priceHistory'> | undefined
 
-export function lessonMoney(l: LessonLike, find: Find): { real: number; plan: number } {
-  if (l.done) { const real = Object.values(l.prices ?? {}).reduce((a, b) => a + (Number(b) || 0), 0); return { real, plan: real } }
-  return { real: 0, plan: l.studentIds.reduce((sum, id) => sum + priceAt(find(id), l.date, l.hour), 0) }
+export type Money = { real: number; plan: number; lost: number }
+export function lessonMoney(l: LessonLike, find: Find): Money {
+  const off = (id: string) => !!l.canceled?.[id]
+  const lost = l.studentIds.filter(off).reduce((sum, id) => sum + priceAt(find(id), l.date, l.hour), 0)
+  if (l.done) { const real = Object.entries(l.prices ?? {}).filter(([id]) => !off(id)).reduce((a, [, b]) => a + (Number(b) || 0), 0); return { real, plan: real, lost } }
+  return { real: 0, plan: l.studentIds.filter((id) => !off(id)).reduce((sum, id) => sum + priceAt(find(id), l.date, l.hour), 0), lost }
 }
-/** Сумма по урокам (день, неделя): { real, plan }. */
-export function sumMoney(lessons: LessonLike[], find: Find): { real: number; plan: number } {
-  return lessons.reduce((acc, l) => { const m = lessonMoney(l, find); return { real: acc.real + m.real, plan: acc.plan + m.plan } }, { real: 0, plan: 0 })
+/** Сумма по урокам (день, неделя): { real, plan, lost }. */
+export function sumMoney(lessons: LessonLike[], find: Find): Money {
+  return lessons.reduce((acc, l) => { const m = lessonMoney(l, find); return { real: acc.real + m.real, plan: acc.plan + m.plan, lost: acc.lost + m.lost } }, { real: 0, plan: 0, lost: 0 })
 }
 const round2 = (n: number) => Math.round(n * 100) / 100
 /** 12 500 → «12 500»; дробные — до копеек. */
