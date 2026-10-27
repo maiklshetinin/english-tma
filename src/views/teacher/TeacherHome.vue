@@ -10,6 +10,8 @@ import { useTelegram } from '../../composables/useTelegram'
 import WeekGrid from '../../components/WeekGrid.vue'
 import StudentsPanel from '../../components/StudentsPanel.vue'
 import LessonSheet from '../../components/LessonSheet.vue'
+import WeekMoney from '../../components/WeekMoney.vue'
+import { sumMoney } from '../../utils/price'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
 import { useScheduleStore } from '../../stores/schedule'
@@ -21,6 +23,9 @@ const MAX_GROUP = 12                                // как на сервер�
 
 // Без листания: сверху всегда текущая неделя, под ней следующая; даты подставляются сами (и обновляются при смене недели)
 const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (nowTick.value, weekDates(1)))
+// Деньги недели: факт (проведённые) и план (все уроки) — utils/price.ts; меняются сразу при отметке «проведён»
+const weekMoney = (dates) => sumMoney(scheduleStore.lessons.filter(l => dates.includes(l.date)), studentStore.byId)
+const m1 = computed(() => weekMoney(w1.value)), m2 = computed(() => weekMoney(w2.value))
 const sheet = ref(null)                             // { lesson } | { slot }
 const name = (id) => studentStore.list.find(s => s.id === id)?.name
 const names = (l) => l.studentIds.map(name).filter(Boolean).join(', ')
@@ -88,11 +93,11 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
     <section class="main">
       <div class="weeks">
         <div class="wcol">
-          <div class="wh"><div><b>{{ weekTitle(0) }}</b><span>{{ weekRange(w1) }}</span></div></div>
+          <div class="wh"><div><b>{{ weekTitle(0) }}</b><span>{{ weekRange(w1) }}</span></div><WeekMoney :m="m1" /></div>
           <WeekGrid :dates="w1" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
         </div>
         <div class="wcol">
-          <div class="wh"><div><b>{{ weekTitle(1) }}</b><span>{{ weekRange(w2) }}</span></div></div>
+          <div class="wh"><div><b>{{ weekTitle(1) }}</b><span>{{ weekRange(w2) }}</span></div><WeekMoney :m="m2" /></div>
           <WeekGrid :dates="w2" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
         </div>
       </div>

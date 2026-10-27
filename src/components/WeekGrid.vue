@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, ymd } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
+import { sumMoney, fmtMoney, fmtMoneyShort, fmtMoneyK } from '../utils/price'
 import AvatarStack from './AvatarStack.vue'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore } from '../stores/schedule'
@@ -18,6 +19,9 @@ const rowNow = (h) => hasToday.value && h === now.value.hour
 const cellNow = (d, h) => d === now.value.date && h === now.value.hour
 const stu = (id) => studentStore.list.find(s => s.id === id)
 const at = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h)) ?? []
+// Деньги дня: факт — проведённые уроки (зафиксированные цены), план — все уроки дня (utils/price.ts)
+const moneyByDay = computed(() => Object.fromEntries(props.dates.map(d => [d, sumMoney(scheduleStore.lessons.filter(l => l.date === d), studentStore.byId)])))
+const money = (d) => moneyByDay.value[d]
 
 function dropState(d, h) {                       // подсветка ячейки под курсором: ok / swap / bad (в обеих таблицах одинаково)
   const o = dnd.over
@@ -44,7 +48,10 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
   <div class="card wk">
     <div class="g head">
       <span class="corner" />
-      <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
+      <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small>
+        <span v-if="money(d).plan" class="money" :title="`Факт ${fmtMoney(money(d).real)} из плана ${fmtMoney(money(d).plan)}`">
+          <i class="real" :class="{ zero: !money(d).real }"><span class="w">{{ fmtMoneyShort(money(d).real) }}</span><span class="n">{{ fmtMoneyK(money(d).real) }}</span></i>
+          <i v-if="money(d).plan !== money(d).real" class="plan"><span class="w">из {{ fmtMoneyShort(money(d).plan) }}</span><span class="n">/{{ fmtMoneyK(money(d).plan) }}</span></i></span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
       <span class="tm" :class="{ now: rowNow(h) }">{{ hh(h) }}</span>
@@ -75,6 +82,14 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .tm { display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--hint-2) }
 .dh { display: grid; justify-items: center; padding: 4px 0; border-radius: 12px; font-size: 13px; color: var(--hint) }
 .dh small { font-weight: 800; font-size: 12px; color: var(--hint-2) } .dh.we b { color: var(--purple-d) }
+/* Деньги дня под датой: зелёным — факт (проведённые), серым — «из» плана; на узком экране суммы короткие (12,5к) */
+.head { align-items: start } .head .dh { align-content: start }
+.money .n { display: none } @media (max-width: 719px) { .money .w { display: none } .money .n { display: inline } }
+.money { display: grid; justify-items: center; margin-top: 2px; line-height: 1.15; font-style: normal; max-width: 100%; overflow: hidden }
+.money i { font-style: normal; white-space: nowrap }
+.money .real { font-size: 12px; font-weight: 900; color: var(--green-d) } .money .real.zero { color: var(--hint-2) }
+.money .plan { font-size: 10px; font-weight: 800; color: var(--hint-2) }
+html[data-theme='dark'] .money .real { color: var(--green) }
 /* «Сейчас» — красным и полупрозрачным (синий занят чипами уроков): день, время и ячейка на пересечении */
 .dh.today { background: rgba(255, 75, 75, .16); box-shadow: inset 0 0 0 2px rgba(255, 75, 75, .55), 0 3px 0 rgba(234, 43, 43, .45) } .dh.today b, .dh.today small { color: var(--red-d) }
 .cell { position: relative; height: 36px; border-radius: 10px; background: var(--surface); transition: background .1s, box-shadow .1s }
