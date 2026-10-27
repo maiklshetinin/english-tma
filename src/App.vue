@@ -6,6 +6,7 @@ import TelegramLogin from './components/TelegramLogin.vue'
 import BottomNav from './components/BottomNav.vue'
 import Toast from './components/Toast.vue'
 import DragGhost from './components/DragGhost.vue'
+import WakeUp from './components/WakeUp.vue'
 import { redirectFor, goUp } from './router'
 import { useBackButton } from './composables/useBackButton'
 import { useAuthStore } from './stores/auth'
@@ -27,7 +28,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
 </script>
 
 <template>
-  <div v-if="auth.status === 'loading'" class="splash"><div class="spin" /></div>
+  <WakeUp v-if="auth.status === 'loading'" />
   <div v-else-if="auth.status === 'login'" class="splash card">
     <h3>Вход</h3><p class="hint">Войдите через Telegram. Ученикам сначала нужна ссылка-приглашение от преподавателя: открыв её в Telegram, вы попадёте в приложение, и дальше можно входить здесь.</p>
     <TelegramLogin v-if="BOT_USERNAME" />
