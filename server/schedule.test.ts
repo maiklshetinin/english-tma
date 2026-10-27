@@ -224,6 +224,20 @@ store.set(`students/${n1.id}`, { ...store.get(`students/${n1.id}`), tgId: 41, st
 const nMine = await find({ uid: 'tg:41', role: 'student', studentId: n1.id }, nl.id)
 ok('ученик видит время 15:30, но не заметку', nMine?.minute === 30 && !nMine?.note)
 
+// --- история уроков (календарь по месяцам) ---
+const h3 = await ST.create({ name: 'Глеб', price: 70 }, 'tg:1'), h4 = await ST.create({ name: 'Дина' }, 'tg:1')
+store.set('lessons/past1', { date: '2026-09-15', hour: 10, weekStart: '2026-09-14', studentIds: [h3.id, h4.id], done: true, prices: { [h3.id]: 70, [h4.id]: 50 }, note: 'секрет', createdBy: 'tg:1', createdAt: {} })
+const hl = await S.create({ studentId: h3.id, date: '2026-10-31', hour: 18 }, 'tg:1')
+store.set(`students/${h3.id}`, { ...store.get(`students/${h3.id}`), tgId: 51, status: 'active' })
+const gUser: TokenUser = { uid: 'tg:51', role: 'student', studentId: h3.id }
+const hist = await S.history(gUser)
+ok('история: прошлые месяцы и текущие уроки, по времени', hist.map(l => l.id).join() === ['past1', hl.id].join())
+ok('история ученика: только он сам, своя цена, без заметки', JSON.stringify(hist[0].studentIds) === JSON.stringify([h3.id]) && JSON.stringify(hist[0].prices) === JSON.stringify({ [h3.id]: 70 }) && !hist[0].note)
+ok('история: чужой studentId / без роли — пусто', !(await S.history({ uid: 'tg:99', role: 'student', studentId: h3.id })).length && !(await S.history({ uid: 'tg:99' })).length)
+const tHist = await S.history(teacher, h4.id)
+ok('история у преподавателя: по ?studentId, со всеми учениками и заметкой', tHist.length === 1 && tHist[0].studentIds.length === 2 && tHist[0].note === 'секрет')
+ok('история у преподавателя без studentId → 400', (await code(S.history(teacher, undefined))) === 400)
+
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
 clock = new Date('2026-10-25T23:30:00Z')                   // уже понедельник 26.10 по Варшаве
 v = await S.list(teacher)

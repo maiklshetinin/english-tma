@@ -39,6 +39,12 @@ const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'do
     ...(x.minute ? { minute: x.minute } : {}), ...(x.note ? { note: x.note } : {}) }
 }
 const byTime = (a: Lesson, b: Lesson) => a.date.localeCompare(b.date) || a.hour - b.hour
+/** Урок глазами ученика: только он сам, только его цена и отметка «отменил»; без заметки преподавателя и чужих имён. */
+const forStudent = (l: Lesson, me: string): Lesson => {
+  const { names: _n, note: _note, canceled, prices, ...rest } = l
+  return { ...rest, studentIds: [me], ...(prices ? { prices: me in prices ? { [me]: prices[me] } : {} } : {}), ...(canceled?.[me] ? { canceled: { [me]: canceled[me] } } : {}) }
+}
+const HISTORY_MAX = 1000
 
 export interface ScheduleDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; tz?: string; now?: () => Date }
 
@@ -66,7 +72,13 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
     if (!liveWeeks().includes(ws)) throw fail(400, 'date outside current and next week')
     return { date, hour, ws, key: slotKey(date, hour) }
   }
-  const checkId = (id: unknown) => { if (!ID.test(String(id))) throw fail(400, 'bad id'); return String(id) }
+  const checkId = (id: unknown) => { if ((typeof id !== 'string' && typeof id !== 'number') || !ID.test(String(id))) throw fail(400, 'bad id'); return String(id) }
+  // id записи ученика из токена — только если она не в архиве и всё ещё привязана к этому аккаунту; иначе null
+  const meOf = async (user: TokenUser): Promise<string | null> => {
+    if (user.role !== 'student' || !user.studentId) return null
+    const st = await students().doc(String(user.studentId)).get()
+    return st.exists && !st.get('archived') && `tg:${st.get('tgId')}` === user.uid ? String(user.studentId) : null
+  }
 
   // Список учеников урока: 1–12 без дублей, каждый существует и не в архиве
   const studentIdsOf = async (raw: unknown): Promise<string[]> => {
@@ -132,19 +144,26 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
     },
 
     // Преподаватель — все уроки двух недель; ученик — только свои (и без чужих учеников в списке); остальным — пусто
+    // История уроков одного ученика за всё время (для календаря по месяцам): ученик — только свои (как в list), преподаватель — ?studentId.
+    // Индексов не нужно: один фильтр array-contains, сортировка — здесь. Не больше HISTORY_MAX последних уроков.
+    async history(user: TokenUser, studentId?: unknown): Promise<Lesson[]> {
+      let sid: string | null = null, asStudent = false
+      if (user.role === 'teacher') sid = checkId(studentId)
+      else { sid = await meOf(user); asStudent = true }
+      if (!sid) return []
+      const all = (await lessons().where('studentIds', 'array-contains', sid).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc)).sort(byTime).slice(-HISTORY_MAX)
+      return asStudent ? all.map((l) => forStudent(l, sid!)) : all
+    },
+
     async list(user: TokenUser): Promise<ScheduleResponse> {
       const [cur, next] = liveWeeks()
-      let me = null
+      let me: string | null = null
       if (user.role === 'teacher') { await this.ensureWeeks(); await this.heal() }
-      else if (user.role === 'student' && user.studentId) {
-        const st = await students().doc(String(user.studentId)).get()
-        if (st.exists && !st.get('archived') && `tg:${st.get('tgId')}` === user.uid) me = String(user.studentId)
-      }
+      else me = await meOf(user)
       const read = async (ws: string): Promise<ScheduleWeek> => {
         if (user.role !== 'teacher' && !me) return { weekStart: ws, lessons: [] }
         let docs = (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc))
-        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me], ...(l.prices ? { prices: me in l.prices ? { [me]: l.prices[me] } : {} } : {}), names: undefined, note: undefined,      // заметка — только преподавателю
-          canceled: l.canceled?.[me] ? { [me]: l.canceled[me] } : undefined }))      // ученик: только он сам и только его цена
+        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => forStudent(l, me!))      // ученик: только он сам и только его цена
         return { weekStart: ws, lessons: docs.sort(byTime) }
       }
       return { current: await read(cur), next: await read(next) }
