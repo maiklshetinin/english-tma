@@ -2,7 +2,7 @@
 // Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок (сохраняется на сервере).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { nowTick, weekDates, weekRange, weekTitle, slotKey, fmtSlot, hh } from '../../store/app'
+import { nowTick, weekDates, weekRange, slotKey, fmtSlot, hh } from '../../store/app'
 import { goUp } from '../../router'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
@@ -11,6 +11,7 @@ import WeekGrid from '../../components/WeekGrid.vue'
 import StudentsPanel from '../../components/StudentsPanel.vue'
 import LessonSheet from '../../components/LessonSheet.vue'
 import WeekMoney from '../../components/WeekMoney.vue'
+import WeekLoad from '../../components/WeekLoad.vue'
 import { sumMoney } from '../../utils/price'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
@@ -26,6 +27,10 @@ const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (n
 // Деньги недели: факт (проведённые) и план (все уроки) — utils/price.ts; меняются сразу при отметке «проведён»
 const weekMoney = (dates) => sumMoney(scheduleStore.lessons.filter(l => dates.includes(l.date)), studentStore.byId)
 const m1 = computed(() => weekMoney(w1.value)), m2 = computed(() => weekMoney(w2.value))
+// Одна таблица: «Эта неделя» или «Следующая» (переключатель над таблицей)
+const week = ref(0)
+// Урок состоится, если не все его ученики отменили (для спидометра нагрузки)
+const activeOf = (l) => !l.studentIds.length || !l.studentIds.every(id => l.canceled?.[id])
 const sheet = ref(null)                             // { lesson } | { slot }
 const name = (id) => studentStore.findAny(id)?.name
 const names = (l) => l.studentIds.map(name).filter(Boolean).join(', ')
@@ -106,13 +111,15 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
     <section class="main">
       <div class="weeks">
         <div class="wcol">
-          <div class="wh"><div><b>{{ weekTitle(0) }}</b><span>{{ weekRange(w1) }}</span></div><WeekMoney :m="m1" /></div>
-          <WeekGrid :dates="w1" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
+          <div class="wh">
+            <div class="seg wk-sw" role="tablist" aria-label="Неделя">
+              <button v-for="o in [0, 1]" :key="o" role="tab" :aria-selected="week === o" :class="{ on: week === o }" @click="week = o"><b>{{ o ? 'Следующая' : 'Эта' }}<span class="wfull"> неделя</span></b><small>{{ weekRange(o ? w2 : w1) }}</small></button>
+            </div>
+            <WeekMoney :m="week ? m2 : m1" />
+          </div>
+          <WeekGrid :dates="week ? w2 : w1" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
         </div>
-        <div class="wcol">
-          <div class="wh"><div><b>{{ weekTitle(1) }}</b><span>{{ weekRange(w2) }}</span></div><WeekMoney :m="m2" /></div>
-          <WeekGrid :dates="w2" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
-        </div>
+        <WeekLoad class="load" :lessons="scheduleStore.lessons" :dates="week ? w2 : w1" :active-of="activeOf" />
       </div>
     </section>
     <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" @students="setStudents" @cancel="setCanceled" @details="setDetails" />
@@ -123,8 +130,12 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 .home { max-width: 1140px; margin: 0 auto; display: grid; gap: 12px; padding: 0 12px calc(100px + var(--safe-b)); grid-template-areas: 'side' 'main' }
 .side { grid-area: side; position: sticky; top: 0; z-index: 8; padding: 10px 0 6px; background: var(--bg) }
 .main { grid-area: main; min-width: 0 }
-/* Две таблицы друг под другом: сверху «Эта неделя», ниже «Следующая неделя» */
-.weeks { display: grid; gap: 14px }
+/* Одна таблица (переключатель недель) и под ней — нагрузка недели */
+.weeks { display: grid; gap: 14px; max-width: 900px; margin: 0 auto; width: 100% }
+.wk-sw { display: inline-grid; grid-template-columns: 1fr 1fr } .wk-sw button { display: grid; justify-items: start; padding: 5px 12px; line-height: 1.2 }
+.wk-sw button b { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .3px } .wk-sw button small { font-size: 11px; font-weight: 700; color: var(--hint-2) }
+.wk-sw button.on small { color: var(--blue) }
+@media (max-width: 480px) { .wfull { display: none } }
 .wcol { display: grid; gap: 6px; min-width: 0 }
 .wh { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh b { display: block; font-weight: 900; letter-spacing: .5px; text-transform: uppercase; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
