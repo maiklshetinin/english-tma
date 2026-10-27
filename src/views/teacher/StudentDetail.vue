@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { pctOf } from '../../store/app'
+import { fmtMoney } from '../../utils/price'
 import { showToast } from '../../composables/useToast'
 import { useTelegram } from '../../composables/useTelegram'
 import Avatar from '../../components/Avatar.vue'
@@ -28,12 +29,15 @@ async function saveEdit() {
   const patch = {}
   if (ename.value.trim() !== s.value.name) patch.name = ename.value.trim()
   if (elevel.value !== s.value.level) patch.level = elevel.value
-  if (!Object.keys(patch).length) { editing.value = false; return }
+  if (!Object.keys(patch).length) return
   editBusy.value = true
-  try { await studentStore.update(s.value.id, patch); editing.value = false; showToast('Сохранено') }
+  try { await studentStore.update(s.value.id, patch); showToast('Сохранено') }
   catch (e) { notify(e.message) } finally { editBusy.value = false }
 }
 const tab = ref('lessons')
+const PAY = { paid: ['оплачено', 'ok'], due: ['ждёт оплаты', 'warn'], overdue: ['просрочено', 'bad'] }
+const panel = ref(null)                                   // что раскрыто в шапке: 'edit' (все правки) | 'remind' | null
+const openEdit = () => { if (panel.value === 'edit') { panel.value = null; editing.value = false; return } startEdit(); panel.value = 'edit' }
 // История уроков этого ученика — для календаря (все месяцы)
 watch(() => props.id, (id) => { if (id) useScheduleStore().loadHistory(String(id)).catch(() => {}) }, { immediate: true })                                       // «Уроки» (как у ученика + отметка «проведён») · «Путь и слова»
 const PRESETS = ['Урок скоро', 'Сделай ДЗ', 'Пора оплатить', 'Повтори слова']
@@ -87,45 +91,50 @@ const saveAsPreset = () => {
 }
 </script>
 <template>
-  <div v-if="s" class="page wide">
-    <button class="btn ghost" style="justify-self:start" @click="$emit('back')"><AppIcon name="back" :size="18" /> {{ backLabel }}</button>
-    <div class="card">
-      <div v-if="!editing" class="row2"><Avatar :s="s" :size="56" /><div style="flex:1;min-width:0"><h3 style="margin:0">{{ s.name }}</h3><div class="hint">Уровень {{ s.level }} · прогресс {{ pctOf(pathStore.of(s.id)) }}%</div></div>
-        <button class="btn ghost sm" @click="startEdit"><AppIcon name="pencil" :size="14" /> Изменить</button></div>
-      <form v-else class="edit" @submit.prevent="saveEdit">
-        <div class="row2"><Avatar :s="{ ...s, name: ename || s.name }" :size="56" />
-          <label class="f"><span class="lab">Имя</span><input v-model="ename" maxlength="40" aria-label="Имя ученика" autofocus /></label></div>
-        <span class="lab">Уровень</span>
-        <div class="seg lv" role="radiogroup" aria-label="Уровень"><button v-for="l in LEVELS" :key="l" type="button" role="radio" :aria-checked="elevel === l" :class="{ on: elevel === l }" @click="elevel = l">{{ l }}</button></div>
-        <div class="row2" style="justify-content:flex-end;margin-top:10px"><button type="button" class="btn ghost sm" @click="editing = false">Отмена</button><button class="btn sm" :disabled="editBusy || !ename.trim()">Сохранить</button></div>
-      </form>
-      <div class="row2" style="margin-top:12px">
-        <span class="badge ok">🔥 {{ s.streak }}</span><span class="badge ok">{{ s.coins }} монет</span>
-        <span class="badge" :class="s.payment.status === 'paid' ? 'ok' : 'warn'">Уроков осталось: {{ s.payment.lessonsLeft }}</span>
-        <span v-if="s.price" class="badge ok">Цена урока: {{ s.price }}</span>
+  <!-- Карточка ученика — одна колонка блоками: шапка (данные и все правки), календарь уроков, внизу — архив -->
+  <div v-if="s" class="page sd">
+    <div class="pcard hd">
+      <div class="top">
+        <button class="ib" :aria-label="`Назад: ${backLabel}`" :title="backLabel" @click="$emit('back')"><AppIcon name="back" :size="20" /></button>
+        <Avatar :s="s" :size="56" />
+        <div class="who"><h2>{{ s.name }}</h2>
+          <div class="sub">{{ s.level }} · <span :class="s.status === 'active' ? 'on' : 'wait'">{{ s.status === 'active' ? 'в приложении' : 'ждёт приглашения' }}</span><template v-if="s.username"> · @{{ s.username }}</template></div></div>
+        <button class="ib" :class="{ on: panel === 'remind' }" aria-label="Напомнить" title="Напомнить" @click="panel = panel === 'remind' ? null : 'remind'"><AppIcon name="bell" :size="19" /></button>
+        <button class="ib" :class="{ on: panel === 'edit' }" aria-label="Изменить" title="Изменить" @click="openEdit"><AppIcon name="pencil" :size="18" /></button>
       </div>
-      <div class="row2" style="margin-top:12px">
-        <span class="badge" :class="s.status === 'active' ? 'ok' : 'warn'">{{ s.status === 'active' ? 'В приложении' : 'Ждёт приглашения' }}</span>
-        <button class="btn ghost" :disabled="inviteBusy" @click="invite">{{ s.status === 'active' ? 'Привязать другой аккаунт' : 'Пригласить в приложение' }}</button>
+      <!-- Приборы: всё главное одной строкой -->
+      <div class="stats">
+        <div><b>{{ s.price ? fmtMoney(s.price) : '—' }}</b><small>цена</small></div>
+        <div><b :class="'p-' + PAY[s.payment.status][1]">{{ s.payment.lessonsLeft }}</b><small :title="`Оплата: ${PAY[s.payment.status][0]}`">уроков осталось</small></div>
+        <div><b>{{ pctOf(pathStore.of(s.id)) }}%</b><small>прогресс</small></div>
+        <div><b>🔥{{ s.streak }}</b><small>серия</small></div>
+        <div><b>{{ s.coins }}</b><small>монет</small></div>
       </div>
-      <div v-if="inviteUrl" class="row2" style="margin-top:8px">
-        <input :value="inviteUrl" readonly aria-label="Ссылка-приглашение" style="flex:1;min-width:180px;margin:0" @focus="$event.target.select()" />
-        <button class="btn ghost" @click="shareInvite(inviteUrl)">Отправить в Telegram</button>
+
+      <div v-if="panel === 'remind'" class="pan"><span class="pl">Напомнить в Telegram</span>
+        <div class="chips"><button v-for="p in PRESETS" :key="p" class="chipb" @click="remind(p)">{{ p }}</button></div></div>
+
+      <!-- Все правки — здесь, по карандашу -->
+      <div v-if="panel === 'edit'" class="pan">
+        <form class="fr" @submit.prevent="saveEdit"><span class="pl">Имя</span>
+          <input v-model="ename" maxlength="40" aria-label="Имя ученика" /><button class="btn sm" :disabled="editBusy || !ename.trim()">Сохранить</button></form>
+        <div class="fr"><span class="pl">Уровень</span>
+          <div class="seg lv" role="radiogroup" aria-label="Уровень"><button v-for="l in LEVELS" :key="l" type="button" role="radio" :aria-checked="elevel === l" :class="{ on: elevel === l }" @click="elevel = l; saveEdit()">{{ l }}</button></div></div>
+        <div class="fr"><span class="pl">Цена урока</span>
+          <input v-model="priceIn" type="number" min="0" max="100000" step="any" inputmode="decimal" :placeholder="s.price ? 'Сейчас: ' + s.price : 'Цена урока'" aria-label="Цена урока" @keydown.enter="savePrice" />
+          <button class="btn sm" :disabled="priceIn === '' || priceBusy" @click="savePrice">Сохранить</button>
+          <small class="hint">Для уроков со следующего часа, прошедшие — по старой цене.</small></div>
+        <div v-if="s.status === 'invited'" class="fr"><span class="pl">Ник</span>
+          <input v-model="nick" :placeholder="s.username ? '@' + s.username : '@maria'" aria-label="Ник в Telegram" autocapitalize="off" autocomplete="off" maxlength="60" @keydown.enter="saveNick" />
+          <button class="btn sm" :disabled="!nick.trim() || nickBusy" @click="saveNick">Сохранить</button></div>
+        <div class="fr"><span class="pl">Вход</span>
+          <button class="btn ghost sm" :disabled="inviteBusy" @click="invite"><AppIcon name="link" :size="15" /> {{ s.status === 'active' ? 'Привязать другой аккаунт' : 'Ссылка-приглашение' }}</button>
+          <template v-if="inviteUrl"><input :value="inviteUrl" readonly aria-label="Ссылка-приглашение" @focus="$event.target.select()" /><button class="btn sm" @click="shareInvite(inviteUrl)">Отправить</button></template></div>
       </div>
-      <div class="row2" style="margin-top:12px">
-        <input v-model="priceIn" type="number" min="0" max="100000" step="any" inputmode="decimal" :placeholder="s.price ? 'Сейчас: ' + s.price : 'Цена урока'" aria-label="Цена урока" style="flex:1;min-width:180px;margin:0" @keydown.enter="savePrice" />
-        <button class="btn ghost" :disabled="priceIn === '' || priceBusy" @click="savePrice">{{ s.price ? 'Изменить цену' : 'Указать цену' }}</button>
-      </div>
-      <p class="hint" style="margin:4px 0 0">Новая цена — для уроков со следующего часа. Прошедшие остаются по старой.</p>
-      <div v-if="s.status === 'invited'" class="row2" style="margin-top:12px">
-        <input v-model="nick" :placeholder="s.username ? '@' + s.username : 'Ник в Telegram, например @maria'" aria-label="Ник в Telegram" autocapitalize="off" autocomplete="off" maxlength="60" style="flex:1;min-width:180px;margin:0" @keydown.enter="saveNick" />
-        <button class="btn ghost" :disabled="!nick.trim() || nickBusy" @click="saveNick">{{ s.username ? 'Сменить ник' : 'Добавить ник' }}</button>
-      </div>
-      <div class="row2" style="margin-top:12px"><AppIcon name="bell" :size="18" />
-        <button v-for="p in PRESETS" :key="p" class="btn ghost" @click="remind(p)">{{ p }}</button></div>
     </div>
-    <div class="seg" style="justify-self:start"><button :class="{ on: tab === 'lessons' }" @click="tab = 'lessons'">Уроки</button><button :class="{ on: tab === 'path' }" @click="tab = 'path'">Путь и слова</button></div>
-    <LessonCalendar v-if="tab === 'lessons'" :student-id="s.id" teacher />
+
+    <div class="seg tabs"><button :class="{ on: tab === 'lessons' }" @click="tab = 'lessons'">Уроки</button><button :class="{ on: tab === 'path' }" @click="tab = 'path'">Путь и слова</button></div>
+    <LessonCalendar v-if="tab === 'lessons'" :student-id="s.id" teacher compact />
     <template v-else>
     <StudentDecks :student-id="s.id" />
     <div class="card">
@@ -138,8 +147,8 @@ const saveAsPreset = () => {
     </div>
     <PathEditor :units="pathStore.of(s.id)" :student-id="s.id" />
     </template>
-    <div class="card row2" style="justify-content:space-between"><span class="hint">Архив скрывает ученика и закрывает ему вход в приложение.</span>
-      <button class="btn ghost" style="color:var(--red)" @click="archive" @blur="confirmArchive = false">{{ confirmArchive ? 'Точно архивировать?' : 'Архивировать ученика' }}</button></div>
+
+    <button class="arch" @click="archive" @blur="confirmArchive = false"><AppIcon name="trash" :size="18" />{{ confirmArchive ? 'Точно архивировать? Ученик потеряет вход' : 'Архивировать ученика' }}</button>
   </div>
   <div v-else class="page wide">      <!-- старая ссылка или ученик в архиве -->
     <button class="btn ghost" style="justify-self:start" @click="$emit('back')"><AppIcon name="back" :size="18" /> {{ backLabel }}</button>
@@ -148,5 +157,25 @@ const saveAsPreset = () => {
 </template>
 
 <style scoped>
-.edit { display: grid; gap: 6px } .edit .f { flex: 1; min-width: 160px } .edit input { margin: 0 } .lv { display: grid; grid-template-columns: repeat(6, 1fr) } .lv button { padding: 6px 0 }
+/* Одна колонка, ширина как у обычной страницы */
+.sd { max-width: 640px }
+.pcard { background: var(--card); border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 18px; overflow: hidden }
+.top { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 4px }
+.who { flex: 1; min-width: 0 } .who h2 { margin: 0; font-size: 19px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.sub { font-size: 13px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .sub .on { color: var(--blue) } .sub .wait { color: var(--orange-d) }
+.ib { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border: 0; border-radius: 50%; background: none; color: var(--hint); cursor: pointer } .ib:hover, .ib.on { background: var(--blue-l); color: var(--blue) }
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--border) }
+.stats div { display: grid; justify-items: center; gap: 1px; padding: 8px 2px; min-width: 0 } .stats div + div { border-left: 1px solid var(--border) }
+.stats b { font-size: 16px; font-weight: 900; white-space: nowrap } .stats small { font-size: 11px; font-weight: 700; color: var(--hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100% }
+.p-ok { color: var(--green-d) } .p-warn { color: var(--orange-d) } .p-bad { color: var(--red-d) }
+.pan { display: grid; gap: 10px; padding: 12px 14px 14px; border-top: 1px solid var(--border); background: var(--surface) }
+.pl { flex: none; width: 92px; font-size: 13px; font-weight: 800; color: var(--hint) }
+.fr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px } .fr input { flex: 1; min-width: 120px; margin: 0; padding: 7px 10px; font-size: 14px; background: var(--card) }
+.fr .hint { flex-basis: 100%; padding-left: 100px; font-size: 12px }
+.lv { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); padding: 2px; background: var(--card) } .lv button { padding: 4px 0; font-size: 13px }
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chipb { padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; background: var(--card); color: var(--blue); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .chipb:hover { background: var(--blue-l); border-color: var(--blue) }
+.tabs { justify-self: start }
+.arch { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 0; border-radius: 14px; background: none; color: var(--red-d); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer } .arch:hover { background: var(--red-l) }
+@media (max-width: 480px) { .pl { width: 100% } .fr .hint { padding-left: 0 } }
 </style>

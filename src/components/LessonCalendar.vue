@@ -10,7 +10,7 @@ import { useScheduleStore } from '../stores/schedule'
 import { useStudentsStore } from '../stores/students'
 import { priceAt, fmtMoney } from '../utils/price'
 import { showToast } from '../composables/useToast'
-const props = defineProps({ studentId: { type: String, default: null }, teacher: Boolean })
+const props = defineProps({ studentId: { type: String, default: null }, teacher: Boolean, compact: Boolean })   // compact — всё в одной карточке, урок дня — по нажатию на день
 const scheduleStore = useScheduleStore(), studentStore = useStudentsStore()
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -55,10 +55,12 @@ const nextOff = computed(() => !hasLater.value && month.value >= today.slice(0, 
 
 // При открытии и смене месяца выбираем день: сегодня (если в этом месяце) или ближайший день с уроком
 watch([month, all], () => {
+  if (props.compact) { if (picked.value && !picked.value.startsWith(month.value)) picked.value = null; return }      // компактно: ничего не выбрано, пока не нажали
   if (picked.value?.startsWith(month.value)) return
   const inMonth = Object.keys(byDate.value).filter(d => d.startsWith(month.value)).sort()
   picked.value = isThisMonth.value ? (inMonth.find(d => d >= today) ?? today) : (inMonth[0] ?? null)
 }, { immediate: true })
+const pick = (d) => { if (!props.compact) { picked.value = d; return } picked.value = picked.value === d || !byDate.value[d] ? null : d }
 const dayLessons = computed(() => (picked.value ? byDate.value[picked.value] ?? [] : []))
 const pickedTitle = computed(() => { if (!picked.value) return ''; const d = new Date(picked.value + 'T00:00'); return `${d.getDate()} ${MONTHS_GEN[d.getMonth()]}, ${DAYS[(d.getDay() + 6) % 7].toLowerCase()}` })
 
@@ -85,7 +87,7 @@ function toggle(l) {
 </script>
 
 <template>
-  <div class="lc">
+  <div class="lc" :class="{ cmp: compact }">
   <div class="cal card">
     <div class="mh">
       <button class="nav" :disabled="prevOff" aria-label="Предыдущий месяц" @click="shift(-1)">‹</button>
@@ -96,15 +98,30 @@ function toggle(l) {
     <div class="grid days">
       <template v-for="(d, i) in cells" :key="i">
         <span v-if="!d" class="day empty" />
-        <button v-else class="day" :class="[dayStatus(d), { today: d === today, picked: d === picked, has: byDate[d], past: d < today }]" :aria-label="`${+d.slice(8)}: ${(byDate[d] || []).length} урок(ов)`" @click="picked = d">
+        <button v-else class="day" :class="[dayStatus(d), { today: d === today, picked: d === picked, has: byDate[d], past: d < today }]" :aria-label="`${+d.slice(8)}: ${(byDate[d] || []).length} урок(ов)`" @click="pick(d)">
           <span class="n">{{ +d.slice(8) }}</span>
           <span v-if="byDate[d]?.length > 1" class="dots"><i v-for="l in byDate[d].slice(0, 3)" :key="l.id" :class="statusOf(l)" /></span>
         </button>
       </template>
     </div>
-    <div class="legend"><span><i class="done" />Проведён</span><span><i class="plan" />Запланирован</span><span><i class="off" />Отменён</span></div>
+    <div v-if="!compact" class="legend"><span><i class="done" />Проведён</span><span><i class="plan" />Запланирован</span><span><i class="off" />Отменён</span></div>
+    <template v-else>
+      <!-- Урок выбранного дня — прямо в карточке, по нажатию на день -->
+      <div v-for="l in dayLessons" :key="l.id" class="cl" :class="statusOf(l)">
+        <i class="dot" /><b>{{ pickedTitle }} · {{ hh(l.hour, l.minute) }}</b>
+        <span class="cs">{{ STATUS[statusOf(l)] }}{{ statusOf(l) !== 'off' && priceOf(l) ? ` · ${fmtMoney(priceOf(l))}` : '' }}</span>
+        <button v-if="teacher && statusOf(l) !== 'off'" class="btn sm" :class="{ ghost: l.done }" :disabled="locked(l)" @click="toggle(l)">{{ l.done ? 'Отменить' : 'Проведён' }}</button>
+      </div>
+      <!-- Итог месяца: легенда = счётчики, ниже деньги одной строкой -->
+      <div class="cnt"><span><i class="done" /><b>{{ sum.done }}</b> проведено</span><span><i class="plan" /><b>{{ sum.plan }}</b> запланировано</span><span><i class="off" /><b>{{ sum.off }}</b> отменено</span></div>
+      <div v-if="teacher && (sum.expected || sum.lost)" class="cm">
+        <div class="cmr"><span><b class="g">{{ fmtMoney(sum.paid) }}</b> из {{ fmtMoney(sum.expected) }} за месяц</span><b v-if="sum.lost" class="r">−{{ fmtMoney(sum.lost) }}</b></div>
+        <div class="mbar"><i :style="{ width: (sum.expected ? Math.min(100, sum.paid / sum.expected * 100) : 0) + '%' }" /></div>
+      </div>
+    </template>
   </div>
 
+  <template v-if="!compact">
   <div v-if="picked" class="dayl">
     <div class="hint dt">{{ pickedTitle }}</div>
     <div v-if="!dayLessons.length" class="card hint none">В этот день уроков нет</div>
@@ -129,6 +146,7 @@ function toggle(l) {
     <div class="mbar" role="progressbar" :aria-valuenow="sum.expected ? Math.round(sum.paid / sum.expected * 100) : 0" aria-valuemin="0" aria-valuemax="100"><i :style="{ width: (sum.expected ? Math.min(100, sum.paid / sum.expected * 100) : 0) + '%' }" /></div>
     <div v-if="sum.lost" class="mrow lost"><span>Потеряно — отменил ученик</span><b>−{{ fmtMoney(sum.lost) }}</b></div>
   </div>
+  </template>
   </div>
 </template>
 
@@ -180,4 +198,13 @@ html[data-theme='dark'] .mrow.real b { color: var(--green) } html[data-theme='da
 @media (max-width: 480px) { .sum { grid-template-columns: repeat(2, 1fr); row-gap: 12px } }
 .sum.t { grid-template-columns: repeat(3, 1fr) }
 html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] .sum .r { color: var(--red) }
+.lc.cmp { max-width: none }
+.lc.cmp .day { max-height: 44px; border-radius: 10px } .lc.cmp .day .n { font-size: 13px }
+.cl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; padding: 8px 10px; border-radius: 12px; background: var(--surface); font-size: 14px }
+.cl .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c) } .cl .cs { flex: 1; color: var(--hint); font-weight: 600 } .cl.off b { text-decoration: line-through; color: var(--hint) }
+.cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
+.cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { width: 10px; height: 10px; border-radius: 3px; background: var(--c) } .cnt b { color: var(--text); font-weight: 900 }
+.cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
+.cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
+.cmr .g { color: var(--green-d) } .cmr .r { color: var(--red-d); font-size: 15px } .cm .mbar { height: 8px }
 </style>
