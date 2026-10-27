@@ -207,10 +207,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 .tx { flex: 1; display: grid; justify-items: start; min-width: 0; line-height: 1.25; text-align: left } .tx b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .tx small { font-size: 13px; font-weight: 500; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .add .rows { margin: 0 -8px }
-/* Тонкая полоса прокрутки, как в Telegram Desktop: появляется при наведении */
-.scroll { scrollbar-width: thin; scrollbar-color: transparent transparent } .scroll:hover { scrollbar-color: color-mix(in srgb, var(--hint) 45%, transparent) transparent }
-.scroll::-webkit-scrollbar { width: 6px } .scroll::-webkit-scrollbar-track { background: transparent }
-.scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 99px } .scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--hint) 45%, transparent) }
+/* полоса прокрутки — общая для всего приложения, styles/theme.css */
 
 /* Окно «Кого назначить?» — пропорции Telegram: узкое, заголовок, поиск во всю ширину с тонкой линией, длинный список, «Отмена» справа внизу */
 .sheet-box.tgbox { max-width: 400px; padding: 0; gap: 0; overflow: hidden }
