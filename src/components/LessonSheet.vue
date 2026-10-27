@@ -6,7 +6,7 @@
 // «Отменил ученик» — по его причине, без оплаты: урок остаётся в ячейке, ученик не входит в цену, его сумма — «потеряно».
 // В группе отмечается каждый ученик отдельно. Ученик видит у себя статус «Отменён вами».
 import { computed, ref, watch } from 'vue'
-import { fmtSlot, hh } from '../store/app'
+import { fmtSlot, hh, handle } from '../store/app'
 import Avatar from './Avatar.vue'
 import AvatarStack from './AvatarStack.vue'
 import AppIcon from './AppIcon.vue'
@@ -49,12 +49,13 @@ const found = computed(() => (props.lesson ? others.value : studentStore.list).f
 const add = (id) => { if (!full.value) emit('students', props.lesson, [...ids.value, id]) }
 const drop = (id) => emit('students', props.lesson, ids.value.filter(x => x !== id))
 const openAdd = () => { q.value = ''; adding.value = true }
+const sub = (st) => [st.level, handle(st)].filter(Boolean).join(' · ') || 'ученик'      // вторая строка в списке, как «last seen» в Telegram
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'ученика' : 'учеников')
 </script>
 
 <template>
   <div class="sheet-bg" @click.self="emit('close')">
-    <div class="sheet-box" role="dialog" aria-modal="true">
+    <div class="sheet-box" :class="{ tgbox: !lesson }" role="dialog" aria-modal="true">
       <template v-if="lesson">
         <div class="head">
           <AvatarStack v-if="members.length > 1" :students="members" :size="36" :max="3" />
@@ -85,9 +86,9 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 
         <div v-if="editable && adding" class="add">
           <div class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Поиск ученика" aria-label="Поиск ученика" /><button v-if="q" class="clr" aria-label="Очистить" @click="q = ''"><AppIcon name="x" :size="14" /></button></div>
-          <div class="tiles scroll">
-            <button v-for="st in found" :key="st.id" class="tile pickable" :disabled="full" @click="add(st.id)">
-              <span class="ava"><Avatar :s="st" :size="48" /></span><span class="nm">{{ st.name }}</span>
+          <div class="rows scroll">
+            <button v-for="st in found" :key="st.id" class="prow" :disabled="full" @click="add(st.id)">
+              <Avatar :s="st" :size="42" /><span class="tx"><b>{{ st.name }}</b><small>{{ sub(st) }}</small></span>
             </button>
           </div>
           <div v-if="!found.length" class="hint empty">{{ others.length ? 'Никого не нашли' : 'Все ученики уже в этом уроке' }}</div>
@@ -123,16 +124,17 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
       </template>
 
       <template v-else>
-        <div class="ttl"><h2>Кого назначить?</h2><div class="hint">{{ when }} · группу можно собрать, открыв урок после назначения</div></div>
-        <div class="add">
-          <div class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Поиск ученика" aria-label="Поиск ученика" /><button v-if="q" class="clr" aria-label="Очистить" @click="q = ''"><AppIcon name="x" :size="14" /></button></div>
-          <div class="tiles scroll">
-            <button v-for="st in found" :key="st.id" class="tile pickable" @click="emit('pick', st.id)">
-              <span class="ava"><Avatar :s="st" :size="48" /></span><span class="nm">{{ st.name }}</span>
+        <div class="tg">
+          <h2>Кого назначить?</h2>
+          <div class="when">{{ when }}</div>
+          <label class="tsearch"><AppIcon name="search" :size="18" /><input v-model="q" placeholder="Поиск" aria-label="Поиск ученика" /><button v-if="q" class="clr" aria-label="Очистить" @click="q = ''"><AppIcon name="x" :size="14" /></button></label>
+          <div class="rows scroll">
+            <button v-for="st in found" :key="st.id" class="prow" @click="emit('pick', st.id)">
+              <Avatar :s="st" :size="42" /><span class="tx"><b>{{ st.name }}</b><small>{{ sub(st) }}</small></span>
             </button>
+            <div v-if="!found.length" class="hint empty">Никого не нашли</div>
           </div>
-          <div v-if="!found.length" class="hint empty">Никого не нашли</div>
-          <div class="foot"><span /><button class="link" @click="emit('close')">Отмена</button></div>
+          <div class="tfoot"><button class="link" @click="emit('close')">Отмена</button></div>
         </div>
       </template>
     </div>
@@ -190,11 +192,36 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 .search input { margin: 0; padding: 10px 0; border: 0; background: none; border-radius: 0 }
 .search input:focus { background: none } .search input:focus-visible { outline: none }
 .clr { display: grid; place-items: center; padding: 4px; border: 0; background: none; color: var(--hint-2); cursor: pointer }
-.scroll { max-height: 236px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px }
+.scroll { max-height: 300px; overflow-y: auto; overscroll-behavior: contain }
 .empty { text-align: center; padding: 8px 0 }
 .foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 6px 0 }
 .foot .hint { font-size: 12px }
 .link { border: 0; background: none; padding: 6px 4px; font: inherit; font-size: 15px; font-weight: 800; color: var(--blue); cursor: pointer }
-.sheet-box { grid-template-columns: minmax(0, 1fr) }                        /* ничто не распирает шторку шире экрана */
+.sheet-box { grid-template-columns: minmax(0, 1fr) }
+
+/* Список учеников — как «Переслать» в Telegram: строка = аватарка 42px, имя и серая подпись; подсветка строки при наведении */
+.rows { display: grid; align-content: start }
+.prow { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 12px; border: 0; border-radius: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; min-width: 0 }
+.prow:hover:not(:disabled) { background: var(--surface) } .prow:disabled { opacity: .45; cursor: not-allowed }
+.prow :deep(.av) { flex: none }
+.tx { flex: 1; display: grid; justify-items: start; min-width: 0; line-height: 1.25; text-align: left } .tx b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.tx small { font-size: 13px; font-weight: 500; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.add .rows { margin: 0 -8px }
+/* Тонкая полоса прокрутки, как в Telegram Desktop: появляется при наведении */
+.scroll { scrollbar-width: thin; scrollbar-color: transparent transparent } .scroll:hover { scrollbar-color: color-mix(in srgb, var(--hint) 45%, transparent) transparent }
+.scroll::-webkit-scrollbar { width: 6px } .scroll::-webkit-scrollbar-track { background: transparent }
+.scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 99px } .scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--hint) 45%, transparent) }
+
+/* Окно «Кого назначить?» — пропорции Telegram: узкое, заголовок, поиск во всю ширину с тонкой линией, длинный список, «Отмена» справа внизу */
+.sheet-box.tgbox { max-width: 400px; padding: 0; gap: 0; overflow: hidden }
+.tg { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; max-height: min(640px, 86vh) }
+.tg h2 { margin: 0; padding: 20px 20px 0; font-size: 19px; font-weight: 800 }
+.tg .when { padding: 2px 20px 10px; font-size: 13px; font-weight: 600; color: var(--hint) }
+.tsearch { display: flex; align-items: center; gap: 12px; padding: 0 20px; border-bottom: 1px solid var(--border); color: var(--hint-2) }
+.tsearch input { margin: 0; padding: 12px 0; border: 0; border-radius: 0; background: none; font-weight: 500; font-size: 15px } .tsearch input:focus { background: none } .tsearch input:focus-visible { outline: none }
+.tg .rows { max-height: none; min-height: 0; padding: 6px 0 }
+.tg .prow { padding: 7px 20px; gap: 14px } .tg .prow :deep(.av) { width: 46px !important; height: 46px !important }
+.tfoot { display: flex; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border) }
+.tfoot .link { font-size: 15px; font-weight: 700; padding: 6px 10px }                        /* ничто не распирает шторку шире экрана */
 .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px } .acts .btn { min-width: 0; padding-left: 6px; padding-right: 6px; font-size: 14px; letter-spacing: .3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 </style>

@@ -57,7 +57,8 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
         <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
       </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
-        <span v-if="money(d).plan" class="dsum" :class="{ ok: money(d).real === money(d).plan }" :title="`Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}`">{{ fmtMoneyK(money(d).plan) }}</span></span>
+        <span v-if="money(d).plan" class="dsum" :class="{ ok: money(d).real === money(d).plan }" :title="`Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}`">{{ fmtMoneyK(money(d).plan) }}</span>
+        <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−{{ fmtMoneyK(money(d).lost) }}</span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
       <span class="tm" :class="{ now: rowNow(h) }">{{ rowNow(h) ? hh(h, now.minute) : hh(h) }}</span>
@@ -68,11 +69,11 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
           <button class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
-              <AvatarStack class="st-lg" :students="group(l)" :size="20" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="20" :max="2" :ring="ringOf(l)" />
+              <AvatarStack class="st-lg" :students="group(l)" :size="34" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
               <span v-if="l.done" class="tick">✓</span>
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
-            <template v-else><Avatar :s="first(l)" :size="20" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick">✓</span></template>
+            <template v-else><Avatar :s="first(l)" :size="34" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick">✓</span></template>
             <i v-if="allOff(l)" class="off" aria-hidden="true">✕</i><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
@@ -103,10 +104,11 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 /* Деньги дня — одна цифра под датой: сумма уроков дня; зелёная, когда все проведены */
 .dsum { margin-top: 2px; font-size: 12px; font-weight: 900; color: var(--hint-2); white-space: nowrap } .dsum.ok { color: var(--green-d) }
 html[data-theme='dark'] .dsum.ok { color: var(--green) }
+.dlost { font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 1.1; white-space: nowrap }      /* потеряно из-за отмен — мелко красным под суммой дня */
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
 /* «Сейчас» — красным и полупрозрачным (синий занят чипами уроков): день, время и ячейка на пересечении */
 .dh.today { background: rgba(255, 75, 75, .16); box-shadow: inset 0 0 0 2px rgba(255, 75, 75, .55), 0 3px 0 rgba(234, 43, 43, .45) } .dh.today b, .dh.today small { color: var(--red-d) }
-.cell { position: relative; height: 36px; border-radius: 10px; background: var(--surface); transition: background .1s, box-shadow .1s }
+.cell { position: relative; height: 38px; border-radius: 10px; background: var(--surface); transition: background .1s, box-shadow .1s }
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
 /* Текущий час: время, день недели (.dh.today) и ячейка на пересечении — один красный полупрозрачный цвет */
 .tm.now { background: rgba(255, 75, 75, .16); color: var(--red-d); border: 2px solid rgba(255, 75, 75, .55); border-bottom-width: 4px; border-radius: 10px; font-weight: 900 }
@@ -136,10 +138,16 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 .min { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); font-style: normal; font-size: 11px; font-weight: 900; line-height: 1.3; padding: 0 5px; border-radius: 99px; background: var(--blue); color: #fff; box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .note { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
-.chip :deep(.av) { width: 20px !important; height: 20px !important; font-size: 10px !important }
+/* Кружок ученика — почти во всю высоту карточки, как аватарка в списке чатов Telegram */
+.chip :deep(.av) { width: 34px !important; height: 34px !important; font-size: 14px !important }
+@media (max-width: 719px) { .chip :deep(.av) { width: 28px !important; height: 28px !important; font-size: 12px !important } }
+@media (max-width: 420px) { .chip :deep(.av) { width: 26px !important; height: 26px !important } }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
 .chip.done .tick { color: var(--green-d) }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
-@media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px } .cell { height: 40px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
-@media (max-width: 420px) { .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 34px } }
+@media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px 0 3px; gap: 7px; font-size: 13px } .cell { height: 46px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
+@media (max-width: 420px) { .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 36px } }
+
+/* На телефоне галочку «проведён» не показываем — кружок крупный, проведённый урок и так зелёный */
+@media (max-width: 719px) { .chip .tick { display: none } }
 </style>

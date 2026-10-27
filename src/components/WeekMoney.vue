@@ -1,15 +1,18 @@
 <script setup>
-// Деньги недели — две цифры: факт (проведённые уроки) и план (все уроки недели). Отменённые учениками в план не входят.
+// Деньги недели — две цифры: факт (проведённые уроки) и план (все уроки недели); под ними мелко красным — сколько потеряно из-за отмен учеников.
 import { fmtMoney, fmtMoneyShort } from '../utils/price'
 defineProps({ m: { type: Object, required: true } })      // { real, plan, lost }
 </script>
 <template>
-  <div v-if="m.plan" class="wm" :title="`Факт ${fmtMoney(m.real)} из ${fmtMoney(m.plan)}`">
-    <b>{{ fmtMoneyShort(m.real) }}</b><small>из {{ fmtMoneyShort(m.plan) }}</small>
+  <div v-if="m.plan || m.lost" class="wm" :title="`Факт ${fmtMoney(m.real)} из ${fmtMoney(m.plan)}${m.lost ? `, потеряно ${fmtMoney(m.lost)}` : ''}`">
+    <span class="top"><b>{{ fmtMoneyShort(m.real) }}</b><small>из {{ fmtMoneyShort(m.plan) }}</small></span>
+    <span v-if="m.lost" class="lost">−{{ fmtMoneyShort(m.lost) }} отмены</span>
   </div>
 </template>
 <style scoped>
-.wm { flex: none; display: flex; align-items: baseline; gap: 5px; padding: 6px 12px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 12px; background: var(--card) }
+.wm { flex: none; display: grid; justify-items: end; padding: 4px 12px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 12px; background: var(--card); line-height: 1.15 }
+.top { display: flex; align-items: baseline; gap: 5px }
 b { font-size: 18px; font-weight: 900; color: var(--green-d) } small { font-size: 13px; font-weight: 800; color: var(--hint) }
-html[data-theme='dark'] b { color: var(--green) }
+.lost { font-size: 11px; font-weight: 800; color: var(--red-d) }
+html[data-theme='dark'] b { color: var(--green) } html[data-theme='dark'] .lost { color: var(--red) }
 </style>
