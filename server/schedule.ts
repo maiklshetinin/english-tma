@@ -1,4 +1,4 @@
-// Расписание: уроки и две живые недели (текущая и следующая). Сайт НЕ ходит в Firestore напрямую — только через эти функции.
+// Расписание: уроки и недели. Неделя появляется в базе с первым уроком и исчезает с последним; листать можно любые недели. Сайт НЕ ходит в Firestore напрямую — только через эти функции.
 // Тест: node schedule.test.mjs
 //
 // Что лежит в базе:
@@ -16,6 +16,7 @@ import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, Sched
 export const HOUR_MIN = 8, HOUR_MAX = 22                 // как в таблице на сайте: 08:00 … 22:00
 const ID = /^[\w-]{1,64}$/
 const MAX_GROUP = 12
+const WINDOW_DAYS = 730                                 // уроки можно ставить на ±2 года от текущей недели
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const toYmd = (d: Date) => d.toISOString().slice(0, 10)
@@ -61,15 +62,18 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
         if (!cache.has(ws)) { const ref = weeks().doc(ws); cache.set(ws, { ref, ws, slots: { ...((await tx.get(ref)).get('slots') || {}) } }) }
         return cache.get(ws)!
       },
-      save() { for (const w of cache.values()) tx.set(w.ref, { weekStart: w.ws, slots: w.slots }) },
+      // Неделя живёт в базе, только пока в ней есть уроки: опустела — документ недели удаляется
+      save() { for (const w of cache.values()) Object.keys(w.slots).length ? tx.set(w.ref, { weekStart: w.ws, slots: w.slots }) : tx.delete(w.ref) },
     }
   }
-  const slotOf = (input: Partial<SlotInput> | undefined) => {                                // проверка «куда»: дата, час и что неделя — текущая или следующая
+  // Окно, в которое можно ставить уроки: от двух лет назад до двух лет вперёд (любые недели, не только текущая и следующая)
+  const inWindow = (ws: string) => { const cur = liveWeeks()[0]; return ws >= addDays(cur, -WINDOW_DAYS) && ws <= addDays(cur, WINDOW_DAYS) }
+  const slotOf = (input: Partial<SlotInput> | undefined) => {                                // проверка «куда»: дата, час и неделя в пределах окна
     const date = input?.date, hour = input?.hour
     if (typeof date !== 'string' || !parseYmd(date)) throw fail(400, 'bad date')
     if (typeof hour !== 'number' || !Number.isInteger(hour) || hour < HOUR_MIN || hour > HOUR_MAX) throw fail(400, 'bad hour')
     const ws = weekStartOf(date)
-    if (!liveWeeks().includes(ws)) throw fail(400, 'date outside current and next week')
+    if (!inWindow(ws)) throw fail(400, 'date outside schedule window')
     return { date, hour, ws, key: slotKey(date, hour) }
   }
   const checkId = (id: unknown) => { if ((typeof id !== 'string' && typeof id !== 'number') || !ID.test(String(id))) throw fail(400, 'bad id'); return String(id) }
@@ -91,12 +95,17 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
   return {
     liveWeeks,
 
-    // Создаёт документы обеих недель, если их ещё нет (пустые слоты) — «записи в базе на 2 недели»
-    async ensureWeeks() {
-      await Promise.all(liveWeeks().map(ws => db.runTransaction(async (tx) => {
-        const ref = weeks().doc(ws)
-        if (!(await tx.get(ref)).exists) tx.set(ref, { weekStart: ws, slots: {} })
-      })))
+    // Недели, которые есть в базе (в них есть уроки) — по возрастанию. По ним сайт листает назад; вперёд — сколько угодно.
+    async weeksList(): Promise<string[]> {
+      return (await weeks().get()).docs.filter((d) => Object.keys(d.get('slots') || {}).length).map((d) => d.id).sort()
+    },
+
+    // Одна неделя целиком (для листания): преподаватель — все уроки; понедельник в формате YYYY-MM-DD
+    async week(start: unknown): Promise<ScheduleWeek> {
+      const ws = typeof start === 'string' ? start : ''
+      if (!parseYmd(ws) || weekStartOf(ws) !== ws) throw fail(400, 'week must be a Monday YYYY-MM-DD')
+      const docs = (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc))
+      return { weekStart: ws, lessons: docs.sort(byTime) }
     },
 
     // Самоочистка: из НЕпроведённых уроков двух живых недель убираем учеников, которых нет среди активных (удалены из базы вручную
@@ -158,7 +167,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
     async list(user: TokenUser): Promise<ScheduleResponse> {
       const [cur, next] = liveWeeks()
       let me: string | null = null
-      if (user.role === 'teacher') { await this.ensureWeeks(); await this.heal() }
+      if (user.role === 'teacher') await this.heal()
       else me = await meOf(user)
       const read = async (ws: string): Promise<ScheduleWeek> => {
         if (user.role !== 'teacher' && !me) return { weekStart: ws, lessons: [] }

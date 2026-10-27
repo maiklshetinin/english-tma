@@ -107,6 +107,8 @@ app.post('/students/:id/archive', requireUser, requireTeacher, wrap(async (req, 
 
 // Расписание: две живые недели (текущая и следующая) и уроки в слотах. Урок = сущность с массивом учеников (группа — несколько).
 app.get('/schedule', requireUser, wrap(async (req, res) => res.json(await schedule.list(req.user))))      // преподаватель — всё, ученик — только свои уроки
+app.get('/schedule/weeks', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await schedule.weeksList())))   // недели, которые есть в базе (с уроками)
+app.get('/schedule/week', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.week(req.query.start))))   // ?start=понедельник → { weekStart, lessons }
 app.get('/lessons/history', requireUser, wrap(async (req, res) => res.json(await schedule.history(req.user, req.query.studentId))))   // все уроки ученика (календарь): ученик — свои, преподаватель — ?studentId
 app.post('/lessons', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.create(req.body, req.user.uid))))   // { studentId | studentIds, date, hour }
 app.post('/lessons/swap', requireUser, requireTeacher, wrap(async (req, res) => { await schedule.swap(String(req.body?.a || ''), String(req.body?.b || '')); res.json({ ok: true }) }))

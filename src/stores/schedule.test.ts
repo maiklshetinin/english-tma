@@ -80,6 +80,19 @@ describe('schedule store', () => {
     expect(s.lessons[0].minute).toBeUndefined(); expect(s.lessons[0].note).toBeUndefined()
   })
 
+  it('loadWeek: уроки другой недели добавляются, свои — заменяются; load() их не затирает; список недель', async () => {
+    const s = useScheduleStore()
+    s.set([{ id: 'live', date: D, hour: 9, studentIds: ['s1'] }, { id: 'old', date: '2026-12-08', hour: 9, studentIds: ['s1'] }])
+    apiRequest.mockImplementation((path: string) => path.startsWith('/schedule/week?') ? ok({ weekStart: '2026-12-07', lessons: [{ id: 'f1', date: '2026-12-09', hour: 10, studentIds: ['s2'] }] })
+      : path === '/schedule/weeks' ? ok(['2026-10-19', '2026-12-07']) : ok(week([{ id: 'live', date: D, hour: 9, studentIds: ['s1'] }])))
+    await s.loadWeek('2026-12-07')
+    expect(apiRequest.mock.calls[0][0]).toBe('/schedule/week?start=2026-12-07')
+    expect(s.lessons.map((l) => l.id).sort()).toEqual(['f1', 'live'])           // 'old' из той же недели заменён свежими данными
+    await s.load()
+    expect(s.lessons.map((l) => l.id).sort()).toEqual(['f1', 'live'])           // живые недели перечитаны, далёкая неделя на месте
+    await s.loadWeeks(); expect(s.weeks).toEqual(['2026-10-19', '2026-12-07'])
+  })
+
   it('lessonMap раскладывает уроки по ячейкам «дата|час»', () => {
     const s = useScheduleStore()
     s.set([{ id: 'a', date: D, hour: 9, studentIds: ['s1'] }, { id: 'b', date: D, hour: 10, studentIds: ['s2'] }])

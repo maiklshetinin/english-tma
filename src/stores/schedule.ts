@@ -34,13 +34,35 @@ export const useScheduleStore = defineStore('schedule', () => {
 
   let pending = 0, rev = 0, dirty = false, chain: Promise<unknown> = Promise.resolve()
 
-  /** Загрузка двух недель с сервера. Ответ не применяется, если за это время на экране что-то поменялось или ещё идёт сохранение. */
+  // Кроме двух живых недель преподаватель листает любые: их уроки тоже лежат в lessons (по датам), а недели запоминаются в extra
+  const extra = new Set<string>()
+  const weekEnd = (ws: string) => { const d = new Date(ws + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 6); return d.toISOString().slice(0, 10) }
+  const inWeek = (date: string, ws: string) => date >= ws && date <= weekEnd(ws)
+  /** Недели, которые есть в базе (с уроками), по возрастанию — до самой ранней можно листать назад. */
+  const weeks = ref<string[]>([])
+
+  /** Загрузка двух недель с сервера. Ответ не применяется, если за это время на экране что-то поменялось или ещё идёт сохранение.
+   *  Уроки других открытых недель (листание) сохраняются. */
   async function load(): Promise<void> {
     if (isDemo) return
     const was = rev
     const d = await call<ScheduleResponse>('/schedule', undefined, 'Не удалось загрузить расписание')
     if (pending || rev !== was) return
-    lessons.value = [...d.current.lessons, ...d.next.lessons]
+    const live = [d.current.weekStart, d.next.weekStart]
+    lessons.value = [...lessons.value.filter((l) => !live.some((ws) => inWeek(l.date, ws))), ...d.current.lessons, ...d.next.lessons]
+  }
+  /** Любая неделя по понедельнику (листание вперёд и назад). Две живые недели берутся из load(). */
+  async function loadWeek(ws: string): Promise<void> {
+    if (isDemo) return
+    const was = rev
+    const d = await call<{ weekStart: string; lessons: Lesson[] }>(`/schedule/week?start=${encodeURIComponent(ws)}`, undefined, 'Не удалось загрузить неделю')
+    if (pending || rev !== was) return
+    extra.add(ws)
+    lessons.value = [...lessons.value.filter((l) => !inWeek(l.date, ws)), ...d.lessons]
+  }
+  async function loadWeeks(): Promise<void> {
+    if (isDemo) return
+    weeks.value = await call<string[]>('/schedule/weeks', undefined, 'Не удалось загрузить список недель')
   }
   const set = (items: Lesson[]) => { lessons.value = items }
   const clear = () => { stopRefresh(); lessons.value = []; history.value = [] }
@@ -133,5 +155,5 @@ export const useScheduleStore = defineStore('schedule', () => {
     sync(async () => { if (!isTmp(lesson.id)) await call(`/lessons/${encodeURIComponent(lesson.id)}`, { method: 'DELETE' }, 'Не удалось убрать урок') })
   }
 
-  return { lessons, lessonMap, history, loadHistory, allOf, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
+  return { lessons, lessonMap, weeks, loadWeek, loadWeeks, history, loadHistory, allOf, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
 })

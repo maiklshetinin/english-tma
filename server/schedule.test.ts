@@ -26,8 +26,8 @@ const olya = await ST.create({ name: 'Оля', level: 'B1' }, 'tg:1')
 
 // --- обе недели создаются в базе сразу ---
 let v = await S.list(teacher)
-ok('обе недели есть в базе, слоты пусты', v.current.weekStart === '2026-10-19' && v.next.weekStart === '2026-10-26'
-  && store.has('schedule/2026-10-19') && store.has('schedule/2026-10-26') && !Object.keys(store.get('schedule/2026-10-19').slots).length)
+ok('пустые недели в базе не создаются (неделя появляется с первым уроком)', v.current.weekStart === '2026-10-19' && v.next.weekStart === '2026-10-26'
+  && !store.has('schedule/2026-10-19') && !store.has('schedule/2026-10-26'))
 ok('уроков пока нет', !v.current.lessons.length && !v.next.lessons.length)
 
 // --- создание: ученик попал в слот → появилась сущность урока ---
@@ -36,8 +36,8 @@ ok('мусорные данные → 400', (await code(S.create({ studentId: ma
   && (await code(S.create({ studentId: masha.id, date: A, hour: 9.5 }, 'tg:1'))) === 400
   && (await code(S.create({ date: A, hour: 9 }, 'tg:1'))) === 400
   && (await code(S.create({ studentId: '../x', date: A, hour: 9 }, 'tg:1'))) === 400)
-ok('неделя за пределами «эта + следующая» → 400', (await code(S.create({ studentId: masha.id, date: FAR, hour: 9 }, 'tg:1'))) === 400
-  && (await code(S.create({ studentId: masha.id, date: '2026-10-12', hour: 9 }, 'tg:1'))) === 400)
+ok('дальше ±2 лет → 400', (await code(S.create({ studentId: masha.id, date: '2029-01-01', hour: 9 }, 'tg:1'))) === 400
+  && (await code(S.create({ studentId: masha.id, date: '2024-06-03', hour: 9 }, 'tg:1'))) === 400)
 ok('несуществующий ученик → 404', (await code(S.create({ studentId: 'nope', date: A, hour: 9 }, 'tg:1'))) === 404)
 const l1 = await S.create({ studentId: masha.id, date: A, hour: 9 }, 'tg:1')
 ok('урок создан: сущность в lessons, id слота записан в неделю', store.get(`lessons/${l1.id}`).studentIds[0] === masha.id
@@ -59,7 +59,7 @@ ok('список: уроки по неделям, по времени', v.curren
 // --- перенос ---
 ok('перенос в занятый слот → 409', (await code(S.move(l1.id, { date: A, hour: 12 }))) === 409)
 ok('перенос несуществующего → 404', (await code(S.move('nope', { date: A, hour: 10 }))) === 404)
-ok('перенос на неделю вне окна → 400', (await code(S.move(l1.id, { date: FAR, hour: 10 }))) === 400)
+ok('перенос дальше ±2 лет → 400', (await code(S.move(l1.id, { date: '2029-03-06', hour: 10 }))) === 400)
 await S.move(l1.id, { date: A, hour: 9 })
 ok('перенос в тот же слот ничего не ломает', store.get('schedule/2026-10-19').slots['2026-10-21_09'] === l1.id)
 const m = await S.move(l1.id, { date: B, hour: 10 })
@@ -241,6 +241,19 @@ ok('история у преподавателя без studentId → 400', (awa
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
 clock = new Date('2026-10-25T23:30:00Z')                   // уже понедельник 26.10 по Варшаве
 v = await S.list(teacher)
-ok('в понедельник окно сдвинулось: текущая 26.10, следующая 02.11, прошлая неделя осталась в базе', v.current.weekStart === '2026-10-26' && v.next.weekStart === '2026-11-02'
-  && store.has('schedule/2026-10-19') && store.has('schedule/2026-11-02') && v.current.lessons.some(l => l.id === g.id))
+ok('в понедельник окно сдвинулось: текущая 26.10, следующая 02.11; прошлая неделя с уроками осталась в базе, пустая следующая не создана', v.current.weekStart === '2026-10-26' && v.next.weekStart === '2026-11-02'
+  && store.has('schedule/2026-10-19') && !store.has('schedule/2026-11-02') && v.current.lessons.some(l => l.id === g.id))
+
+// --- любые недели: вперёд сколько угодно, неделя в базе — только с уроками ---
+const far = await S.create({ studentId: masha.id, date: '2027-03-10', hour: 11 }, 'tg:1')
+ok('урок через несколько месяцев: неделя появилась в базе', store.has('schedule/2027-03-08') && store.get('schedule/2027-03-08').slots['2027-03-10_11'] === far.id)
+ok('список недель в базе — по возрастанию, с новой неделей', (await S.weeksList()).at(-1) === '2027-03-08' && JSON.stringify(await S.weeksList()) === JSON.stringify([...(await S.weeksList())].sort()))
+const wk = await S.week('2027-03-08')
+ok('неделя целиком по понедельнику', wk.weekStart === '2027-03-08' && wk.lessons.length === 1 && wk.lessons[0].id === far.id)
+ok('неделя: не понедельник / мусор → 400', (await code(S.week('2027-03-10'))) === 400 && (await code(S.week('x'))) === 400)
+await S.remove(far.id)
+ok('убрали последний урок недели — недели нет в базе и в списке', !store.has('schedule/2027-03-08') && !(await S.weeksList()).includes('2027-03-08'))
+const mv = await S.create({ studentId: masha.id, date: '2027-04-07', hour: 9 }, 'tg:1')
+await S.move(mv.id, { date: '2027-04-14', hour: 9 })
+ok('перенос в другую неделю: старая пустая неделя удалена, новая появилась', !store.has('schedule/2027-04-05') && store.has('schedule/2027-04-12'))
 process.exit(bad ? 1 : 0)
