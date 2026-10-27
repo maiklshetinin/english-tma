@@ -115,11 +115,11 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
             <div class="seg wk-sw" role="tablist" aria-label="Неделя">
               <button v-for="o in [0, 1]" :key="o" role="tab" :aria-selected="week === o" :class="{ on: week === o }" @click="week = o"><b>{{ o ? 'Следующая' : 'Эта' }}<span class="wfull"> неделя</span></b><small>{{ weekRange(o ? w2 : w1) }}</small></button>
             </div>
-            <WeekMoney :m="week ? m2 : m1" />
+            <WeekLoad :lessons="scheduleStore.lessons" :dates="week ? w2 : w1" :active-of="activeOf" />
+            <WeekMoney class="money" :m="week ? m2 : m1" />
           </div>
           <WeekGrid :dates="week ? w2 : w1" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
         </div>
-        <WeekLoad class="load" :lessons="scheduleStore.lessons" :dates="week ? w2 : w1" :active-of="activeOf" />
       </div>
     </section>
     <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" @students="setStudents" @cancel="setCanceled" @details="setDetails" />
@@ -130,14 +130,15 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 .home { max-width: 1140px; margin: 0 auto; display: grid; gap: 12px; padding: 0 12px calc(100px + var(--safe-b)); grid-template-areas: 'side' 'main' }
 .side { grid-area: side; position: sticky; top: 0; z-index: 8; padding: 10px 0 6px; background: var(--bg) }
 .main { grid-area: main; min-width: 0 }
-/* Одна таблица (переключатель недель) и под ней — нагрузка недели */
+/* Одна таблица; над ней: переключатель недель, спидометр нагрузки, деньги недели */
 .weeks { display: grid; gap: 14px; max-width: 900px; margin: 0 auto; width: 100% }
 .wk-sw { display: inline-grid; grid-template-columns: 1fr 1fr } .wk-sw button { display: grid; justify-items: start; padding: 5px 12px; line-height: 1.2 }
 .wk-sw button b { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .3px } .wk-sw button small { font-size: 11px; font-weight: 700; color: var(--hint-2) }
 .wk-sw button.on small { color: var(--blue) }
 @media (max-width: 480px) { .wfull { display: none } }
 .wcol { display: grid; gap: 6px; min-width: 0 }
-.wh { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 4px; font-size: 14px; color: var(--hint) }
+.wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 4px; font-size: 14px; color: var(--hint) }
+.wh .money { margin-left: auto }
 .wh b { display: block; font-weight: 900; letter-spacing: .5px; text-transform: uppercase; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
 @media (min-width: 1024px) {
   .home { grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: 12px 0 40px }
