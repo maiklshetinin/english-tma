@@ -141,7 +141,8 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 .wh .money { margin-left: auto }
 .wh b { display: block; font-weight: 900; letter-spacing: .5px; text-transform: uppercase; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
 @media (min-width: 1024px) {
-  .home { grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: 12px 0 40px }
-  .side { position: sticky; top: 12px; height: calc(100vh - 24px); padding: 0; background: none; z-index: 1 }
+  /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */
+  .home { --top-gap: 72px; grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: var(--top-gap) 0 40px; align-items: start }
+  .side { position: sticky; top: 12px; max-height: calc(100vh - 24px); padding: 0; background: none; z-index: 1; display: grid }
 }
 </style>
