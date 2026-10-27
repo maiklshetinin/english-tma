@@ -147,6 +147,7 @@ export interface LessonInput {             // POST /lessons
 }
 export interface DoneInput { done: boolean }   // POST /lessons/:id/done
 export interface SlotInput { date: string; hour: number }   // POST /lessons/:id/move
+export interface StudentsInput { studentIds: string[] }      // POST /lessons/:id/students — новый состав урока целиком (1–12 учеников)
 
 // ───────────────────────── Неделя · коллекция schedule ─────────────────────────
 export interface WeekDoc {                // id документа — понедельник недели

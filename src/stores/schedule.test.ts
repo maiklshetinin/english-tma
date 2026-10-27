@@ -41,6 +41,17 @@ describe('schedule store', () => {
     expect(s.lessons[0].done).toBe(false); expect(s.lessons[0].prices).toBeUndefined()
   })
 
+  it('setStudents: состав группы меняется сразу и уходит на сервер целиком', async () => {
+    apiRequest.mockImplementation(() => ok({ id: 'a', date: D, hour: 9, studentIds: ['s1', 's2'] }))
+    const s = useScheduleStore()
+    s.set([{ id: 'a', date: D, hour: 9, studentIds: ['s1'] }])
+    s.setStudents(s.lessons[0], ['s1', 's2', 's2'])
+    expect(s.lessons[0].studentIds).toEqual(['s1', 's2'])
+    await vi.waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(1))
+    expect(apiRequest.mock.calls[0][0]).toBe('/lessons/a/students')
+    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ studentIds: ['s1', 's2'] })
+  })
+
   it('lessonMap раскладывает уроки по ячейкам «дата|час»', () => {
     const s = useScheduleStore()
     s.set([{ id: 'a', date: D, hour: 9, studentIds: ['s1'] }, { id: 'b', date: D, hour: 10, studentIds: ['s2'] }])

@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, ymd } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
+import AvatarStack from './AvatarStack.vue'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore } from '../stores/schedule'
 const studentStore = useStudentsStore()
@@ -23,13 +24,16 @@ function dropState(d, h) {                       // подсветка ячей�
   if (!dnd.active || o?.kind !== 'cell' || o.date !== d || o.hour !== h) return ''
   const occ = at(d, h)[0], p = dnd.payload
   if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : occ ? 'swap' : 'ok'
-  return occ ? 'bad' : 'ok'
+  if (!occ) return 'ok'
+  return occ.done || occ.studentIds.includes(p.id) || occ.studentIds.length >= 12 ? 'bad' : 'join'      // ученик на урок — добавится в группу
 }
+const isGroup = (l) => l.studentIds.length > 1
+const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)
 const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payload.lesson.id === l.id
 const down = (e, l) => { if (!l.done) pressStart(e, { kind: 'lesson', lesson: l }) }      // проведённый урок не перетаскиваем (сначала снять отметку)
 // Подпись урока: ученик (у группы — первый, остальные «+N»). Ученика могли архивировать — тогда подписи нет, и ячейка просто пустая
 const first = (l) => stu(l.studentIds[0])
-const label = (l) => `${first(l)?.name ?? ''}${l.studentIds.length > 1 ? ` +${l.studentIds.length - 1}` : ''}, ${hh(l.hour)}`
+const label = (l) => isGroup(l) ? `Группа: ${l.studentIds.map(id => stu(id)?.name).filter(Boolean).join(', ')}, ${hh(l.hour)}` : `${first(l)?.name ?? ''}, ${hh(l.hour)}`
 const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 </script>
 
@@ -44,10 +48,14 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
       <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h) }]"
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
-          <button v-if="first(l)" class="chip" :class="{ lifted: lifted(l), done: l.done }" :title="label(l)" :aria-label="label(l)"
+          <button v-if="first(l)" class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
-            <Avatar :s="first(l)" :size="20" /><span v-if="l.done" class="tick">✓</span><span class="nm">{{ first(l).name }}</span>
-            <i v-if="l.studentIds.length > 1 || at(d, h).length > 1" class="more">+{{ l.studentIds.length - 1 + at(d, h).length - 1 }}</i>
+            <template v-if="isGroup(l)">
+              <AvatarStack class="st-lg" :students="group(l)" :size="20" :max="4" ring="var(--purple-l)" /><AvatarStack class="st-sm" :students="group(l)" :size="20" :max="2" ring="var(--purple-l)" />
+              <span v-if="l.done" class="tick">✓</span>
+            </template>
+            <template v-else><Avatar :s="first(l)" :size="20" /><span v-if="l.done" class="tick">✓</span><span class="nm">{{ first(l).name }}</span></template>
+            <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
           </button>
         </template>
       </div>
@@ -78,6 +86,15 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
   border: 2px solid var(--blue); border-bottom-width: 4px; border-radius: 10px; background: var(--blue-l); color: var(--blue-d);
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
 .chip.done { border-color: var(--green); background: var(--green-l); color: var(--green-d); cursor: pointer } .chip .tick { font-weight: 900 }
+/* Групповой урок — фиолетовый (и в шторке урока LessonSheet.vue); проведённая группа остаётся фиолетовой, с зелёной ✓ */
+.chip.group { border-color: var(--purple); background: var(--purple-l); color: var(--purple-d) }
+.chip.group .tick { color: var(--green-d) }
+/* Группа: аватарки внахлёст без подписи — на телефоне две (вторая может быть «+N»), на широком экране до четырёх */
+.chip .st-lg { display: none } .chip .st-sm { display: inline-flex }
+@media (min-width: 720px) { .chip .st-lg { display: inline-flex } .chip .st-sm { display: none } }
+.cell.join .chip.group :deep(.it) { box-shadow: 0 0 0 1.5px var(--purple-l) }
+html[data-theme='dark'] .chip.group { color: var(--purple) }
+.cell.join { box-shadow: inset 0 0 0 2px var(--purple) } .cell.join .chip { border-color: var(--purple); background: var(--purple-l) }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 .chip :deep(.av) { width: 20px !important; height: 20px !important; font-size: 10px !important }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

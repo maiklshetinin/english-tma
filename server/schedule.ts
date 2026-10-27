@@ -11,7 +11,7 @@
 import type { Firestore, FieldValue as FV, Transaction, DocumentReference } from 'firebase-admin/firestore'
 import { fail } from './login.js'
 import { priceAt } from './price.js'
-import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, TokenUser, WeekDoc } from './types.js'
+import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, StudentsInput, TokenUser, WeekDoc } from './types.js'
 
 export const HOUR_MIN = 8, HOUR_MAX = 22                 // как в таблице на сайте: 08:00 … 22:00
 const ID = /^[\w-]{1,64}$/
@@ -61,6 +61,14 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
   }
   const checkId = (id: unknown) => { if (!ID.test(String(id))) throw fail(400, 'bad id'); return String(id) }
 
+  // Список учеников урока: 1–12 без дублей, каждый существует и не в архиве
+  const studentIdsOf = async (raw: unknown): Promise<string[]> => {
+    const ids = [...new Set((Array.isArray(raw) ? raw : []).map(checkId))]
+    if (!ids.length || ids.length > MAX_GROUP) throw fail(400, `studentIds: 1–${MAX_GROUP}`)
+    for (const id of ids) { const st = await students().doc(id).get(); if (!st.exists || st.get('archived')) throw fail(404, 'student not found') }
+    return ids
+  }
+
   return {
     liveWeeks,
 
@@ -93,10 +101,8 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
     // Новый урок в слот. studentIds — один ученик (обычный урок) или несколько (группа).
     async create(input: Partial<LessonInput> | undefined, by: string): Promise<Lesson> {
       const raw = Array.isArray(input?.studentIds) ? input.studentIds : input?.studentId != null ? [input.studentId] : []
-      const ids = [...new Set(raw.map(checkId))]
-      if (!ids.length || ids.length > MAX_GROUP) throw fail(400, `studentIds: 1–${MAX_GROUP}`)
       const slot = slotOf(input)
-      for (const id of ids) { const st = await students().doc(id).get(); if (!st.exists || st.get('archived')) throw fail(404, 'student not found') }
+      const ids = await studentIdsOf(raw)
       const ref = lessons().doc(), data = { date: slot.date, hour: slot.hour, studentIds: ids }
       await db.runTransaction(async (tx) => {
         const W = weekLoader(tx), w = await W.get(slot.ws)
@@ -124,6 +130,21 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
         to.slots[slot.key] = id
         tx.update(ref, { date: slot.date, hour: slot.hour, weekStart: slot.ws })
         W.save()
+      })
+      return out!
+    },
+
+    // Состав урока (группа): новый список учеников целиком — так можно добавить и убрать сразу нескольких.
+    // Проведённый урок не меняем (цены уже зафиксированы) — сначала снимите отметку. Пустой урок нельзя: для этого есть «Убрать урок».
+    async setStudents(id: string, input: Partial<StudentsInput> | undefined): Promise<Lesson> {
+      checkId(id)
+      const ids = await studentIdsOf(input?.studentIds); let out: Lesson | undefined
+      await db.runTransaction(async (tx) => {
+        const ref = lessons().doc(id), l = await tx.get(ref)
+        if (!l.exists) throw fail(404, 'lesson not found')
+        if (l.get('done')) throw fail(409, 'lesson already conducted')
+        tx.update(ref, { studentIds: ids })
+        out = pub(id, { ...(l.data() as LessonDoc), studentIds: ids })
       })
       return out!
     },

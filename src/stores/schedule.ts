@@ -87,11 +87,18 @@ export const useScheduleStore = defineStore('schedule', () => {
     l.done = done; if (!done) delete l.prices
     sync(async () => { if (!isTmp(l.id)) { const r = await post<Lesson>(`/lessons/${encodeURIComponent(l.id)}/done`, { done }, 'Не удалось отметить урок'); if (r.prices) l.prices = r.prices } })
   }
+  /** Состав урока (группа): новый список учеников целиком. Нельзя для проведённого урока и пустой — это проверяет и сервер. */
+  function setStudents(lesson: Lesson, studentIds: string[]) {
+    const l = live(lesson) ?? lesson; rev++
+    l.studentIds = [...new Set(studentIds)]
+    const ids = [...l.studentIds]
+    sync(async () => { if (!isTmp(l.id)) await post(`/lessons/${encodeURIComponent(l.id)}/students`, { studentIds: ids }, 'Не удалось изменить состав урока') })
+  }
   function remove(lesson: Lesson) {
     const i = lessons.value.findIndex((x) => x.id === lesson.id); rev++
     if (i >= 0) lessons.value.splice(i, 1)
     sync(async () => { if (!isTmp(lesson.id)) await call(`/lessons/${encodeURIComponent(lesson.id)}`, { method: 'DELETE' }, 'Не удалось убрать урок') })
   }
 
-  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, remove }
+  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, remove }
 })

@@ -1,0 +1,49 @@
+// Шторка урока: состав группы, цена = сумма цен учеников, добавить / убрать ученика, проведённый урок не правится.
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import type { Lesson, Student } from '../../server/types'
+
+vi.mock('../firebase', () => ({ isDemo: false, apiRequest: vi.fn(), apiFetch: vi.fn() }))
+
+import LessonSheet from './LessonSheet.vue'
+import { useStudentsStore } from '../stores/students'
+
+const D = '2026-10-27'
+const st = (id: string, name: string, price: number): Student => ({ id, name, level: 'A2', color: '#fff', username: '', streak: 0, coins: 0, status: 'active', tgId: null, photoUrl: '', price, priceHistory: [{ from: '', price }], payment: { status: 'paid', until: '2026-11-01', lessonsLeft: 3, packageSize: 8 } })
+
+describe('LessonSheet', () => {
+  beforeEach(() => { setActivePinia(createPinia()); useStudentsStore().set([st('a', 'Маша', 100), st('b', 'Петя', 80), st('c', 'Оля', 50)]) })
+
+  it('групповой урок: все ученики и итог — сумма их цен', () => {
+    const w = mount(LessonSheet, { props: { lesson: { id: 'L', date: D, hour: 9, studentIds: ['a', 'b'] } as Lesson } })
+    expect(w.text()).toContain('Группа · 2'); expect(w.text()).toContain('Маша'); expect(w.text()).toContain('Петя')
+    expect(w.find('.total').text()).toContain('180')
+    expect(w.find('.box').classes()).toContain('group')
+    expect(w.find('.head .stack').exists()).toBe(true)                   // в шапке — аватарки внахлёст
+  })
+
+  it('проведённый урок: итог по зафиксированным ценам, состав не правится', () => {
+    const w = mount(LessonSheet, { props: { lesson: { id: 'L', date: D, hour: 9, studentIds: ['a', 'b'], done: true, prices: { a: 90, b: 70 } } as Lesson } })
+    expect(w.find('.total').text()).toContain('160')
+    expect(w.find('.x').exists()).toBe(false)
+    expect(w.find('.plus').exists()).toBe(false)
+  })
+
+  it('добавить и убрать: шторка отдаёт новый состав целиком; последнего ученика не убрать', async () => {
+    const lesson = { id: 'L', date: D, hour: 9, studentIds: ['a'] } as Lesson
+    const w = mount(LessonSheet, { props: { lesson } })
+    expect(w.find('.x').exists()).toBe(false)                              // один ученик — крестика нет
+    expect(w.find('.total').text()).toContain('100')
+    await w.find('.plus').trigger('click')
+    expect(w.findAll('.add .tile')).toHaveLength(2)                       // Петя и Оля, без Маши
+    await w.find('.search input').setValue('пет')
+    expect(w.findAll('.add .tile')).toHaveLength(1)                       // поиск по имени
+    await w.findAll('.add .tile')[0].trigger('click')
+    expect(w.emitted('students')![0]).toEqual([lesson, ['a', 'b']])
+
+    await w.setProps({ lesson: { ...lesson, studentIds: ['a', 'b'] } })
+    await w.findAll('.x')[0].trigger('click')
+    expect(w.emitted('students')![1][1]).toEqual(['b'])
+  })
+})

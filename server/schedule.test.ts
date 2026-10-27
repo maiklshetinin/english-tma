@@ -125,6 +125,23 @@ ok('снять отметку: done=false, цен нет, у ученика ст
 ok('после снятия отметки урок снова можно перенести', (await S.move(dl.id, { date: D1, hour: 9 })).hour === 9)
 ok('setDone: не boolean → 400, мусорный id → 400, нет урока → 404', (await code(S.setDone(dl.id, { done: 'yes' as any }))) === 400 && (await code(S.setDone(dl.id, undefined))) === 400 && (await code(S.setDone('../x', { done: true }))) === 400 && (await code(S.setDone('nope', { done: true }))) === 404)
 
+// --- состав урока: добавить / убрать учеников (группа) ---
+const zoe = await ST.create({ name: 'Зоя', price: 50 }, 'tg:1')
+const sl = await S.create({ studentId: lev.id, date: D1, hour: 14 }, 'tg:1')
+const sg = await S.setStudents(sl.id, { studentIds: [lev.id, zoe.id, zoe.id] })
+ok('состав: ученик добавлен, дубли убраны, урок в том же слоте', JSON.stringify(sg.studentIds) === JSON.stringify([lev.id, zoe.id])
+  && JSON.stringify(store.get(`lessons/${sl.id}`).studentIds) === JSON.stringify([lev.id, zoe.id]) && sg.hour === 14 && store.get('schedule/2026-10-26').slots['2026-10-30_14'] === sl.id)
+const sr = await S.setStudents(sl.id, { studentIds: [zoe.id] })
+ok('состав: ученик убран, урок остался', JSON.stringify(sr.studentIds) === JSON.stringify([zoe.id]) && store.has(`lessons/${sl.id}`))
+ok('состав: пусто / больше 12 / мусор → 400', (await code(S.setStudents(sl.id, { studentIds: [] }))) === 400 && (await code(S.setStudents(sl.id, undefined))) === 400
+  && (await code(S.setStudents(sl.id, { studentIds: Array.from({ length: 13 }, (_, i) => `x${i}`) }))) === 400 && (await code(S.setStudents(sl.id, { studentIds: ['../x'] }))) === 400)
+ok('состав: архивный / несуществующий ученик → 404, нет урока → 404', (await code(S.setStudents(sl.id, { studentIds: [zoe.id, petya.id] }))) === 404
+  && (await code(S.setStudents(sl.id, { studentIds: ['nope'] }))) === 404 && (await code(S.setStudents('nope', { studentIds: [zoe.id] }))) === 404)
+await S.setStudents(sl.id, { studentIds: [lev.id, zoe.id] })
+const sd = await S.setDone(sl.id, { done: true })
+ok('группа после правки: при отметке цена фиксируется у каждого', sd.prices?.[lev.id] === 80 && sd.prices?.[zoe.id] === 50)
+ok('проведённый урок: состав не меняется → 409', (await code(S.setStudents(sl.id, { studentIds: [zoe.id] }))) === 409 && store.get(`lessons/${sl.id}`).studentIds.length === 2)
+
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
 clock = new Date('2026-10-25T23:30:00Z')                   // уже понедельник 26.10 по Варшаве
 v = await S.list(teacher)

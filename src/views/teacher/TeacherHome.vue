@@ -17,6 +17,7 @@ const studentStore = useStudentsStore()
 const route = useRoute(), router = useRouter()
 const scheduleStore = useScheduleStore()
 const { haptic } = useTelegram()
+const MAX_GROUP = 12                                // как на сервере (server/schedule.ts)
 
 // Без листания: сверху всегда текущая неделя, под ней следующая; даты подставляются сами (и обновляются при смене недели)
 const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (nowTick.value, weekDates(1)))
@@ -35,13 +36,25 @@ function unassign(lesson) {
   scheduleStore.remove(lesson); sheet.value = null; haptic('light')
   showToast(`Урок снят: ${names(copy)}`, () => scheduleStore.create(copy.studentIds, copy.date, copy.hour))
 }
+// Состав урока (группа): добавить / убрать учеников. Тост с «Отменить» возвращает прежний состав.
+function setStudents(lesson, ids) {
+  if (lesson.done) return showToast('Урок проведён — сначала снимите отметку', null, 'bad')
+  if (!ids.length) return
+  const was = [...lesson.studentIds]
+  const added = ids.filter(id => !was.includes(id)), removed = was.filter(id => !ids.includes(id))
+  scheduleStore.setStudents(lesson, ids); haptic('light')
+  const msg = added.length ? `Добавлен в урок: ${added.map(name).join(', ')}` : `Убран из урока: ${removed.map(name).join(', ')}`
+  showToast(msg, () => scheduleStore.setStudents(lesson, was))
+}
 function onDrop(p, t) {
   if (t.kind === 'panel') return p.kind === 'lesson' ? unassign(p.lesson) : undefined
   if (t.kind !== 'cell') return
   const occ = occupant(t.date, t.hour)
   if (p.kind === 'student') {
-    if (occ) return showToast('Это время уже занято', null, 'bad')
-    return assign(p.id, t.date, t.hour)
+    if (!occ) return assign(p.id, t.date, t.hour)
+    if (occ.studentIds.includes(p.id)) return showToast(`${name(p.id)} уже в этом уроке`, null, 'bad')
+    if (occ.studentIds.length >= MAX_GROUP) return showToast(`В группе не больше ${MAX_GROUP} учеников`, null, 'bad')
+    return setStudents(occ, [...occ.studentIds, p.id])      // ученик на занятую ячейку — добавляется в урок (группа)
   }
   const a = p.lesson
   if (occ?.id === a.id) return
@@ -83,7 +96,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
         </div>
       </div>
     </section>
-    <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" />
+    <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" @students="setStudents" />
   </div>
 </template>
 
