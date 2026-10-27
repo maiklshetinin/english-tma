@@ -41,10 +41,10 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHan
   fn(req, res).catch((e) => { e.status < 500 ? console.log(`  → ${e.status} ${e.message}`) : console.error(e); res.status(e.status || 500).json({ error: e.message || 'error' }) })
 }
 const login = makeLogin({ db, auth, FieldValue, teacherIds: TEACHER_IDS })
-const students = makeStudents({ db, FieldValue, photoByUsername, tz: env.SCHEDULE_TZ || 'Europe/Warsaw' })
+const students = makeStudents({ db, FieldValue, photoByUsername, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })
 const content = makeContent({ db, FieldValue })
 const srs = makeSrs({ db, FieldValue })
-const schedule = makeSchedule({ db, FieldValue, tz: env.SCHEDULE_TZ || 'Europe/Warsaw' })      // часовой пояс, по которому считаются «эта» и «следующая» неделя
+const schedule = makeSchedule({ db, FieldValue, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })      // часовой пояс, по которому считаются «эта» и «следующая» неделя
 
 app.post('/auth/telegram', wrap(async (req, res) => {
   const v = verifyInitData((req.headers.authorization || '').replace(/^tma /, ''), BOT_TOKEN)

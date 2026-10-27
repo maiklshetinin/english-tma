@@ -41,7 +41,7 @@ export interface StudentsDeps {
   photoByUsername?: (username: string) => Promise<string>      // фото по нику из Telegram; не передан — фото не ищем
 }
 
-export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/Warsaw', now = () => new Date() }: StudentsDeps) {
+export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/Moscow', now = () => new Date() }: StudentsDeps) {
   const col = () => db.collection('students')
   const alive = () => col().where('archived', '==', false).get()
 

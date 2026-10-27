@@ -5,7 +5,7 @@
 //  • ‹ › — листать месяцы: история хранится вся (GET /lessons/history), две живые недели — свежие из расписания.
 //  • Нажатие на день — уроки этого дня под календарём; внизу — итог месяца.
 import { computed, ref, watch } from 'vue'
-import { DAYS, hh, ymd } from '../store/app'
+import { DAYS, hh, todayYmd } from '../store/app'
 import { useScheduleStore } from '../stores/schedule'
 import { useStudentsStore } from '../stores/students'
 import { priceAt, fmtMoney } from '../utils/price'
@@ -15,7 +15,7 @@ const scheduleStore = useScheduleStore(), studentStore = useStudentsStore()
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-const today = ymd(new Date())
+const today = todayYmd()                                   // по поясу расписания (по умолчанию Москва)
 const month = ref(today.slice(0, 7))                       // 'YYYY-MM'
 const picked = ref(null)                                   // выбранный день 'YYYY-MM-DD'
 

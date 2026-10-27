@@ -7,9 +7,11 @@ import { handle } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
+import AddStudent from './AddStudent.vue'
 import { useStudentsStore } from '../stores/students'
 const studentStore = useStudentsStore()
 const q = ref('')
+const adding = ref(false)                       // «+» — форма «Новый ученик» в шторке (та же, что во вкладке «Ученики»)
 const list = computed(() => { const k = q.value.trim().toLowerCase(); return studentStore.list.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
 const trash = computed(() => dnd.active && dnd.payload?.kind === 'lesson')
 const trashOver = computed(() => trash.value && dnd.over?.kind === 'panel')
@@ -19,9 +21,11 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 
 <template>
   <aside class="panel card" :class="{ trash, over: trashOver }" data-drop="panel">
-    <header class="ph"><AppIcon name="users" :size="20" /><b>Ученики</b><span class="cnt">{{ studentStore.list.length }}</span></header>
+    <header class="ph"><AppIcon name="users" :size="20" /><b>Ученики</b><span class="cnt">{{ studentStore.list.length }}</span>
+      <button class="addb" title="Добавить ученика" aria-label="Добавить ученика" @click="adding = true"><AppIcon name="plus" :size="18" /></button></header>
     <label class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Поиск ученика…" aria-label="Поиск ученика" /></label>
     <div class="list">
+      <button class="st addt" aria-label="Добавить ученика" @click="adding = true"><span class="ava plus"><AppIcon name="plus" :size="22" /></span><span class="nm">Добавить</span></button>
       <div v-for="s in list" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
         @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
         <span class="ava"><Avatar :s="s" :size="48" /></span>
@@ -30,6 +34,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
       <p v-if="!list.length" class="hint empty">Никого не нашли</p>
     </div>
     <footer class="ft">Всего: <b>{{ studentStore.list.length }}</b></footer>
+    <Teleport to="body"><div v-if="adding" class="sheet-bg" @click.self="adding = false"><div class="sheet-box"><AddStudent @close="adding = false" /></div></div></Teleport>
     <div v-if="trash" class="drophint"><AppIcon name="trash" :size="22" />Отпустите, чтобы снять урок</div>
   </aside>
 </template>
@@ -37,6 +42,10 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 <style scoped>
 .panel { position: relative; padding: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100%; overflow: hidden }
 .ph { display: flex; align-items: center; gap: 8px; padding: 14px 14px 8px; font-size: 17px; font-weight: 800 }
+.addb { margin-left: auto; display: grid; place-items: center; width: 32px; height: 32px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 10px; background: var(--card); color: var(--green-d); cursor: pointer }
+.addb:hover { border-color: var(--green); background: var(--green-l) }
+.addt { display: none }                                                   /* на телефоне шапки нет — «+» первым кружком в полоске */
+.plus { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 2px dashed var(--hint-2); color: var(--hint) }
 .cnt { background: var(--surface); border: 2px solid var(--border); border-radius: 99px; font-size: 12px; padding: 0 8px; color: var(--hint) }
 .search { display: flex; align-items: center; gap: 8px; margin: 0 12px 10px; padding: 0 12px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--hint-2) }
 .search:focus-within { border-color: var(--blue); background: var(--card) } .search input { border: 0; background: none; margin: 0; padding: 9px 0; min-width: 0 }
@@ -57,6 +66,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 @media (max-width: 1023px) {
   .panel { height: auto; grid-template-rows: auto; border-bottom-width: 4px }
   .ph, .search, .ft { display: none }
+  .addt { display: grid; cursor: pointer; border: 0; background: none; font: inherit }
   .list { display: flex; overflow-x: auto; overflow-y: hidden; padding: 6px 6px 4px; gap: 2px; scrollbar-width: none } .list::-webkit-scrollbar { display: none }
   .st { flex: none; width: 64px; padding: 4px 2px } .nm { font-size: 11px; -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block }
   .st :deep(.av) { width: 44px !important; height: 44px !important; font-size: 20px !important }

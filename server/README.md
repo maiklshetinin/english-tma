@@ -15,7 +15,7 @@ New → Web Service → этот репозиторий, **Root Directory: `serv
 | `APP_SHORT_NAME` | short name мини-приложения из @BotFather → /newapp (если приложение задано как Main Mini App — не нужно) |
 | `FIREBASE_SERVICE_ACCOUNT` | весь JSON сервисного ключа в одну строку: Firebase → Project settings → Service accounts → Generate new private key (секрет) |
 | `TEACHER_IDS` | ваш Telegram id (число; узнать — @userinfobot), несколько через запятую |
-| `SCHEDULE_TZ` | часовой пояс для «этой» и «следующей» недели (по умолчанию `Europe/Warsaw`) |
+| `SCHEDULE_TZ` | часовой пояс для «этой» и «следующей» недели (по умолчанию `Europe/Moscow`) |
 | `ALLOWED_ORIGIN` | откуда можно обращаться: `https://<ваш_ник>.github.io` (через запятую можно добавить `http://localhost:5173`) |
 
 Локально: скопируйте их в `server/.env` и `npm run dev` (`tsx watch`, перезапускается при правках).

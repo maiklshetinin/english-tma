@@ -1,7 +1,7 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
 import { computed } from 'vue'
-import { HOURS, DAYS, hh, slotKey, nowTick, ymd } from '../store/app'
+import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney, fmtMoneyShort, fmtMoneyK } from '../utils/price'
@@ -13,7 +13,8 @@ const scheduleStore = useScheduleStore()
 const props = defineProps({ dates: { type: Array, required: true } })
 const emit = defineEmits(['cell', 'lesson'])
 // «Сейчас»: сегодняшний день и текущий час (обновляется раз в минуту). Подсвечивается только в той таблице, где есть сегодняшний день.
-const now = computed(() => { const d = new Date(nowTick.value); return { date: ymd(d), hour: d.getHours() } })
+// «Сейчас» — по выбранному поясу (уголок таблицы), а не по часам компьютера; минуты идут в метке текущего часа и линией в ячейке
+const now = computed(() => nowIn(tz.value, nowTick.value))
 const hasToday = computed(() => props.dates.includes(now.value.date))
 const rowNow = (h) => hasToday.value && h === now.value.hour
 const cellNow = (d, h) => d === now.value.date && h === now.value.hour
@@ -51,25 +52,29 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 <template>
   <div class="card wk">
     <div class="g head">
-      <span class="corner" />
+      <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
+        <span>{{ tzShort(tz) }}</span>
+        <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
+      </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
         <span v-if="money(d).plan" class="money" :title="`Факт ${fmtMoney(money(d).real)} из плана ${fmtMoney(money(d).plan)}`">
           <i class="real" :class="{ zero: !money(d).real }"><span class="w">{{ fmtMoneyShort(money(d).real) }}</span><span class="n">{{ fmtMoneyK(money(d).real) }}</span></i>
           <i v-if="money(d).plan !== money(d).real" class="plan"><span class="w">из {{ fmtMoneyShort(money(d).plan) }}</span><span class="n">/{{ fmtMoneyK(money(d).plan) }}</span></i></span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
-      <span class="tm" :class="{ now: rowNow(h) }">{{ hh(h) }}</span>
+      <span class="tm" :class="{ now: rowNow(h) }">{{ rowNow(h) ? hh(h, now.minute) : hh(h) }}</span>
       <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h) }]"
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
+        <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
           <button class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="20" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="20" :max="2" :ring="ringOf(l)" />
-              <b class="t">{{ hh(l.hour, l.minute) }}</b><span v-if="l.done" class="tick">✓</span>
+              <span v-if="l.done" class="tick">✓</span>
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
-            <template v-else><Avatar :s="first(l)" :size="20" /><b class="t">{{ hh(l.hour, l.minute) }}</b><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick">✓</span></template>
+            <template v-else><Avatar :s="first(l)" :size="20" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick">✓</span></template>
             <i v-if="allOff(l)" class="off" aria-hidden="true">✕</i><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
@@ -86,6 +91,13 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .wk { padding: 10px; display: grid; gap: 4px; overflow: hidden }
 .g { display: grid; grid-template-columns: 34px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: stretch }
 .head { margin-bottom: 2px }
+/* Уголок: часовой пояс расписания (по умолчанию МСК). Видна аббревиатура, поверх — прозрачный select */
+.corner { position: relative; display: grid; place-items: center; border-radius: 10px; border: 2px solid var(--border); background: var(--surface); font-size: 10px; font-weight: 900; color: var(--hint); cursor: pointer; min-height: 30px; align-self: center }
+.corner:hover { border-color: var(--blue); color: var(--blue) }
+.corner select { position: absolute; inset: 0; opacity: 0; margin: 0; padding: 0; cursor: pointer; width: 100% }
+/* Линия «сейчас» внутри текущей ячейки: высота = минуты часа */
+.nowline { position: absolute; left: -3px; right: -3px; height: 2px; background: var(--red-d); z-index: 3; pointer-events: none; border-radius: 2px }
+.nowline::before { content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red-d) }
 .tm { display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--hint-2) }
 .dh { display: grid; justify-items: center; padding: 4px 0; border-radius: 12px; font-size: 13px; color: var(--hint) }
 .dn { display: grid; justify-items: center }
@@ -110,8 +122,8 @@ html[data-theme='dark'] .money .real { color: var(--green) }
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
 /* Текущий час: время, день недели (.dh.today) и ячейка на пересечении — один красный полупрозрачный цвет */
 .tm.now { background: rgba(255, 75, 75, .16); color: var(--red-d); border: 2px solid rgba(255, 75, 75, .55); border-bottom-width: 4px; border-radius: 10px; font-weight: 900 }
-.cell.now { background: rgba(255, 75, 75, .16) }
-.cell.now::after { content: ''; position: absolute; inset: -3px; border: 2px solid rgba(255, 75, 75, .6); border-radius: 12px; pointer-events: none }
+/* Текущая ячейка — только красный контур (без заливки), чтобы не путать с пустой подсвеченной ячейкой */
+.cell.now::after { content: ''; position: absolute; inset: -3px; border: 2px solid var(--red); border-radius: 12px; pointer-events: none; z-index: 4 }
 .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
@@ -138,10 +150,8 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 .chip :deep(.av) { width: 20px !important; height: 20px !important; font-size: 10px !important }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
-/* Время урока: на широком экране — крупно в карточке («18:30»), на телефоне карточка узкая — заметная бирка «:30» внизу */
-.chip .t { display: none; font-size: 13px; font-weight: 900; letter-spacing: -.2px; flex: none }
-.chip.done .t, .chip.done .tick { color: var(--green-d) } html[data-theme='dark'] .chip.done .t { color: var(--green) }
+.chip.done .tick { color: var(--green-d) }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
-@media (min-width: 720px) { .chip .nm { display: block } .chip .t { display: inline } .min { display: none } .chip { justify-content: flex-start; padding: 0 6px } .cell { height: 40px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
+@media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px } .cell { height: 40px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
 @media (max-width: 420px) { .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 34px } }
 </style>

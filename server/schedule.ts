@@ -48,7 +48,7 @@ const HISTORY_MAX = 1000
 
 export interface ScheduleDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; tz?: string; now?: () => Date }
 
-export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () => new Date() }: ScheduleDeps) {
+export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () => new Date() }: ScheduleDeps) {
   const lessons = () => db.collection('lessons'), weeks = () => db.collection('schedule'), students = () => db.collection('students')
   const liveWeeks = () => { const w = weekStartOf(todayIn(tz, now())); return [w, addDays(w, 7)] }   // [текущая, следующая]
 
