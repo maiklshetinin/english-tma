@@ -56,7 +56,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
         <div class="tiles">
           <div v-for="s in g.members" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
             @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
-            <span class="ava"><Avatar :s="s" :size="46" /></span><span class="nm">{{ s.name }}</span>
+            <span class="ava"><Avatar :s="s" :size="54" /></span><span class="nm">{{ s.name }}</span>
           </div>
         </div>
       </section>
@@ -65,7 +65,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
         <div class="tiles">
           <div v-for="s in solo" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
             @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
-            <span class="ava"><Avatar :s="s" :size="46" /></span><span class="nm">{{ s.name }}</span>
+            <span class="ava"><Avatar :s="s" :size="54" /></span><span class="nm">{{ s.name }}</span>
           </div>
         </div>
       </section>
@@ -86,12 +86,12 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 .search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 12px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--hint-2) }
 .search:focus-within { border-color: var(--blue); background: var(--card) } .search input { border: 0; background: none; margin: 0; padding: 7px 0; min-width: 0; font-size: 14px }
 .search input:focus-visible { outline: none }      /* рамку при фокусе даёт сам .search — без второй обводки */
-/* Сетка кружков: аватарка 46px (как в Telegram) и имя под ней, по 4 в ряд; группы — блоками в рамке с подписью, ниже «Индивидуально» */
-.list { display: grid; gap: 10px; align-content: start; overflow-y: auto; padding: 2px 10px 10px }
-.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 2px }
-.grp { border: 2px solid var(--border); border-radius: 14px; padding: 4px 4px 2px; background: var(--surface) }
+/* Сетка кружков: аватарка 54px — максимум для 4 в ряд и имя под ней, по 4 в ряд; группы — блоками в рамке с подписью, ниже «Индивидуально» */
+.list { display: grid; gap: 8px; align-content: start; overflow-y: auto; padding: 2px 6px 8px }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 0 }
+.grp { border: 2px solid var(--border); border-radius: 14px; padding: 4px 2px 2px; background: var(--surface) }
 .gl { display: flex; align-items: center; gap: 4px; padding: 2px 6px 4px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
-.st { display: grid; justify-items: center; align-content: start; gap: 3px; padding: 5px 1px; border-radius: 14px; min-width: 0;
+.st { display: grid; justify-items: center; align-content: start; gap: 3px; padding: 4px 0; border-radius: 14px; min-width: 0;
   cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: background .1s }
 .st:hover { background: var(--blue-l) } .st:active { cursor: grabbing } .st:active .ava { transform: scale(.94) }
 .ava { position: relative; display: inline-grid; transition: transform .08s }

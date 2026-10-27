@@ -27,7 +27,7 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
     <div v-else class="card tbl">
       <div class="tr th"><span>Ученик</span><span class="uc">Юнит</span><span>Оплата</span><span>Прогресс</span></div>
       <button class="tr" v-for="s in studentStore.list" :key="s.id" @click="router.push({ name: 'students', params: { id: s.id } })">
-        <span class="who"><Avatar :s="s" /><span><b>{{ s.name }}</b><small v-if="s.status === 'invited'" class="badge warn" style="justify-self:start">Ждёт приглашения</small><small class="hint ui">{{ unitOf(pathStore.of(s.id)) }}</small></span></span>
+        <span class="who"><Avatar :s="s" :size="46" /><span class="tx"><b>{{ s.name }}</b><small v-if="s.status === 'invited'" class="inv">ждёт приглашения</small><small v-else-if="s.username" class="sub">@{{ s.username }}</small><small class="sub ui">{{ unitOf(pathStore.of(s.id)) }}</small></span></span>
         <span class="hint uc">{{ unitOf(pathStore.of(s.id)) }}</span>
         <span><span class="badge" :class="PAY[s.payment.status][1]">{{ PAY[s.payment.status][0] }}</span></span>
         <span class="prog"><span class="bar"><i :style="{ width: pctOf(pathStore.of(s.id)) + '%' }" /></span>{{ pctOf(pathStore.of(s.id)) }}%</span>
@@ -37,10 +37,17 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
   </div>
 </template>
 <style scoped>
-.tbl { padding: 6px 8px } .tr { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 10px; align-items: center; width: 100%; padding: 12px 10px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 14px }
-button.tr:hover { background: var(--blue-l) } .th { font-size: 13px; color: var(--hint); cursor: default }
-.who { display: flex; align-items: center; gap: 10px } .who span { display: grid } .ui { display: block } .uc { display: none }
-.prog { display: flex; align-items: center; gap: 8px; font-weight: 700 } .bar { flex: 1; height: 12px; border-radius: 9px; background: var(--border); overflow: hidden; min-width: 40px } .bar i { display: block; height: 100%; background: var(--green); border-radius: 9px }
-.tr > :nth-child(4) { grid-column: 1 / -1 } .th > :nth-child(4) { display: none }
-@media (min-width: 768px) { .tr { grid-template-columns: 1.4fr 1.4fr 1fr 1.2fr } .uc { display: block } .ui { display: none } .tr > :nth-child(4) { grid-column: auto } .th > :nth-child(4) { display: block } }
+/* Компактные строки, как список чатов в Telegram: кружок 46px, имя и серая подпись под ним («ждёт приглашения» — оранжевым), высота строки ~58px */
+.tbl { padding: 4px 0 } .tr { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 10px; align-items: center; width: 100%; padding: 6px 14px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 0 }
+button.tr:hover { background: var(--surface) } .th { padding-top: 8px; padding-bottom: 6px; font-size: 12px; font-weight: 800; color: var(--hint); cursor: default; text-transform: uppercase; letter-spacing: .3px }
+.who { display: flex; align-items: center; gap: 12px; min-width: 0 } .tx { display: grid; min-width: 0; line-height: 1.25 } .tx b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.sub { font-size: 13px; font-weight: 500; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .inv { font-size: 13px; font-weight: 700; color: var(--orange-d, var(--orange)) }
+.ui { display: block } .uc { display: none } .uc.hint { font-size: 13px }
+.tr .badge { font-size: 12px; padding: 2px 8px }
+.prog { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700 } .bar { flex: 1; height: 8px; border-radius: 9px; background: var(--border); overflow: hidden; min-width: 40px } .bar i { display: block; height: 100%; background: var(--green); border-radius: 9px }
+.tr .badge { white-space: nowrap }
+/* Телефон: имя и юнит слева, оплата справа, прогресс — тонкой полосой под текстом */
+.tr { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0 } .tr > :nth-child(4) { grid-column: 1 / -1; padding-left: 58px } .th > :nth-child(4) { display: none }
+@media (max-width: 767px) { .tx .sub:not(.ui) { display: none } .prog { font-size: 11px; margin-top: -4px } .bar { height: 5px } }
+@media (min-width: 768px) { .tr { grid-template-columns: 1.4fr 1.4fr 1fr 1.2fr } .uc { display: block } .ui { display: none } .tr > :nth-child(4) { grid-column: auto; padding-left: 0 } .th > :nth-child(4) { display: block } }
 </style>
