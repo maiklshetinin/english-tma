@@ -2,7 +2,7 @@
 // Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок (сохраняется на сервере).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { nowTick, weekDates, weekRange, weekTitle, slotKey, fmtSlot } from '../../store/app'
+import { nowTick, weekDates, weekRange, weekTitle, slotKey, fmtSlot, hh } from '../../store/app'
 import { goUp } from '../../router'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
@@ -79,6 +79,13 @@ function setCanceled(lesson, sid, on) {
   scheduleStore.setCanceled(lesson, sid, on); haptic('light')
   showToast(on ? `${name(sid)} отменил(а) урок — без оплаты` : `${name(sid)} снова в уроке`, () => scheduleStore.setCanceled(lesson, sid, !on))
 }
+// Начало внутри часа и заметка: минута — сразу (с «Отменить»), заметка — тихо, коротким тостом
+function setDetails(lesson, d) {
+  const was = { minute: lesson.minute || 0, note: lesson.note || '' }
+  scheduleStore.setDetails(lesson, d); haptic('light')
+  if (d.minute !== undefined) showToast(`Начало урока: ${hh(lesson.hour, d.minute)}`, () => scheduleStore.setDetails(lesson, { minute: was.minute }))
+  else showToast(d.note.trim() ? 'Заметка сохранена' : 'Заметка удалена', () => scheduleStore.setDetails(lesson, { note: was.note }))
+}
 function toggleDone(lesson) {
   const was = !!lesson.done
   scheduleStore.setDone(lesson, !was); sheet.value = null; haptic('light')
@@ -108,7 +115,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
         </div>
       </div>
     </section>
-    <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" @students="setStudents" @cancel="setCanceled" />
+    <LessonSheet v-if="sheet" :lesson="sheet.lesson" :slot="sheet.slot" @close="sheet = null" @remove="unassign" @done="toggleDone" @open="openStudent" @pick="pick" @students="setStudents" @cancel="setCanceled" @details="setDetails" />
   </div>
 </template>
 

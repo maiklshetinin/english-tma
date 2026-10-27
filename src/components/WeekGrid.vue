@@ -43,7 +43,7 @@ const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payloa
 const down = (e, l) => { if (!l.done && !orphan(l)) pressStart(e, { kind: 'lesson', lesson: l }) }      // проведённый (и «пустой») урок не перетаскиваем
 // Подпись урока: ученик или участники группы; у «пустого» урока — подсказка, что его ученика больше нет
 const first = (l) => group(l)[0]
-const label = (l) => allOff(l) ? `Отменил ученик: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour)} — без оплаты` : orphan(l) ? (goneName(l) ? `${goneName(l)} (удалён), ${hh(l.hour)}` : `Урок без ученика (удалён или в архиве), ${hh(l.hour)} — нажмите, чтобы убрать`) : isGroup(l) ? `Группа: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour)}` : `${first(l).name}, ${hh(l.hour)}`
+const label = (l) => allOff(l) ? `Отменил ученик: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour, l.minute)} — без оплаты` : orphan(l) ? (goneName(l) ? `${goneName(l)} (удалён), ${hh(l.hour, l.minute)}` : `Урок без ученика (удалён или в архиве), ${hh(l.hour, l.minute)} — нажмите, чтобы убрать`) : isGroup(l) ? `Группа: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour, l.minute)}` : `${first(l).name}, ${hh(l.hour, l.minute)}`
 const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 </script>
 
@@ -70,6 +70,8 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
             <template v-else><Avatar :s="first(l)" :size="20" /><span v-if="l.done" class="tick">✓</span><span class="nm">{{ first(l).name }}</span></template>
             <i v-if="allOff(l)" class="off" aria-hidden="true">✕</i><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
+            <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
+            <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
             <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
           </button>
         </template>
@@ -126,6 +128,9 @@ html[data-theme='dark'] .chip.group { color: var(--purple) }
 .chip.canceled .nm { text-decoration: line-through } .chip.canceled :deep(.av), .chip.canceled :deep(.stack) { opacity: .45 }
 html[data-theme='dark'] .chip.canceled { color: var(--red) }
 .off { position: absolute; top: -6px; left: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
+/* Начало внутри часа — бирка «:30» в правом нижнем углу; заметка — жёлтая точка в правом верхнем */
+.min { position: absolute; right: -4px; bottom: -7px; font-style: normal; font-size: 10px; font-weight: 900; line-height: 1.25; padding: 0 4px; border-radius: 99px; background: var(--text); color: var(--bg); z-index: 2 }
+.note { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 .chip :deep(.av) { width: 20px !important; height: 20px !important; font-size: 10px !important }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

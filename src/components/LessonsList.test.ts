@@ -60,4 +60,10 @@ describe('LessonsList', () => {
     const t = mount(LessonsList, { props: { studentId: 's1', canMark: true } })
     expect(t.text()).toContain('Отменил ученик'); expect(t.find('button').exists()).toBe(false)
   })
+
+  it('урок с началом в 18:30 показывается как 18:30', () => {
+    useStudentsStore().set([st('s1', 100, [{ from: '', price: 100 }])])
+    useScheduleStore().set([{ id: 'm', date: D, hour: 18, minute: 30, studentIds: ['s1'] }])
+    expect(mount(LessonsList, { props: { studentId: 's1' } }).text()).toContain('18:30')
+  })
 })

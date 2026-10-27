@@ -102,11 +102,19 @@ export const useScheduleStore = defineStore('schedule', () => {
     l.canceled = next
     sync(async () => { if (!isTmp(l.id)) await post(`/lessons/${encodeURIComponent(l.id)}/cancel`, { studentId, canceled }, 'Не удалось изменить отмену') })
   }
+  /** Начало внутри часа (0/15/30/45) и заметка преподавателя: правка сразу на экране, запрос — по очереди. */
+  function setDetails(lesson: Lesson, d: { minute?: number; note?: string }) {
+    const l = live(lesson) ?? lesson; rev++
+    if (d.minute !== undefined) l.minute = d.minute || undefined
+    if (d.note !== undefined) l.note = d.note.trim().slice(0, 300) || undefined
+    const body = { ...d, ...(d.note !== undefined ? { note: d.note.trim().slice(0, 300) } : {}) }
+    sync(async () => { if (!isTmp(l.id)) await post(`/lessons/${encodeURIComponent(l.id)}/details`, body, 'Не удалось сохранить время или заметку') })
+  }
   function remove(lesson: Lesson) {
     const i = lessons.value.findIndex((x) => x.id === lesson.id); rev++
     if (i >= 0) lessons.value.splice(i, 1)
     sync(async () => { if (!isTmp(lesson.id)) await call(`/lessons/${encodeURIComponent(lesson.id)}`, { method: 'DELETE' }, 'Не удалось убрать урок') })
   }
 
-  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, setCanceled, remove }
+  return { lessons, lessonMap, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
 })

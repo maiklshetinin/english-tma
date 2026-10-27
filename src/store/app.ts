@@ -31,7 +31,7 @@ export const deckOf = (n: { deckId?: string }) => useDecksStore().byId(n.deckId)
 export const allLessons = computed(() => useScheduleStore().lessons.flatMap((l) => l.studentIds.map((sid) => {
   const st = useStudentsStore().findAny(sid)                                                 // и архивный: проведённые уроки с ним остаются в истории
   return {
-    id: `${l.id}:${sid}`, lesson: l, title: 'Урок', date: l.date, hour: l.hour, time: hh(l.hour), done: !!l.done, studentId: sid, studentName: st ? (st.archived ? `${st.name} (в архиве)` : st.name) : (l.names?.[sid] ? `${l.names[sid]} (удалён)` : ''),
+    id: `${l.id}:${sid}`, lesson: l, title: 'Урок', date: l.date, hour: l.hour, time: hh(l.hour, l.minute), done: !!l.done, studentId: sid, studentName: st ? (st.archived ? `${st.name} (в архиве)` : st.name) : (l.names?.[sid] ? `${l.names[sid]} (удалён)` : ''),
     canceled: !!l.canceled?.[sid],                                                                // отменил ученик — без оплаты
     price: l.canceled?.[sid] ? 0 : l.done && l.prices?.[sid] != null ? l.prices[sid] : priceAt(st, l.date, l.hour),
   }

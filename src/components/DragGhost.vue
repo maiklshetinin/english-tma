@@ -20,7 +20,7 @@ const pos = computed(() => lesson.value
   <div v-if="dnd.active && s" class="ghost" :class="{ lesson, group: lesson && members.length > 1 }" :style="pos" :title="s.name">
     <template v-if="lesson && members.length > 1"><AvatarStack :students="members" :size="20" :max="3" ring="var(--purple-l)" /></template>
     <template v-else-if="lesson"><Avatar :s="s" :size="20" /><span class="nm">{{ s.name }}</span></template>
-    <template v-else><Avatar :s="s" :size="26" /><b>{{ s.name }}</b><small v-if="p.kind === 'lesson'">{{ hh(p.lesson.hour) }}</small></template>
+    <template v-else><Avatar :s="s" :size="26" /><b>{{ s.name }}</b><small v-if="p.kind === 'lesson'">{{ hh(p.lesson.hour, p.lesson.minute) }}</small></template>
   </div>
 </template>
 <style scoped>

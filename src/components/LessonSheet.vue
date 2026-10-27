@@ -5,8 +5,8 @@
 // Ученики показаны компактной сеткой кружков (как «Поделиться» в Telegram): аватарка, имя под ней; выбор — через поиск.
 // «Отменил ученик» — по его причине, без оплаты: урок остаётся в ячейке, ученик не входит в цену, его сумма — «потеряно».
 // В группе отмечается каждый ученик отдельно. Ученик видит у себя статус «Отменён вами».
-import { computed, ref } from 'vue'
-import { fmtSlot } from '../store/app'
+import { computed, ref, watch } from 'vue'
+import { fmtSlot, hh } from '../store/app'
 import Avatar from './Avatar.vue'
 import AvatarStack from './AvatarStack.vue'
 import AppIcon from './AppIcon.vue'
@@ -15,7 +15,7 @@ import { priceAt } from '../utils/price'
 const MAX_GROUP = 12                                              // как на сервере (server/schedule.ts)
 const studentStore = useStudentsStore()
 const props = defineProps({ lesson: Object, slot: Object })
-const emit = defineEmits(['close', 'remove', 'open', 'pick', 'done', 'students', 'cancel'])
+const emit = defineEmits(['close', 'remove', 'open', 'pick', 'done', 'students', 'cancel', 'details'])
 const members = computed(() => (props.lesson?.studentIds ?? []).map(id => studentStore.findAny(id)).filter(Boolean))   // и архивные (в проведённых уроках остаются, серые)
 const cost = (st) => (!props.lesson ? 0 : props.lesson.done && props.lesson.prices?.[st.id] != null ? props.lesson.prices[st.id] : priceAt(st, props.lesson.date, props.lesson.hour))      // цена на время урока: прошедшие уроки не пересчитываются
 // Ученики урока, которых нет в списке: удалённые навсегда (у проведённого урока имя сохранено в names) или удалённые из базы вручную
@@ -29,7 +29,13 @@ const total = computed(() => members.value.filter(st => !off(st.id)).reduce((sum
 const lost = computed(() => members.value.filter(st => off(st.id)).reduce((sum, st) => sum + priceAt(st, props.lesson.date, props.lesson.hour), 0))
 const allOff = computed(() => members.value.length > 0 && members.value.every(st => off(st.id)))
 const cancelable = computed(() => !!props.lesson && !props.lesson.done && members.value.length > 0)
-const when = computed(() => props.lesson ? fmtSlot(props.lesson.date, props.lesson.hour) : fmtSlot(props.slot.date, props.slot.hour))
+const when = computed(() => props.lesson ? fmtSlot(props.lesson.date, props.lesson.hour, props.lesson.minute) : fmtSlot(props.slot.date, props.slot.hour))
+// Начало внутри часа (18:00 / 18:15 / 18:30 / 18:45) и заметка преподавателя (ученик её не видит)
+const MINUTES = [0, 15, 30, 45]
+const note = ref(props.lesson?.note ?? '')
+watch(() => props.lesson?.note, (v) => { note.value = v ?? '' })
+const noteDirty = computed(() => !!props.lesson && note.value.trim() !== (props.lesson.note ?? ''))
+const saveNote = () => { if (noteDirty.value) emit('details', props.lesson, { note: note.value }) }
 
 // Правка состава: проведённый урок не меняется (цены уже зафиксированы), последнего ученика не убрать — для этого «Убрать урок»
 const editable = computed(() => !!props.lesson && !props.lesson.done)
@@ -90,6 +96,15 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
         <div v-if="!editable && !locked" class="hint">Состав проведённого урока не меняется — сначала снимите отметку.</div>
 
         <div v-if="locked" class="hint">В уроке есть {{ members.some(st => st.archived) ? 'ученик из архива' : 'удалённый ученик' }}: урок сохранён в истории, его состав и отметку «проведён» не изменить.</div>
+        <div class="meta">
+          <div class="mrow"><span class="lab">Начало</span>
+            <div class="seg mins" role="radiogroup" aria-label="Начало урока">
+              <button v-for="m in MINUTES" :key="m" role="radio" :aria-checked="(lesson.minute || 0) === m" :class="{ on: (lesson.minute || 0) === m }" @click="emit('details', lesson, { minute: m })">{{ hh(lesson.hour, m) }}</button>
+            </div></div>
+          <div class="mrow notes"><span class="lab">Заметка <small>видите только вы</small></span>
+            <textarea v-model="note" rows="2" maxlength="300" placeholder="Например: начнём в 18:30, повторить Present Perfect" aria-label="Заметка к уроку" @blur="saveNote" @keydown.enter.exact.prevent="saveNote(); $event.target.blur()" />
+            <button v-if="noteDirty" class="link save" @mousedown.prevent @click="saveNote">Сохранить</button></div>
+        </div>
         <div v-if="cancelable" class="cancel">
           <template v-if="members.length === 1">
             <button class="btn ghost" :class="off(members[0].id) ? 'undo' : 'warnb'" @click="emit('cancel', lesson, members[0].id, !off(members[0].id))">
@@ -157,6 +172,11 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 .tile.off .ava { opacity: .45 } .tile.off .nm { text-decoration: line-through; color: var(--hint) }
 .offtxt { color: var(--red-d) !important } html[data-theme='dark'] .offtxt { color: var(--red) !important }
 .lostrow { border-top: 0 !important; padding-top: 0 } .lostrow b { color: var(--red-d); font-size: 15px } html[data-theme='dark'] .lostrow b { color: var(--red) }
+.meta { display: grid; gap: 8px }
+.mrow { display: grid; gap: 4px } .mrow .lab { margin: 0 } .mrow .lab small { font-weight: 700; color: var(--hint-2); margin-left: 4px }
+.mins { display: grid; grid-template-columns: repeat(4, 1fr) } .mins button { padding: 6px 4px; font-size: 14px }
+.notes { position: relative } .notes textarea { margin: 0; resize: vertical; min-height: 44px; font-size: 14px; padding: 9px 12px }
+.save { justify-self: end; padding: 2px 4px; font-size: 14px }
 .cancel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px }
 .cancel > .btn { flex: 1 }
 .btn.warnb { color: var(--red-d) } .btn.undo { color: var(--green-d) }

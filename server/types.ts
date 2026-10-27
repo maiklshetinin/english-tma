@@ -132,6 +132,8 @@ export interface LessonDoc {
   prices?: Record<string, number>   // цена урока по ученикам, зафиксированная в момент отметки «проведён»: потом не меняется
   names?: Record<string, string>    // имена учеников, удалённых навсегда (id → имя): проведённый урок остаётся в истории и читается
   canceled?: Record<string, string> // отменил ученик (id → ISO-время отметки): урок не оплачивается, слот остаётся занят
+  minute?: number                   // минута начала внутри часа слота: 0 | 15 | 30 | 45 (нет — 0), например 18:30
+  note?: string                     // заметка преподавателя к уроку (до 300 символов); ученику не отдаётся
   createdBy: string
   createdAt: ServerTime
 }
@@ -146,6 +148,8 @@ export interface Lesson {
   prices?: Record<string, number>   // у проведённого урока — зафиксированная цена по ученикам (ученик видит только свою)
   names?: Record<string, string>    // имена удалённых навсегда учеников этого урока (только преподавателю)
   canceled?: Record<string, string> // кто из учеников отменил урок (id → ISO-время); ученик видит только свою отметку
+  minute?: number                   // минута начала: 0 | 15 | 30 | 45 (видят все)
+  note?: string                     // заметка преподавателя (только преподавателю)
 }
 
 export interface LessonInput {             // POST /lessons
@@ -153,8 +157,10 @@ export interface LessonInput {             // POST /lessons
   studentIds?: string[]                    // …либо несколько (группа)
   date: string
   hour: number
+  minute?: number                          // начало внутри часа: 0 | 15 | 30 | 45
 }
 export interface DoneInput { done: boolean }   // POST /lessons/:id/done
+export interface DetailsInput { minute?: number; note?: string }   // POST /lessons/:id/details — начало внутри часа и заметка (любое из полей)
 export interface CancelInput { studentId: string; canceled: boolean }   // POST /lessons/:id/cancel — «отменил ученик» (без оплаты) / вернуть
 export interface SlotInput { date: string; hour: number }   // POST /lessons/:id/move
 export interface StudentsInput { studentIds: string[] }      // POST /lessons/:id/students — новый состав урока целиком (1–12 учеников)

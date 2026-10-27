@@ -110,6 +110,7 @@ app.post('/lessons', requireUser, requireTeacher, wrap(async (req, res) => res.j
 app.post('/lessons/swap', requireUser, requireTeacher, wrap(async (req, res) => { await schedule.swap(String(req.body?.a || ''), String(req.body?.b || '')); res.json({ ok: true }) }))
 app.post('/lessons/:id/move', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.move(req.params.id, req.body))))   // { date, hour }
 app.post('/lessons/:id/students', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.setStudents(req.params.id, req.body))))   // { studentIds } → урок с новым составом (группа)
+app.post('/lessons/:id/details', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.setDetails(req.params.id, req.body))))   // { minute?, note? } → урок
 app.post('/lessons/:id/cancel', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.setCanceled(req.params.id, req.body))))   // { studentId, canceled } → урок; «отменил ученик», без оплаты
 app.post('/lessons/:id/done', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.setDone(req.params.id, req.body))))   // { done: true|false } → урок; цена фиксируется
 app.delete('/lessons/:id', requireUser, requireTeacher, wrap(async (req, res) => { await schedule.remove(req.params.id); res.json({ ok: true }) }))

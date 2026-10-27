@@ -32,6 +32,7 @@ New → Web Service → этот репозиторий, **Root Directory: `serv
 - `GET /schedule` — две живые недели `{ current: { weekStart, lessons }, next: {…} }`; преподаватель — все уроки, ученик — только свои
 - `POST /lessons` — урок в слот `{ studentId | studentIds, date: 'YYYY-MM-DD', hour: 8–22 }`; слот занят → 409, неделя не текущая и не следующая → 400 (преподаватель)
 - `POST /lessons/:id/move` `{ date, hour }`, `POST /lessons/swap` `{ a, b }`, `DELETE /lessons/:id` (преподаватель)
+- `POST /lessons/:id/details` `{ minute?: 0|15|30|45, note?: string }` — начало внутри часа и заметка (до 300 символов); можно и у проведённого урока. В `POST /lessons` тоже можно передать `minute`. Ученик в `GET /schedule` получает `minute`, но не `note` (преподаватель)
 - `POST /lessons/:id/cancel` `{ studentId, canceled: true|false }` — «отменил ученик» (без оплаты) / вернуть; урок остаётся в слоте. Проведённый → 409; при отметке «проведён» отменившие не платят (их цены не фиксируются), отменили все → 409. Ученик в `GET /schedule` видит только свою отметку (преподаватель)
 - `GET /students/archived` — архивные ученики `[{ …Student, archivedAt }]` (преподаватель)
 - `POST /students/:id/restore` — вернуть из архива → `{ student, url }` (новая ссылка-приглашение; не в архиве → 409) (преподаватель)

@@ -11,7 +11,7 @@
 import type { Firestore, FieldValue as FV, Transaction, DocumentReference } from 'firebase-admin/firestore'
 import { fail } from './login.js'
 import { priceAt } from './price.js'
-import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, StudentsInput, TokenUser, WeekDoc, CancelInput } from './types.js'
+import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, StudentsInput, TokenUser, WeekDoc, CancelInput, DetailsInput } from './types.js'
 
 export const HOUR_MIN = 8, HOUR_MAX = 22                 // как в таблице на сайте: 08:00 … 22:00
 const ID = /^[\w-]{1,64}$/
@@ -30,10 +30,13 @@ export const todayIn = (tz: string, now: Date) => new Intl.DateTimeFormat('en-CA
 export const slotKey = (date: string, hour: number) => `${date}_${pad(hour)}`
 
 const canceledOf = (x: Pick<LessonDoc, 'studentIds' | 'canceled'>) => Object.fromEntries(Object.entries(x.canceled ?? {}).filter(([k]) => x.studentIds.includes(k)))   // только ученики этого урока
-const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names' | 'canceled'>): Lesson => {
+export const MINUTES = [0, 15, 30, 45]
+const NOTE_MAX = 300
+const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names' | 'canceled' | 'minute' | 'note'>): Lesson => {
   const canceled = canceledOf(x)
   return { id, date: x.date, hour: x.hour, studentIds: [...x.studentIds], done: !!x.done, ...(x.done ? { prices: { ...(x.prices ?? {}) } } : {}),
-    ...(x.names && Object.keys(x.names).length ? { names: { ...x.names } } : {}), ...(Object.keys(canceled).length ? { canceled } : {}) }
+    ...(x.names && Object.keys(x.names).length ? { names: { ...x.names } } : {}), ...(Object.keys(canceled).length ? { canceled } : {}),
+    ...(x.minute ? { minute: x.minute } : {}), ...(x.note ? { note: x.note } : {}) }
 }
 const byTime = (a: Lesson, b: Lesson) => a.date.localeCompare(b.date) || a.hour - b.hour
 
@@ -140,7 +143,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       const read = async (ws: string): Promise<ScheduleWeek> => {
         if (user.role !== 'teacher' && !me) return { weekStart: ws, lessons: [] }
         let docs = (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc))
-        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me], ...(l.prices ? { prices: me in l.prices ? { [me]: l.prices[me] } : {} } : {}), names: undefined,
+        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me], ...(l.prices ? { prices: me in l.prices ? { [me]: l.prices[me] } : {} } : {}), names: undefined, note: undefined,      // заметка — только преподавателю
           canceled: l.canceled?.[me] ? { [me]: l.canceled[me] } : undefined }))      // ученик: только он сам и только его цена
         return { weekStart: ws, lessons: docs.sort(byTime) }
       }
@@ -152,7 +155,8 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       const raw = Array.isArray(input?.studentIds) ? input.studentIds : input?.studentId != null ? [input.studentId] : []
       const slot = slotOf(input)
       const ids = await studentIdsOf(raw)
-      const ref = lessons().doc(), data = { date: slot.date, hour: slot.hour, studentIds: ids }
+      const minute = MINUTES.includes(input?.minute as number) ? (input!.minute as number) : 0           // можно сразу указать начало внутри часа
+      const ref = lessons().doc(), data = { date: slot.date, hour: slot.hour, studentIds: ids, ...(minute ? { minute } : {}) }
       await db.runTransaction(async (tx) => {
         const W = weekLoader(tx), w = await W.get(slot.ws)
         if (w.slots[slot.key]) throw fail(409, 'slot busy')
@@ -195,6 +199,23 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
         const canceled = canceledOf({ studentIds: ids, canceled: l.get('canceled') })      // убранный из урока — и его отметка «отменил» уходит
         tx.update(ref, { studentIds: ids, canceled })
         out = pub(id, { ...(l.data() as LessonDoc), studentIds: ids, canceled })
+      })
+      return out!
+    },
+
+    // Начало внутри часа (минута 0/15/30/45 — например, урок в 18:30 в слоте 18:00) и заметка преподавателя. Можно и у проведённого урока.
+    async setDetails(id: string, input: Partial<DetailsInput> | undefined): Promise<Lesson> {
+      checkId(id)
+      const patch: Partial<LessonDoc> = {}
+      if (input?.minute !== undefined) { if (!MINUTES.includes(input.minute as number)) throw fail(400, 'minute: 0, 15, 30 or 45'); patch.minute = input.minute }
+      if (input?.note !== undefined) { if (typeof input.note !== 'string') throw fail(400, 'note must be string'); patch.note = input.note.trim().slice(0, NOTE_MAX) }
+      if (!Object.keys(patch).length) throw fail(400, 'nothing to change')
+      let out: Lesson | undefined
+      await db.runTransaction(async (tx) => {
+        const ref = lessons().doc(id), l = await tx.get(ref)
+        if (!l.exists) throw fail(404, 'lesson not found')
+        tx.update(ref, patch)
+        out = pub(id, { ...(l.data() as LessonDoc), ...patch })
       })
       return out!
     },

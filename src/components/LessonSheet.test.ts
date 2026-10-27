@@ -108,4 +108,17 @@ describe('урок с учеником, которого больше нет (у
     expect(w.find('.total').text()).toContain('150')
     expect(w.find('.orphan').exists()).toBe(false)
   })
+
+  it('начало внутри часа и заметка: время 18:30 в шапке, выбор минуты и сохранение заметки', async () => {
+    const lesson = { id: 'L', date: D, hour: 18, minute: 30, note: 'старое', studentIds: ['a'] } as Lesson
+    const w = mount(LessonSheet, { props: { lesson } })
+    expect(w.find('.head .hint').text()).toContain('18:30')
+    expect(w.find('.mins .on').text()).toBe('18:30')
+    await w.findAll('.mins button').find(b => b.text() === '18:45')!.trigger('click')
+    expect(w.emitted('details')![0]).toEqual([lesson, { minute: 45 }])
+    const ta = w.find('.notes textarea')
+    expect((ta.element as HTMLTextAreaElement).value).toBe('старое')
+    await ta.setValue('новое'); await ta.trigger('blur')
+    expect(w.emitted('details')![1]).toEqual([lesson, { note: 'новое' }])
+  })
 })

@@ -65,6 +65,21 @@ describe('schedule store', () => {
     expect(s.lessons[0].canceled?.s1).toBeUndefined()
   })
 
+  it('setDetails: минута и заметка сразу на экране, на сервер уходит только изменённое', async () => {
+    apiRequest.mockImplementation(() => ok({}))
+    const s = useScheduleStore()
+    s.set([{ id: 'a', date: D, hour: 18, studentIds: ['s1'] }])
+    s.setDetails(s.lessons[0], { minute: 30 })
+    s.setDetails(s.lessons[0], { note: '  учебник  ' })
+    expect(s.lessons[0].minute).toBe(30); expect(s.lessons[0].note).toBe('учебник')
+    await vi.waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(2))
+    expect(apiRequest.mock.calls[0][0]).toBe('/lessons/a/details')
+    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ minute: 30 })
+    expect(JSON.parse(apiRequest.mock.calls[1][1].body)).toEqual({ note: 'учебник' })
+    s.setDetails(s.lessons[0], { minute: 0, note: '' })
+    expect(s.lessons[0].minute).toBeUndefined(); expect(s.lessons[0].note).toBeUndefined()
+  })
+
   it('lessonMap раскладывает уроки по ячейкам «дата|час»', () => {
     const s = useScheduleStore()
     s.set([{ id: 'a', date: D, hour: 9, studentIds: ['s1'] }, { id: 'b', date: D, hour: 10, studentIds: ['s2'] }])

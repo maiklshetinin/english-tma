@@ -207,6 +207,23 @@ ok('архив: у проведённого урока с архивным от�
 await S.list(teacher)
 ok('самоочистка тоже не трогает проведённые уроки архивного', store.has(`lessons/${aSoloDone.id}`) && store.get(`lessons/${aGroupDone.id}`).studentIds.includes(a1.id))
 
+// --- начало внутри часа и заметка ---
+const n1 = await ST.create({ name: 'Нина' }, 'tg:1')
+const N1 = '2026-10-31'
+const nl = await S.create({ studentId: n1.id, date: N1, hour: 14, minute: 30 }, 'tg:1')
+ok('создание с минутой: 14:30', nl.minute === 30 && store.get(`lessons/${nl.id}`).minute === 30)
+const nd = await S.setDetails(nl.id, { minute: 15, note: '  принести учебник  ' })
+ok('детали: минута и заметка (обрезана по краям)', nd.minute === 15 && nd.note === 'принести учебник')
+ok('детали: минута не из 0/15/30/45 → 400, пусто → 400, нет урока → 404', (await code(S.setDetails(nl.id, { minute: 20 }))) === 400 && (await code(S.setDetails(nl.id, {}))) === 400 && (await code(S.setDetails('nope', { minute: 0 }))) === 404)
+ok('детали: заметка ограничена 300 символами', (await S.setDetails(nl.id, { note: 'x'.repeat(500) })).note!.length === 300)
+ok('минута ноль и пустая заметка не отдаются', !('minute' in (await S.setDetails(nl.id, { minute: 0, note: '' }))))
+await S.setDetails(nl.id, { minute: 30, note: 'секрет' })
+const moved = await S.move(nl.id, { date: N1, hour: 15 })
+ok('перенос сохраняет минуту и заметку', moved.minute === 30 && moved.note === 'секрет')
+store.set(`students/${n1.id}`, { ...store.get(`students/${n1.id}`), tgId: 41, status: 'active' })
+const nMine = await find({ uid: 'tg:41', role: 'student', studentId: n1.id }, nl.id)
+ok('ученик видит время 15:30, но не заметку', nMine?.minute === 30 && !nMine?.note)
+
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
 clock = new Date('2026-10-25T23:30:00Z')                   // уже понедельник 26.10 по Варшаве
 v = await S.list(teacher)
