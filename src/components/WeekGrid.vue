@@ -31,11 +31,12 @@ function dropState(d, h) {                       // подсветка ячей�
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)
 const isGroup = (l) => group(l).length > 1
 const orphan = (l) => !group(l).length                                      // урок, в котором не осталось известных учеников: показываем серым «?», чтобы его можно было убрать
+const goneName = (l) => Object.values(l.names ?? {})[0] ?? ''             // имя удалённого навсегда (у проведённых уроков)
 const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payload.lesson.id === l.id
 const down = (e, l) => { if (!l.done && !orphan(l)) pressStart(e, { kind: 'lesson', lesson: l }) }      // проведённый (и «пустой») урок не перетаскиваем
 // Подпись урока: ученик или участники группы; у «пустого» урока — подсказка, что его ученика больше нет
 const first = (l) => group(l)[0]
-const label = (l) => orphan(l) ? `Урок без ученика (удалён или в архиве), ${hh(l.hour)} — нажмите, чтобы убрать` : isGroup(l) ? `Группа: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour)}` : `${first(l).name}, ${hh(l.hour)}`
+const label = (l) => orphan(l) ? (goneName(l) ? `${goneName(l)} (удалён), ${hh(l.hour)}` : `Урок без ученика (удалён или в архиве), ${hh(l.hour)} — нажмите, чтобы убрать`) : isGroup(l) ? `Группа: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour)}` : `${first(l).name}, ${hh(l.hour)}`
 const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 </script>
 
@@ -56,7 +57,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
               <AvatarStack class="st-lg" :students="group(l)" :size="20" :max="4" ring="var(--purple-l)" /><AvatarStack class="st-sm" :students="group(l)" :size="20" :max="2" ring="var(--purple-l)" />
               <span v-if="l.done" class="tick">✓</span>
             </template>
-            <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">Нет ученика</span></template>
+            <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
             <template v-else><Avatar :s="first(l)" :size="20" /><span v-if="l.done" class="tick">✓</span><span class="nm">{{ first(l).name }}</span></template>
             <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
           </button>

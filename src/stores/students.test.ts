@@ -1,7 +1,7 @@
 // Тесты учеников: список с сервера сортируется по имени, добавление возвращает ссылку, архив перечитывает ученика и расписание.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import type { Student } from '../../server/types'
+import type { ArchivedStudent, Student } from '../../server/types'
 
 const apiRequest = vi.fn()
 vi.mock('../firebase', () => ({ isDemo: false, apiRequest: (...a: unknown[]) => apiRequest(...a), apiFetch: vi.fn() }))
@@ -41,11 +41,11 @@ describe('students store', () => {
     apiRequest.mockImplementation(() => err(500)); await expect(s.load()).rejects.toThrow('(500)')
   })
 
-  it('archive: после архива перечитывает и учеников, и расписание', async () => {
-    apiRequest.mockImplementation((path: string) => ok(path === '/schedule' ? { current: { weekStart: 'a', lessons: [] }, next: { weekStart: 'b', lessons: [] } } : path === '/students' ? [] : { ok: true }))
+  it('archive: после архива перечитывает учеников, архив и расписание', async () => {
+    apiRequest.mockImplementation((path: string) => ok(path === '/schedule' ? { current: { weekStart: 'a', lessons: [] }, next: { weekStart: 'b', lessons: [] } } : path === '/students' || path === '/students/archived' ? [] : { ok: true }))
     const s = useStudentsStore()
     await s.archive('1')
-    expect(apiRequest.mock.calls.map((c) => c[0]).sort()).toEqual(['/schedule', '/students', '/students/1/archive'])
+    expect(apiRequest.mock.calls.map((c) => c[0]).sort()).toEqual(['/schedule', '/students', '/students/1/archive', '/students/archived'])
   })
 
   it('setUsername: отправляет ник и перечитывает список; ошибки понятные', async () => {
@@ -73,5 +73,30 @@ describe('students store', () => {
   it('clear очищает список', () => {
     const s = useStudentsStore(); s.set([st('1', 'Аня')]); s.clear()
     expect(s.list).toHaveLength(0)
+  })
+  it('архив: загрузка, вернуть (новая ссылка, ученик снова в списке), удалить навсегда', async () => {
+    const calls: string[] = []
+    let alive = [st('1', 'Маша')], arch: ArchivedStudent[] = [{ ...st('2', 'Петя'), archivedAt: '2026-10-20T10:00:00.000Z' }]
+    apiRequest.mockImplementation((path: string, o?: RequestInit) => {
+      calls.push(`${o?.method ?? 'GET'} ${path}`)
+      if (path === '/students') return ok(alive)
+      if (path === '/students/archived') return ok(arch)
+      if (path === '/students/2/restore') { alive = [...alive, st('2', 'Петя')]; arch = []; return ok({ student: st('2', 'Петя'), url: 'https://t.me/bot?startapp=invite_new' }) }
+      if (path === '/students/3') { arch = []; return ok({ ok: true }) }
+      if (path === '/schedule') return ok({ current: { weekStart: '', lessons: [] }, next: { weekStart: '', lessons: [] } })
+      return err(500)
+    })
+    const s = useStudentsStore()
+    await s.loadArchived()
+    expect(s.archived.map((x) => x.name)).toEqual(['Петя'])
+    expect(await s.restore('2')).toBe('https://t.me/bot?startapp=invite_new')
+    expect(s.archived).toHaveLength(0)
+    expect(s.byId('2')?.name).toBe('Петя')
+    arch = [{ ...st('3', 'Оля'), archivedAt: null }]; await s.loadArchived()
+    await s.purge('3')
+    expect(s.archived).toHaveLength(0)
+    expect(calls).toContain('POST /students/2/restore')
+    expect(calls).toContain('DELETE /students/3')
+    expect(calls).toContain('GET /schedule')                      // после удаления расписание перечитывается
   })
 })

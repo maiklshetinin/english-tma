@@ -6,7 +6,7 @@ import { fail } from './login.js'
 import { LEVELS } from './types.js'
 import { cleanUsername, isUsername } from './tgphoto.js'
 import { addDays } from './schedule.js'
-import type { Level, PriceChange, Student, StudentDoc, StudentInput, TokenUser } from './types.js'
+import type { ArchivedStudent, Level, PriceChange, Student, StudentDoc, StudentInput, TokenUser } from './types.js'
 
 export { LEVELS }
 const COLORS = ['#ff4b4b', '#1cb0f6', '#ce82ff', '#58cc02', '#ff9600', '#2b70c9', '#ff86d0']
@@ -17,6 +17,9 @@ const pub = (id: string, x: StudentDoc): Student => ({
   id, name: x.name, level: x.level, color: x.color, username: x.username || '', streak: x.streak ?? 0, coins: x.coins ?? 0,
   status: x.status || 'invited', tgId: x.tgId ?? null, photoUrl: x.photoUrl || '', price: x.price ?? 0, priceHistory: x.priceHistory ?? [{ from: '', price: x.price ?? 0 }], payment: x.payment,
 })
+
+const iso = (t: unknown): string | null => (t && typeof (t as any).toDate === 'function' ? (t as any).toDate().toISOString() : null)   // Timestamp → ISO
+const ID = /^[\w-]{1,64}$/
 
 // Цена из запроса: пусто → 0, иначе число 0–100000 с точностью до копеек; остальное — 400
 const parsePrice = (raw: unknown): number => {
@@ -117,6 +120,53 @@ export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/War
       const code = crypto.randomBytes(12).toString('base64url')
       await db.collection('invites').doc(code).set({ studentId, createdBy: by, createdAt: FieldValue.serverTimestamp() })
       return code
+    },
+
+    // Архив (для раздела «Архив» у преподавателя): сначала недавно архивированные
+    async listArchived(): Promise<ArchivedStudent[]> {
+      const docs = (await col().where('archived', '==', true).get()).docs
+      return docs.map((d) => ({ ...pub(d.id, d.data() as StudentDoc), archivedAt: iso(d.get('archivedAt')) }))
+        .sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '') || a.name.localeCompare(b.name))
+    },
+
+    // Вернуть из архива. Старый аккаунт доступ уже потерял (users/tg:<id> удалён при архивации), поэтому запись снова «ждёт приглашения»:
+    // ученику нужна новая ссылка (её создаёт маршрут). Путь, прогресс слов и история уроков сохранились.
+    async restore(id: string): Promise<Student> {
+      if (!ID.test(id)) throw fail(400, 'studentId required')
+      const ref = col().doc(id), st = await ref.get()
+      if (!st.exists) throw fail(404, 'student not found')
+      if (!st.get('archived')) throw fail(409, 'student is not archived')
+      const patch = { archived: false, archivedAt: null, status: 'invited' as const, tgId: null }
+      await ref.update(patch)
+      return pub(id, { ...(st.data() as StudentDoc), ...patch })
+    },
+
+    // Удалить навсегда — только из архива. Расписание чистит schedule.purgeStudent (вызывается раньше, ему нужно имя);
+    // здесь — сама запись, путь, прогресс повторений, приглашения, аккаунт и назначения колод.
+    async purge(id: string): Promise<{ name: string }> {
+      if (!ID.test(id)) throw fail(400, 'studentId required')
+      const ref = col().doc(id), st = await ref.get()
+      if (!st.exists) throw fail(404, 'student not found')
+      if (!st.get('archived')) throw fail(409, 'archive the student first')
+      const batch = db.batch()
+      batch.delete(ref)
+      batch.delete(db.collection('paths').doc(id))
+      batch.delete(db.collection('srs').doc(id))
+      for (const d of (await db.collection('invites').where('studentId', '==', id).get()).docs) batch.delete(d.ref)
+      for (const d of (await db.collection('users').where('studentId', '==', id).get()).docs) batch.delete(d.ref)
+      for (const d of (await db.collection('decks').where('assigned', 'array-contains', id).get()).docs)
+        batch.update(d.ref, { assigned: (d.get('assigned') as string[]).filter((x) => x !== id) })
+      await batch.commit()
+      return { name: String(st.get('name') || '') }
+    },
+
+    /** Имя ученика, если он в архиве (для удаления навсегда); иначе 404 / 409. */
+    async archivedName(id: string): Promise<string> {
+      if (!ID.test(id)) throw fail(400, 'studentId required')
+      const st = await col().doc(id).get()
+      if (!st.exists) throw fail(404, 'student not found')
+      if (!st.get('archived')) throw fail(409, 'archive the student first')
+      return String(st.get('name') || '')
     },
 
     // Архив: скрывает запись, закрывает аккаунту доступ, гасит неиспользованные приглашения

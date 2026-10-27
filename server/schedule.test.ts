@@ -98,6 +98,7 @@ ok('архив: из группы ученик убран, урок осталс
 ok('архивного ученика нельзя поставить в расписание', (await code(S.create({ studentId: petya.id, date: A, hour: 15 }, 'tg:1'))) === 404)
 store.set(`students/${masha.id}`, { ...store.get(`students/${masha.id}`), archived: true })
 ok('архивный ученик расписание не читает', ![...(await S.list(mUser)).current.lessons, ...(await S.list(mUser)).next.lessons].length)
+store.set(`students/${masha.id}`, { ...store.get(`students/${masha.id}`), archived: false })      // вернули флаг (дальше Маша нужна активной; самоочистка убрала бы её из уроков)
 
 // --- «урок проведён»: статус и зафиксированная цена ---
 const kat = await ST.create({ name: 'Катя', price: 100 }, 'tg:1'), lev = await ST.create({ name: 'Лев', price: 80 }, 'tg:1')
@@ -141,6 +142,34 @@ await S.setStudents(sl.id, { studentIds: [lev.id, zoe.id] })
 const sd = await S.setDone(sl.id, { done: true })
 ok('группа после правки: при отметке цена фиксируется у каждого', sd.prices?.[lev.id] === 80 && sd.prices?.[zoe.id] === 50)
 ok('проведённый урок: состав не меняется → 409', (await code(S.setStudents(sl.id, { studentIds: [zoe.id] }))) === 409 && store.get(`lessons/${sl.id}`).studentIds.length === 2)
+
+// --- самоочистка: ученика удалили из базы вручную / архивировали флагом — его непроведённые уроки чистятся при чтении расписания ---
+const h1 = await ST.create({ name: 'Гоша' }, 'tg:1'), h2 = await ST.create({ name: 'Даня' }, 'tg:1')
+const solo = await S.create({ studentId: h1.id, date: D1, hour: 16 }, 'tg:1')
+const pair = await S.create({ studentIds: [h1.id, h2.id], date: D1, hour: 17 }, 'tg:1')
+const kept = await S.create({ studentId: h1.id, date: D1, hour: 18 }, 'tg:1'); await S.setDone(kept.id, { done: true })
+store.delete(`students/${h1.id}`)                                                    // как удаление в консоли Firebase
+v = await S.list(teacher)
+const all = [...v.current.lessons, ...v.next.lessons]
+ok('самоочистка: одиночный урок «сироты» удалён, слот свободен', !store.has(`lessons/${solo.id}`) && !('2026-10-30_16' in store.get('schedule/2026-10-26').slots) && !all.some(l => l.id === solo.id))
+ok('самоочистка: из группы «сирота» убран, урок остался', JSON.stringify(store.get(`lessons/${pair.id}`).studentIds) === JSON.stringify([h2.id]))
+ok('самоочистка: проведённый урок не тронут (история)', JSON.stringify(store.get(`lessons/${kept.id}`).studentIds) === JSON.stringify([h1.id]))
+ok('самоочистка: повторно ничего не меняет', (await S.heal()) === 0)
+
+// --- удалить навсегда: уроки (прошлые недели тоже) ---
+const p1 = await ST.create({ name: 'Рома', price: 70 }, 'tg:1'), p2 = await ST.create({ name: 'Тая', price: 60 }, 'tg:1')
+const pDone = await S.create({ studentIds: [p1.id, p2.id], date: D1, hour: 19 }, 'tg:1'); await S.setDone(pDone.id, { done: true })
+const pSolo = await S.create({ studentId: p1.id, date: D1, hour: 20 }, 'tg:1')
+const pGroup = await S.create({ studentIds: [p1.id, p2.id], date: D1, hour: 21 }, 'tg:1')
+store.set('lessons/old', { date: '2026-10-14', hour: 9, weekStart: '2026-10-12', studentIds: [p1.id], done: true, prices: { [p1.id]: 70 }, createdBy: 'tg:1', createdAt: {} })   // давняя неделя
+await S.purgeStudent(p1.id, 'Рома')
+ok('удаление: проведённый урок остался с ценой и именем удалённого', store.get(`lessons/${pDone.id}`).studentIds.includes(p1.id) && store.get(`lessons/${pDone.id}`).prices[p1.id] === 70 && store.get(`lessons/${pDone.id}`).names[p1.id] === 'Рома')
+ok('удаление: давний проведённый урок тоже получил имя', store.get('lessons/old').names[p1.id] === 'Рома')
+ok('удаление: одиночный будущий урок удалён со слотом, из группы — убран', !store.has(`lessons/${pSolo.id}`) && !('2026-10-30_20' in store.get('schedule/2026-10-26').slots)
+  && JSON.stringify(store.get(`lessons/${pGroup.id}`).studentIds) === JSON.stringify([p2.id]))
+const named = (await find(teacher, pDone.id))!
+ok('урок с удалённым навсегда: отметку «проведён» не снять → 409', (await code(S.setDone(pDone.id, { done: false }))) === 409 && store.get(`lessons/${pDone.id}`).done === true)
+ok('преподаватель видит имя удалённого в уроке', named.names?.[p1.id] === 'Рома')
 
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
 clock = new Date('2026-10-25T23:30:00Z')                   // уже понедельник 26.10 по Варшаве

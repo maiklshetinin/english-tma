@@ -31,7 +31,7 @@ export const deckOf = (n: { deckId?: string }) => useDecksStore().byId(n.deckId)
 export const allLessons = computed(() => useScheduleStore().lessons.flatMap((l) => l.studentIds.map((sid) => {
   const st = useStudentsStore().byId(sid)
   return {
-    id: `${l.id}:${sid}`, lesson: l, title: 'Урок', date: l.date, hour: l.hour, time: hh(l.hour), done: !!l.done, studentId: sid, studentName: st?.name ?? '',
+    id: `${l.id}:${sid}`, lesson: l, title: 'Урок', date: l.date, hour: l.hour, time: hh(l.hour), done: !!l.done, studentId: sid, studentName: st?.name ?? (l.names?.[sid] ? `${l.names[sid]} (удалён)` : ''),
     price: l.done && l.prices?.[sid] != null ? l.prices[sid] : priceAt(st, l.date, l.hour),
   }
 })).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))

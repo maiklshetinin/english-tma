@@ -29,8 +29,8 @@ export const weekStartOf = (s: string) => addDays(s, -((parseYmd(s)!.getUTCDay()
 export const todayIn = (tz: string, now: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 export const slotKey = (date: string, hour: number) => `${date}_${pad(hour)}`
 
-const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices'>): Lesson =>
-  ({ id, date: x.date, hour: x.hour, studentIds: [...x.studentIds], done: !!x.done, ...(x.done ? { prices: { ...(x.prices ?? {}) } } : {}) })
+const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names'>): Lesson =>
+  ({ id, date: x.date, hour: x.hour, studentIds: [...x.studentIds], done: !!x.done, ...(x.done ? { prices: { ...(x.prices ?? {}) } } : {}), ...(x.names && Object.keys(x.names).length ? { names: { ...x.names } } : {}) })
 const byTime = (a: Lesson, b: Lesson) => a.date.localeCompare(b.date) || a.hour - b.hour
 
 export interface ScheduleDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; tz?: string; now?: () => Date }
@@ -80,11 +80,55 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       })))
     },
 
+    // Самоочистка: из НЕпроведённых уроков двух живых недель убираем учеников, которых нет среди активных (удалены из базы вручную
+    // или в архиве); урок, где никого не осталось, удаляется и освобождает слот. Проведённые уроки — история денег, их не трогаем.
+    // Так в расписании не бывает «невидимых» уроков, занимающих ячейку. Возвращает, сколько уроков поправлено.
+    async heal(): Promise<number> {
+      const alive = new Set((await students().where('archived', '==', false).get()).docs.map((d) => d.id))
+      let fixed = 0
+      for (const ws of liveWeeks()) {
+        for (const d of (await lessons().where('weekStart', '==', ws).get()).docs) {
+          if (d.get('done') || (d.get('studentIds') as string[]).every((x) => alive.has(x))) continue
+          await db.runTransaction(async (tx) => {
+            const l = await tx.get(d.ref); if (!l.exists || l.get('done')) return
+            const rest = (l.get('studentIds') as string[]).filter((x) => alive.has(x))
+            if (rest.length === l.get('studentIds').length) return
+            fixed++
+            if (rest.length) return void tx.update(d.ref, { studentIds: rest })
+            const W = weekLoader(tx), w = await W.get(l.get('weekStart')), k = slotKey(l.get('date'), l.get('hour'))
+            if (w.slots[k] === d.id) delete w.slots[k]
+            tx.delete(d.ref); W.save()
+          })
+        }
+      }
+      if (fixed) console.log(`  → расписание: убраны ученики-«сироты» из ${fixed} урок(ов)`)
+      return fixed
+    },
+
+    // Ученик удалён навсегда: убираем его из ВСЕХ уроков (и прошлых недель). Проведённый урок остаётся как история: id и цена
+    // ученика в нём сохраняются, а имя записывается в names, чтобы урок читался. Непроведённый — без него; пустой — удаляется.
+    async purgeStudent(studentId: string, name: string): Promise<void> {
+      checkId(studentId)
+      for (const d of (await lessons().where('studentIds', 'array-contains', studentId).get()).docs) {
+        await db.runTransaction(async (tx) => {
+          const l = await tx.get(d.ref); if (!l.exists) return
+          const x = l.data() as LessonDoc
+          if (!x.studentIds.includes(studentId)) return
+          if (x.done) return void tx.update(d.ref, { names: { ...(x.names ?? {}), [studentId]: name || 'Удалённый ученик' } })
+          const rest = x.studentIds.filter((s) => s !== studentId)
+          if (rest.length) return void tx.update(d.ref, { studentIds: rest })
+          const W = weekLoader(tx), w = await W.get(x.weekStart), k = slotKey(x.date, x.hour)
+          if (w.slots[k] === d.id) delete w.slots[k]
+          tx.delete(d.ref); W.save()
+        })
+      }
+    },
+
     // Преподаватель — все уроки двух недель; ученик — только свои (и без чужих учеников в списке); остальным — пусто
     async list(user: TokenUser): Promise<ScheduleResponse> {
       const [cur, next] = liveWeeks()
       let me = null
-      if (user.role === 'teacher') await this.ensureWeeks()
+      if (user.role === 'teacher') { await this.ensureWeeks(); await this.heal() }
       else if (user.role === 'student' && user.studentId) {
         const st = await students().doc(String(user.studentId)).get()
         if (st.exists && !st.get('archived') && `tg:${st.get('tgId')}` === user.uid) me = String(user.studentId)
@@ -92,7 +136,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
       const read = async (ws: string): Promise<ScheduleWeek> => {
         if (user.role !== 'teacher' && !me) return { weekStart: ws, lessons: [] }
         let docs = (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc))
-        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me], ...(l.prices ? { prices: me in l.prices ? { [me]: l.prices[me] } : {} } : {}) }))      // ученик: только он сам и только его цена
+        if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => ({ ...l, studentIds: [me], ...(l.prices ? { prices: me in l.prices ? { [me]: l.prices[me] } : {} } : {}), names: undefined }))      // ученик: только он сам и только его цена
         return { weekStart: ws, lessons: docs.sort(byTime) }
       }
       return { current: await read(cur), next: await read(next) }
@@ -177,6 +221,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Warsaw', now = () =>
         if (!l.exists) throw fail(404, 'lesson not found')
         const d = l.data() as LessonDoc
         if (!!d.done === done) { out = pub(id, d); return }                      // уже в нужном состоянии — ничего не меняем (цены не пересчитываются)
+        if (!done && Object.keys(d.names ?? {}).length) throw fail(409, 'lesson has deleted students')   // в уроке ученик, удалённый навсегда: снять отметку — потерять его цену в истории
         const prices: Record<string, number> = {}
         if (done) for (const sid of d.studentIds) { const st = await tx.get(students().doc(sid)); prices[sid] = st.exists ? priceAt(st.data() as any, d.date, d.hour) : 0 }
         tx.update(ref, done ? { done: true, prices, doneAt: FieldValue.serverTimestamp() } : { done: false, prices: {}, doneAt: null })

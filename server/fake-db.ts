@@ -23,11 +23,12 @@ const mkRef = (c: string, id: string): Ref => ({
   async get() { return new Snap(this, clone(store.get(this.path))) },
   async set(d, o) { apply('set', this, d, o) }, async update(d) { apply('update', this, d) }, async delete() { apply('delete', this) },
 })
-const query = (c: string, filters: [string, unknown][] = []): any => ({
-  where: (f: string, op: string, v: unknown) => { if (op !== '==') throw new Error('fake: only =='); return query(c, [...filters, [f, v]]) },
+const query = (c: string, filters: [string, string, unknown][] = []): any => ({
+  where: (f: string, op: string, v: unknown) => { if (op !== '==' && op !== 'array-contains') throw new Error('fake: only == and array-contains'); return query(c, [...filters, [f, op, v]]) },
   async get() {
     const docs = [...store.keys()].filter(k => k.startsWith(c + '/') && !k.slice(c.length + 1).includes('/'))
-      .map(k => new Snap(mkRef(c, k.slice(c.length + 1)), clone(store.get(k)))).filter(s => filters.every(([f, v]) => s.get(f) === v))
+      .map(k => new Snap(mkRef(c, k.slice(c.length + 1)), clone(store.get(k))))
+      .filter(s => filters.every(([f, op, v]) => op === '==' ? s.get(f) === v : Array.isArray(s.get(f)) && s.get(f).includes(v)))
     return { docs, size: docs.length }
   },
 })

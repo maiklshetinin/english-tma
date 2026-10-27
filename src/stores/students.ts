@@ -4,7 +4,7 @@
 // Путь, колоды и повторения — в stores/path.ts, decks.ts, srs.ts; расписание — в stores/schedule.ts.
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { CreateStudentResponse, InviteResponse, Student, StudentInput } from '../../server/types'
+import type { ArchivedStudent, CreateStudentResponse, InviteResponse, Student, StudentInput } from '../../server/types'
 import { apiRequest } from '../firebase'
 import { useScheduleStore } from './schedule'
 
@@ -22,10 +22,11 @@ async function call<T>(path: string, opts: RequestInit | undefined, what: string
 
 export const useStudentsStore = defineStore('students', () => {
   const list = ref<Student[]>([])
+  const archived = ref<ArchivedStudent[]>([])        // раздел «Архив» (грузится на вкладке «Ученики»)
 
   const byId = (id: string | null | undefined) => list.value.find((s) => s.id === id)
   const set = (items: Student[]) => { list.value = [...items].sort((a, b) => a.name.localeCompare(b.name, 'ru')) }
-  const clear = () => { stopRefresh(); list.value = [] }
+  const clear = () => { stopRefresh(); list.value = []; archived.value = [] }
 
   async function load(): Promise<Student[]> {
     set((await call<Student[]>('/students', undefined, 'Не удалось загрузить учеников')).map(normalize))
@@ -64,8 +65,26 @@ export const useStudentsStore = defineStore('students', () => {
   }
   async function archive(studentId: string): Promise<void> {
     await call(`/students/${encodeURIComponent(studentId)}/archive`, { method: 'POST' }, 'Не удалось архивировать')
-    await Promise.all([load().catch(() => {}), useScheduleStore().load().catch(() => {})])      // сервер заодно убирает ученика из уроков
+    await Promise.all([load().catch(() => {}), loadArchived().catch(() => {}), useScheduleStore().load().catch(() => {})])      // сервер заодно убирает ученика из уроков
   }
 
-  return { list, byId, set, clear, load, startRefresh, stopRefresh, add, invite, setUsername, setPrice, archive }
+  async function loadArchived(): Promise<ArchivedStudent[]> {
+    archived.value = (await call<ArchivedStudent[]>('/students/archived', undefined, 'Не удалось загрузить архив')).map((x) => ({ ...normalize(x), archivedAt: x.archivedAt ?? null }))
+    return archived.value
+  }
+  /** Вернуть из архива: ученик снова в списке и «ждёт приглашения». Возвращает новую ссылку-приглашение (старый аккаунт доступ потерял). */
+  async function restore(studentId: string): Promise<string> {
+    const { url } = await call<CreateStudentResponse>(`/students/${encodeURIComponent(studentId)}/restore`, { method: 'POST' }, 'Не удалось вернуть ученика')
+    archived.value = archived.value.filter((x) => x.id !== studentId)
+    await Promise.all([load().catch(() => {}), loadArchived().catch(() => {})])
+    return url
+  }
+  /** Удалить навсегда (только из архива): запись, путь, прогресс слов; будущие уроки — без него, проведённые остаются с его именем. */
+  async function purge(studentId: string): Promise<void> {
+    await call(`/students/${encodeURIComponent(studentId)}`, { method: 'DELETE' }, 'Не удалось удалить ученика')
+    archived.value = archived.value.filter((x) => x.id !== studentId)
+    await Promise.all([loadArchived().catch(() => {}), useScheduleStore().load().catch(() => {})])
+  }
+
+  return { list, archived, byId, set, clear, load, loadArchived, startRefresh, stopRefresh, add, invite, setUsername, setPrice, archive, restore, purge }
 })

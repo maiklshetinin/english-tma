@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { pctOf, unitOf } from '../../store/app'
 import { goUp } from '../../router'
 import AddStudent from '../../components/AddStudent.vue'
+import ArchivePanel from '../../components/ArchivePanel.vue'
 import Avatar from '../../components/Avatar.vue'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
@@ -32,6 +33,7 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
         <span class="prog"><span class="bar"><i :style="{ width: pctOf(pathStore.of(s.id)) + '%' }" /></span>{{ pctOf(pathStore.of(s.id)) }}%</span>
       </button>
     </div>
+    <ArchivePanel />
   </div>
 </template>
 <style scoped>

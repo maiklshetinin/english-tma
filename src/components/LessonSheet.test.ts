@@ -75,4 +75,12 @@ describe('урок с учеником, которого больше нет (у
     await chips[0].trigger('click')
     expect(w.emitted('lesson')![0][0]).toMatchObject({ id: 'o' })           // по нему можно нажать и убрать
   })
+  it('проведённый урок с удалённым навсегда учеником: имя и цена из истории, итог сходится', () => {
+    const lesson = { id: 'L', date: D, hour: 9, studentIds: ['a', 'gone'], done: true, prices: { a: 100, gone: 70 }, names: { gone: 'Рома' } } as Lesson
+    const w = mount(LessonSheet, { props: { lesson } })
+    expect(w.find('.tile.gone').text()).toContain('Рома (удалён)')
+    expect(w.find('.tile.gone').text()).toContain('70')
+    expect(w.find('.total').text()).toContain('170')
+    expect(w.find('.orphan').exists()).toBe(false)
+  })
 })

@@ -87,6 +87,11 @@ export interface Student {
   payment: Payment
 }
 
+/** Ученик в архиве (ответ GET /students/archived): то же, что Student, плюс когда архивирован. */
+export interface ArchivedStudent extends Student {
+  archivedAt: string | null    // ISO-время архивации; у старых записей может не быть
+}
+
 export interface StudentInput {            // POST /students
   name: string
   level?: Level                            // по умолчанию 'A1'
@@ -125,6 +130,7 @@ export interface LessonDoc {
   done?: boolean               // «урок проведён» (отмечает преподаватель; на всех учеников урока сразу)
   doneAt?: ServerTime | null
   prices?: Record<string, number>   // цена урока по ученикам, зафиксированная в момент отметки «проведён»: потом не меняется
+  names?: Record<string, string>    // имена учеников, удалённых навсегда (id → имя): проведённый урок остаётся в истории и читается
   createdBy: string
   createdAt: ServerTime
 }
@@ -137,6 +143,7 @@ export interface Lesson {
   studentIds: string[]         // у ученика — только он сам, чужих не видно
   done?: boolean               // проведён ли урок (отмечает преподаватель)
   prices?: Record<string, number>   // у проведённого урока — зафиксированная цена по ученикам (ученик видит только свою)
+  names?: Record<string, string>    // имена удалённых навсегда учеников этого урока (только преподавателю)
 }
 
 export interface LessonInput {             // POST /lessons
@@ -161,7 +168,7 @@ export interface ScheduleResponse { current: ScheduleWeek; next: ScheduleWeek }
 
 // ───────────────────────── Ответы остальных маршрутов ─────────────────────────
 export interface AuthResponse { token: string }                       // POST /auth/telegram, /auth/telegram-widget
-export interface CreateStudentResponse { student: Student; url: string }   // POST /students
+export interface CreateStudentResponse { student: Student; url: string }   // POST /students, POST /students/:id/restore (вернуть из архива + новая ссылка)
 export interface InviteResponse { url: string }                       // POST /invites
 export interface PingResponse { ok: true; who: string }               // POST /ping
 

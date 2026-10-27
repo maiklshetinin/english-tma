@@ -84,6 +84,19 @@ app.post('/invites', requireUser, requireTeacher, wrap(async (req, res) => {    
 }))
 app.post('/students/:id/username', requireUser, requireTeacher, wrap(async (req, res) => res.json(await students.setUsername(req.params.id, req.body?.username))))   // { username } → обновлённый ученик (с фото по нику)
 app.post('/students/:id/price', requireUser, requireTeacher, wrap(async (req, res) => res.json(await students.setPrice(req.params.id, req.body?.price))))   // { price } → обновлённый ученик; прошедшие уроки по старой цене
+app.get('/students/archived', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await students.listArchived())))   // раздел «Архив»
+app.post('/students/:id/restore', requireUser, requireTeacher, wrap(async (req, res) => {                  // вернуть из архива + новая ссылка-приглашение
+  const student = await students.restore(req.params.id)
+  console.log(`  → из архива: ученик ${req.params.id}`)
+  res.json({ student, url: inviteUrl(await students.invite(student.id, req.user.uid)) } satisfies CreateStudentResponse)
+}))
+app.delete('/students/:id', requireUser, requireTeacher, wrap(async (req, res) => {                        // удалить навсегда (только из архива)
+  const name = await students.archivedName(req.params.id)                                                   // 404 / 409, если не в архиве
+  await schedule.purgeStudent(req.params.id, name)                                                          // уроки: будущие — без него, проведённые — с его именем
+  await students.purge(req.params.id)                                                                       // запись, путь, прогресс слов, приглашения, колоды
+  console.log(`  → удалён навсегда: ученик ${req.params.id} (${name})`)
+  res.json({ ok: true })
+}))
 app.post('/students/:id/archive', requireUser, requireTeacher, wrap(async (req, res) => {                  // архив: скрыть, закрыть доступ, погасить приглашения
   await students.archive(req.params.id)
   await schedule.dropStudent(req.params.id)                                                                 // и убрать из уроков текущей/следующей недели

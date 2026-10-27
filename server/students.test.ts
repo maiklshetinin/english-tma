@@ -101,4 +101,28 @@ ok('архив: неиспользованное приглашение пога
 ok('архивный пропал у преподавателя', (await S.list(teacher)).every(s => s.id !== masha.id))
 ok('архивный не читается и самим учеником', (await S.list(mUser)).length === 0)
 ok('приглашение на архивного → 404', (await code(S.invite(masha.id, 'tg:1'))) === 404)
+
+// --- раздел «Архив»: список и возврат ---
+const arch = await S.listArchived()
+ok('архив: в списке только архивные (и Маша среди них)', arch.some(x => x.id === masha.id) && arch.every(x => store.get(`students/${x.id}`).archived === true) && 'archivedAt' in arch[0])
+ok('вернуть: не архивного → 409, нет записи → 404, мусор → 400', (await code(S.restore(big.id))) === 409 && (await code(S.restore('nope'))) === 404 && (await code(S.restore('../x'))) === 400)
+const back = await S.restore(masha.id)
+ok('вернуть: снова в списке, ждёт приглашения, старый аккаунт не привязан', back.status === 'invited' && back.tgId === null && (await S.list(teacher)).some(s => s.id === masha.id)
+  && store.get(`students/${masha.id}`).archived === false && (await S.listArchived()).every(x => x.id !== masha.id))
+ok('вернуть: старый токен ученика доступа не получил', (await S.list(mUser)).length === 0)
+ok('вернуть: на вернувшегося можно снова создать приглашение', /^[\w-]{8,}$/.test(await S.invite(masha.id, 'tg:1')))
+
+// --- удалить навсегда ---
+ok('удалить не архивного → 409, нет записи → 404', (await code(S.purge(masha.id))) === 409 && (await code(S.archivedName(masha.id))) === 409 && (await code(S.purge('nope'))) === 404)
+const gone = await S.create({ name: 'Лиза' }, 'tg:1')
+store.set(`paths/${gone.id}`, { units: [] }); store.set(`srs/${gone.id}`, { cards: {}, log: {} })
+store.set('decks/d1', { title: 'A', forAll: false, assigned: [gone.id, big.id] }); store.set('decks/d2', { title: 'B', forAll: true, assigned: [] })
+store.set('users/tg:77', { role: 'student', studentId: gone.id })
+const inv = await S.invite(gone.id, 'tg:1')
+await S.archive(gone.id)
+ok('имя архивного для удаления', (await S.archivedName(gone.id)) === 'Лиза')
+await S.purge(gone.id)
+ok('удаление: записи, пути, прогресса и приглашений нет', !store.has(`students/${gone.id}`) && !store.has(`paths/${gone.id}`) && !store.has(`srs/${gone.id}`) && !store.has(`invites/${inv}`) && !store.has('users/tg:77'))
+ok('удаление: из колод снят, остальные назначения целы', JSON.stringify(store.get('decks/d1').assigned) === JSON.stringify([big.id]) && store.get('decks/d2').title === 'B')
+ok('удалённого нет ни в списке, ни в архиве', (await S.list(teacher)).every(s => s.id !== gone.id) && (await S.listArchived()).every(s => s.id !== gone.id))
 process.exit(bad ? 1 : 0)
