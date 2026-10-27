@@ -16,6 +16,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 const pub = (id: string, x: StudentDoc): Student => ({
   id, name: x.name, level: x.level, color: x.color, username: x.username || '', streak: x.streak ?? 0, coins: x.coins ?? 0,
   status: x.status || 'invited', tgId: x.tgId ?? null, photoUrl: x.photoUrl || '', price: x.price ?? 0, priceHistory: x.priceHistory ?? [{ from: '', price: x.price ?? 0 }], payment: x.payment,
+  lastSeenAt: typeof x.lastSeenAt === 'number' ? x.lastSeenAt : null,
 })
 
 const iso = (t: unknown): string | null => (t && typeof (t as any).toDate === 'function' ? (t as any).toDate().toISOString() : null)   // Timestamp → ISO
@@ -46,6 +47,16 @@ export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/Mos
   const alive = () => col().where('archived', '==', false).get()
 
   return {
+    // «В сети»: ученик открыл приложение — раз в минуту отмечаем время (зелёная точка у преподавателя, как в Telegram).
+    // Пишем только в свою запись и не чаще раза в 30 секунд.
+    async seen(user: TokenUser): Promise<void> {
+      if (user.role !== 'student' || !user.studentId) return
+      const ref = db.collection('students').doc(String(user.studentId)), d = await ref.get()
+      if (!d.exists || d.get('archived') || `tg:${d.get('tgId')}` !== user.uid) return
+      const t = now().getTime()
+      if (t - (Number(d.get('lastSeenAt')) || 0) < 30_000) return
+      await ref.update({ lastSeenAt: t })
+    },
     // Преподаватель — все активные ученики; ученик — только своя запись, и только если она всё ещё привязана к его аккаунту
     async list(user: TokenUser): Promise<Student[]> {
       if (user.role === 'teacher') return (await alive()).docs.map((d) => pub(d.id, d.data() as StudentDoc))

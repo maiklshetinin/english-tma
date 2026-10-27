@@ -74,6 +74,7 @@ const requireTeacher = (req: Request, res: Response, next: NextFunction) => (req
 
 // Ученики. Сайт не ходит в Firestore напрямую — только через эти маршруты; доступ определяется ролью в токене.
 const inviteUrl = (code: string) => `${APP_SHORT_NAME ? `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}` : `https://t.me/${BOT_USERNAME}`}?startapp=invite_${code}`
+app.post('/me/seen', requireUser, wrap(async (req, res) => { await students.seen(req.user); res.json({ ok: true }) }))      // ученик в приложении — «в сети» (раз в минуту)
 app.get('/students', requireUser, wrap(async (req, res) => res.json(await students.list(req.user))))      // преподаватель — все, ученик — только он сам
 app.post('/students', requireUser, requireTeacher, wrap(async (req, res) => {                              // добавить ученика + сразу ссылка-приглашение
   const student = await students.create(req.body, req.user.uid)

@@ -134,4 +134,16 @@ await S.purge(gone.id)
 ok('удаление: записи, пути, прогресса и приглашений нет', !store.has(`students/${gone.id}`) && !store.has(`paths/${gone.id}`) && !store.has(`srs/${gone.id}`) && !store.has(`invites/${inv}`) && !store.has('users/tg:77'))
 ok('удаление: из колод снят, остальные назначения целы', JSON.stringify(store.get('decks/d1').assigned) === JSON.stringify([big.id]) && store.get('decks/d2').title === 'B')
 ok('удалённого нет ни в списке, ни в архиве', (await S.list(teacher)).every(s => s.id !== gone.id) && (await S.listArchived()).every(s => s.id !== gone.id))
+// --- «в сети» ---
+{
+  const st = await S.create({ name: 'Онлайн' }, 'tg:1'); store.set(`students/${st.id}`, { ...store.get(`students/${st.id}`), tgId: 77, status: 'active' })
+  const me: TokenUser = { uid: 'tg:77', role: 'student', studentId: st.id }
+  await S.seen(me); ok('seen: время записано', store.get(`students/${st.id}`).lastSeenAt === nowMs)
+  ok('seen: время отдаётся в списке', (await S.list(teacher)).find((x) => x.id === st.id)?.lastSeenAt === nowMs)
+  nowMs += 10_000; await S.seen(me); ok('seen: не чаще раза в 30 с', store.get(`students/${st.id}`).lastSeenAt === nowMs - 10_000)
+  nowMs += 30_000; await S.seen(me); ok('seen: через 40 с — обновлено', store.get(`students/${st.id}`).lastSeenAt === nowMs)
+  const before = store.get(`students/${st.id}`).lastSeenAt; nowMs += 60_000
+  await S.seen({ uid: 'tg:99', role: 'student', studentId: st.id }); ok('seen: чужой аккаунт не пишет', store.get(`students/${st.id}`).lastSeenAt === before)
+  await S.seen(teacher); ok('seen: преподаватель — ничего', store.get(`students/${st.id}`).lastSeenAt === before)
+}
 process.exit(bad ? 1 : 0)

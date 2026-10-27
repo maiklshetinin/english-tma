@@ -11,7 +11,7 @@ import { useScheduleStore } from './schedule'
 // Сервер уже отдаёт нужную форму; здесь только значения по умолчанию на случай неполных данных
 const normalize = (x: Student): Student => ({
   ...x, name: x.name || 'Без имени', level: x.level || 'A1', username: x.username || '', streak: x.streak ?? 0, coins: x.coins ?? 0,
-  status: x.status || 'invited', tgId: x.tgId ?? null, photoUrl: x.photoUrl || '', price: x.price ?? 0, priceHistory: x.priceHistory ?? [{ from: '', price: x.price ?? 0 }],
+  status: x.status || 'invited', tgId: x.tgId ?? null, photoUrl: x.photoUrl || '', price: x.price ?? 0, priceHistory: x.priceHistory ?? [{ from: '', price: x.price ?? 0 }], lastSeenAt: x.lastSeenAt ?? null,
 })
 
 async function call<T>(path: string, opts: RequestInit | undefined, what: string): Promise<T> {
@@ -35,13 +35,15 @@ export const useStudentsStore = defineStore('students', () => {
     return list.value
   }
 
-  let onVisible: (() => void) | null = null
-  function startRefresh() {                      // обновлять список, когда пользователь возвращается в приложение
+  let onVisible: (() => void) | null = null, timer: ReturnType<typeof setInterval> | null = null
+  /** Обновлять список, когда пользователь возвращается в приложение; every (мс) — ещё и по таймеру, пока вкладка открыта (у преподавателя — точки «в сети»). */
+  function startRefresh(every = 0) {
     stopRefresh()
     onVisible = () => { if (document.visibilityState === 'visible') load().catch(() => {}) }
     document.addEventListener('visibilitychange', onVisible)
+    if (every) timer = setInterval(() => { if (document.visibilityState === 'visible') load().catch(() => {}) }, every)
   }
-  function stopRefresh() { if (onVisible) document.removeEventListener('visibilitychange', onVisible); onVisible = null }
+  function stopRefresh() { if (onVisible) document.removeEventListener('visibilitychange', onVisible); onVisible = null; if (timer) clearInterval(timer); timer = null }
 
   /** Новый ученик: сервер создаёт запись (если указан ник — сразу ищет фото в Telegram) и ссылку-приглашение. Telegram-аккаунт привяжется, когда он откроет ссылку. */
   async function add({ name, level, packageSize, username, price }: StudentInput): Promise<string> {

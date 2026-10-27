@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { isOnline, seenLabel } from '../../utils/online'
 import { useRoute, useRouter } from 'vue-router'
 import { pctOf } from '../../store/app'
 import { fmtMoney } from '../../utils/price'
@@ -96,9 +97,9 @@ const saveAsPreset = () => {
     <div class="pcard hd">
       <div class="top">
         <button class="ib" :aria-label="`Назад: ${backLabel}`" :title="backLabel" @click="$emit('back')"><AppIcon name="back" :size="20" /></button>
-        <Avatar :s="s" :size="56" />
+        <Avatar :s="s" :size="56" :online="isOnline(s)" />
         <div class="who"><h2>{{ s.name }}</h2>
-          <div class="sub">{{ s.level }} · <span :class="s.status === 'active' ? 'on' : 'wait'">{{ s.status === 'active' ? 'в приложении' : 'ждёт приглашения' }}</span><template v-if="s.username"> · @{{ s.username }}</template></div></div>
+          <div class="sub">{{ s.level }} · <span :class="s.status !== 'active' ? 'wait' : isOnline(s) ? 'on' : ''">{{ s.status !== 'active' ? 'ждёт приглашения' : seenLabel(s) || 'в приложении' }}</span><template v-if="s.username"> · @{{ s.username }}</template></div></div>
         <button class="ib" :class="{ on: panel === 'remind' }" aria-label="Напомнить" title="Напомнить" @click="panel = panel === 'remind' ? null : 'remind'"><AppIcon name="bell" :size="19" /></button>
         <button class="ib" :class="{ on: panel === 'edit' }" aria-label="Изменить" title="Изменить" @click="openEdit"><AppIcon name="pencil" :size="18" /></button>
       </div>

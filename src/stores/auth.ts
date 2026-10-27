@@ -8,7 +8,7 @@ import { reactive, ref } from 'vue'
 import { signInWithCustomToken, signOut } from 'firebase/auth'
 import type { User } from 'firebase/auth'
 import type { AuthResponse, Role, SessionClaims } from '../../server/types'
-import { API, fb, isDemo, tg } from '../firebase'
+import { API, apiRequest, fb, isDemo, tg } from '../firebase'
 import { showToast } from '../composables/useToast'
 import { session } from './session'
 import { useContentStore } from './content'
@@ -18,6 +18,15 @@ import { useScheduleStore } from './schedule'
 export type AuthStatus = 'loading' | 'login' | 'ready' | 'error'
 /** Профиль из Telegram (поля названы так, как их называет Telegram). */
 export interface TgProfile { id: number; first_name?: string; username?: string; photo_url?: string }
+
+// Ученик в приложении — раз в минуту сообщаем серверу (POST /me/seen), чтобы у преподавателя горела зелёная точка «в сети»
+let seenTimer: ReturnType<typeof setInterval> | null = null
+function startSeen() {
+  const ping = () => { try { if (document.visibilityState === 'visible') apiRequest('/me/seen', { method: 'POST' }).catch(() => {}) } catch { /* не важно */ } }
+  ping(); if (seenTimer) clearInterval(seenTimer)
+  seenTimer = setInterval(ping, 60_000)
+  document.addEventListener('visibilitychange', ping)
+}
 
 export const useAuthStore = defineStore('auth', () => {
   const status = ref<AuthStatus>('loading')
@@ -53,7 +62,8 @@ export const useAuthStore = defineStore('auth', () => {
     if (c.role === 'student') currentStudentId.value = c.studentId
     const students = useStudentsStore(), schedule = useScheduleStore(), content = useContentStore()
     await students.load()                                   // ученики с сервера (для ученика — только его запись)
-    students.startRefresh()
+    students.startRefresh(c.role === 'teacher' ? 60_000 : 0)      // преподавателю — раз в минуту (точки «в сети»)
+    if (c.role === 'student') startSeen()
     if (c.role === 'student' && !students.list.length) throw new Error('Ваша запись не найдена или в архиве. Попросите преподавателя прислать новое приглашение.')
     // Что сохранять на сервер: только преподаватель правит путь, колоды и пресеты; прогресс повторений — свой собственный
     session.canEdit = c.role === 'teacher'; session.ownKey = c.role === 'teacher' ? 'teacher' : c.studentId

@@ -115,7 +115,27 @@ export function cleanSrsState(x: unknown): SrsState {
   return {
     ease: num(x.ease, 'ease', 1.3, 5), interval: Math.round(num(x.interval, 'interval', 0, 36500)), reps: Math.round(num(x.reps, 'reps', 0, 100000)), lapses: Math.round(num(x.lapses, 'lapses', 0, 100000)),
     first: ymd(x.first, 'first'), last: ymd(x.last, 'last'), due: ymd(x.due, 'due'),
+    ...srsExtra(x),
   }
+}
+// Поля планировщика как в Anki (FSRS): все необязательные, у старых записей их нет
+const PHASES = ['learning', 'review', 'relearning'] as const
+function srsExtra(x: Record<string, unknown>): Partial<SrsState> {
+  const o: Partial<SrsState> = {}
+  if (x.phase != null) { if (!PHASES.includes(x.phase as any)) throw fail(400, 'bad phase'); o.phase = x.phase as SrsState['phase'] }
+  if (x.step != null) o.step = Math.round(num(x.step, 'step', 0, 20))
+  if (x.dueAt != null) o.dueAt = Math.round(num(x.dueAt, 'dueAt', 0, 1e13))
+  if (x.lastAt != null) o.lastAt = Math.round(num(x.lastAt, 'lastAt', 0, 1e13))
+  if (x.stab != null) o.stab = num(x.stab, 'stab', 0, 1e6)
+  if (x.diff != null) o.diff = num(x.diff, 'diff', 1, 10)
+  if (x.hist != null) {
+    if (!Array.isArray(x.hist) || x.hist.length > 12) throw fail(400, 'bad hist')
+    o.hist = x.hist.map((h) => {
+      if (!Array.isArray(h) || h.length !== 3) throw fail(400, 'bad hist')
+      return [Math.round(num(h[0], 'hist', 0, 1e13)), Math.round(num(h[1], 'hist', 0, 3)), Math.round(num(h[2], 'hist', -100000, 36500))] as [number, number, number]
+    })
+  }
+  return o
 }
 
 export function cleanRate(input: unknown): SrsRateInput {

@@ -4,6 +4,7 @@
 // Группы — сверху отдельными блоками: ученики, которые вместе стоят в групповом уроке (по расписанию), подпись — день и время урока.
 // Ниже — «Индивидуально»: остальные по алфавиту.
 import { ref, computed } from 'vue'
+import { isOnline } from '../utils/online'
 import { useRouter } from 'vue-router'
 import { handle, DAYS, hh, todayYmd } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
@@ -56,7 +57,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
         <div class="tiles">
           <div v-for="s in g.members" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
             @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
-            <span class="ava"><Avatar :s="s" :size="54" /></span><span class="nm">{{ s.name }}</span>
+            <span class="ava"><Avatar :s="s" :size="54" :online="isOnline(s)" /></span><span class="nm">{{ s.name }}</span>
           </div>
         </div>
       </section>
@@ -65,7 +66,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
         <div class="tiles">
           <div v-for="s in solo" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
             @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
-            <span class="ava"><Avatar :s="s" :size="54" /></span><span class="nm">{{ s.name }}</span>
+            <span class="ava"><Avatar :s="s" :size="54" :online="isOnline(s)" /></span><span class="nm">{{ s.name }}</span>
           </div>
         </div>
       </section>

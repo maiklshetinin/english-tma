@@ -6,6 +6,7 @@
 // «Отменил ученик» — по его причине, без оплаты: урок остаётся в ячейке, ученик не входит в цену, его сумма — «потеряно».
 // В группе отмечается каждый ученик отдельно. Ученик видит у себя статус «Отменён вами».
 import { computed, ref, watch } from 'vue'
+import { isOnline } from '../utils/online'
 import { fmtSlot, hh, handle } from '../store/app'
 import Avatar from './Avatar.vue'
 import AvatarStack from './AvatarStack.vue'
@@ -71,7 +72,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
         <div class="sec box" :class="{ group: isGroup }">
           <div class="stitle">{{ isGroup ? `${size} ${word(size)}` : 'Ученик' }}</div>
           <div v-for="st in members" :key="st.id" class="tile" :class="{ off: off(st.id) }">
-            <button class="ava" :disabled="st.archived" :title="st.archived ? `${st.name} — в архиве` : `Открыть: ${st.name}`" @click="emit('open', st.id)"><Avatar :s="st" :size="42" /></button>
+            <button class="ava" :disabled="st.archived" :title="st.archived ? `${st.name} — в архиве` : `Открыть: ${st.name}`" @click="emit('open', st.id)"><Avatar :s="st" :size="42" :online="isOnline(st)" /></button>
             <span class="tx"><b class="nm">{{ st.name }}</b>
               <small v-if="st.archived" class="arch-l">в архиве{{ cost(st) ? ` · ${cost(st)}` : '' }}</small>
               <small v-else-if="off(st.id)" class="pr offtxt">отменил — без оплаты</small>
@@ -92,7 +93,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
           <div class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Поиск ученика" aria-label="Поиск ученика" /><button v-if="q" class="clr" aria-label="Очистить" @click="q = ''"><AppIcon name="x" :size="14" /></button></div>
           <div class="rows scroll">
             <button v-for="st in found" :key="st.id" class="prow" :disabled="full" @click="add(st.id)">
-              <Avatar :s="st" :size="42" /><span class="tx"><b>{{ st.name }}</b><small>{{ sub(st) }}</small></span>
+              <Avatar :s="st" :size="42" :online="isOnline(st)" /><span class="tx"><b>{{ st.name }}</b><small :class="{ onl: isOnline(st) }">{{ isOnline(st) ? 'в сети' : sub(st) }}</small></span>
             </button>
           </div>
           <div v-if="!found.length" class="hint empty">{{ others.length ? 'Никого не нашли' : 'Все ученики уже в этом уроке' }}</div>
@@ -129,7 +130,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
           <label class="tsearch"><AppIcon name="search" :size="18" /><input v-model="q" placeholder="Поиск" aria-label="Поиск ученика" /><button v-if="q" class="clr" aria-label="Очистить" @click="q = ''"><AppIcon name="x" :size="14" /></button></label>
           <div class="rows scroll">
             <button v-for="st in found" :key="st.id" class="prow" @click="emit('pick', st.id)">
-              <Avatar :s="st" :size="42" /><span class="tx"><b>{{ st.name }}</b><small>{{ sub(st) }}</small></span>
+              <Avatar :s="st" :size="42" :online="isOnline(st)" /><span class="tx"><b>{{ st.name }}</b><small :class="{ onl: isOnline(st) }">{{ isOnline(st) ? 'в сети' : sub(st) }}</small></span>
             </button>
             <div v-if="!found.length" class="hint empty">Никого не нашли</div>
           </div>
@@ -204,6 +205,7 @@ html[data-theme='dark'] .mi.green { color: var(--green) } html[data-theme='dark'
 .prow:hover:not(:disabled) { background: var(--surface) } .prow:disabled { opacity: .45; cursor: not-allowed }
 .prow :deep(.av) { flex: none }
 .tx { flex: 1; display: grid; justify-items: start; min-width: 0; line-height: 1.25; text-align: left } .tx b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.tx small.onl { color: var(--blue) }
 .tx small { font-size: 13px; font-weight: 500; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .add .rows { margin: 0 -8px }
 /* полоса прокрутки — общая для всего приложения, styles/theme.css */

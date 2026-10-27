@@ -67,6 +67,7 @@ export interface StudentDoc {
   createdAt: ServerTime
   joinedAt?: ServerTime        // когда принял приглашение
   lastLoginAt?: ServerTime
+  lastSeenAt?: number          // мс; ученик открыт в приложении — обновляется раз в минуту (POST /me/seen), для зелёной точки «в сети»
   archivedAt?: ServerTime
 }
 
@@ -85,6 +86,7 @@ export interface Student {
   price: number                // текущая цена одного урока, 0 — не указана
   priceHistory: PriceChange[]  // по ней считается цена каждого урока (src/utils/price.ts): прошедшие уроки не пересчитываются
   payment: Payment
+  lastSeenAt?: number | null   // мс — когда ученик последний раз был в приложении (зелёная точка «в сети», как в Telegram)
 }
 
 /** Ученик в архиве (ответ GET /students/archived): то же, что Student, плюс когда архивирован. */
@@ -236,6 +238,14 @@ export interface SrsState {
   first: string                // 'YYYY-MM-DD' — когда карточка показана впервые
   last: string
   due: string                  // когда повторять
+  // Планировщик как в Anki (FSRS, src/utils/fsrs.ts). У старых записей этих полей нет — они считаются по interval/ease.
+  phase?: 'learning' | 'review' | 'relearning'   // шаги изучения / повторение / переучивание после ошибки
+  step?: number                // номер шага изучения (1 мин → 10 мин)
+  dueAt?: number               // мс — точное время показа (для шагов в минутах)
+  stab?: number                // стабильность памяти S, дней (через сколько вероятность вспомнить упадёт до 90 %)
+  diff?: number                // сложность D, 1–10
+  lastAt?: number              // мс — последний ответ
+  hist?: [number, number, number][]   // последние 12 ответов: [мс, оценка 0–3, интервал: дни или −минуты] — для графика слова
 }
 export interface SrsUser {
   cards: Record<string, SrsState>      // id карточки → состояние

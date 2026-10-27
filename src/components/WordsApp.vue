@@ -7,6 +7,7 @@ import { deckCounts, userStats } from '../composables/useSrs'
 import AppIcon from './AppIcon.vue'
 import StudySession from './StudySession.vue'
 import CardBrowser from './CardBrowser.vue'
+import DeckChart from './DeckChart.vue'
 import DeckSheet from './DeckSheet.vue'
 import { useStudentsStore } from '../stores/students'
 import { useDecksStore } from '../stores/decks'
@@ -33,13 +34,14 @@ const audience = (d) => {
 <template>
   <div class="page" :class="{ wide: canManage }">
     <StudySession v-if="screen === 'study' && deck" :key="deck.id" :deck="deck" :user-key="userKey" :can-edit="canManage" @finish="back" @exit="back" />
+    <DeckChart v-else-if="screen === 'chart' && deck" :deck="deck" :user-key="userKey" @back="back" />
     <CardBrowser v-else-if="screen === 'browse' && deck" :deck="deck" :user-key="userKey" :can-manage="canManage" @back="back" />
     <template v-else>
       <div class="card stats">
         <div class="nums">
           <div><b>{{ stats.today }}</b><span class="hint">ответов сегодня</span></div>
           <div><b>{{ stats.learned }}<small>/{{ stats.total }}</small></b><span class="hint">слов начато</span></div>
-          <div><b>{{ stats.mature }}</b><span class="hint">выучено (интервал 7+ дн.)</span></div>
+          <div><b>{{ stats.mature }}</b><span class="hint">выучено (интервал 21+ дн.)</span></div>
         </div>
         <div class="bars" aria-label="Ответы за 7 дней">
           <div v-for="w in stats.week" :key="w.date" class="bw"><i :style="{ height: Math.max(4, w.n / max * 44) + 'px' }" :class="{ z: !w.n }" :title="w.n + ' ответов'" /><small>{{ dayName(w.date) }}</small></div>
@@ -63,6 +65,7 @@ const audience = (d) => {
         </div>
         <div class="acts">
           <button class="btn sm" @click="open('study', d)">Учить</button>
+          <button class="ib" aria-label="График колоды" title="График: когда повторять каждое слово" @click="open('chart', d)"><AppIcon name="chart" :size="18" /></button>
           <button class="ib" aria-label="Карточки колоды" title="Карточки" @click="open('browse', d)"><AppIcon name="list" :size="18" /></button>
           <button v-if="canManage" class="ib" aria-label="Настройки колоды" title="Настройки" @click="sheet = { deck: d }"><AppIcon name="sliders" :size="18" /></button>
         </div>

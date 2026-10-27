@@ -1,20 +1,28 @@
 <script setup>
-// Сессия повторения в стиле Anki: очередь (изучаю → к повторению → новые), «Показать ответ», 4 оценки с интервалами,
+// Сессия повторения как в Anki: очередь пересчитывается после каждого ответа (изучаю, чьё время пришло → к повторению → новые),
+// карточка на шаге «1 мин / 10 мин» возвращается сама, когда подойдёт её время; «Показать ответ», 4 оценки с интервалами,
 // отмена последнего ответа, счётчики «новые / изучаю / к повторению». Клавиши: Пробел — ответ/«Хорошо», 1–4 — оценка, Z — отмена.
 // Используется и во вкладке «Слова», и внутри кружка пути (embedded).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { buildQueue, srsOf, kindOf, rate, restore, snapshot, intervalLabel, nextDueInfo } from '../composables/useSrs'
+import { buildQueue, srsOf, kindOf, rate, restore, snapshot, intervalLabel, nextDueInfo, deckCounts, nextLearnAt } from '../composables/useSrs'
 import { imageSrc, audioSrc } from '../utils/media'
 import AppIcon from './AppIcon.vue'
 import CardEditor from './CardEditor.vue'
+import DeckChart from './DeckChart.vue'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, canEdit: Boolean, embedded: Boolean })
 const emit = defineEmits(['finish', 'exit'])
+const chartOpen = ref(false)                                      // график колоды поверх сессии — видно, как ответ «отбрасывает» слово
 
 const queue = ref(buildQueue(props.deck, props.userKey))
 const flipped = ref(false), answered = ref(0), hist = ref([]), editing = ref(false)
 const card = computed(() => queue.value[0])
 const kind = (c) => kindOf(srsOf(props.userKey, c))
-const counts = computed(() => { const o = { new: 0, learn: 0, due: 0 }; for (const c of queue.value) o[{ new: 'new', learn: 'learn', review: 'due' }[kind(c)]]++; return o })
+const counts = computed(() => { tick.value; const c = deckCounts(props.deck, props.userKey); return { new: c.new, learn: c.learn, due: c.due } })
+// Часы сессии: раз в секунду — чтобы карточка на шаге изучения вернулась сама, когда подойдёт её время, и шёл обратный отсчёт
+const tick = ref(Date.now()); let clock = null
+const refill = () => { if (!card.value) queue.value = buildQueue(props.deck, props.userKey) }
+const waitAt = computed(() => { tick.value; return card.value ? null : nextLearnAt(props.deck, props.userKey) })
+const waitLeft = computed(() => { if (!waitAt.value) return ''; const s = Math.max(0, Math.round((waitAt.value - tick.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const cur = computed(() => card.value && { new: 'new', learn: 'learn', review: 'due' }[kind(card.value)])
 const GRADES = [{ q: 0, t: 'Снова' }, { q: 1, t: 'Трудно' }, { q: 2, t: 'Хорошо' }, { q: 3, t: 'Легко' }]
 const next = computed(() => nextDueInfo(props.deck, props.userKey))
@@ -49,14 +57,14 @@ function answer(q) {
   const c = card.value; if (!c || !flipped.value) return
   hist.value.push({ c, prev: snapshot(props.userKey, c), queue: queue.value.slice() })
   rate(props.userKey, c, q); answered.value++; flipped.value = false
-  queue.value = q === 0 ? [...queue.value.slice(1), c] : queue.value.slice(1)     // «Снова» возвращает карточку в конец очереди
+  queue.value = buildQueue(props.deck, props.userKey)                              // как в Anki: «Снова» вернётся через 1 мин, «Хорошо» на шаге — через 10 мин
 }
 function undo() {
   const h = hist.value.pop(); if (!h) return
-  restore(props.userKey, h.c, h.prev); queue.value = h.queue; answered.value--; flipped.value = false
+  restore(props.userKey, h.c, h.prev); queue.value = [h.c, ...buildQueue(props.deck, props.userKey).filter((x) => x.id !== h.c.id)]; answered.value--; flipped.value = false
 }
 function onKey(e) {
-  if (editing.value || e.metaKey || e.ctrlKey || e.altKey) return
+  if (editing.value || chartOpen.value || e.metaKey || e.ctrlKey || e.altKey) return
   const tag = e.target?.tagName
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return
   if ((e.key === 'z' || e.key === 'я') && hist.value.length) return undo()
@@ -67,8 +75,8 @@ function onKey(e) {
     e.preventDefault(); flipped.value ? answer(2) : (flipped.value = true)
   } else if (flipped.value && /^[1-4]$/.test(e.key)) answer(+e.key - 1)
 }
-onMounted(() => addEventListener('keydown', onKey))
-onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause() })
+onMounted(() => { addEventListener('keydown', onKey); clock = setInterval(() => { tick.value = Date.now(); refill() }, 1000) })
+onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInterval(clock) })
 </script>
 
 <template>
@@ -76,6 +84,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause() })
     <header class="bar">
       <button class="btn ghost sm" @click="emit('exit')"><AppIcon name="back" :size="18" /> {{ embedded ? 'Закрыть' : 'Колоды' }}</button>
       <b class="dt">{{ deck.title }}</b>
+      <button class="chartb" aria-label="График колоды" title="График: когда повторять каждое слово" @click="chartOpen = true"><AppIcon name="chart" :size="18" /></button>
       <span class="cnt" aria-label="Новые, изучаю, к повторению">
         <b class="n" :class="{ on: cur === 'new' }">{{ counts.new }}</b><b class="l" :class="{ on: cur === 'learn' }">{{ counts.learn }}</b><b class="d" :class="{ on: cur === 'due' }">{{ counts.due }}</b>
       </span>
@@ -107,15 +116,17 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause() })
     </template>
 
     <div v-else class="card done">
-      <h3>{{ answered ? 'Готово! 🎉' : 'Повторять пока нечего' }}</h3>
+      <template v-if="waitAt"><h3>Перерыв ⏳</h3><p class="hint">Карточки на шагах изучения вернутся через <b class="wl">{{ waitLeft }}</b> — как в Anki. Можно подождать здесь.</p></template>
+      <h3 v-else>{{ answered ? 'Готово! 🎉' : 'Повторять пока нечего' }}</h3>
       <p class="hint">{{ answered ? `Повторено карточек: ${answered}` : 'На сегодня всё выучено' }}</p>
-      <p v-if="next" class="hint">{{ next }}</p>
+      <p v-if="next && !waitAt" class="hint">{{ next }}</p>
       <div class="row2" style="justify-content:center">
         <button v-if="hist.length" class="btn ghost" @click="undo"><AppIcon name="undo" :size="16" /> Отменить</button>
         <button class="btn" @click="emit('finish')">{{ embedded ? 'Завершить' : 'Готово' }}</button>
       </div>
     </div>
     <CardEditor v-if="editing && card" :card="card" @close="editing = false" />
+    <DeckChart v-if="chartOpen" :deck="deck" :user-key="userKey" overlay @back="chartOpen = false" />
   </div>
 </template>
 
@@ -144,6 +155,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause() })
 .tools button { flex: none; white-space: nowrap }
 .tools button { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--border); background: var(--card); color: var(--hint); font: inherit; font-weight: 800; font-size: 13px; border-radius: 12px; padding: 6px 10px; cursor: pointer }
 .tools button:disabled { opacity: .45; cursor: default } .keys { margin-left: auto; font-size: 12px; white-space: nowrap }
-.done { text-align: center; display: grid; gap: 6px } .done p { margin: 0 }
+.done { text-align: center; display: grid; gap: 6px } .done p { margin: 0 } .wl { color: var(--blue); font-variant-numeric: tabular-nums }
+.chartb { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 12px; background: var(--card); color: var(--blue); cursor: pointer }
 @media (max-width: 600px) { .keys { display: none } .q { font-size: 28px } .a { font-size: 24px } }
 </style>

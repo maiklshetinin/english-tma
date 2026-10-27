@@ -8,6 +8,7 @@ import { useDecksStore } from '../stores/decks'
 import { usePathStore } from '../stores/path'
 import { useScheduleStore, slotKey } from '../stores/schedule'
 import { useSrsStore } from '../stores/srs'
+import { answer } from '../utils/fsrs'
 import { useStudentsStore } from '../stores/students'
 
 // Узел («кружок») пути. date привязывает его к календарю.
@@ -60,7 +61,7 @@ const TRAVEL = [card('luggage', 'багаж'), card('boarding pass', 'посад
 const PHRASAL = [card('to give up', 'сдаваться', 'Never give up!'), card('to look forward to', 'ждать с нетерпением'), card('to run out of', 'исчерпать запас'), card('to carry on', 'продолжать')]
 
 const student = (id: string, name: string, username: string, color: string, level: Student['level'], streak: number, coins: number, payment: Student['payment']): Student =>
-  ({ id, name, username, color, level, streak, coins, status: 'active', tgId: null, photoUrl: '', price: 0, priceHistory: [{ from: '', price: 0 }], payment })
+  ({ id, name, username, color, level, streak, coins, status: 'active', tgId: null, photoUrl: '', price: 0, priceHistory: [{ from: '', price: 0 }], payment, lastSeenAt: ['2', '4', '7'].includes(id) ? Date.now() : id === '3' ? Date.now() - 3 * 3600_000 : null })      // 2, 4, 7 — «в сети»
 export const DEMO_STUDENTS: Student[] = [
   student('1', 'Мария Д.', 'maria_d', '#ff4b4b', 'A2', 3, 80, { status: 'due', until: iso(4), lessonsLeft: 0, packageSize: 8 }),
   student('2', 'Леня С.', 'lenya_eng', '#1cb0f6', 'B1', 12, 340, { status: 'paid', until: iso(36), lessonsLeft: 2, packageSize: 8 }),
@@ -88,8 +89,17 @@ export function loadDemo(): void {
   ]
   useDecksStore().apply(decks)
 
+  // Прогресс преподавателя в «Business Basics» — прогнан через настоящий алгоритм (как в Anki), чтобы на графике колоды была история
+  const teacher: SrsUser = { cards: {}, log: {} }
+  const play = (card: Card, startDaysAgo: number, grades: number[]) => {
+    let t = Date.now() - startDaysAgo * 86_400_000, st = null as SrsUser['cards'][string] | null
+    for (const q of grades) { if (t > Date.now()) break; st = answer(st, q, t); t = st.interval ? st.dueAt! + 9 * 3600_000 : st.dueAt! }
+    if (st) teacher.cards[card.id] = st
+  }
+  play(BASIC[0], 60, [2, 2, 2, 2, 2]); play(BASIC[1], 40, [2, 2, 1, 2]); play(BASIC[2], 30, [0, 2, 2, 2, 0, 2]); play(BASIC[3], 12, [3, 2])
+  play(BASIC[4], 6, [2, 2, 2]); play(BASIC[5], 0.004, [0])
   const srs: Record<string, SrsUser> = {
-    teacher: { cards: {}, log: {} },
+    teacher,
     1: { cards: { [BASIC[0].id]: { ease: 2.5, interval: 3, reps: 2, lapses: 0, first: iso(-5), last: iso(-3), due: iso(0) },
                   [BASIC[2].id]: { ease: 2.3, interval: 0, reps: 0, lapses: 1, first: iso(-1), last: iso(-1), due: iso(0) },
                   [BASIC[1].id]: { ease: 2.6, interval: 9, reps: 3, lapses: 0, first: iso(-9), last: iso(-1), due: iso(8) } },

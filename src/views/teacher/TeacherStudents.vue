@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { isOnline, seenLabel } from '../../utils/online'
 import { useRoute, useRouter } from 'vue-router'
 import { pctOf, unitOf } from '../../store/app'
 import { goUp } from '../../router'
@@ -27,7 +28,7 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
     <div v-else class="card tbl">
       <div class="tr th"><span>Ученик</span><span class="uc">Юнит</span><span>Оплата</span><span>Прогресс</span></div>
       <button class="tr" v-for="s in studentStore.list" :key="s.id" @click="router.push({ name: 'students', params: { id: s.id } })">
-        <span class="who"><Avatar :s="s" :size="56" /><span class="tx"><b>{{ s.name }}</b><small v-if="s.status === 'invited'" class="inv">ждёт приглашения</small><small v-else-if="s.username" class="sub">@{{ s.username }}</small><small class="sub ui">{{ unitOf(pathStore.of(s.id)) }}</small></span></span>
+        <span class="who"><Avatar :s="s" :size="56" :online="isOnline(s)" /><span class="tx"><b>{{ s.name }}</b><small v-if="s.status === 'invited'" class="inv">ждёт приглашения</small><small v-else-if="isOnline(s)" class="onl">в сети</small><small v-else class="sub">{{ seenLabel(s) || (s.username ? '@' + s.username : '') }}</small><small class="sub ui">{{ unitOf(pathStore.of(s.id)) }}</small></span></span>
         <span class="hint uc">{{ unitOf(pathStore.of(s.id)) }}</span>
         <span><span class="badge" :class="PAY[s.payment.status][1]">{{ PAY[s.payment.status][0] }}</span></span>
         <span class="prog"><span class="bar"><i :style="{ width: pctOf(pathStore.of(s.id)) + '%' }" /></span>{{ pctOf(pathStore.of(s.id)) }}%</span>
@@ -42,6 +43,7 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
 button.tr:hover { background: var(--surface) } .th { padding-top: 8px; padding-bottom: 6px; font-size: 12px; font-weight: 800; color: var(--hint); cursor: default; text-transform: uppercase; letter-spacing: .3px }
 .who { display: flex; align-items: center; gap: 12px; min-width: 0 } .tx { display: grid; min-width: 0; line-height: 1.25 } .tx b { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .sub { font-size: 14px; font-weight: 500; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .inv { font-size: 14px; font-weight: 700; color: var(--orange-d, var(--orange)) }
+.onl { font-size: 14px; font-weight: 600; color: var(--blue) }
 .ui { display: block } .uc { display: none } .uc.hint { font-size: 13px }
 .tr .badge { font-size: 12px; padding: 2px 8px }
 .prog { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700 } .bar { flex: 1; height: 8px; border-radius: 9px; background: var(--border); overflow: hidden; min-width: 40px } .bar i { display: block; height: 100%; background: var(--green); border-radius: 9px }
