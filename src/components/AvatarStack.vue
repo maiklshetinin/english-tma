@@ -23,5 +23,5 @@ const ringW = computed(() => Math.max(1.5, props.size / 14))
 <style scoped>
 .stack { display: inline-flex; align-items: center; flex: none }
 .it { position: relative; display: inline-grid; border-radius: 50%; box-shadow: 0 0 0 var(--rw) var(--ring) }
-.more { place-items: center; background: var(--purple-d); color: #fff; font-weight: 900; line-height: 1; letter-spacing: -.5px; z-index: 20 }
+.more { place-items: center; background: var(--hint); color: #fff; font-weight: 900; line-height: 1; letter-spacing: -.5px; z-index: 20 }
 </style>

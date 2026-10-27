@@ -34,6 +34,7 @@ function dropState(d, h) {                       // подсветка ячей�
 // Ученики урока, которые есть в списке. Ученика могли удалить из базы или архивировать — его id остаётся в уроке, но показывать некого.
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)
 const isGroup = (l) => group(l).length > 1
+const ringOf = (l) => (allOff(l) ? 'var(--red-l)' : l.done ? 'var(--green-l)' : 'var(--card)')        // кольцо стопки — цвета фона карточки
 const orphan = (l) => !group(l).length                                      // урок, в котором не осталось известных учеников: показываем серым «?», чтобы его можно было убрать
 // «Отменил ученик»: все отменили — карточка красная и зачёркнутая; в группе часть — красный значок «✕N»
 const offCount = (l) => group(l).filter(s => l.canceled?.[s.id]).length
@@ -51,7 +52,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
   <div class="card wk">
     <div class="g head">
       <span class="corner" />
-      <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small>
+      <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
         <span v-if="money(d).plan" class="money" :title="`Факт ${fmtMoney(money(d).real)} из плана ${fmtMoney(money(d).plan)}`">
           <i class="real" :class="{ zero: !money(d).real }"><span class="w">{{ fmtMoneyShort(money(d).real) }}</span><span class="n">{{ fmtMoneyK(money(d).real) }}</span></i>
           <i v-if="money(d).plan !== money(d).real" class="plan"><span class="w">из {{ fmtMoneyShort(money(d).plan) }}</span><span class="n">/{{ fmtMoneyK(money(d).plan) }}</span></i></span></span>
@@ -64,11 +65,11 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
           <button class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
-              <AvatarStack class="st-lg" :students="group(l)" :size="20" :max="4" ring="var(--purple-l)" /><AvatarStack class="st-sm" :students="group(l)" :size="20" :max="2" ring="var(--purple-l)" />
-              <span v-if="l.done" class="tick">✓</span>
+              <AvatarStack class="st-lg" :students="group(l)" :size="20" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="20" :max="2" :ring="ringOf(l)" />
+              <b class="t">{{ hh(l.hour, l.minute) }}</b><span v-if="l.done" class="tick">✓</span>
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
-            <template v-else><Avatar :s="first(l)" :size="20" /><span v-if="l.done" class="tick">✓</span><span class="nm">{{ first(l).name }}</span></template>
+            <template v-else><Avatar :s="first(l)" :size="20" /><b class="t">{{ hh(l.hour, l.minute) }}</b><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick">✓</span></template>
             <i v-if="allOff(l)" class="off" aria-hidden="true">✕</i><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
@@ -87,9 +88,16 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .head { margin-bottom: 2px }
 .tm { display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--hint-2) }
 .dh { display: grid; justify-items: center; padding: 4px 0; border-radius: 12px; font-size: 13px; color: var(--hint) }
+.dn { display: grid; justify-items: center }
 .dh small { font-weight: 800; font-size: 12px; color: var(--hint-2) } .dh.we b { color: var(--purple-d) }
 /* Деньги дня под датой: зелёным — факт (проведённые), серым — «из» плана; на узком экране суммы короткие (12,5к) */
 .head { align-items: start } .head .dh { align-content: start }
+/* Широкий экран: «Пн 26» слева, деньги справа в той же строке */
+@media (min-width: 720px) {
+  .dh { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; min-height: 40px }
+  .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px }
+  .dh .money { justify-items: end; margin-top: 0 }
+}
 .money .n { display: none } @media (max-width: 719px) { .money .w { display: none } .money .n { display: inline } }
 .money { display: grid; justify-items: center; margin-top: 2px; line-height: 1.15; font-style: normal; max-width: 100%; overflow: hidden }
 .money i { font-style: normal; white-space: nowrap }
@@ -108,18 +116,14 @@ html[data-theme='dark'] .money .real { color: var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
 .chip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 4px; min-width: 0;
-  border: 2px solid var(--blue); border-bottom-width: 4px; border-radius: 10px; background: var(--blue-l); color: var(--blue-d);
+  border: 2px solid var(--hint-2); border-bottom-width: 4px; border-radius: 10px; background: var(--card); color: var(--text);
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
 .chip.done { border-color: var(--green); background: var(--green-l); color: var(--green-d); cursor: pointer } .chip .tick { font-weight: 900 }
-/* Групповой урок — фиолетовый (и в шторке урока LessonSheet.vue); проведённая группа остаётся фиолетовой, с зелёной ✓ */
-.chip.group { border-color: var(--purple); background: var(--purple-l); color: var(--purple-d) }
-.chip.group .tick { color: var(--green-d) }
+/* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
 /* Группа: аватарки внахлёст без подписи — на телефоне две (вторая может быть «+N»), на широком экране до четырёх */
 .chip .st-lg { display: none } .chip .st-sm { display: inline-flex }
 @media (min-width: 720px) { .chip .st-lg { display: inline-flex } .chip .st-sm { display: none } }
-.cell.join .chip.group :deep(.it) { box-shadow: 0 0 0 1.5px var(--purple-l) }
-html[data-theme='dark'] .chip.group { color: var(--purple) }
-.cell.join { box-shadow: inset 0 0 0 2px var(--purple) } .cell.join .chip { border-color: var(--purple); background: var(--purple-l) }
+.cell.join { box-shadow: inset 0 0 0 2px var(--green) } .cell.join .chip { border-color: var(--green); border-style: dashed }
 /* Урок, ученика которого больше нет (удалён из базы / архив): серый пунктир с «?» — нажать и убрать */
 .chip.orphan { border-style: dashed; border-color: var(--hint-2); background: var(--surface); color: var(--hint); cursor: pointer }
 .chip .q { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--hint-2); color: #fff; font-weight: 900; font-size: 12px; flex: none }
@@ -129,12 +133,15 @@ html[data-theme='dark'] .chip.group { color: var(--purple) }
 html[data-theme='dark'] .chip.canceled { color: var(--red) }
 .off { position: absolute; top: -6px; left: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
 /* Начало внутри часа — бирка «:30» в правом нижнем углу; заметка — жёлтая точка в правом верхнем */
-.min { position: absolute; right: -4px; bottom: -7px; font-style: normal; font-size: 10px; font-weight: 900; line-height: 1.25; padding: 0 4px; border-radius: 99px; background: var(--text); color: var(--bg); z-index: 2 }
+.min { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); font-style: normal; font-size: 11px; font-weight: 900; line-height: 1.3; padding: 0 5px; border-radius: 99px; background: var(--blue); color: #fff; box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .note { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 .chip :deep(.av) { width: 20px !important; height: 20px !important; font-size: 10px !important }
-.chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
+/* Время урока: на широком экране — крупно в карточке («18:30»), на телефоне карточка узкая — заметная бирка «:30» внизу */
+.chip .t { display: none; font-size: 13px; font-weight: 900; letter-spacing: -.2px; flex: none }
+.chip.done .t, .chip.done .tick { color: var(--green-d) } html[data-theme='dark'] .chip.done .t { color: var(--green) }
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
-@media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px } .cell { height: 40px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
+@media (min-width: 720px) { .chip .nm { display: block } .chip .t { display: inline } .min { display: none } .chip { justify-content: flex-start; padding: 0 6px } .cell { height: 40px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
 @media (max-width: 420px) { .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 34px } }
 </style>

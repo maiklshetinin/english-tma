@@ -18,7 +18,7 @@ const pos = computed(() => lesson.value
 </script>
 <template>
   <div v-if="dnd.active && s" class="ghost" :class="{ lesson, group: lesson && members.length > 1 }" :style="pos" :title="s.name">
-    <template v-if="lesson && members.length > 1"><AvatarStack :students="members" :size="20" :max="3" ring="var(--purple-l)" /></template>
+    <template v-if="lesson && members.length > 1"><AvatarStack :students="members" :size="20" :max="3" ring="var(--card)" /></template>
     <template v-else-if="lesson"><Avatar :s="s" :size="20" /><span class="nm">{{ s.name }}</span></template>
     <template v-else><Avatar :s="s" :size="26" /><b>{{ s.name }}</b><small v-if="p.kind === 'lesson'">{{ hh(p.lesson.hour, p.lesson.minute) }}</small></template>
   </div>
@@ -28,7 +28,6 @@ const pos = computed(() => lesson.value
   background: var(--card); border: 2px solid var(--blue); border-bottom-width: 4px; border-radius: 14px; color: var(--blue-d); font-size: 14px; box-shadow: 0 10px 24px rgba(0, 0, 0, .18); rotate: -3deg }
 .ghost small { color: var(--hint) }
 .ghost.lesson .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 800 }
-.ghost.lesson { overflow: hidden; gap: 5px; justify-content: center; padding: 0; rotate: none; border-radius: 10px; background: var(--blue-l); opacity: .92; box-shadow: 0 6px 16px rgba(0, 0, 0, .22) }
-.ghost.lesson.group { border-color: var(--purple); background: var(--purple-l); color: var(--purple-d) }      /* групповой урок — фиолетовый, как в WeekGrid.vue */
+.ghost.lesson { overflow: hidden; gap: 5px; justify-content: center; padding: 0; rotate: none; border-radius: 10px; background: var(--card); border-color: var(--hint-2); color: var(--text); opacity: .92; box-shadow: 0 6px 16px rgba(0, 0, 0, .22) }
 @media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px } }
 </style>
