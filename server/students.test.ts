@@ -102,6 +102,15 @@ ok('архивный пропал у преподавателя', (await S.list(
 ok('архивный не читается и самим учеником', (await S.list(mUser)).length === 0)
 ok('приглашение на архивного → 404', (await code(S.invite(masha.id, 'tg:1'))) === 404)
 
+// --- имя и уровень ---
+const ed = await S.create({ name: 'Тёма', level: 'A1' }, 'tg:1')
+const ed2 = await S.update(ed.id, { name: '  Артём  ', level: 'B2' })
+ok('правка: имя обрезано, уровень сменён', ed2.name === 'Артём' && ed2.level === 'B2' && store.get(`students/${ed.id}`).name === 'Артём' && store.get(`students/${ed.id}`).level === 'B2')
+ok('правка только уровня не трогает имя', (await S.update(ed.id, { level: 'C1' })).name === 'Артём')
+ok('правка: пустое имя / длинное / неверный уровень / ничего → 400', (await code(S.update(ed.id, { name: '  ' }))) === 400 && (await code(S.update(ed.id, { name: 'x'.repeat(41) }))) === 400
+  && (await code(S.update(ed.id, { level: 'Z9' }))) === 400 && (await code(S.update(ed.id, {}))) === 400)
+ok('правка: нет ученика / архивный → 404', (await code(S.update('nope', { name: 'A' }))) === 404 && (await code(S.update(masha.id, { name: 'A' }))) === 404)
+
 // --- раздел «Архив»: список и возврат ---
 const arch = await S.listArchived()
 ok('архив: в списке только архивные (и Маша среди них)', arch.some(x => x.id === masha.id) && arch.every(x => store.get(`students/${x.id}`).archived === true) && 'archivedAt' in arch[0])

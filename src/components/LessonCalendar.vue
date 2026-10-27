@@ -1,5 +1,6 @@
 <script setup>
-// Календарь уроков ученика по месяцам (вкладка «Уроки»).
+// Календарь уроков ученика по месяцам: у ученика — вкладка «Уроки», у преподавателя (teacher) — карточка ученика.
+// У преподавателя ещё: кнопка «Проведён» у урока и деньги за месяц — «Ожидается» (все уроки, кроме отменённых) и «Факт» (проведённые).
 //  • Цвет урока: зелёный — проведён (подтвердил преподаватель), серый — запланирован, красный — отменил ученик.
 //  • ‹ › — листать месяцы: история хранится вся (GET /lessons/history), две живые недели — свежие из расписания.
 //  • Нажатие на день — уроки этого дня под календарём; внизу — итог месяца.
@@ -8,7 +9,8 @@ import { DAYS, hh, ymd } from '../store/app'
 import { useScheduleStore } from '../stores/schedule'
 import { useStudentsStore } from '../stores/students'
 import { priceAt, fmtMoney } from '../utils/price'
-const props = defineProps({ studentId: { type: String, default: null } })
+import { showToast } from '../composables/useToast'
+const props = defineProps({ studentId: { type: String, default: null }, teacher: Boolean })
 const scheduleStore = useScheduleStore(), studentStore = useStudentsStore()
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -60,12 +62,26 @@ watch([month, all], () => {
 const dayLessons = computed(() => (picked.value ? byDate.value[picked.value] ?? [] : []))
 const pickedTitle = computed(() => { if (!picked.value) return ''; const d = new Date(picked.value + 'T00:00'); return `${d.getDate()} ${MONTHS_GEN[d.getMonth()]}, ${DAYS[(d.getDay() + 6) % 7].toLowerCase()}` })
 
+// Итог месяца. paid — факт (проведённые, по зафиксированным ценам); expected — ожидается: проведённые + запланированные (по цене на время урока);
+// lost — отменённые учеником (по цене на время урока, без оплаты)
 const sum = computed(() => {
-  const s = { done: 0, plan: 0, off: 0, paid: 0 }
-  for (const l of all.value) if (l.date.startsWith(month.value)) { const st = statusOf(l); s[st]++; if (st === 'done') s.paid += priceOf(l) }
+  const s = { done: 0, plan: 0, off: 0, paid: 0, expected: 0, lost: 0 }
+  for (const l of all.value) if (l.date.startsWith(month.value)) {
+    const st = statusOf(l); s[st]++
+    if (st === 'done') { s.paid += priceOf(l); s.expected += priceOf(l) }
+    else if (st === 'plan') s.expected += priceOf(l)
+    else s.lost += priceAt(studentStore.findAny(props.studentId), l.date, l.hour)
+  }
   return s
 })
-const STATUS = { done: 'Проведён', plan: 'Запланирован', off: 'Отменён вами' }
+const STATUS = computed(() => ({ done: 'Проведён', plan: 'Запланирован', off: props.teacher ? 'Отменил ученик' : 'Отменён вами' }))
+// Преподаватель: «Проведён» / «Отменить» прямо в календаре (отменённый учеником урок не отмечаем)
+const locked = (l) => l.done && (Object.keys(l.names ?? {}).length > 0 || l.studentIds.some(id => studentStore.findAny(id)?.archived))
+function toggle(l) {
+  const was = !!l.done
+  scheduleStore.setDone(l, !was)
+  showToast(was ? 'Отметка «проведён» снята' : 'Урок отмечен проведённым', () => scheduleStore.setDone(l, was))
+}
 </script>
 
 <template>
@@ -97,14 +113,21 @@ const STATUS = { done: 'Проведён', plan: 'Запланирован', off
       <div class="info"><b class="tm">{{ hh(l.hour, l.minute) }}</b> · Урок
         <div class="hint">{{ statusOf(l) === 'off' ? 'Без оплаты' : priceOf(l) ? `Цена: ${fmtMoney(priceOf(l))}` : '' }}</div></div>
       <span class="badge" :class="{ done: 'ok', plan: 'warn', off: 'bad' }[statusOf(l)]">{{ STATUS[statusOf(l)] }}</span>
+      <button v-if="teacher && statusOf(l) !== 'off'" class="btn sm" :class="{ ghost: l.done }" :disabled="locked(l)" :title="locked(l) ? 'В уроке ученик из архива или удалённый — отметку не снять' : ''" @click="toggle(l)">{{ l.done ? 'Отменить' : 'Проведён' }}</button>
     </div>
   </div>
 
-  <div class="card sum">
+  <div class="card sum" :class="{ t: teacher }">
     <div><b class="g">{{ sum.done }}</b><small>проведено</small></div>
     <div><b>{{ sum.plan }}</b><small>запланировано</small></div>
     <div><b class="r">{{ sum.off }}</b><small>отменено</small></div>
-    <div v-if="sum.paid"><b>{{ fmtMoney(sum.paid) }}</b><small>за проведённые</small></div>
+    <div v-if="sum.paid && !teacher"><b>{{ fmtMoney(sum.paid) }}</b><small>за проведённые</small></div>
+  </div>
+  <div v-if="teacher" class="card money">
+    <div class="mrow"><span>Ожидается за месяц</span><b>{{ fmtMoney(sum.expected) }}</b></div>
+    <div class="mrow real"><span>Факт — проведённые</span><b>{{ fmtMoney(sum.paid) }}</b></div>
+    <div class="mbar" role="progressbar" :aria-valuenow="sum.expected ? Math.round(sum.paid / sum.expected * 100) : 0" aria-valuemin="0" aria-valuemax="100"><i :style="{ width: (sum.expected ? Math.min(100, sum.paid / sum.expected * 100) : 0) + '%' }" /></div>
+    <div v-if="sum.lost" class="mrow lost"><span>Потеряно — отменил ученик</span><b>−{{ fmtMoney(sum.lost) }}</b></div>
   </div>
   </div>
 </template>
@@ -145,9 +168,16 @@ const STATUS = { done: 'Проведён', plan: 'Запланирован', off
 .ls.off .tm { text-decoration: line-through; color: var(--hint) }
 .ls.done { background: var(--green-l); border-color: var(--green) }
 
+.money { display: grid; gap: 8px; padding: 14px 16px }
+.mrow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 800; color: var(--hint) }
+.mrow b { font-size: 20px; font-weight: 900; color: var(--text) } .mrow.real b { color: var(--green-d) } .mrow.lost b { font-size: 16px; color: var(--red-d) }
+html[data-theme='dark'] .mrow.real b { color: var(--green) } html[data-theme='dark'] .mrow.lost b { color: var(--red) }
+.mbar { height: 12px; border-radius: 99px; background: var(--border); overflow: hidden } .mbar i { display: block; height: 100%; border-radius: 99px; background: var(--green); box-shadow: inset 0 -3px 0 var(--green-d); transition: width .25s }
+.ls .btn { flex: none } .ls { flex-wrap: wrap; row-gap: 8px } .ls .info { flex: 1 1 150px }
 .sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px; text-align: center }
 .sum div { display: grid; gap: 2px } .sum b { font-size: 20px; font-weight: 900 } .sum small { font-size: 12px; font-weight: 800; color: var(--hint); line-height: 1.15 }
 .sum .g { color: var(--green-d) } .sum .r { color: var(--red-d) }
 @media (max-width: 480px) { .sum { grid-template-columns: repeat(2, 1fr); row-gap: 12px } }
+.sum.t { grid-template-columns: repeat(3, 1fr) }
 html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] .sum .r { color: var(--red) }
 </style>

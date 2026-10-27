@@ -77,6 +77,19 @@ export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/War
       return pub(ref.id, data)
     },
 
+    // Имя и уровень (любое из полей). Имя 1–40 символов, уровень — из LEVELS. Архивного не правим.
+    async update(id: string, input: { name?: unknown; level?: unknown } | undefined): Promise<Student> {
+      if (!ID.test(id)) throw fail(400, 'studentId required')
+      const patch: Partial<StudentDoc> = {}
+      if (input?.name !== undefined) { const name = String(input.name ?? '').trim(); if (!name || name.length > 40) throw fail(400, 'name required (1–40 chars)'); patch.name = name }
+      if (input?.level !== undefined) { if (!(LEVELS as readonly string[]).includes(String(input.level))) throw fail(400, 'bad level'); patch.level = String(input.level) as Level }
+      if (!Object.keys(patch).length) throw fail(400, 'nothing to change')
+      const ref = col().doc(id), st = await ref.get()
+      if (!st.exists || st.get('archived')) throw fail(404, 'student not found')
+      await ref.update(patch)
+      return pub(id, { ...(st.data() as StudentDoc), ...patch })
+    },
+
     // Ник Telegram у уже созданного ученика: ставим ник и заново ищем фото по нему.
     // Пока ученик не открыл приглашение; после входа ник и фото приходят из его настоящего аккаунта.
     async setUsername(id: string, raw: unknown): Promise<Student> {

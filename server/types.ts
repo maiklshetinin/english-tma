@@ -92,6 +92,8 @@ export interface ArchivedStudent extends Student {
   archivedAt: string | null    // ISO-время архивации; у старых записей может не быть
 }
 
+export interface StudentUpdateInput { name?: string; level?: Level }   // POST /students/:id — имя и/или уровень
+
 export interface StudentInput {            // POST /students
   name: string
   level?: Level                            // по умолчанию 'A1'

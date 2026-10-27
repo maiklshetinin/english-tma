@@ -53,6 +53,13 @@ export const useStudentsStore = defineStore('students', () => {
   async function invite(studentId: string): Promise<string> {
     return (await call<InviteResponse>('/invites', { method: 'POST', body: JSON.stringify({ studentId }) }, 'Не удалось создать приглашение')).url
   }
+  /** Имя и/или уровень ученика. */
+  async function update(studentId: string, patch: { name?: string; level?: string }): Promise<void> {
+    const r = await apiRequest(`/students/${encodeURIComponent(studentId)}`, { method: 'POST', body: JSON.stringify(patch) })
+    if (!r.ok) throw new Error(r.status === 400 ? 'Имя — от 1 до 40 символов, уровень — A1…C2' : r.status === 404 ? 'Ученик не найден (возможно, уже в архиве)' : `Не удалось сохранить (${r.status})`)
+    const st = byId(studentId); if (st) Object.assign(st, patch)          // сразу на экране; список перечитаем
+    await load().catch(() => {})
+  }
   /** Ник Telegram у уже созданного ученика (пока он не открыл приглашение): сервер заново ищет фото по нику. */
   async function setUsername(studentId: string, username: string): Promise<void> {
     const r = await apiRequest(`/students/${encodeURIComponent(studentId)}/username`, { method: 'POST', body: JSON.stringify({ username }) })
@@ -88,5 +95,5 @@ export const useStudentsStore = defineStore('students', () => {
     await Promise.all([loadArchived().catch(() => {}), useScheduleStore().load().catch(() => {})])
   }
 
-  return { list, archived, byId, findAny, set, clear, load, loadArchived, startRefresh, stopRefresh, add, invite, setUsername, setPrice, archive, restore, purge }
+  return { list, archived, byId, findAny, set, clear, load, loadArchived, startRefresh, stopRefresh, add, update, invite, setUsername, setPrice, archive, restore, purge }
 })

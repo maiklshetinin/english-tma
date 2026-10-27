@@ -99,4 +99,14 @@ describe('students store', () => {
     expect(calls).toContain('DELETE /students/3')
     expect(calls).toContain('GET /schedule')                      // после удаления расписание перечитывается
   })
+
+  it('update: имя и уровень — запрос, сразу на экране; ошибки понятные', async () => {
+    apiRequest.mockImplementation((path: string) => (path === '/students' ? ok([{ ...st('1', 'Артём'), level: 'B2' }]) : ok({})))
+    const s = useStudentsStore(); s.set([st('1', 'Тёма')])
+    await s.update('1', { name: 'Артём', level: 'B2' })
+    expect(apiRequest.mock.calls[0][0]).toBe('/students/1')
+    expect(JSON.parse(apiRequest.mock.calls[0][1].body)).toEqual({ name: 'Артём', level: 'B2' })
+    expect(s.byId('1')?.name).toBe('Артём'); expect(s.byId('1')?.level).toBe('B2')
+    apiRequest.mockImplementation(() => err(400)); await expect(s.update('1', { name: '' })).rejects.toThrow('Имя')
+  })
 })

@@ -1,6 +1,6 @@
 <script setup>
 // Список учеников — компактная сетка кружков (как «Поделиться» в Telegram): аватарка, имя под ней.
-// Кружок можно перетащить в таблицу; урок из таблицы, брошенный сюда, снимается с расписания. Красная точка — нужна оплата.
+// Кружок можно перетащить в таблицу; урок из таблицы, брошенный сюда, снимается с расписания.
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { handle } from '../store/app'
@@ -15,7 +15,6 @@ const trash = computed(() => dnd.active && dnd.payload?.kind === 'lesson')
 const trashOver = computed(() => trash.value && dnd.over?.kind === 'panel')
 const router = useRouter()
 const open = (id) => { router.push({ name: 'home', params: { id } }) }      // панель живёт на «Главной»: карточка открывается там же
-const attention = (s) => s.payment.status !== 'paid'
 </script>
 
 <template>
@@ -25,7 +24,7 @@ const attention = (s) => s.payment.status !== 'paid'
     <div class="list">
       <div v-for="s in list" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
         @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
-        <span class="ava"><Avatar :s="s" :size="48" /><i v-if="attention(s)" class="dot" title="Нужна оплата" /></span>
+        <span class="ava"><Avatar :s="s" :size="48" /></span>
         <span class="nm">{{ s.name }}</span>
       </div>
       <p v-if="!list.length" class="hint empty">Никого не нашли</p>
@@ -48,7 +47,6 @@ const attention = (s) => s.payment.status !== 'paid'
 .st:hover { background: var(--blue-l) } .st:active { cursor: grabbing } .st:active .ava { transform: scale(.94) }
 .ava { position: relative; display: inline-grid; transition: transform .08s }
 .nm { width: 100%; text-align: center; font-size: 12px; font-weight: 700; line-height: 1.2; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word }
-.dot { position: absolute; top: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 2px var(--card) }
 .empty { text-align: center; margin: 8px 0 }
 .ft { border-top: 2px solid var(--border); background: var(--surface); text-align: center; padding: 10px; font-size: 12px; color: var(--hint) }
 .drophint { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; text-align: center; padding: 12px; font-weight: 800; font-size: 14px;

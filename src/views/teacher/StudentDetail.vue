@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { pctOf } from '../../store/app'
 import { showToast } from '../../composables/useToast'
@@ -8,7 +8,8 @@ import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import PathEditor from '../../components/PathEditor.vue'
 import StudentDecks from '../../components/StudentDecks.vue'
-import LessonsList from '../../components/LessonsList.vue'
+import LessonCalendar from '../../components/LessonCalendar.vue'
+import { useScheduleStore } from '../../stores/schedule'
 import { useStudentsStore } from '../../stores/students'
 import { copyText, shareInvite } from '../../composables/useShare'
 import { usePathStore } from '../../stores/path'
@@ -19,7 +20,22 @@ const props = defineProps({ id: { type: [String, Number], required: true }, back
 defineEmits(['back'])
 const { notify, haptic } = useTelegram()
 const s = computed(() => studentStore.list.find(x => x.id === props.id))
-const tab = ref('lessons')                                       // «Уроки» (как у ученика + отметка «проведён») · «Путь и слова»
+// Имя и уровень: «Изменить» → форма в карточке
+const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+const editing = ref(false), ename = ref(''), elevel = ref('A1'), editBusy = ref(false)
+const startEdit = () => { ename.value = s.value.name; elevel.value = s.value.level; editing.value = true }
+async function saveEdit() {
+  const patch = {}
+  if (ename.value.trim() !== s.value.name) patch.name = ename.value.trim()
+  if (elevel.value !== s.value.level) patch.level = elevel.value
+  if (!Object.keys(patch).length) { editing.value = false; return }
+  editBusy.value = true
+  try { await studentStore.update(s.value.id, patch); editing.value = false; showToast('Сохранено') }
+  catch (e) { notify(e.message) } finally { editBusy.value = false }
+}
+const tab = ref('lessons')
+// История уроков этого ученика — для календаря (все месяцы)
+watch(() => props.id, (id) => { if (id) useScheduleStore().loadHistory(String(id)).catch(() => {}) }, { immediate: true })                                       // «Уроки» (как у ученика + отметка «проведён») · «Путь и слова»
 const PRESETS = ['Урок скоро', 'Сделай ДЗ', 'Пора оплатить', 'Повтори слова']
 const remind = (t) => { haptic('medium'); notify(`Отправлено: ${s.value.name} — ${t}`) }   // TODO: бэкенд → Bot API sendMessage
 
@@ -74,7 +90,15 @@ const saveAsPreset = () => {
   <div v-if="s" class="page wide">
     <button class="btn ghost" style="justify-self:start" @click="$emit('back')"><AppIcon name="back" :size="18" /> {{ backLabel }}</button>
     <div class="card">
-      <div class="row2"><Avatar :s="s" :size="56" /><div><h3 style="margin:0">{{ s.name }}</h3><div class="hint">Уровень {{ s.level }} · прогресс {{ pctOf(pathStore.of(s.id)) }}%</div></div></div>
+      <div v-if="!editing" class="row2"><Avatar :s="s" :size="56" /><div style="flex:1;min-width:0"><h3 style="margin:0">{{ s.name }}</h3><div class="hint">Уровень {{ s.level }} · прогресс {{ pctOf(pathStore.of(s.id)) }}%</div></div>
+        <button class="btn ghost sm" @click="startEdit"><AppIcon name="pencil" :size="14" /> Изменить</button></div>
+      <form v-else class="edit" @submit.prevent="saveEdit">
+        <div class="row2"><Avatar :s="{ ...s, name: ename || s.name }" :size="56" />
+          <label class="f"><span class="lab">Имя</span><input v-model="ename" maxlength="40" aria-label="Имя ученика" autofocus /></label></div>
+        <span class="lab">Уровень</span>
+        <div class="seg lv" role="radiogroup" aria-label="Уровень"><button v-for="l in LEVELS" :key="l" type="button" role="radio" :aria-checked="elevel === l" :class="{ on: elevel === l }" @click="elevel = l">{{ l }}</button></div>
+        <div class="row2" style="justify-content:flex-end;margin-top:10px"><button type="button" class="btn ghost sm" @click="editing = false">Отмена</button><button class="btn sm" :disabled="editBusy || !ename.trim()">Сохранить</button></div>
+      </form>
       <div class="row2" style="margin-top:12px">
         <span class="badge ok">🔥 {{ s.streak }}</span><span class="badge ok">{{ s.coins }} монет</span>
         <span class="badge" :class="s.payment.status === 'paid' ? 'ok' : 'warn'">Уроков осталось: {{ s.payment.lessonsLeft }}</span>
@@ -101,7 +125,7 @@ const saveAsPreset = () => {
         <button v-for="p in PRESETS" :key="p" class="btn ghost" @click="remind(p)">{{ p }}</button></div>
     </div>
     <div class="seg" style="justify-self:start"><button :class="{ on: tab === 'lessons' }" @click="tab = 'lessons'">Уроки</button><button :class="{ on: tab === 'path' }" @click="tab = 'path'">Путь и слова</button></div>
-    <LessonsList v-if="tab === 'lessons'" :student-id="s.id" can-mark />
+    <LessonCalendar v-if="tab === 'lessons'" :student-id="s.id" teacher />
     <template v-else>
     <StudentDecks :student-id="s.id" />
     <div class="card">
@@ -122,3 +146,7 @@ const saveAsPreset = () => {
     <div class="card" style="text-align:center"><b>Ученик не найден</b><p class="hint" style="margin:6px 0 0">Возможно, он в архиве.</p></div>
   </div>
 </template>
+
+<style scoped>
+.edit { display: grid; gap: 6px } .edit .f { flex: 1; min-width: 160px } .edit input { margin: 0 } .lv { display: grid; grid-template-columns: repeat(6, 1fr) } .lv button { padding: 6px 0 }
+</style>

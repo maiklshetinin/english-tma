@@ -82,6 +82,7 @@ app.post('/students', requireUser, requireTeacher, wrap(async (req, res) => {   
 app.post('/invites', requireUser, requireTeacher, wrap(async (req, res) => {                               // новая ссылка для существующего ученика (одноразовая)
   res.json({ url: inviteUrl(await students.invite(String(req.body?.studentId || ''), req.user.uid)) } satisfies InviteResponse)
 }))
+app.post('/students/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await students.update(req.params.id, req.body))))   // { name?, level? } → обновлённый ученик
 app.post('/students/:id/username', requireUser, requireTeacher, wrap(async (req, res) => res.json(await students.setUsername(req.params.id, req.body?.username))))   // { username } → обновлённый ученик (с фото по нику)
 app.post('/students/:id/price', requireUser, requireTeacher, wrap(async (req, res) => res.json(await students.setPrice(req.params.id, req.body?.price))))   // { price } → обновлённый ученик; прошедшие уроки по старой цене
 app.get('/students/archived', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await students.listArchived())))   // раздел «Архив»
