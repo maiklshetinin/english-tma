@@ -58,9 +58,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
         <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
       </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
-        <!-- Деньги дня: всё проведено — сумма зелёным; часть — факт зелёным и «из плана» мелко серым; ничего — план серым -->
-        <span v-if="money(d).plan" class="dsum" :class="{ ok: money(d).real > 0 }" :title="`Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}`">{{ fmtMoneyK(money(d).real > 0 ? money(d).real : money(d).plan) }}</span>
-        <span v-if="money(d).real > 0 && money(d).real < money(d).plan" class="dof">из {{ fmtMoneyK(money(d).plan) }}</span>
+        <span v-if="money(d).plan" class="dsum" :class="{ ok: money(d).real === money(d).plan }" :title="`Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}`">{{ fmtMoneyK(money(d).plan) }}</span>
         <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−{{ fmtMoneyK(money(d).lost) }}</span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
@@ -107,7 +105,6 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 /* Деньги дня — одна цифра под датой: сумма уроков дня; зелёная, когда все проведены */
 .dsum { margin-top: 2px; font-size: 12px; font-weight: 900; color: var(--hint-2); white-space: nowrap } .dsum.ok { color: var(--green-d) }
 html[data-theme='dark'] .dsum.ok { color: var(--green) }
-.dof { font-size: 10px; font-weight: 800; color: var(--hint-2); line-height: 1.1; white-space: nowrap }      /* «из 4,9к» — план дня, если проведена только часть */
 .dlost { font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 1.1; white-space: nowrap }      /* потеряно из-за отмен — мелко красным под суммой дня */
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
 /* «Сейчас» — красным и полупрозрачным (синий занят чипами уроков): день, время и ячейка на пересечении */
