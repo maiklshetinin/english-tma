@@ -11,7 +11,6 @@ import CardEditor from './CardEditor.vue'
 import DeckChart from './DeckChart.vue'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, canEdit: Boolean, embedded: Boolean })
 const emit = defineEmits(['finish', 'exit'])
-const chartOpen = ref(false)                                      // график колоды поверх сессии — видно, как ответ «отбрасывает» слово
 
 const queue = ref(buildQueue(props.deck, props.userKey))
 const flipped = ref(false), answered = ref(0), hist = ref([]), editing = ref(false)
@@ -30,6 +29,9 @@ const next = computed(() => nextDueInfo(props.deck, props.userKey))
 // Фото и озвучка (необязательны). Озвучка слова включается сама при показе карточки (можно выключить), 🔊 — повторить.
 const hasAudio = computed(() => props.deck.cards.some((c) => c.audio))
 const store = (k, v) => { try { return v === undefined ? localStorage.getItem(k) : localStorage.setItem(k, v) } catch { return null } }
+// График колоды — сверху, над карточкой: видно, куда ответ «отбросил» слово. Открыт/закрыт — запоминается
+const chartOpen = ref(store('tma.chartOpen') === '1')
+watch(chartOpen, (v) => store('tma.chartOpen', v ? '1' : '0'))
 const autoplay = ref(store('tma.autoplay') !== 'off')
 const toggleAuto = () => { autoplay.value = !autoplay.value; store('tma.autoplay', autoplay.value ? 'on' : 'off') }
 const imgBad = ref(false)
@@ -64,7 +66,7 @@ function undo() {
   restore(props.userKey, h.c, h.prev); queue.value = [h.c, ...buildQueue(props.deck, props.userKey).filter((x) => x.id !== h.c.id)]; answered.value--; flipped.value = false
 }
 function onKey(e) {
-  if (editing.value || chartOpen.value || e.metaKey || e.ctrlKey || e.altKey) return
+  if (editing.value || e.metaKey || e.ctrlKey || e.altKey) return
   const tag = e.target?.tagName
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return
   if ((e.key === 'z' || e.key === 'я') && hist.value.length) return undo()
@@ -84,11 +86,13 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
     <header class="bar">
       <button class="btn ghost sm" @click="emit('exit')"><AppIcon name="back" :size="18" /> {{ embedded ? 'Закрыть' : 'Колоды' }}</button>
       <b class="dt">{{ deck.title }}</b>
-      <button class="chartb" aria-label="График колоды" title="График: когда повторять каждое слово" @click="chartOpen = true"><AppIcon name="chart" :size="18" /></button>
+      <button class="chartb" :class="{ on: chartOpen }" :aria-pressed="chartOpen" aria-label="График колоды" title="График: когда повторять каждое слово" @click="chartOpen = !chartOpen"><AppIcon name="chart" :size="18" /></button>
       <span class="cnt" aria-label="Новые, изучаю, к повторению">
         <b class="n" :class="{ on: cur === 'new' }">{{ counts.new }}</b><b class="l" :class="{ on: cur === 'learn' }">{{ counts.learn }}</b><b class="d" :class="{ on: cur === 'due' }">{{ counts.due }}</b>
       </span>
     </header>
+    <!-- График колоды — сверху, над карточкой (как статистика в списке колод): ответили — видно, куда ушло слово -->
+    <DeckChart v-if="chartOpen" :deck="deck" :user-key="userKey" dock @back="chartOpen = false" />
 
     <template v-if="card">
       <!-- Как в Anki: слово и перевод — над фото, пример — под ним. Все блоки на месте до и после «Показать ответ», поэтому ничего не прыгает -->
@@ -126,7 +130,6 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
       </div>
     </div>
     <CardEditor v-if="editing && card" :card="card" @close="editing = false" />
-    <DeckChart v-if="chartOpen" :deck="deck" :user-key="userKey" overlay @back="chartOpen = false" />
   </div>
 </template>
 
@@ -156,6 +159,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
 .tools button { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--border); background: var(--card); color: var(--hint); font: inherit; font-weight: 800; font-size: 13px; border-radius: 12px; padding: 6px 10px; cursor: pointer }
 .tools button:disabled { opacity: .45; cursor: default } .keys { margin-left: auto; font-size: 12px; white-space: nowrap }
 .done { text-align: center; display: grid; gap: 6px } .done p { margin: 0 } .wl { color: var(--blue); font-variant-numeric: tabular-nums }
+.chartb.on { background: var(--blue-l); border-color: var(--blue) }
 .chartb { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 12px; background: var(--card); color: var(--blue); cursor: pointer }
 @media (max-width: 600px) { .keys { display: none } .q { font-size: 28px } .a { font-size: 24px } }
 </style>

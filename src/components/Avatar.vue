@@ -16,13 +16,13 @@ watch(src, () => { failed.value = false })
     <template v-else>{{ (s.name || '?')[0] }}</template>
     <span v-if="s.archived" class="ab" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg></span>
   </span>
-  <i v-if="online && !s.archived" class="on" :style="{ '--d': Math.max(8, Math.round(size * .27)) + 'px' }" title="в сети" aria-label="в сети" />
+  <i v-if="online && !s.archived" class="on" :style="{ '--d': Math.max(7, Math.round(size * .2)) + 'px' }" title="в сети" aria-label="в сети" />
   </span>
 </template>
 <style scoped>
 .avw { position: relative; display: inline-grid; flex: none }
 /* Точка «в сети»: зелёная, с белым кольцом цвета фона — как в Telegram */
-.on { position: absolute; right: 2%; bottom: 2%; width: var(--d); height: var(--d); border-radius: 50%; background: #4fce5d; box-shadow: 0 0 0 max(2px, calc(var(--d) * .18)) var(--card); z-index: 1 }
+.on { position: absolute; right: 4%; bottom: 4%; width: var(--d); height: var(--d); border-radius: 50%; background: #4fce5d; box-shadow: 0 0 0 2px var(--card); z-index: 1 }      /* как в Telegram: ~20 % аватарки, тонкое белое кольцо */
 .av { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 900; flex: none; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); line-height: 1; overflow: hidden }
 .av.img { box-shadow: none; background: var(--surface) !important }
 .av { position: relative }
