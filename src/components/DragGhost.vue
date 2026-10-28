@@ -30,7 +30,7 @@ const fx = computed(() => b.value?.fx ?? 0.5), fy = computed(() => b.value?.fy ?
 const box = computed(() => ({ width: W.value + 'px', height: H.value + 'px', left: -fx.value * W.value + 'px', top: -fy.value * H.value + 'px' }))
 // Кружки: в панели — по одному в клетке сетки; в ячейке — внахлёст, как у урока в таблице
 const shown = computed(() => people.value.slice(0, 4))
-const avEnd = computed(() => (lesson.value ? Math.max(20, Math.min(38, H.value - 10)) : Math.max(26, Math.min(40, H.value + 2))))      // кружки в полёте — как в ячейке, чуть крупнее
+const avEnd = computed(() => (lesson.value ? Math.max(20, Math.min(38, H.value - 10)) : Math.max(26, Math.min(45, H.value + 7))))      // кружки в полёте — как в ячейке, чуть крупнее
 const av = computed(() => (small.value || !g.value?.av ? avEnd.value : Math.round(g.value.av)))
 const ml = (i) => {
   const n = shown.value.length

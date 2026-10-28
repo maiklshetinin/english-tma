@@ -139,7 +139,7 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 .note { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 /* Кружок ученика — почти во всю высоту карточки, как аватарка в списке чатов Telegram */
-.chip :deep(.av) { width: 38px !important; height: 38px !important; font-size: 15px !important }
+.chip :deep(.av) { width: 45px !important; height: 45px !important; font-size: 17px !important }      /* почти во всю высоту ячейки (46px) */
 @media (max-width: 719px) { .chip :deep(.av) { width: 31px !important; height: 31px !important; font-size: 13px !important } }
 @media (max-width: 420px) { .chip :deep(.av) { width: 29px !important; height: 29px !important } }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
