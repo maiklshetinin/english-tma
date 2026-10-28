@@ -119,7 +119,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
 .chip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 4px; min-width: 0;
-  border: 0; border-radius: 10px; background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .1);      /* без обводки — заливка и лёгкая тень: меньше линий на экране */
+  border: 0; border-radius: 10px; background: var(--surface); color: var(--text);      /* запланированный — серая плашка-тег, без обводки и тени */
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
 .chip.done { box-shadow: none; background: var(--green-l); color: var(--green-d); cursor: pointer } .chip .tick { font-weight: 900 }
 /* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
@@ -140,7 +140,7 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 .note { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 /* Кружок ученика — почти во всю высоту карточки, как аватарка в списке чатов Telegram */
-.chip :deep(.av) { width: 45px !important; height: 45px !important; font-size: 17px !important }      /* почти во всю высоту ячейки (46px) */
+.chip :deep(.av) { width: 47px !important; height: 47px !important; font-size: 17px !important }      /* во всю высоту ячейки (46px) */
 @media (max-width: 719px) { .chip :deep(.av) { width: 31px !important; height: 31px !important; font-size: 13px !important } }
 @media (max-width: 420px) { .chip :deep(.av) { width: 29px !important; height: 29px !important } }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
@@ -153,6 +153,7 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 @media (max-width: 719px) { .chip .tick { display: none } }
 /* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
 .wk.gs-gray .cell { background: var(--surface); box-shadow: none }
+.wk.gs-gray .chip:not(.done):not(.canceled):not(.orphan) { background: var(--card) }      /* на серой ячейке урок — белый, иначе сольётся */
 .wk.gs-none .cell { background: transparent; box-shadow: none }      /* без линий: чистый фон, только уроки */
 .wk.gs-lines { gap: 0 } .wk.gs-lines .g.head { margin-bottom: 4px }
 .wk.gs-lines .g:not(.head) { box-shadow: inset 0 -1px 0 var(--border); padding: 2px 0 }      /* линия под каждым часом во всю ширину */
