@@ -92,7 +92,7 @@ function remove() {
 .dicon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--green); color: #fff }
 .tt { flex: 1; display: grid; min-width: 0 } .tt small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .title { margin: 0; padding: 2px 0; border: 0; border-bottom: 1px dashed transparent; border-radius: 0; background: none; font-size: 18px; font-weight: 800 }
-.title:hover { border-bottom-color: var(--border) } .title:focus { background: none; border-bottom-color: var(--blue) } .title:focus-visible { outline: none }
+.title:hover { border-bottom-color: var(--border) } .title:focus { background: none; border-bottom-color: var(--hint-2) } .title:focus-visible { outline: none }
 .x { flex: none; align-self: flex-start; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--hint); cursor: pointer } .x:hover { background: var(--surface) }
 .sec { display: grid; padding: 4px 0 }
 .r { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 46px; padding: 4px 14px 4px 16px; border: 0; background: none; font: inherit; color: var(--text); text-align: left }
@@ -108,7 +108,7 @@ function remove() {
 /* Переключатель как в Telegram */
 .sw { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 99px; background: var(--border); cursor: pointer; transition: background .15s }
 .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s }
-.sw:checked { background: var(--blue) } .sw:checked::after { transform: translateX(16px) } .sw:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px }
+.sw:checked { background: var(--blue) } .sw:checked::after { transform: translateX(16px) }
 .r.sl { display: block; padding-top: 8px; padding-bottom: 8px; border-top: 1px solid var(--border) }
 .ft { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border) }
 .lnk { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--blue); cursor: pointer }

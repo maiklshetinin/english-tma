@@ -25,7 +25,7 @@ html[data-theme='dark'] {
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 700 16px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
 h1, h2, h3 { font-weight: 800; color: var(--text); }
-:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+:focus, :focus-visible { outline: none; }      /* без синей обводки фокуса во всём приложении */
 html.dragging, html.dragging * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
@@ -52,7 +52,7 @@ html.dragging, html.dragging * { user-select: none !important; -webkit-user-sele
 
 input, textarea, select { width: 100%; font: inherit; font-weight: 700; color: var(--text); background: var(--surface);
   border: 2px solid var(--border); border-radius: 14px; padding: 11px 14px; margin-bottom: 10px; outline: none; transition: border-color .12s; }
-input:focus, textarea:focus, select:focus { border-color: var(--blue); background: var(--card); }
+input:focus, textarea:focus, select:focus { border-color: var(--hint-2); background: var(--card); }      /* фокус в поле — чуть темнее рамка, без синего */
 input::placeholder, textarea::placeholder { color: var(--hint-2); }
 input[type='checkbox'] { accent-color: var(--green); }
 

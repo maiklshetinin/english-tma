@@ -85,7 +85,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 .addb { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 10px; background: var(--card); color: var(--green-d); cursor: pointer }
 .addb:hover { border-color: var(--green); background: var(--green-l) }
 .search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 12px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--hint-2) }
-.search:focus-within { border-color: var(--blue); background: var(--card) } .search input { border: 0; background: none; margin: 0; padding: 7px 0; min-width: 0; font-size: 14px }
+.search:focus-within { border-color: var(--hint-2); background: var(--card) } .search input { border: 0; background: none; margin: 0; padding: 7px 0; min-width: 0; font-size: 14px }
 .search input:focus-visible { outline: none }      /* рамку при фокусе даёт сам .search — без второй обводки */
 /* Сетка кружков: аватарка 54px — максимум для 4 в ряд и имя под ней, по 4 в ряд; группы — блоками в рамке с подписью, ниже «Индивидуально» */
 .list { display: grid; gap: 8px; align-content: start; overflow-y: auto; padding: 2px 6px 8px }
