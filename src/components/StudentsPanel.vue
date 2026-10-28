@@ -1,9 +1,10 @@
 <script setup>
 // Список учеников — компактная сетка кружков (как «Поделиться» в Telegram): аватарка, имя под ней.
 // Кружок можно перетащить в таблицу, группу — только целиком (урок сразу всей группе); урок из таблицы, брошенный сюда, снимается с расписания.
+// Нажатие на группу — небольшое меню под ней (как в iOS): её ученики списком, любого можно перетащить по одному, нажатие — карточка ученика.
 // Группы — сверху отдельными блоками: ученики, которые вместе стоят в групповом уроке (по расписанию), подпись — день и время урока.
 // Ниже — «Индивидуально»: остальные по алфавиту.
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { isOnline } from '../utils/online'
 import { useRouter } from 'vue-router'
 import { handle } from '../store/app'
@@ -23,6 +24,21 @@ const shownGroups = computed(() => groups.value.map(g => ({ ...g, members: g.mem
 const solo = computed(() => { const inGroup = new Set(groups.value.flatMap(g => g.members.map(s => s.id))); return list.value.filter(s => !inGroup.has(s.id)) })
 const trash = computed(() => dnd.active && dnd.payload?.kind === 'lesson')
 const trashOver = computed(() => trash.value && dnd.over?.kind === 'panel')
+// Меню группы: где показать — под группой (не влезает — над ней), прижато к краям экрана
+const pop = ref(null)
+const POP_W = 260
+function openPop(g, e) {
+  const r = e.currentTarget.getBoundingClientRect(), h = 44 + g.members.length * 52
+  const left = Math.min(Math.max(8, r.left + r.width / 2 - POP_W / 2), innerWidth - POP_W - 8)
+  const below = r.bottom + 6 + h < innerHeight - 8
+  pop.value = { g, style: { left: left + 'px', width: POP_W + 'px', ...(below ? { top: r.bottom + 6 + 'px' } : { bottom: innerHeight - r.top + 6 + 'px' }) }, up: !below }
+}
+const closePop = () => { pop.value = null }
+watch(() => dnd.active, (on) => { if (on) closePop() })                      // потянули ученика из меню — меню закрывается, тащим дальше
+const onKey = (e) => { if (e.key === 'Escape') closePop() }
+onMounted(() => { addEventListener('keydown', onKey); addEventListener('resize', closePop) })
+onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('resize', closePop) })
+const sub = (s) => (isOnline(s) ? 'в сети' : [s.level, handle(s)].filter(Boolean).join(' · '))
 const router = useRouter()
 const open = (id) => { router.push({ name: 'home', params: { id } }) }      // панель живёт на «Главной»: карточка открывается там же
 </script>
@@ -36,11 +52,10 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
       <!-- Одна сетка на 4 колонки: группа занимает столько колонок, сколько в ней учеников; остальные ученики заполняют свободные клетки рядом -->
       <div class="mix">
       <section v-for="g in shownGroups" :key="g.key" class="grp" :style="{ '--n': Math.min(4, g.members.length) }" :title="`Группа · ${g.label} — перетащите в таблицу, чтобы назначить урок всей группе`"
-        @pointerdown="pressStart($event, { kind: 'student', ids: g.members.map(m => m.id) })" @dragstart.prevent>
+        role="button" tabindex="0" @pointerdown="pressStart($event, { kind: 'student', ids: g.members.map(m => m.id) })" @click="openPop(g, $event)" @keydown.enter="openPop(g, $event)" @dragstart.prevent>
         <i class="gi" aria-hidden="true"><AppIcon name="users" :size="10" /></i>
         <div class="tiles">
-          <div v-for="s in g.members" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}, группа ${g.label}. Группа перетаскивается целиком`"
-            @click="open(s.id)" @keydown.enter="open(s.id)">
+          <div v-for="s in g.members" :key="s.id" class="st">
             <span class="ava"><Avatar :s="s" :size="54" :online="isOnline(s)" /></span><span class="nm">{{ s.name }}</span>
           </div>
         </div>
@@ -53,6 +68,18 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
       <p v-if="!list.length" class="hint empty">Никого не нашли</p>
     </div>
     <Teleport to="body"><div v-if="adding" class="sheet-bg" @click.self="adding = false"><div class="sheet-box"><AddStudent @close="adding = false" /></div></div></Teleport>
+    <!-- Меню группы (как в iOS): ученики списком — потянуть любого в таблицу (урок только ему), нажать — его карточка -->
+    <Teleport to="body">
+      <div v-if="pop" class="gpop-bg" @pointerdown.self="closePop">
+        <div class="gpop" :class="{ up: pop.up }" :style="pop.style" role="menu" :aria-label="`Группа · ${pop.g.label}`">
+          <div class="gph"><AppIcon name="users" :size="14" /> Группа · {{ pop.g.label }}</div>
+          <div v-for="s in pop.g.members" :key="s.id" class="gpr" role="menuitem" tabindex="0" :title="`${s.name}: перетащите в таблицу — урок только ему; нажмите — карточка`"
+            @pointerdown="pressStart($event, { kind: 'student', ids: [s.id] })" @click="closePop(); open(s.id)" @keydown.enter="closePop(); open(s.id)" @dragstart.prevent>
+            <Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) }">{{ sub(s) }}</small></span><i class="grip" aria-hidden="true">⋮⋮</i>
+          </div>
+        </div>
+      </div>
+    </Teleport>
     <div v-if="trash" class="drophint"><AppIcon name="trash" :size="22" />Отпустите, чтобы снять урок</div>
   </aside>
 </template>
@@ -77,7 +104,8 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 /* Группа — только серая подложка под кружками (без подписи и рамки, клетки того же размера — сетка ровная); день и время — во всплывающей подсказке.
    Подложка чуть уже блока (::before) — соседние группы не сливаются, а сетка не сдвигается */
 .grp { position: relative; grid-column: span var(--n); min-width: 0; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none } .grp:active { cursor: grabbing }
-.grp::before { content: ''; position: absolute; inset: 0 2px; border-radius: 14px; background: var(--surface); z-index: 0 } .grp .tiles { position: relative }
+.grp::before { content: ''; position: absolute; inset: 0 2px; border-radius: 14px; background: var(--surface); z-index: 0; transition: background .1s } .grp .tiles { position: relative }
+.grp:hover::before, .grp:focus-visible::before { background: var(--blue-l) } .grp .st { cursor: inherit } .grp .st:hover { background: none } .grp:active .ava { transform: scale(.94) }      /* подсвечивается вся группа */
 .grp .tiles { grid-template-columns: repeat(var(--n), minmax(0, 1fr)) }
 .st { display: grid; justify-items: center; align-content: start; gap: 3px; padding: 4px 0; border-radius: 14px; min-width: 0;
   cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: background .1s }
@@ -99,4 +127,15 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
   .st :deep(.av) { width: 44px !important; height: 44px !important; font-size: 20px !important }
   .drophint { flex-direction: row; display: flex; justify-content: center; align-items: center; gap: 8px; border-radius: 12px }
 }
+/* Меню группы — как контекстное меню iOS: карточка со скруглением, строки 52px, лёгкое затемнение вокруг */
+.gpop-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .06) }
+.gpop { position: fixed; display: grid; padding: 4px 0; border-radius: 16px; background: var(--card); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 0 0 1px rgba(0, 0, 0, .04); overflow: hidden;
+  transform-origin: top center; animation: gpop .16s ease-out }
+.gpop.up { transform-origin: bottom center } @keyframes gpop { from { opacity: 0; transform: scale(.92) } }
+.gph { display: flex; align-items: center; gap: 6px; padding: 8px 14px 6px; font-size: 12px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
+.gpr { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 12px 0 14px; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none }
+.gpr + .gpr { box-shadow: inset 0 1px 0 var(--border) } .gpr:hover { background: var(--surface) } .gpr:active { cursor: grabbing }
+.gtx { flex: 1; display: grid; min-width: 0; line-height: 1.25 } .gtx b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.gtx small { font-size: 12px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .gtx small.onl { color: var(--blue) }
+.grip { flex: none; font-style: normal; font-size: 14px; letter-spacing: -2px; color: var(--hint-2) }
 </style>
