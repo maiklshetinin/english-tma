@@ -9,6 +9,7 @@ vi.mock('../firebase', () => ({ isDemo: false, apiRequest: vi.fn(), apiFetch: vi
 import LessonSheet from './LessonSheet.vue'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore } from '../stores/schedule'
+import { useGroupsStore } from '../stores/groups'
 
 const D = '2026-10-27'
 const st = (id: string, name: string, price: number): Student => ({ id, name, level: 'A2', color: '#fff', username: '', streak: 0, coins: 0, status: 'active', tgId: null, photoUrl: '', price, priceHistory: [{ from: '', price }], payment: { status: 'paid', until: '2026-11-01', lessonsLeft: 3, packageSize: 8 } })
@@ -31,34 +32,25 @@ describe('LessonSheet', () => {
     expect(w.find('.plus').exists()).toBe(false)
   })
 
-  it('добавить и убрать: шторка отдаёт новый состав целиком; последнего ученика не убрать', async () => {
+  it('добавить ученика в урок нельзя (группы — только в панели); убрать из группового — можно', async () => {
     const lesson = { id: 'L', date: D, hour: 9, studentIds: ['a'] } as Lesson
     const w = mount(LessonSheet, { props: { lesson } })
     expect(w.find('.x').exists()).toBe(false)                              // один ученик — крестика нет
+    expect(w.find('.plus').exists()).toBe(false)                           // «Добавить ученика» больше нет
     expect(w.find('.total').text()).toContain('100')
-    await w.find('.plus').trigger('click')
-    expect(w.findAll('.add .prow')).toHaveLength(2)                       // Петя и Оля, без Маши
-    await w.find('.search input').setValue('пет')
-    expect(w.findAll('.add .prow')).toHaveLength(1)                       // поиск по имени
-    await w.findAll('.add .prow')[0].trigger('click')
-    expect(w.emitted('students')![0]).toEqual([lesson, ['a', 'b']])
-
     await w.setProps({ lesson: { ...lesson, studentIds: ['a', 'b'] } })
     await w.findAll('.x')[0].trigger('click')
-    expect(w.emitted('students')![1][1]).toEqual(['b'])
+    expect(w.emitted('students')![0][1]).toEqual(['b'])
   })
 })
 
 describe('урок с учеником, которого больше нет (удалён из базы / в архиве)', () => {
   beforeEach(() => { setActivePinia(createPinia()); useStudentsStore().set([st('a', 'Маша', 100), st('b', 'Петя', 80)]) })
 
-  it('шторка поясняет, а добавление отправляет только известных учеников', async () => {
+  it('шторка поясняет, что учеников урока больше нет', async () => {
     const lesson = { id: 'L', date: D, hour: 9, studentIds: ['gone'] } as Lesson
     const w = mount(LessonSheet, { props: { lesson } })
     expect(w.find('.orphan').exists()).toBe(true)
-    await w.find('.plus').trigger('click')
-    await w.findAll('.add .prow').find(b => b.text().includes('Петя'))!.trigger('click')
-    expect(w.emitted('students')![0][1]).toEqual(['b'])                     // 'gone' не уходит на сервер (иначе 404)
   })
 
   it('сетка: «пустой» урок виден серым «?», группа без первого ученика не пропадает', async () => {
@@ -126,6 +118,7 @@ describe('урок с учеником, которого больше нет (у
   it('«Кого назначить?»: группы подложкой, нажатие — меню (вся группа или один), ученики без группы — кружками', async () => {
     useStudentsStore().set([st('a', 'Маша', 100), st('b', 'Петя', 80), st('c', 'Оля', 50)])
     useScheduleStore().set([{ id: 'G', date: D, hour: 20, studentIds: ['a', 'b'] }])
+    useGroupsStore().set([{ id: 'g1', studentIds: ['a', 'b'] }])                    // группа — отдельная сущность, подпись — по её уроку
     const w = mount(LessonSheet, { props: { slot: { date: D, hour: 12 } }, attachTo: document.body })
     expect(w.findAll('.grp')).toHaveLength(1); expect(w.find('.grp').attributes('title')).toContain('Группа · Вт 20:00')
     expect(w.findAll('.st.solo .nm').map(b => b.text())).toEqual(['Оля'])        // ученики группы — только в меню группы

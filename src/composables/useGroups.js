@@ -1,28 +1,32 @@
-// Группы по расписанию: ученики, связанные общими групповыми уроками, — одна группа (объединение по цепочке).
-// Подпись — день и время ближайшего урока группы («Пт 20:00»). Общая для панели учеников и окна «Кого назначить?».
+// Группы учеников для экрана: отдельная сущность (stores/groups → server/groups.ts) + подпись по расписанию —
+// день и время ближайшего урока группы («Пт 20:00»), уроков нет — «без урока». Общая для панели учеников,
+// окна «Кого назначить?» и выбора учеников колоды.
+// Урок группы — урок, где 2+ учеников и все они из этой группы (урок может быть и без кого-то — например, его убрали).
 import { computed } from 'vue'
 import { DAYS, hh, todayYmd } from '../store/app'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore } from '../stores/schedule'
+import { useGroupsStore } from '../stores/groups'
+
+/** Уроки группы: 2+ живых ученика, все из группы. future — только непроведённые с сегодняшнего дня. */
+export function lessonsOfGroup(memberIds, lessons, alive, future = false) {
+  const ids = new Set(memberIds), today = todayYmd()
+  return lessons.filter((l) => {
+    const live = l.studentIds.filter((id) => alive(id))
+    return live.length > 1 && live.every((id) => ids.has(id)) && (!future || (!l.done && l.date >= today))
+  })
+}
 
 export function useGroups() {
-  const studentStore = useStudentsStore(), scheduleStore = useScheduleStore()
+  const studentStore = useStudentsStore(), scheduleStore = useScheduleStore(), groupsStore = useGroupsStore()
   return computed(() => {
-    const ids = new Set(studentStore.list.map(s => s.id)), parent = {}
-    const find = (x) => (parent[x] === x ? x : (parent[x] = find(parent[x])))
-    const lessonsOf = {}                                                     // корень группы → её уроки (для подписи)
-    const multi = scheduleStore.lessons.map(l => ({ l, ids: l.studentIds.filter(id => ids.has(id) && !l.canceled?.[id]) })).filter(x => x.ids.length > 1)
-    for (const { ids: g } of multi) for (const id of g) parent[id] ??= id
-    for (const { ids: g } of multi) for (const id of g.slice(1)) parent[find(id)] = find(g[0])
-    for (const { l, ids: g } of multi) (lessonsOf[find(g[0])] ??= []).push(l)
-    const out = {}
-    for (const id of Object.keys(parent)) (out[find(id)] ??= []).push(id)
-    const today = todayYmd()
-    return Object.entries(out).map(([root, members]) => {
-      const ls = lessonsOf[root].sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour)
-      const next = ls.find(l => l.date >= today) ?? ls[ls.length - 1]
-      const dow = DAYS[(new Date(next.date + 'T12:00:00Z').getUTCDay() + 6) % 7]
-      return { key: root, label: `${dow} ${hh(next.hour, next.minute)}`, members: members.map(id => studentStore.byId(id)).sort((a, b) => a.name.localeCompare(b.name, 'ru')) }
-    }).sort((a, b) => a.label.localeCompare(b.label))
+    const alive = (id) => !!studentStore.byId(id), today = todayYmd()
+    return groupsStore.list.map((g) => {
+      const members = g.studentIds.map((id) => studentStore.byId(id)).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      const ls = lessonsOfGroup(g.studentIds, scheduleStore.lessons, alive).sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour)
+      const next = ls.find((l) => l.date >= today) ?? ls[ls.length - 1]
+      const label = next ? `${DAYS[(new Date(next.date + 'T12:00:00Z').getUTCDay() + 6) % 7]} ${hh(next.hour, next.minute)}` : 'без урока'
+      return { key: g.id, id: g.id, label, members }
+    }).filter((g) => g.members.length).sort((a, b) => a.label.localeCompare(b.label))
   })
 }

@@ -30,8 +30,7 @@ function dropState(d, h) {                       // подсветка ячей�
   const occ = at(d, h)[0], p = dnd.payload
   if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : occ ? 'swap' : 'ok'
   if (!occ) return 'ok'
-  const ids = p.ids ?? [p.id], add = ids.filter(id => !occ.studentIds.includes(id))
-  return occ.done || !add.length || group(occ).length + add.length > 12 ? 'bad' : 'join'      // ученик / группа на урок — добавятся в него
+  return 'bad'      // ученик / группа — только на свободную ячейку: из урока группу не собираем
 }
 // Ученики урока, которые есть в списке. Ученика могли удалить из базы или архивировать — его id остаётся в уроке, но показывать некого.
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)

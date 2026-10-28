@@ -7,6 +7,7 @@ import { flat } from '../utils/path'
 import { useDecksStore } from '../stores/decks'
 import { usePathStore } from '../stores/path'
 import { useScheduleStore, slotKey } from '../stores/schedule'
+import { useGroupsStore } from '../stores/groups'
 import { useSrsStore } from '../stores/srs'
 import { answer } from '../utils/fsrs'
 import { useStudentsStore } from '../stores/students'
@@ -115,4 +116,5 @@ export function loadDemo(): void {
     used.add(k); lessons.push({ id: `demo-${newId('l')}`, date: n.date, hour, studentIds: [st.id] })
   }
   useScheduleStore().set(lessons)
+  useGroupsStore().set([{ id: 'demo-g1', studentIds: ['3', '5'] }, { id: 'demo-g2', studentIds: ['2', '6', '7'] }])      // группы — отдельно от уроков
 }

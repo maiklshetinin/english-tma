@@ -20,7 +20,6 @@ const studentStore = useStudentsStore()
 const route = useRoute(), router = useRouter()
 const scheduleStore = useScheduleStore()
 const { haptic } = useTelegram()
-const MAX_GROUP = 12                                // как на сервере (server/schedule.ts)
 
 // Без листания: сверху всегда текущая неделя, под ней следующая; даты подставляются сами (и обновляются при смене недели)
 const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (nowTick.value, weekDates(1)))
@@ -62,13 +61,10 @@ function onDrop(p, t) {
   if (t.kind === 'panel') return p.kind === 'lesson' ? unassign(p.lesson) : undefined
   if (t.kind !== 'cell') return
   const occ = occupant(t.date, t.hour)
-  if (p.kind === 'student') {                         // ученик или группа из панели (ids)
+  if (p.kind === 'student') {                         // ученик или группа из панели (ids): только на свободную ячейку
     const ids = p.ids ?? [p.id]
     if (!occ) return assign(ids, t.date, t.hour)
-    const add = ids.filter(id => !occ.studentIds.includes(id))
-    if (!add.length) return showToast(`${ids.map(name).join(', ')} уже в этом уроке`, null, 'bad')
-    if (known(occ).length + add.length > MAX_GROUP) return showToast(`В группе не больше ${MAX_GROUP} учеников`, null, 'bad')
-    return setStudents(occ, [...known(occ), ...add])      // на занятую ячейку — добавляются в урок (группа)
+    return showToast('Время занято: в урок ставят группу целиком или одного ученика. Состав группы — в её меню в панели', null, 'bad')      // из урока группу не собираем
   }
   const a = p.lesson
   if (occ?.id === a.id) return

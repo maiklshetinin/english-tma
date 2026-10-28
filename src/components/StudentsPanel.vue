@@ -1,43 +1,97 @@
 <script setup>
 // Список учеников — компактная сетка кружков (как «Поделиться» в Telegram): аватарка, имя под ней.
-// Кружок можно перетащить в таблицу, группу — только целиком (урок сразу всей группе); урок из таблицы, брошенный сюда, снимается с расписания.
-// Нажатие на группу — небольшое меню под ней (как в iOS): её ученики списком, любого можно перетащить по одному, нажатие — карточка ученика.
-// Группы — сверху отдельными блоками: ученики, которые вместе стоят в групповом уроке (по расписанию), подпись — день и время урока.
-// Ниже — «Индивидуально»: остальные по алфавиту.
+// Группы — отдельная сущность (stores/groups): создаются только здесь (кнопка «группа +»), состав — только через меню группы.
+// Кружок можно перетащить в таблицу, группу — только целиком (урок всей группе); урок из таблицы, брошенный сюда, снимается с расписания.
+// Нажатие на группу — меню (как в iOS): её ученики (потянуть — урок только ему, нажать — карточка, ✕ — убрать из группы),
+// «Добавить ученика», «Расформировать». Изменения — с подтверждением; состав группы меняется и в её будущих уроках.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { isOnline } from '../utils/online'
 import { useRouter } from 'vue-router'
 import { handle } from '../store/app'
-import { useGroups } from '../composables/useGroups'
+import { useGroups, lessonsOfGroup } from '../composables/useGroups'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
 import AddStudent from './AddStudent.vue'
 import { useStudentsStore } from '../stores/students'
+import { useScheduleStore } from '../stores/schedule'
+import { useGroupsStore } from '../stores/groups'
+import { showToast } from '../composables/useToast'
 const studentStore = useStudentsStore()
 const q = ref('')
 const adding = ref(false)                       // «+» — форма «Новый ученик» в шторке (та же, что во вкладке «Ученики»)
 const list = computed(() => { const k = q.value.trim().toLowerCase(); return studentStore.list.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
-const groups = useGroups()                     // группы по расписанию (composables/useGroups)
+const groups = useGroups()                     // группы учеников (composables/useGroups)
 const match = (s) => { const k = q.value.trim().toLowerCase(); return !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k) }
 const shownGroups = computed(() => groups.value.map(g => ({ ...g, members: g.members.filter(match) })).filter(g => g.members.length))
 const solo = computed(() => { const inGroup = new Set(groups.value.flatMap(g => g.members.map(s => s.id))); return list.value.filter(s => !inGroup.has(s.id)) })
 const trash = computed(() => dnd.active && dnd.payload?.kind === 'lesson')
 const trashOver = computed(() => trash.value && dnd.over?.kind === 'panel')
-// Меню группы: где показать — под группой (не влезает — над ней), прижато к краям экрана
+// Меню (группы или «Новая группа»): где показать — под элементом (не влезает — над ним), прижато к краям экрана
 const pop = ref(null)
 const POP_W = 260
-function openPop(g, e) {
-  const r = e.currentTarget.getBoundingClientRect(), h = 44 + g.members.length * 52
+function place(e, h) {
+  const r = e.currentTarget.getBoundingClientRect()
   const left = Math.min(Math.max(8, r.left + r.width / 2 - POP_W / 2), innerWidth - POP_W - 8)
   const below = r.bottom + 6 + h < innerHeight - 8
-  pop.value = { g, style: { left: left + 'px', width: POP_W + 'px', ...(below ? { top: r.bottom + 6 + 'px' } : { bottom: innerHeight - r.top + 6 + 'px' }) }, up: !below }
+  return { style: { left: left + 'px', width: POP_W + 'px', ...(below ? { top: r.bottom + 6 + 'px' } : { bottom: innerHeight - r.top + 6 + 'px' }) }, up: !below }
 }
+function openPop(sg, e) {
+  const g = groups.value.find(x => x.key === sg.key) ?? sg                    // в меню — вся группа, даже если поиск оставил не всех
+  pop.value = { g, view: 'list', aq: '', sel: [], ...place(e, 44 + (g.members.length + 2) * 52) }
+}
+const openNew = (e) => { pop.value = { g: null, view: 'new', aq: '', sel: [], ...place(e, 420) } }
 const closePop = () => { pop.value = null }
 watch(() => dnd.active, (on) => { if (on) closePop() })                      // потянули ученика из меню — меню закрывается, тащим дальше
 const onKey = (e) => { if (e.key === 'Escape') closePop() }
 onMounted(() => { addEventListener('keydown', onKey); addEventListener('resize', closePop) })
 onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('resize', closePop) })
+
+// Состав группы меняется в группе (сервер) и в её будущих уроках: убрали — уходит из них, добавили — появляется во всех.
+// Проведённые уроки не меняются. Перед изменением — подтверждение в том же меню, после — тост с «Отменить».
+const scheduleStore = useScheduleStore(), groupsStore = useGroupsStore()
+const MAX_GROUP = 12
+const alive = (id) => !!studentStore.byId(id)
+const known = (l) => l.studentIds.filter(alive)
+const futureOf = (g) => lessonsOfGroup(g.members.map(m => m.id), scheduleStore.lessons, alive, true)
+const gname = (g) => (g.label === 'без урока' ? 'группы' : `группы ${g.label}`)      // «из группы Пт 20:00» / «из группы»
+const lessonsWord = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'урок' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'урока' : 'уроков')
+const inPop = computed(() => new Set(pop.value?.g ? pop.value.g.members.map(m => m.id) : []))
+const candidates = computed(() => {
+  if (!pop.value) return []
+  const k = pop.value.aq.trim().toLowerCase().replace(/^@/, '')
+  return studentStore.list.filter(s => !inPop.value.has(s.id) && (!k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)))
+})
+const pickNew = (id) => { const sel = pop.value.sel; const i = sel.indexOf(id); i >= 0 ? sel.splice(i, 1) : sel.length < MAX_GROUP && sel.push(id) }
+const ask = (kind, s = null) => {
+  const g = pop.value.g, n = kind === 'remove' ? futureOf(g).filter(l => l.studentIds.includes(s.id)).length : kind === 'add' ? futureOf(g).length : 0
+  pop.value = { ...pop.value, view: 'confirm', kind, s, n, last: kind === 'remove' && g.members.length <= 2 }
+}
+function applyChange() {
+  const { g, kind, s, last } = pop.value, was = [], group = groupsStore.byId(g.id), before = group ? group.studentIds.slice() : []
+  if (kind === 'dissolve') {
+    groupsStore.remove(group); closePop()
+    return showToast(`Группа расформирована — уроки остались`, () => groupsStore.set([...groupsStore.list, { id: g.id, studentIds: before }]))
+  }
+  for (const l of futureOf(g)) {
+    const ids = known(l)
+    if (kind === 'remove' && ids.includes(s.id)) { was.push([l, l.studentIds.slice()]); scheduleStore.setStudents(l, ids.filter(id => id !== s.id)) }
+    if (kind === 'add' && !ids.includes(s.id) && ids.length < MAX_GROUP) { was.push([l, l.studentIds.slice()]); scheduleStore.setStudents(l, [...ids, s.id]) }
+  }
+  if (kind === 'remove' && last) groupsStore.remove(group)                                   // остался один — группы больше нет
+  else groupsStore.setMembers(group, kind === 'remove' ? before.filter(id => id !== s.id) : [...before, s.id])
+  closePop()
+  const undo = () => {
+    for (const [l, ids] of was) scheduleStore.setStudents(l, ids.filter(alive))
+    if (groupsStore.byId(g.id)) groupsStore.setMembers(groupsStore.byId(g.id), before); else groupsStore.create(before)
+  }
+  showToast(kind === 'remove' ? (last ? `${s.name} убран(а), группа расформирована` : `${s.name} убран(а) из ${gname(g)}`) : `${s.name} добавлен(а) в ${gname(g).replace('группы', 'группу')}`, undo)
+}
+function createGroup() {
+  const ids = pop.value.sel.slice(); if (ids.length < 2) return
+  const g = groupsStore.create(ids); closePop()
+  showToast(`Группа создана: ${ids.map(id => studentStore.byId(id)?.name).join(', ')}`, () => groupsStore.remove(g))
+}
 const sub = (s) => (isOnline(s) ? 'в сети' : [s.level, handle(s)].filter(Boolean).join(' · '))
 const router = useRouter()
 const open = (id) => { router.push({ name: 'home', params: { id } }) }      // панель живёт на «Главной»: карточка открывается там же
@@ -46,7 +100,8 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 <template>
   <aside class="panel card" :class="{ trash, over: trashOver }" data-drop="panel">
     <header class="ph">
-      <label class="search"><AppIcon name="search" :size="16" /><input v-model="q" :placeholder="`Поиск · ${studentStore.list.length} учеников`" aria-label="Поиск ученика" /></label>
+      <label class="search"><AppIcon name="search" :size="16" /><input v-model="q" :placeholder="`Поиск · ${studentStore.list.length}`" aria-label="Поиск ученика" /></label>
+      <button class="addb grpb" title="Новая группа" aria-label="Новая группа" @click="openNew"><AppIcon name="users" :size="17" /><i>+</i></button>
       <button class="addb" title="Добавить ученика" aria-label="Добавить ученика" @click="adding = true"><AppIcon name="plus" :size="18" /></button></header>
     <div class="list">
       <!-- Одна сетка на 4 колонки: группа занимает столько колонок, сколько в ней учеников; остальные ученики заполняют свободные клетки рядом -->
@@ -71,11 +126,47 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
     <!-- Меню группы (как в iOS): ученики списком — потянуть любого в таблицу (урок только ему), нажать — его карточка -->
     <Teleport to="body">
       <div v-if="pop" class="gpop-bg" @click.self="closePop">
-        <div class="gpop" :class="{ up: pop.up }" :style="pop.style" role="menu" :aria-label="`Группа · ${pop.g.label}`">
-          <div class="gph"><AppIcon name="users" :size="14" /> Группа · {{ pop.g.label }}</div>
-          <div v-for="s in pop.g.members" :key="s.id" class="gpr" role="menuitem" tabindex="0" :title="`${s.name}: перетащите в таблицу — урок только ему; нажмите — карточка`"
-            @pointerdown="pressStart($event, { kind: 'student', ids: [s.id] })" @click="closePop(); open(s.id)" @keydown.enter="closePop(); open(s.id)" @dragstart.prevent>
-            <Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) }">{{ sub(s) }}</small></span><i class="grip" aria-hidden="true">⋮⋮</i>
+        <div class="gpop" :class="{ up: pop.up }" :style="pop.style" role="menu" :aria-label="pop.g ? `Группа · ${pop.g.label}` : 'Новая группа'">
+          <!-- Состав: потянуть — урок только ему, нажать — карточка, ✕ — убрать из группы; внизу — добавить ученика -->
+          <template v-if="pop.view === 'list'">
+            <div class="gph"><AppIcon name="users" :size="14" /> Группа · {{ pop.g.label }}</div>
+            <div v-for="s in pop.g.members" :key="s.id" class="gpr" role="menuitem" tabindex="0" :title="`${s.name}: перетащите в таблицу — урок только ему; нажмите — карточка`"
+              @pointerdown="pressStart($event, { kind: 'student', ids: [s.id] })" @click="closePop(); open(s.id)" @keydown.enter="closePop(); open(s.id)" @dragstart.prevent>
+              <Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) }">{{ sub(s) }}</small></span>
+              <button class="gx" :aria-label="`Убрать ${s.name} из группы`" title="Убрать из группы" @pointerdown.stop @click.stop="ask('remove', s)"><AppIcon name="x" :size="14" /></button>
+            </div>
+            <button class="gpr gadd" role="menuitem" :disabled="pop.g.members.length >= MAX_GROUP" @click="pop = { ...pop, view: 'add', aq: '' }"><span class="gic"><AppIcon name="plus" :size="18" /></span><b>Добавить ученика</b></button>
+            <button class="gpr gadd red" role="menuitem" @click="ask('dissolve')"><span class="gic"><AppIcon name="trash" :size="17" /></span><b>Расформировать</b></button>
+          </template>
+          <!-- Новая группа: выбрать 2–12 учеников -->
+          <template v-else-if="pop.view === 'new'">
+            <div class="gph"><AppIcon name="users" :size="14" /> Новая группа<span v-if="pop.sel.length" class="gcnt">{{ pop.sel.length }}</span></div>
+            <label class="gsearch"><AppIcon name="search" :size="14" /><input v-model="pop.aq" placeholder="Поиск" aria-label="Поиск ученика" /></label>
+            <div class="glist">
+              <button v-for="s in candidates" :key="s.id" class="gpr" :aria-pressed="pop.sel.includes(s.id)" @click="pickNew(s.id)"><Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) }">{{ sub(s) }}</small></span>
+                <i class="chk" :class="{ on: pop.sel.includes(s.id) }"><AppIcon v-if="pop.sel.includes(s.id)" name="check" :size="13" /></i></button>
+              <p v-if="!candidates.length" class="gnone">Никого не нашли</p>
+            </div>
+            <div class="gbt pad"><button class="lnk" @click="closePop">Отмена</button><button class="gok" :disabled="pop.sel.length < 2" @click="createGroup">Создать{{ pop.sel.length > 1 ? ` (${pop.sel.length})` : '' }}</button></div>
+          </template>
+          <!-- Добавить: свободные ученики с поиском -->
+          <template v-else-if="pop.view === 'add'">
+            <div class="gph"><button class="gback" aria-label="Назад" @click="pop = { ...pop, view: 'list' }"><AppIcon name="back" :size="14" /></button> В группу · {{ pop.g.label }}</div>
+            <label class="gsearch"><AppIcon name="search" :size="14" /><input v-model="pop.aq" placeholder="Поиск" aria-label="Поиск ученика" /></label>
+            <div class="glist">
+              <button v-for="s in candidates" :key="s.id" class="gpr" @click="ask('add', s)"><Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) }">{{ sub(s) }}</small></span></button>
+              <p v-if="!candidates.length" class="gnone">Никого не нашли</p>
+            </div>
+          </template>
+          <!-- Подтверждение -->
+          <div v-else class="gcf">
+            <Avatar v-if="pop.s" :s="pop.s" :size="44" /><span v-else class="gic big"><AppIcon name="users" :size="22" /></span>
+            <b>{{ pop.kind === 'remove' ? `Убрать ${pop.s.name} из ${gname(pop.g)}?` : pop.kind === 'add' ? `Добавить ${pop.s.name} в ${gname(pop.g).replace('группы', 'группу')}?` : `Расформировать ${gname(pop.g).replace('группы', 'группу')}?` }}</b>
+            <small>{{ pop.kind === 'dissolve' ? 'Ученики станут по одному. Уроки группы останутся в расписании.'
+              : pop.kind === 'remove' ? (pop.last ? 'В группе останется один ученик — группа расформируется. ' : '') + (pop.n ? `Уйдёт из ${pop.n} ${lessonsWord(pop.n)} группы. Проведённые не меняются.` : 'Будущих уроков у группы нет.')
+              : pop.n ? `Появится во всех будущих уроках группы: ${pop.n}.` : 'Будущих уроков у группы пока нет — появится в новых.' }}</small>
+            <div class="gbt"><button class="lnk" @click="pop = { ...pop, view: pop.kind === 'add' ? 'add' : 'list' }">Отмена</button>
+              <button class="gok" :class="{ red: pop.kind !== 'add' }" @click="applyChange">{{ pop.kind === 'remove' ? 'Убрать' : pop.kind === 'add' ? 'Добавить' : 'Расформировать' }}</button></div>
           </div>
         </div>
       </div>
@@ -137,5 +228,24 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 .gpr + .gpr { box-shadow: inset 0 1px 0 var(--border) } .gpr:hover { background: var(--surface) } .gpr:active { cursor: grabbing }
 .gtx { flex: 1; display: grid; min-width: 0; line-height: 1.25 } .gtx b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .gtx small { font-size: 12px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .gtx small.onl { color: var(--blue) }
-.grip { flex: none; font-style: normal; font-size: 14px; letter-spacing: -2px; color: var(--hint-2) }
+.gx { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer } .gx:hover { background: var(--red-l); color: var(--red-d) }
+.gadd { width: 100%; border: 0; background: none; font: inherit; color: var(--blue); cursor: pointer; text-align: left } .gadd b { font-size: 15px } .gadd:disabled { opacity: .4; cursor: default }
+.gadd.red { color: var(--red-d) } .gadd.red .gic { background: var(--red-l); color: var(--red-d) } .gic.big { width: 44px; height: 44px; background: var(--red-l); color: var(--red-d) }
+.gcnt { margin-left: auto; min-width: 20px; padding: 1px 6px; border-radius: 99px; background: var(--green); color: #fff; text-align: center; letter-spacing: 0 }
+.chk { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); color: #fff } .chk.on { background: var(--green); border-color: var(--green) }
+.gbt.pad { padding: 8px 10px 6px; margin: 0; box-shadow: inset 0 1px 0 var(--border) }
+/* «Новая группа» — значок группы с плюсом */
+.grpb { position: relative; color: var(--blue) } .grpb i { position: absolute; right: 1px; bottom: -1px; font-style: normal; font-size: 13px; font-weight: 900; line-height: 1; color: var(--green-d) } .grpb:hover { border-color: var(--blue); background: var(--blue-l) }
+.gic { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--blue-l); color: var(--blue) }
+.gback { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -6px; border: 0; border-radius: 50%; background: none; color: var(--hint); cursor: pointer } .gback:hover { background: var(--surface) }
+.gsearch { display: flex; align-items: center; gap: 8px; margin: 0 10px 4px; padding: 0 10px; border-radius: 10px; background: var(--surface); color: var(--hint-2) }
+.gsearch input { flex: 1; min-width: 0; margin: 0; padding: 7px 0; border: 0; background: none; font-size: 14px } .gsearch input:focus { background: none } .gsearch input:focus-visible { outline: none }
+.glist { display: grid; max-height: 260px; overflow-y: auto } .glist .gpr { width: 100%; border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer } .glist .gpr:hover { background: var(--surface) }
+.gnone { margin: 8px 0; text-align: center; font-size: 13px; color: var(--hint) }
+/* Подтверждение — как алерт iOS: аватарка, вопрос, пояснение, две кнопки */
+.gcf { display: grid; justify-items: center; gap: 6px; padding: 14px 14px 10px; text-align: center }
+.gcf b { font-size: 15px; line-height: 1.3 } .gcf small { font-size: 12px; font-weight: 600; color: var(--hint); line-height: 1.35 }
+.gbt { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 6px }
+.gbt .lnk { height: 38px; border: 0; border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-weight: 800; cursor: pointer }
+.gok { height: 38px; border: 0; border-radius: 10px; background: var(--blue); color: #fff; font: inherit; font-weight: 800; cursor: pointer } .gok.red { background: var(--red) } .gok:disabled { opacity: .4; cursor: default }
 </style>

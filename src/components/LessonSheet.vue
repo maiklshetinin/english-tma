@@ -1,6 +1,7 @@
 <script setup>
 // Шторка: либо карточка урока (состав, цена, отметка «проведён», убрать урок), либо выбор ученика для пустого слота.
-// Урок — сущность со списком учеников: здесь можно добавить учеников (урок становится групповым) и убрать их.
+// Урок — это урок: в него ставят группу целиком или одного ученика. Добавить ученика в урок отсюда нельзя (группы — только
+// в панели учеников); убрать из группового урока — можно (✕, только этот урок).
 // Цена урока = сумма цен всех учеников (у каждого своя, на время урока; у проведённого — зафиксированная).
 // Ученики показаны компактной сеткой кружков (как «Поделиться» в Telegram): аватарка, имя под ней; выбор — через поиск.
 // «Отменил ученик» — по его причине, без оплаты: урок остаётся в ячейке, ученик не входит в цену, его сумма — «потеряно».
@@ -42,21 +43,16 @@ const saveNote = () => { if (noteDirty.value) emit('details', props.lesson, { no
 
 // Правка состава: проведённый урок не меняется (цены уже зафиксированы), последнего ученика не убрать — для этого «Убрать урок»
 const editable = computed(() => !!props.lesson && !props.lesson.done)
-const adding = ref(false), q = ref('')
+const q = ref('')
 // Только известные ученики: id удалённых из базы / архивных в уроке могут остаться, но сервер их не примет
 const ids = computed(() => members.value.filter(st => !st.archived).map(st => st.id))
-const full = computed(() => ids.value.length >= MAX_GROUP)
-const others = computed(() => studentStore.list.filter(st => !props.lesson?.studentIds.includes(st.id)))
 const match = (st) => { const s = q.value.trim().toLowerCase().replace(/^@/, ''); return !s || st.name.toLowerCase().includes(s) || (st.username || '').toLowerCase().includes(s) }
-const found = computed(() => (props.lesson ? others.value : studentStore.list).filter(match))
-const add = (id) => { if (!full.value) emit('students', props.lesson, [...ids.value, id]) }
 const drop = (id) => emit('students', props.lesson, ids.value.filter(x => x !== id))
 // Пустая ячейка — «Кого назначить?»: сверху группы (нажатие — урок сразу всей группе), ниже все ученики; сеткой по 4, как панель учеников
 const groups = useGroups()
 const shownGroups = computed(() => { const s = q.value.trim().toLowerCase(); return groups.value.filter(g => !s || g.label.toLowerCase().includes(s) || g.members.some(match)) })
 const soloFound = computed(() => { const inGroup = new Set(groups.value.flatMap(g => g.members.map(m => m.id))); return studentStore.list.filter(st => !inGroup.has(st.id) && match(st)) })      // ученики из групп — в меню группы
 const pickGroup = (g) => emit('pick', g.members.map(m => m.id).slice(0, MAX_GROUP))
-const openAdd = () => { q.value = ''; adding.value = true }
 const sub = (st) => [st.level, handle(st)].filter(Boolean).join(' · ') || 'ученик'      // вторая строка в списке, как «last seen» в Telegram
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'ученика' : 'учеников')
 </script>
@@ -90,22 +86,10 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
           <div v-for="g in gone.filter(x => x.name)" :key="g.id" class="tile gone" :title="`${g.name} — удалён(а), урок сохранён в истории`">
             <span class="ava"><span class="q">?</span></span><span class="tx"><b class="nm">{{ g.name }} (удалён)</b><small v-if="g.price" class="pr">{{ g.price }}</small></span>
           </div>
-          <button v-if="editable && !adding" class="tile plus" :disabled="full || !others.length" aria-label="Добавить ученика" @click="openAdd">
-            <span class="pic"><AppIcon name="plus" :size="22" /></span><span class="tx"><b>Добавить ученика</b></span></button>
           <div v-if="total" class="total"><span>{{ isGroup ? 'Итого за урок' : 'Цена урока' }}</span><b>{{ total }}</b></div>
           <div v-if="lost" class="total lostrow"><span>Потеряно — отменил ученик</span><b>−{{ lost }}</b></div>
         </div>
 
-        <div v-if="editable && adding" class="add">
-          <div class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Поиск ученика" aria-label="Поиск ученика" /><button v-if="q" class="clr" aria-label="Очистить" @click="q = ''"><AppIcon name="x" :size="14" /></button></div>
-          <div class="rows scroll">
-            <button v-for="st in found" :key="st.id" class="prow" :disabled="full" @click="add(st.id)">
-              <Avatar :s="st" :size="42" :online="isOnline(st)" /><span class="tx"><b>{{ st.name }}</b><small :class="{ onl: isOnline(st) }">{{ isOnline(st) ? 'в сети' : sub(st) }}</small></span>
-            </button>
-          </div>
-          <div v-if="!found.length" class="hint empty">{{ others.length ? 'Никого не нашли' : 'Все ученики уже в этом уроке' }}</div>
-          <div class="foot"><span class="hint">{{ full ? `Не больше ${MAX_GROUP} в группе` : 'Нажмите, чтобы добавить' }}</span><button class="link" @click="adding = false">Готово</button></div>
-        </div>
         <div v-if="!editable && !locked" class="hint note-l">Состав проведённого урока не меняется — сначала снимите отметку.</div>
         <div v-if="locked" class="hint note-l">В уроке есть {{ members.some(st => st.archived) ? 'ученик из архива' : 'удалённый ученик' }}: урок сохранён в истории, его состав и отметку «проведён» не изменить.</div>
 
@@ -151,7 +135,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 /* Карточка урока в стиле Telegram («Информация о группе»): узкое окно без внешних отступов, разделы через серые полосы, строки во всю ширину */
 .sheet-box.lsn { display: block; overflow-y: auto; background: var(--surface) }
 .lsn > * { background: var(--card) }
-.lsn .sec, .lsn .add, .lsn .note-l, .lsn .orphan { margin-top: 8px }
+.lsn .sec, .lsn .note-l, .lsn .orphan { margin-top: 8px }
 .head { display: flex; align-items: center; gap: 14px; padding: 18px 14px 16px 20px }
 .ttl { flex: 1; min-width: 0 } .ttl h2 { margin: 0; font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .ttl .hint { margin-top: 2px; font-size: 14px; font-weight: 600 }
 .head .badge { padding: 0; background: none; border: 0; font-size: 14px; font-weight: 700 }
@@ -164,8 +148,6 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 .tx { flex: 1; display: grid; min-width: 0; line-height: 1.25 } .nm, .tx b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .pr, .arch-l { font-size: 13px; font-weight: 500; color: var(--hint) }
 .x { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer } .x:hover { background: var(--red-l); color: var(--red-d) }
-.plus { cursor: pointer; color: var(--blue) } .plus .pic { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--blue-l); color: var(--blue) } .plus b { color: var(--blue) }
-.plus:hover:not(:disabled) { background: var(--surface) } .plus:disabled { opacity: .4; cursor: not-allowed }
 .pickable { cursor: pointer; border-radius: 14px } .pickable:hover:not(:disabled) { background: var(--blue-l) } .pickable:disabled { opacity: .45; cursor: not-allowed }
 .gone .q { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--hint-2); color: #fff; font-size: 20px; font-weight: 900 } .gone .nm { color: var(--hint) }
 .tile.off .ava { opacity: .45 } .tile.off .nm { text-decoration: line-through; color: var(--hint) }

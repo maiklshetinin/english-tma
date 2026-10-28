@@ -143,6 +143,12 @@ export interface LessonDoc {
 }
 
 /** Урок на сайте (ответ GET /schedule, POST /lessons, POST /lessons/:id/move). */
+/** Группа учеников — отдельная сущность (server/groups.ts): состав меняется только через меню группы. */
+export interface Group {
+  id: string
+  studentIds: string[]          // 2–12 учеников
+}
+
 export interface Lesson {
   id: string
   date: string

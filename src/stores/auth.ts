@@ -14,6 +14,7 @@ import { session } from './session'
 import { useContentStore } from './content'
 import { useStudentsStore } from './students'
 import { useScheduleStore } from './schedule'
+import { useGroupsStore, groupsFromLessons } from './groups'
 
 export type AuthStatus = 'loading' | 'login' | 'ready' | 'error'
 /** Профиль из Telegram (поля названы так, как их называет Telegram). */
@@ -69,7 +70,10 @@ export const useAuthStore = defineStore('auth', () => {
     session.canEdit = c.role === 'teacher'; session.ownKey = c.role === 'teacher' ? 'teacher' : c.studentId
     await content.load().catch((e: Error) => showToast(e.message, null, 'bad'))          // путь, колоды, пресеты и прогресс слов
     content.startRefresh()
-    schedule.load().catch(() => showToast('Не удалось загрузить расписание', null, 'bad'))      // уроки двух недель (для ученика — только его)
+    const sched = schedule.load().then(() => true, () => { showToast('Не удалось загрузить расписание', null, 'bad'); return false })      // уроки двух недель (для ученика — только его)
+    // Группы учеников (преподаватель). Старые группы из расписания переносятся на сервер один раз — поэтому после расписания
+    if (c.role === 'teacher') sched.then((ok) => useGroupsStore().load(ok ? () => groupsFromLessons(schedule.lessons, new Set(students.list.map(s => s.id))) : undefined))
+      .catch((e: Error) => showToast(e.message, null, 'bad'))
     if (c.role === 'teacher') students.loadArchived().catch(() => {})      // архивные — чтобы проведённые уроки с ними показывались (серым, «в архиве»)
     schedule.startRefresh()
     setRole(c.role); isTeacher.value = c.role === 'teacher'
@@ -108,7 +112,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
-    await signOut(fb!); useStudentsStore().clear(); useScheduleStore().clear(); useContentStore().clear()
+    await signOut(fb!); useStudentsStore().clear(); useScheduleStore().clear(); useGroupsStore().clear(); useContentStore().clear()
     session.canEdit = false; session.ownKey = null
     user.value = null; isTeacher.value = false; status.value = 'login'
   }

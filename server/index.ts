@@ -10,6 +10,7 @@ import { verifyInitData, verifyWidget } from './telegram.js'
 import { makeLogin, fail } from './login.js'
 import { makeStudents } from './students.js'
 import { photoByUsername, nickPhoto } from './tgphoto.js'
+import { makeGroups } from './groups.js'
 import { makeSchedule } from './schedule.js'
 import { makeContent } from './content.js'
 import { makeSrs } from './srs.js'
@@ -42,6 +43,7 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHan
 }
 const login = makeLogin({ db, auth, FieldValue, teacherIds: TEACHER_IDS })
 const students = makeStudents({ db, FieldValue, photoByUsername, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })
+const groups = makeGroups({ db, FieldValue })
 const content = makeContent({ db, FieldValue })
 const srs = makeSrs({ db, FieldValue })
 const schedule = makeSchedule({ db, FieldValue, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })      // часовой пояс, по которому считаются «эта» и «следующая» неделя
@@ -128,6 +130,12 @@ app.put('/presets/:id', requireUser, requireTeacher, wrap(async (req, res) => { 
 app.delete('/presets/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.removePreset(req.params.id); res.json({ ok: true }) }))
 app.put('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.putDeck(req.params.id, req.body, req.user.uid); res.json({ ok: true }) }))
 app.delete('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.removeDeck(req.params.id); res.json({ ok: true }) }))
+// Группы учеников — отдельная сущность (создаются и меняются только преподавателем, из панели учеников)
+app.get('/groups', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await groups.list())))
+app.post('/groups', requireUser, requireTeacher, wrap(async (req, res) => res.json(await groups.create(req.body))))                 // { studentIds } → группа
+app.post('/groups/seed', requireUser, requireTeacher, wrap(async (req, res) => res.json(await groups.seed(req.body))))          // разовый перенос старых групп из расписания
+app.put('/groups/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await groups.update(req.params.id, req.body))))
+app.delete('/groups/:id', requireUser, requireTeacher, wrap(async (req, res) => { await groups.remove(req.params.id); res.json({ ok: true }) }))
 app.get('/srs', requireUser, wrap(async (req, res) => res.json(await srs.list(req.user))))              // свой прогресс (преподаватель — ещё и всех учеников)
 app.post('/srs/reset', requireUser, wrap(async (req, res) => res.json(await srs.reset(req.user, req.body))))      // { cardIds } → свои карточки снова «новые» (сбросить колоду)
 app.post('/srs/rate', requireUser, wrap(async (req, res) => { await srs.rate(req.user, req.body); res.json({ ok: true }) }))
