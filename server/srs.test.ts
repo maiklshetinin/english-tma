@@ -66,4 +66,14 @@ ok('ученик без документа: пустой прогресс, не 
 await S.rate(masha, rate('c9', st({ phase: 'learning', step: 1, dueAt: Date.now() + 600000, stab: 3.17, diff: 5.3, lastAt: Date.now(), hist: [{ t: Date.now(), q: 2, i: -10 }] } as any)))
 ok('FSRS-состояние с историей сохранено', store.get('srs/' + masha.studentId)?.cards?.c9?.hist?.[0]?.i === -10 && store.get('srs/' + masha.studentId)?.cards?.c9?.phase === 'learning')
 ok('история в старом виде (массив в массиве) → 400, а не 500', (await code(S.rate(masha, rate('c9', st({ hist: [[1, 2, 3]] } as any))))) === 400)
+// «Сбросить колоду»: только свои карточки и только перечисленные
+{
+  await S.rate(masha, rate('r1', st())); await S.rate(masha, rate('r2', st())); await S.rate(petya, rate('r1', st()))
+  const r = await S.reset(masha, { cardIds: ['r1', 'r2', 'nope'] })
+  const mine = store.get('srs/s1').cards
+  ok('reset: свои карточки удалены', r.removed === 2 && !mine.r1 && !mine.r2 && !!mine.c9)
+  ok('reset: прогресс другого ученика не тронут', !!store.get('srs/s2').cards.r1)
+  ok('reset: плохой запрос → 400', (await code(S.reset(masha, { cardIds: 'x' }))) === 400)
+  ok('reset: чужой аккаунт → 403', (await code(S.reset(stray, { cardIds: ['r1'] }))) === 403)
+}
 process.exit(bad ? 1 : 0)

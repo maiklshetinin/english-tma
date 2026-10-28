@@ -74,4 +74,15 @@ describe('srs store', () => {
     s.set('s1', 'c1', S(), '2026-10-26', 1)
     await vi.waitFor(() => expect(s.of('s1')!.cards.c1).toBeUndefined())
   })
+
+  it('сброс колоды: карточки снова новые, на сервер POST /srs/reset только за себя', async () => {
+    const s = useSrsStore()
+    s.set('s1', 'c1', S(), '2026-10-26', 1); s.set('s1', 'c2', S(), '2026-10-26', 1)
+    await vi.waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(2))
+    s.reset('s1', ['c1', 'c2'])
+    expect(s.of('s1')!.cards).toEqual({}); expect(s.of('s1')!.log['2026-10-26']).toBe(2)
+    await vi.waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(3))
+    expect(apiRequest.mock.calls[2][0]).toBe('/srs/reset'); expect(JSON.parse(apiRequest.mock.calls[2][1].body)).toEqual({ cardIds: ['c1', 'c2'] })
+    s.reset('s2', ['c1']); await new Promise((r) => setTimeout(r, 20)); expect(apiRequest).toHaveBeenCalledTimes(3)
+  })
 })

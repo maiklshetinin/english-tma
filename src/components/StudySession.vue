@@ -92,7 +92,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
       </span>
     </header>
     <!-- График колоды — сверху, над карточкой (как статистика в списке колод): ответили — видно, куда ушло слово -->
-    <DeckChart v-if="chartOpen" :deck="deck" :user-key="userKey" dock @back="chartOpen = false" />
+    <DeckChart v-if="chartOpen" :deck="deck" :user-key="userKey" :current-id="card?.id ?? null" dock @back="chartOpen = false" @reset="queue = buildQueue(deck, userKey); hist = []; flipped = false" />
 
     <template v-if="card">
       <!-- Как в Anki: слово и перевод — над фото, пример — под ним. Все блоки на месте до и после «Показать ответ», поэтому ничего не прыгает -->

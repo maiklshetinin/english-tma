@@ -129,6 +129,7 @@ app.delete('/presets/:id', requireUser, requireTeacher, wrap(async (req, res) =>
 app.put('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.putDeck(req.params.id, req.body, req.user.uid); res.json({ ok: true }) }))
 app.delete('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.removeDeck(req.params.id); res.json({ ok: true }) }))
 app.get('/srs', requireUser, wrap(async (req, res) => res.json(await srs.list(req.user))))              // свой прогресс (преподаватель — ещё и всех учеников)
+app.post('/srs/reset', requireUser, wrap(async (req, res) => res.json(await srs.reset(req.user, req.body))))      // { cardIds } → свои карточки снова «новые» (сбросить колоду)
 app.post('/srs/rate', requireUser, wrap(async (req, res) => { await srs.rate(req.user, req.body); res.json({ ok: true }) }))
 
 // Аватарка пользователя через Bot API (Mini App отдаёт фото только самого пользователя). Токен бота наружу не уходит.

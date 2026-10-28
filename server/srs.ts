@@ -4,7 +4,7 @@
 import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './login.js'
 import { makeAccess } from './access.js'
-import { LIMITS, cleanRate } from './clean.js'
+import { LIMITS, cleanRate, id } from './clean.js'
 import type { SrsResponse, SrsUser, TokenUser } from './types.js'
 
 export interface SrsDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; now?: () => number }
@@ -52,6 +52,21 @@ export function makeSrs({ db, FieldValue, now = Date.now }: SrsDeps) {
         for (const k of Object.keys(log)) if (k < cutoff) delete log[k]
         tx.set(ref, { cards, log, updatedAt: FieldValue.serverTimestamp() })
       })
+    },
+
+    // «Сбросить колоду»: карточки снова «новые» — только в своём прогрессе (журнал ответов по дням не трогаем)
+    async reset(user: TokenUser, input: unknown): Promise<{ removed: number }> {
+      const raw = (input as { cardIds?: unknown } | null)?.cardIds
+      if (!Array.isArray(raw) || raw.length > LIMITS.cards) throw fail(400, 'bad card ids')
+      const ids = new Set(raw.map((x) => id(x, 'card id'))), docId = await mine(user)
+      let removed = 0
+      await db.runTransaction(async (tx) => {
+        const ref = col().doc(docId), cur = pub((await tx.get(ref)).data()), cards = { ...cur.cards }
+        removed = 0
+        for (const k of Object.keys(cards)) if (ids.has(k)) { delete cards[k]; removed++ }
+        if (removed) tx.set(ref, { cards, log: cur.log, updatedAt: FieldValue.serverTimestamp() })
+      })
+      return { removed }
     },
   }
 }

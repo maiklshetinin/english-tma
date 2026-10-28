@@ -2,16 +2,18 @@
 // График колоды: где сейчас каждое слово и как алгоритм (Anki / FSRS) его «отбрасывает».
 //  • Столбики — сколько слов придёт в каждый отрезок времени. Масштаб: «Сутки» (по часам), «Неделя», «Месяц» (по дням), «Год» (по месяцам).
 //    Отрезки считаются от «сейчас», поэтому со временем столбики сами сдвигаются влево, к «Сейчас».
-//  • Нажатие на столбик — слова этого отрезка (карточки с обратным отсчётом); нажатие на слово — его история ответов.
+//  • Наведение на столбик (на телефоне — нажатие) — всплывающая подсказка поверх графика: сколько и какие слова, когда вернутся.
+//    Подсказка не сдвигает страницу. Нажатый столбик держит подсказку открытой; в ней нажатие на слово — его история ответов.
 //  • В реальном времени: ответили в сессии — над графиком всплывает «budget · Снова → <1 мин.», столбик с этим словом
 //    подсвечивается и сразу открывается. Часы тикают раз в секунду.
 //  dock — график сверху сессии (над карточкой), без него — отдельный экран из списка колод.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { srsOf, kindOf, today, LEARNED_DAYS } from '../composables/useSrs'
+import { srsOf, kindOf, today, LEARNED_DAYS, resetDeck, buildQueue, deckCounts } from '../composables/useSrs'
+import { showToast } from '../composables/useToast'
 import { dueMs, recallNow, fmtSpan, memoryOf } from '../utils/fsrs'
 import AppIcon from './AppIcon.vue'
-const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, dock: Boolean })
-const emit = defineEmits(['back'])
+const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, dock: Boolean, currentId: { type: String, default: null } })
+const emit = defineEmits(['back', 'reset'])
 
 const now = ref(Date.now()); let clock = null
 onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 1000) })
@@ -72,7 +74,7 @@ function axis(i) {                                          // подпись п
   if (i === sc.value.n - 1 && scale.value !== 'week') return ''
   if (scale.value === 'day') return i % 6 === 0 ? `+${i} ч` : ''
   if (scale.value === 'week') return i === 1 ? 'завтра' : DOW[dateAt(i).getDay()]
-  if (scale.value === 'month') return i % 7 === 0 ? `+${i / 7} нед` : ''
+  if (scale.value === 'month') return i % 7 === 0 && i < 28 ? `+${i / 7} нед` : ''
   return i % 3 === 0 ? MON[monthAt(i).getMonth()] : ''
 }
 function title(i) {                                         // заголовок открытого столбика
@@ -87,10 +89,36 @@ function title(i) {                                         // заголово�
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'слова' : 'слов')
 
 // Открытый столбик: наведённый (на компьютере) или выбранный нажатием
-const hover = ref(null), pinned = ref(0), open = ref(null)
-watch(scale, (v) => { store('tma.chartScale', v); pinned.value = 0; hover.value = null })
+const hover = ref(null), pinned = ref(null), open = ref(null), autoPin = ref(false)
+watch(scale, (v) => { store('tma.chartScale', v); pinned.value = null; hover.value = null; open.value = null })
 const activeI = computed(() => hover.value ?? pinned.value)
-const active = computed(() => bins.value[activeI.value] ?? bins.value[0])
+const active = computed(() => activeI.value == null ? null : bins.value[activeI.value] ?? null)
+const tipLeft = computed(() => activeI.value == null ? 50 : (activeI.value + 0.5) / bins.value.length * 100)
+const pin = (i) => { autoPin.value = false; open.value = null; pinned.value = pinned.value === i ? null : i; hover.value = null }
+// Нажатие мимо графика закрывает закреплённую подсказку
+const root = ref(null)
+const outside = (e) => { if (pinned.value != null && root.value && !root.value.querySelector('.plotw')?.contains(e.target)) { pinned.value = null; open.value = null } }
+onMounted(() => document.addEventListener('pointerdown', outside))
+onUnmounted(() => document.removeEventListener('pointerdown', outside))
+// Очередь как в Anki — в подсказке «Сейчас»: номер, в каком порядке придут карточки (изучаемые, чьё время пришло → повторения → новые),
+// а карточки на шагах, которым ещё рано, — с обратным отсчётом «через 0:45». Пересчитывается раз в секунду.
+const queue = computed(() => { now.value; return buildQueue(props.deck, props.userKey, now.value) })
+const qPos = computed(() => {                               // карточка на экране (currentId) — первая, дальше очередь по порядку
+  const ids = queue.value.map(c => c.id), order = props.currentId ? [props.currentId, ...ids.filter(id => id !== props.currentId)] : ids
+  const m = {}; order.forEach((id, i) => { m[id] = i + 1 }); return m
+})
+const queueNew = computed(() => queue.value.filter(c => !srsOf(props.userKey, c)))
+const newLeft = computed(() => deckCounts(props.deck, props.userKey).new)
+/** Слова подсказки: у «Сейчас» — в порядке очереди (кто следующий — первым), у остальных — по времени. */
+const tipItems = computed(() => {
+  if (!active.value) return []
+  if (active.value.i !== 0) return active.value.items
+  const pos = (r) => qPos.value[r.c.id] ?? 1e6 + r.at
+  return [...active.value.items].sort((a, b) => pos(a) - pos(b))
+})
+const firstWait = computed(() => active.value?.i === 0 ? tipItems.value.findIndex(r => !qPos.value[r.c.id]) : -1)   // где в списке начинаются «ещё рано»
+const newRange = computed(() => { const ps = queueNew.value.map(c => qPos.value[c.id]).filter(Boolean); return ps.length ? (ps.length > 1 ? `${Math.min(...ps)}–${Math.max(...ps)}` : `${ps[0]}`) : '' })
+const MAXW = 8                                              // в подсказке — первые 8 слов, дальше «и ещё N»
 
 // Когда вернётся слово: обратный отсчёт до часа, дальше — «завтра / 5 дн.»
 function when(r) {
@@ -109,21 +137,28 @@ watch(lastKey, (v, was) => {
   const id = v.split(':')[0], r = started.value.find(x => x.c.id === id); if (!r) return
   const h = r.s.hist?.at(-1)
   jump.value = { id, word: r.c.front, q: h?.q ?? 2, to: h ? (h.i < 0 ? fmtSpan(-h.i, 0) : fmtSpan(0, h.i)) : '' }
-  hover.value = null; pinned.value = binOf(r); open.value = null
-  clearTimeout(jumpTimer); jumpTimer = setTimeout(() => { jump.value = null }, 4500)
+  hover.value = null; pinned.value = binOf(r); autoPin.value = true; open.value = null
+  clearTimeout(jumpTimer); jumpTimer = setTimeout(() => { jump.value = null; if (autoPin.value) pinned.value = null }, 4500)
 })
 onUnmounted(() => clearTimeout(jumpTimer))
 const fresh = (r) => jump.value?.id === r.c.id
 
+// «Сбросить колоду»: два нажатия — второе подтверждает; все слова снова новые (только у этого пользователя)
+const sure = ref(false)
+function reset() {
+  if (!sure.value) { sure.value = true; return }
+  const n = resetDeck(String(props.userKey), props.deck); sure.value = false; open.value = null; pinned.value = null
+  showToast(n ? `Колода сброшена: ${n} ${word(n)} снова новые` : 'Сбрасывать нечего — слова ещё не начаты'); emit('reset')
+}
+
 // История слова
-const picked = computed(() => started.value.find(r => r.c.id === open.value) ?? null)
 const histOf = (r) => (r.s?.hist ?? []).filter(h => !Array.isArray(h)).map(({ t: at, q, i: iv }) => ({ at, q, label: iv < 0 ? fmtSpan(-iv, 0) : fmtSpan(0, iv), days: iv < 0 ? -iv / 1440 : iv }))
 const histMax = (r) => Math.max(1, ...histOf(r).map(h => h.days))
 const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')}` }
 </script>
 
 <template>
-  <div class="dc" :class="{ docked: dock }">
+  <div ref="root" class="dc" :class="{ docked: dock }">
     <header v-if="!dock" class="bar">
       <button class="btn ghost sm" @click="emit('back')"><AppIcon name="back" :size="18" /> Колоды</button>
       <b class="dt">{{ deck.title }}</b>
@@ -140,42 +175,51 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
       </div>
 
 
-      <!-- Столбики -->
+      <!-- Столбики; подсказка со словами всплывает поверх — ничего не сдвигается -->
+      <div class="plotw">
       <div class="plot" :style="{ '--n': bins.length }" @mouseleave="hover = null">
         <div class="grid"><i /><i /><i /></div>
         <!-- Всплывашка над столбиками: слово только что ушло -->
-        <Transition name="jmp"><div v-if="jump" class="jump" :class="'jq' + jump.q"><b>{{ jump.word }}</b> · {{ GRADE[jump.q] }} → <b class="to">{{ jump.to }}</b></div></Transition>
-        <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, later: b.i === sc.n, hot: b.items.some(fresh) }"
-          :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="hover = b.i" @click="pinned = b.i; hover = null; open = null">
+        <Transition name="jmp"><div v-if="jump && !active" class="jump" :class="'jq' + jump.q"><b>{{ jump.word }}</b> · {{ GRADE[jump.q] }} → <b class="to">{{ jump.to }}</b></div></Transition>
+        <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, pin: pinned === b.i, later: b.i === sc.n, hot: b.items.some(fresh) }"
+          :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="hover = b.i" @click="pin(b.i)">
           <span v-if="b.items.length" class="bn">{{ b.items.length }}</span>
           <span class="stk" :style="{ height: (b.items.length ? 8 + b.items.length / maxN * (dock ? 74 : 100) : 3) + 'px' }"><i v-for="g in segs(b)" :key="g.k" :class="g.k" :style="{ flexGrow: g.n }" /></span>
         </button>
       </div>
       <div class="ax" :style="{ '--n': bins.length }"><span v-for="b in bins" :key="b.i" :class="{ now: b.i === 0 }">{{ axis(b.i) }}</span></div>
 
-      <!-- Слова открытого столбика -->
-      <div class="pop">
-        <div class="ph"><b>{{ title(activeI) }}</b><span>{{ active.items.length ? `${active.items.length} ${word(active.items.length)}` : 'слов нет' }}</span></div>
-        <TransitionGroup v-if="active.items.length" name="chip" tag="div" class="chips">
-          <button v-for="r in active.items" :key="r.c.id" class="chip" :class="[r.k, { on: open === r.c.id, fresh: fresh(r) }]" @click="open = open === r.c.id ? null : r.c.id">
-            <span class="cw"><b>{{ r.c.front }}</b><small>{{ r.c.back }}</small></span>
-            <span class="cd">{{ when(r) }}</span>
-          </button>
-        </TransitionGroup>
-        <p v-else class="hint none">{{ started.length ? 'Нажмите на другой столбик, чтобы увидеть его слова' : 'Слова ещё не начаты — ответьте на первую карточку' }}</p>
-
-        <!-- История слова -->
-        <div v-if="picked" class="hist">
-          <div class="meta"><b>{{ picked.c.front }}</b><span>{{ KIND[picked.k] }}</span><span>вспомнит сейчас <b>{{ Math.round(picked.r * 100) }}%</b></span>
-            <span>стабильность <b>{{ fmtSpan(0, Math.max(1, Math.round(picked.mem.stab))) }}</b></span><span>сложность <b>{{ picked.mem.diff.toFixed(1) }}</b></span><span>ошибок <b>{{ picked.s.lapses }}</b></span></div>
-          <div v-if="histOf(picked).length" class="hb">
-            <div v-for="(h, i) in histOf(picked)" :key="i" class="hc" :title="`${fmtDate(h.at)} · ${GRADE[h.q]} → ${h.label}`">
-              <small class="hv">{{ h.label }}</small><i :class="'q' + h.q" :style="{ height: Math.max(4, Math.sqrt(h.days / histMax(picked)) * 56) + 'px' }" /><small class="hd">{{ fmtDate(h.at) }}</small>
-            </div>
+      <!-- Подсказка столбика -->
+      <Transition name="tipf">
+        <div v-if="active" class="tip" :class="{ pinned: pinned === active.i }" :style="{ '--x': tipLeft + '%' }">
+          <div class="th"><b>{{ title(active.i) }}</b><span>{{ active.items.length ? `${active.items.length} ${word(active.items.length)}` : 'слов нет' }}</span></div>
+          <div v-if="active.items.length" class="tl">
+            <template v-for="(r, idx) in tipItems.slice(0, open ? 99 : MAXW)" :key="r.c.id">
+              <!-- Новые встают в очередь после повторений и раньше карточек, которым ещё рано (как в Anki) -->
+              <div v-if="active.i === 0 && newLeft && idx === firstWait" class="qnew"><i class="qn nw">{{ newRange || '+' + newLeft }}</i><span>{{ newLeft }} новых: {{ queueNew.slice(0, 3).map(c => c.front).join(', ') }}{{ newLeft > 3 ? '…' : '' }}</span></div>
+              <button class="tw" :class="[r.k, { fresh: fresh(r), on: open === r.c.id }]" :disabled="pinned !== active.i" @click.stop="open = open === r.c.id ? null : r.c.id">
+                <i v-if="active.i === 0 && qPos[r.c.id]" class="qn" :class="{ first: qPos[r.c.id] === 1 }" :title="qPos[r.c.id] === 1 && currentId ? 'Сейчас на экране' : `В очереди ${qPos[r.c.id]}-я`">{{ qPos[r.c.id] }}</i><i v-else class="dot" />
+                <b>{{ r.c.front }}</b><small>{{ r.c.back }}</small><span class="cd" :class="{ wait: active.i === 0 && !qPos[r.c.id] }">{{ active.i === 0 && !qPos[r.c.id] ? `через ${when(r)}` : active.i === 0 && qPos[r.c.id] === 1 && currentId ? 'на экране' : when(r) }}</span></button>
+              <!-- История слова (в закреплённой подсказке) -->
+              <div v-if="open === r.c.id" class="hist">
+                <div class="meta"><span>{{ KIND[r.k] }}</span><span>вспомнит <b>{{ Math.round(r.r * 100) }}%</b></span><span>стаб. <b>{{ fmtSpan(0, Math.max(1, Math.round(r.mem.stab))) }}</b></span><span>сложн. <b>{{ r.mem.diff.toFixed(1) }}</b></span><span>ошибок <b>{{ r.s.lapses }}</b></span></div>
+                <div v-if="histOf(r).length" class="hb">
+                  <div v-for="(h, i) in histOf(r)" :key="i" class="hc" :title="`${fmtDate(h.at)} · ${GRADE[h.q]} → ${h.label}`">
+                    <small class="hv">{{ h.label }}</small><i :class="'q' + h.q" :style="{ height: Math.max(3, Math.sqrt(h.days / histMax(r)) * 40) + 'px' }" /><small class="hd">{{ fmtDate(h.at) }}</small>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <small v-if="!open && active.items.length > MAXW" class="more">и ещё {{ active.items.length - MAXW }}…{{ pinned === active.i ? '' : ' — нажмите на столбик' }}</small>
           </div>
-          <div class="lg"><span><i class="q0" />Снова</span><span><i class="q1" />Трудно</span><span><i class="q2" />Хорошо</span><span><i class="q3" />Легко</span><span>— на сколько отбросило после ответа</span></div>
+          <div v-if="active.i === 0 && newLeft && firstWait < 0" class="qnew"><i class="qn nw">{{ newRange || '+' + newLeft }}</i><span>{{ newLeft }} новых: {{ queueNew.slice(0, 3).map(c => c.front).join(', ') }}{{ newLeft > 3 ? '…' : '' }}</span></div>
+          <small v-if="active.items.length && pinned !== active.i" class="hint2">нажмите на столбик — закрепить и посмотреть историю слова</small>
         </div>
+      </Transition>
       </div>
+      <p v-if="!started.length" class="hint none">Слова ещё не начаты — ответьте на первую карточку</p>
+      <div class="foot"><button class="rst" :class="{ sure }" :disabled="!started.length" @click="reset" @blur="sure = false">
+        <AppIcon name="refresh" :size="14" />{{ sure ? `Точно? ${started.length} ${word(started.length)} станут новыми` : 'Сбросить прогресс колоды' }}</button></div>
     </section>
   </div>
 </template>
@@ -209,25 +253,38 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .bn { font-size: 11px; font-weight: 900; color: var(--text); line-height: 1 }
 .ax { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; height: 14px; border-top: 1px solid var(--border); padding-top: 3px }
 .ax span { display: flex; justify-content: center; width: 0; justify-self: center; font-size: 10px; font-weight: 800; color: var(--hint-2); white-space: nowrap } .ax span.now { color: var(--blue) }
-/* Слова столбика */
-.pop { display: grid; gap: 8px; margin-top: 4px; padding: 10px; border-radius: 14px; background: var(--surface) }
-.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px } .ph span { flex: none; font-size: 13px; font-weight: 800; color: var(--hint) }
-.chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; max-height: 196px; overflow-y: auto; padding: 2px }
-.chip { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 10px; border: 0; border-left: 4px solid var(--c); border-radius: 10px; background: var(--card); font: inherit; color: var(--text); text-align: left; cursor: pointer; box-shadow: 0 1px 0 var(--border); transition: transform .15s }
-.chip:hover { transform: translateY(-1px) } .chip.on { box-shadow: 0 0 0 2px var(--blue) }
-.chip.learn { --c: var(--red) } .chip.review { --c: var(--green) } .chip.mature { --c: var(--green-d) }
-.chip.fresh { background: #fff6e0; box-shadow: 0 0 0 2px var(--orange) } html[data-theme='dark'] .chip.fresh { background: var(--card) }
-.cw { flex: 1; display: grid; min-width: 0; line-height: 1.2 } .cw b, .cw small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .cw b { font-size: 14px } .cw small { font-size: 11px; color: var(--hint); font-weight: 600 }
-.cd { flex: none; font-size: 12px; font-weight: 800; color: var(--hint); font-variant-numeric: tabular-nums } .chip.learn .cd { color: var(--red-d) }
-.chip-enter-active { transition: all .35s ease } .chip-enter-from { opacity: 0; transform: scale(.8) } .chip-leave-active { display: none }
+.none { margin: 0; text-align: center; font-size: 13px }
+/* Подсказка столбика — поверх графика, ничего не сдвигает */
+.plotw { position: relative }
+.tip { position: absolute; z-index: 20; top: calc(100% + 6px); pointer-events: none; left: clamp(min(130px, 50%), var(--x), calc(100% - min(130px, 50%))); transform: translateX(-50%); width: min(260px, 100%); box-sizing: border-box; max-height: 260px; overflow-y: auto;
+  display: grid; gap: 4px; padding: 8px 8px 6px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 10px 28px rgba(0, 0, 0, .16) }
+.tip.pinned { pointer-events: auto }      /* наведённая подсказка не мешает водить по столбикам; закреплённую можно нажимать */
+.tip::before { content: ''; position: absolute; top: -6px; left: calc(50% - 6px); width: 12px; height: 12px; background: var(--card); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg) }
+.tipf-enter-active, .tipf-leave-active { transition: opacity .12s, transform .12s } .tipf-enter-from, .tipf-leave-to { opacity: 0; transform: translate(-50%, 4px) }
+.th { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 0 4px 2px; font-size: 13px } .th span { flex: none; font-size: 12px; font-weight: 800; color: var(--hint) }
+.tl { display: grid; gap: 1px }
+.tw { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 5px 6px; border: 0; border-radius: 8px; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer }
+.tw:disabled { cursor: default; color: var(--text); opacity: 1 } .tw:not(:disabled):hover, .tw.on { background: var(--surface) }
+.tw .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c) } .tw.learn { --c: var(--red) } .tw.review { --c: var(--green) } .tw.mature { --c: var(--green-d) }
+.tw b { flex: none; max-width: 45%; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tw small { flex: 1; min-width: 0; font-size: 11px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.tw .cd { flex: none; font-size: 12px; font-weight: 800; color: var(--hint); font-variant-numeric: tabular-nums } .tw.learn .cd { color: var(--red-d) }
+.tw.fresh { background: #fff3d6; box-shadow: inset 0 0 0 2px var(--orange) } html[data-theme='dark'] .tw.fresh { background: var(--surface) }
+.more, .hint2 { padding: 0 6px; font-size: 11px; font-weight: 700; color: var(--hint) } .hint2 { color: var(--hint-2) }
+.bc.pin { box-shadow: inset 0 0 0 2px var(--blue) }
+/* Номер в очереди: синий кружок; 1 — карточка на экране (заливка) */
+.qn { flex: none; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue-l); color: var(--blue); font-style: normal; font-size: 11px; font-weight: 900; font-variant-numeric: tabular-nums }
+.qn.first { background: var(--blue); color: #fff } .tw .cd.wait { color: var(--orange-d) }
+.qnew { display: flex; align-items: center; gap: 6px; padding: 5px 6px; font-size: 12px; font-weight: 600; color: var(--hint) } .qn.nw { background: var(--surface); color: var(--blue) }
 .none { margin: 0; text-align: center; font-size: 13px }
 /* История слова */
-.hist { display: grid; gap: 6px; padding: 10px; border-radius: 12px; background: var(--card) }
-.meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 12px; font-weight: 700; color: var(--hint) } .meta > b:first-child { font-size: 15px; color: var(--text) } .meta span b { color: var(--text) }
+.hist { display: grid; gap: 4px; margin: 0 0 4px 20px; padding: 6px 8px; border-radius: 10px; background: var(--surface) }
+.meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 11px; font-weight: 700; color: var(--hint) } .meta > b:first-child { font-size: 15px; color: var(--text) } .meta span b { color: var(--text) }
 .hb { display: flex; align-items: flex-end; gap: 6px; overflow-x: auto; padding-bottom: 2px }
-.hc { flex: none; width: 44px; display: grid; justify-items: center; align-content: end; gap: 2px }
-.hc i { display: block; width: 24px; border-radius: 4px 4px 0 0 } .hv { font-size: 10px; font-weight: 800; white-space: nowrap } .hd { font-size: 9px; color: var(--hint-2); font-weight: 700 }
+.hc { flex: none; width: 36px; display: grid; justify-items: center; align-content: end; gap: 2px }
+.hc i { display: block; width: 18px; border-radius: 4px 4px 0 0 } .hv { font-size: 10px; font-weight: 800; white-space: nowrap } .hd { font-size: 9px; color: var(--hint-2); font-weight: 700 }
 .q0 { background: var(--red) } .q1 { background: var(--orange) } .q2 { background: var(--green) } .q3 { background: var(--blue) }
-.lg { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; font-weight: 700; color: var(--hint) } .lg span { display: inline-flex; align-items: center; gap: 4px } .lg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block }
-@media (max-width: 520px) { .dt { margin-right: 0 } .scl button { padding: 4px 7px } .chips { grid-template-columns: 1fr 1fr } .plot { height: 130px } }
+.foot { display: flex; justify-content: flex-end }
+.rst { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; border-radius: 99px; background: none; color: var(--hint); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer }
+.rst:hover:not(:disabled) { background: var(--red-l); color: var(--red-d) } .rst.sure { background: var(--red); color: #fff } .rst:disabled { opacity: .4; cursor: default }
+@media (max-width: 520px) { .dt { margin-right: 0 } .scl button { padding: 4px 7px } .plot { height: 130px } }
 </style>

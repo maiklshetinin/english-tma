@@ -28,6 +28,12 @@ export function rate(userKey: string, card: Card, q: number, now = Date.now()): 
 export function restore(userKey: string, card: Card, prev: SrsState | null): void {
   useSrsStore().set(userKey, card.id, prev, today(), -1)
 }
+/** «Сбросить колоду»: все её слова снова «новые» у этого пользователя. Возвращает, сколько слов было начато. */
+export function resetDeck(userKey: string, deck: Deck): number {
+  const map = cardsOf(userKey), ids = deck.cards.map((c) => c.id).filter((id) => map[id])
+  if (ids.length) useSrsStore().reset(userKey, ids)
+  return ids.length
+}
 export const snapshot = (userKey: Key, card: Card): SrsState | null => { const s = srsOf(userKey, card); return s ? { ...s } : null }
 
 /** Подпись на кнопке оценки, как в Anki: «<1 мин.», «<10 мин.», «4 дн.», «3,6 мес.». */
