@@ -6,6 +6,8 @@
 //    sel — элемент под мышкой (путь в странице), rx/ry — где внутри него (0…1): так стрелка попадает туда же при любом масштабе и ширине окна.
 //    Включено ли — общее состояние сервера (cursors), новичок получает его в hello; выключается тем же переключателем.
 //    Сохраняет курс в Firestore тот, кто правил (PUT /courses) — здесь только пересылка, ничего не пишем в базу.
+//  • «В сети» учеников: сервер помнит, кто отмечался (students.seen), и сразу рассылает { t: 'seen', id, at }; новичку — в hello.seen.
+//    Так преподавателю не нужно раз в минуту перечитывать список учеников из базы.
 //  • После любой правки через обычные маршруты (ученики, расписание, группы…) остальным уходит «changed» — они перезагружают
 //    эти данные. Всё в памяти одного процесса: на Render один экземпляр сервера, этого достаточно.
 import type { Server } from 'node:http'
@@ -20,7 +22,7 @@ const colorOf = (uid: string) => COLORS[[...uid].reduce((h, c) => (h * 31 + c.ch
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : 0)
 
-export function makeLive({ verify, origins }: { verify: Verify; origins: string[] }) {
+export function makeLive({ verify, origins, hello = () => ({}) }: { verify: Verify; origins: string[]; hello?: () => Record<string, unknown> }) {
   const conns = new Set<Conn>()
   let seq = 0, cursors = false, cursorsBy = ''
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
@@ -57,7 +59,7 @@ export function makeLive({ verify, origins }: { verify: Verify; origins: string[
         if (!u || u.role !== 'teacher') return ws.close(4401, 'unauthorized')
         const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
         conns.add(c)
-        send(c, { t: 'hello', cid: c.cid, cursors, cursorsBy })
+        send(c, { ...hello(), t: 'hello', cid: c.cid, cursors, cursorsBy })
         presence()
         ws.on('message', (d) => onMessage(c, String(d)))
         ws.on('pong', () => { c.alive = true })
@@ -70,6 +72,8 @@ export function makeLive({ verify, origins }: { verify: Verify; origins: string[
     },
     /** Кто-то поменял данные через обычный маршрут — остальным: перезагрузить это. byCid — подключение того, кто правил
      *  (сайт присылает его в заголовке X-Live-Cid), ему самому не шлём: у него данные уже свежие */
+    /** Всем преподавателям в приложении (например, «ученик в сети» — без чтения базы) */
+    broadcast(m: Record<string, unknown>) { for (const c of conns) send(c, m) },
     changed(what: string, byCid: string) { for (const c of conns) if (c.cid !== byCid) send(c, { t: 'changed', what }) },
   }
 }

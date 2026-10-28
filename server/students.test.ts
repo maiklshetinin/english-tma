@@ -141,7 +141,10 @@ ok('удалённого нет ни в списке, ни в архиве', (aw
   await S.seen(me); ok('seen: время записано', store.get(`students/${st.id}`).lastSeenAt === nowMs)
   ok('seen: время отдаётся в списке', (await S.list(teacher)).find((x) => x.id === st.id)?.lastSeenAt === nowMs)
   nowMs += 10_000; await S.seen(me); ok('seen: не чаще раза в 30 с', store.get(`students/${st.id}`).lastSeenAt === nowMs - 10_000)
-  nowMs += 30_000; await S.seen(me); ok('seen: через 40 с — обновлено', store.get(`students/${st.id}`).lastSeenAt === nowMs)
+  nowMs += 30_000; const r40 = await S.seen(me)
+  ok('seen: через 40 с — новое время сразу видно (в памяти и в списке), а в базу не пишем', r40?.at === nowMs && store.get(`students/${st.id}`).lastSeenAt === nowMs - 40_000 && (await S.list(teacher)).find((x) => x.id === st.id)?.lastSeenAt === nowMs)
+  ok('seen: недавние — для нового окна преподавателя', S.recentSeen()[st.id] === nowMs)
+  nowMs += 10 * 60_000; await S.seen(me); ok('seen: через 10 мин — записано в базу', store.get(`students/${st.id}`).lastSeenAt === nowMs)
   const before = store.get(`students/${st.id}`).lastSeenAt; nowMs += 60_000
   await S.seen({ uid: 'tg:99', role: 'student', studentId: st.id }); ok('seen: чужой аккаунт не пишет', store.get(`students/${st.id}`).lastSeenAt === before)
   await S.seen(teacher); ok('seen: преподаватель — ничего', store.get(`students/${st.id}`).lastSeenAt === before)

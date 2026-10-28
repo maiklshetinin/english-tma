@@ -10,6 +10,7 @@ import WakeUp from './components/WakeUp.vue'
 import PresenceBar from './components/PresenceBar.vue'
 import GlobalCursors from './components/GlobalCursors.vue'
 import { startLive, stopLive, setWhere, onLive } from './composables/useLive'
+import { active, onActive } from './composables/useActive'
 import { useStudentsStore } from './stores/students'
 import { useScheduleStore } from './stores/schedule'
 import { useGroupsStore } from './stores/groups'
@@ -35,11 +36,17 @@ watch(() => auth.status === 'ready' && auth.isTeacher, (on) => (on ? startLive()
 watch(() => route.meta.tab, (t) => { if (t !== 'courses') setWhere(String(t || '')) }, { immediate: true })      // в редакторе он сам скажет, какой курс
 const RELOAD = { students: () => useStudentsStore().load(), schedule: () => useScheduleStore().load(), groups: () => useGroupsStore().load(),
   paths: () => useContentStore().load(), presets: () => useContentStore().load(), decks: () => useContentStore().load(), content: () => useContentStore().load() }
-const pending = new Map()
-onLive('changed', ({ what }) => {          // несколько правок подряд — одна перезагрузка
-  const fn = RELOAD[what]; if (!fn) return
-  clearTimeout(pending.get(what)); pending.set(what, setTimeout(() => fn()?.catch?.(() => {}), 250))
+const pending = new Map(), later = new Set()
+const reload = (what) => { const fn = RELOAD[what]; if (!fn) return; clearTimeout(pending.get(what)); pending.set(what, setTimeout(() => fn()?.catch?.(() => {}), 1500)) }
+onLive('changed', ({ what }) => {          // несколько правок подряд — одна перезагрузка; если никого нет за экраном — когда вернётся
+  if (!RELOAD[what]) return
+  if (active.value) reload(what); else later.add(what)
 })
+onActive(() => { for (const w of later) reload(w); later.clear() })
+// «В сети» учеников — по живому соединению (сервер рассылает отметки), без перечитывания списка учеников из базы
+const seen = (id, at) => { const s = useStudentsStore().byId(id); if (s && at > (s.lastSeenAt ?? 0)) s.lastSeenAt = at }
+onLive('seen', ({ id, at }) => seen(id, at))
+onLive('hello', ({ seen: m }) => { for (const [id, at] of Object.entries(m ?? {})) seen(id, at) })
 const demo = import.meta.env.DEV || new URLSearchParams(location.search).has('demo')
 onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(location.search).get('role'); if (demo && (r === 'teacher' || r === 'student')) auth.setRole(r) }).finally(() => { booted.value = true }))
 </script>

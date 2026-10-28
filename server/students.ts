@@ -21,6 +21,7 @@ const pub = (id: string, x: StudentDoc): Student => ({
 
 const iso = (t: unknown): string | null => (t && typeof (t as any).toDate === 'function' ? (t as any).toDate().toISOString() : null)   // Timestamp → ISO
 const ID = /^[\w-]{1,64}$/
+const SEEN_WRITE_MS = 10 * 60_000       // «в сети»: в базу — не чаще раза в 10 минут
 
 // Цена из запроса: пусто → 0, иначе число 0–100000 с точностью до копеек; остальное — 400
 const parsePrice = (raw: unknown): number => {
@@ -45,21 +46,37 @@ export interface StudentsDeps {
 export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/Moscow', now = () => new Date() }: StudentsDeps) {
   const col = () => db.collection('students')
   const alive = () => col().where('archived', '==', false).get()
+  const seenMem = new Map<string, { uid: string; at: number; wrote: number }>()      // «в сети» — в памяти (см. seen)
+  const withSeen = (x: Student): Student => { const at = seenMem.get(x.id)?.at; return at && at > (x.lastSeenAt ?? 0) ? { ...x, lastSeenAt: at } : x }
 
   return {
-    // «В сети»: ученик открыл приложение — раз в минуту отмечаем время (зелёная точка у преподавателя, как в Telegram).
-    // Пишем только в свою запись и не чаще раза в 30 секунд.
-    async seen(user: TokenUser): Promise<void> {
-      if (user.role !== 'student' || !user.studentId) return
-      const ref = db.collection('students').doc(String(user.studentId)), d = await ref.get()
-      if (!d.exists || d.get('archived') || `tg:${d.get('tgId')}` !== user.uid) return
-      const t = now().getTime()
-      if (t - (Number(d.get('lastSeenAt')) || 0) < 30_000) return
-      await ref.update({ lastSeenAt: t })
+    // «В сети»: ученик открыл приложение — раз в минуту сообщает (зелёная точка у преподавателя, как в Telegram).
+    // Чтобы не тратить чтения и записи базы каждую минуту: время держим в памяти сервера (преподавателям оно уходит сразу
+    // через живое соединение — index.ts → live), а в базу пишем не чаще раза в 10 минут (для подписи «был(а) … назад» после
+    // перезапуска сервера). Запись ученика читаем один раз — проверить, что она его. Возвращает { id, at } или null (не чаще раза в 30 с).
+    async seen(user: TokenUser): Promise<{ id: string; at: number } | null> {
+      if (user.role !== 'student' || !user.studentId) return null
+      const sid = String(user.studentId), ref = col().doc(sid), t = now().getTime()
+      let m = seenMem.get(sid)
+      if (!m || m.uid !== user.uid) {
+        const d = await ref.get()
+        if (!d.exists || d.get('archived') || `tg:${d.get('tgId')}` !== user.uid) return null
+        m = { uid: user.uid, at: 0, wrote: Number(d.get('lastSeenAt')) || 0 }; seenMem.set(sid, m)
+      }
+      if (t - m.at < 30_000) return null
+      m.at = t
+      if (t - m.wrote >= SEEN_WRITE_MS) { m.wrote = t; await ref.update({ lastSeenAt: t }) }
+      return { id: sid, at: t }
+    },
+    /** Кто отмечался за последние 5 минут: { studentId: время } — новому окну преподавателя при подключении */
+    recentSeen(): Record<string, number> {
+      const t = now().getTime(), out: Record<string, number> = {}
+      for (const [id, m] of seenMem) if (m.at && t - m.at < 5 * 60_000) out[id] = m.at
+      return out
     },
     // Преподаватель — все активные ученики; ученик — только своя запись, и только если она всё ещё привязана к его аккаунту
     async list(user: TokenUser): Promise<Student[]> {
-      if (user.role === 'teacher') return (await alive()).docs.map((d) => pub(d.id, d.data() as StudentDoc))
+      if (user.role === 'teacher') return (await alive()).docs.map((d) => withSeen(pub(d.id, d.data() as StudentDoc)))
       if (user.role === 'student' && user.studentId) {
         const d = await col().doc(String(user.studentId)).get()
         return d.exists && !d.get('archived') && `tg:${d.get('tgId')}` === user.uid ? [pub(d.id, d.data() as StudentDoc)] : []

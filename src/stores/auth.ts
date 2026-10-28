@@ -4,6 +4,7 @@
 //  • Внутри Telegram — автоматически, без кнопок (initData).
 //  • В обычном браузере — кнопка «Войти через Telegram» (Login Widget); сессия сохраняется Firebase.
 import { defineStore } from 'pinia'
+import { active } from '../composables/useActive'
 import { reactive, ref } from 'vue'
 import { signInWithCustomToken, signOut } from 'firebase/auth'
 import type { User } from 'firebase/auth'
@@ -20,10 +21,11 @@ export type AuthStatus = 'loading' | 'login' | 'ready' | 'error'
 /** Профиль из Telegram (поля названы так, как их называет Telegram). */
 export interface TgProfile { id: number; first_name?: string; username?: string; photo_url?: string }
 
-// Ученик в приложении — раз в минуту сообщаем серверу (POST /me/seen), чтобы у преподавателя горела зелёная точка «в сети»
+// Ученик в приложении — раз в минуту сообщаем серверу (POST /me/seen), чтобы у преподавателя горела зелёная точка «в сети».
+// Только пока он правда здесь (useActive): забытое открытым окно «в сети» не висит и сервер не дёргает
 let seenTimer: ReturnType<typeof setInterval> | null = null
 function startSeen() {
-  const ping = () => { try { if (document.visibilityState === 'visible') apiRequest('/me/seen', { method: 'POST' }).catch(() => {}) } catch { /* не важно */ } }
+  const ping = () => { try { if (document.visibilityState === 'visible' && active.value) apiRequest('/me/seen', { method: 'POST' }).catch(() => {}) } catch { /* не важно */ } }
   ping(); if (seenTimer) clearInterval(seenTimer)
   seenTimer = setInterval(ping, 60_000)
   document.addEventListener('visibilitychange', ping)
@@ -64,7 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (c.role === 'student') currentStudentId.value = c.studentId
     const students = useStudentsStore(), schedule = useScheduleStore(), content = useContentStore()
     await students.load()                                   // ученики с сервера (для ученика — только его запись)
-    students.startRefresh(c.role === 'teacher' ? 60_000 : 0)      // преподавателю — раз в минуту (точки «в сети»)
+    students.startRefresh()                                  // при возвращении в приложение; «в сети» преподавателю приходит по живому соединению
     if (c.role === 'student') startSeen()
     if (c.role === 'student' && !students.list.length) throw new Error('Ваша запись не найдена или в архиве. Попросите преподавателя прислать новое приглашение.')
     // Что сохранять на сервер: только преподаватель правит путь, колоды и пресеты; прогресс повторений — свой собственный

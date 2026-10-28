@@ -4,6 +4,7 @@
 // В демо-режиме (`npm run dev` вне Telegram) сервера нет — всё остаётся в памяти.
 // Форма данных — `Lesson` из server/types.ts.
 import { defineStore } from 'pinia'
+import { refreshOnReturn } from '../composables/useActive'
 import { computed, ref } from 'vue'
 import type { Lesson, ScheduleResponse } from '../../server/types'
 import { apiRequest, isDemo } from '../firebase'
@@ -84,13 +85,9 @@ export const useScheduleStore = defineStore('schedule', () => {
     return [...m.values()].sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour)
   }
 
-  let onVisible: (() => void) | null = null
-  function startRefresh() {                  // перечитывать, когда пользователь возвращается в приложение
-    stopRefresh()
-    onVisible = () => { if (document.visibilityState === 'visible') load().catch(() => {}) }
-    document.addEventListener('visibilitychange', onVisible)
-  }
-  function stopRefresh() { if (onVisible) document.removeEventListener('visibilitychange', onVisible); onVisible = null }
+  let off: (() => void) | null = null
+  function startRefresh() { stopRefresh(); off = refreshOnReturn(() => load().catch(() => {})) }      // перечитать, когда человек вернулся в приложение
+  function stopRefresh() { off?.(); off = null }
 
   function sync(task: () => Promise<unknown>) {      // поставить запрос в очередь; при ошибке — тост и перечитывание, когда очередь опустеет
     if (isDemo) return

@@ -111,11 +111,12 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
     // Самоочистка: из НЕпроведённых уроков двух живых недель убираем учеников, которых нет среди активных (удалены из базы вручную
     // или в архиве); урок, где никого не осталось, удаляется и освобождает слот. Проведённые уроки — история денег, их не трогаем.
     // Так в расписании не бывает «невидимых» уроков, занимающих ячейку. Возвращает, сколько уроков поправлено.
-    async heal(): Promise<number> {
+    // pre — уже прочитанные уроки недель (list читает их сам — чтобы не читать дважды)
+    async heal(pre?: Map<string, FirebaseFirestore.QueryDocumentSnapshot[]>): Promise<number> {
       const alive = new Set((await students().where('archived', '==', false).get()).docs.map((d) => d.id))
       let fixed = 0
       for (const ws of liveWeeks()) {
-        for (const d of (await lessons().where('weekStart', '==', ws).get()).docs) {
+        for (const d of pre?.get(ws) ?? (await lessons().where('weekStart', '==', ws).get()).docs) {
           if (d.get('done') || (d.get('studentIds') as string[]).every((x) => alive.has(x))) continue
           await db.runTransaction(async (tx) => {
             const l = await tx.get(d.ref); if (!l.exists || l.get('done')) return
@@ -175,12 +176,15 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
 
     async list(user: TokenUser): Promise<ScheduleResponse> {
       const [cur, next] = liveWeeks()
-      let me: string | null = null
-      if (user.role === 'teacher') await this.heal()
-      else me = await meOf(user)
+      let me: string | null = null, pre: Map<string, FirebaseFirestore.QueryDocumentSnapshot[]> | null = null
+      const weekDocs = async (ws: string) => (await lessons().where('weekStart', '==', ws).get()).docs as FirebaseFirestore.QueryDocumentSnapshot[]
+      if (user.role === 'teacher') {
+        pre = new Map([[cur, await weekDocs(cur)], [next, await weekDocs(next)]])
+        if (await this.heal(pre)) pre = null                     // что-то поправили — перечитаем свежие
+      } else me = await meOf(user)
       const read = async (ws: string): Promise<ScheduleWeek> => {
         if (user.role !== 'teacher' && !me) return { weekStart: ws, lessons: [] }
-        let docs = (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc))
+        let docs = (pre?.get(ws) ?? await weekDocs(ws)).map((d) => pub(d.id, d.data() as LessonDoc))
         if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => forStudent(l, me!))      // ученик: только он сам и только его цена
         return { weekStart: ws, lessons: docs.sort(byTime) }
       }

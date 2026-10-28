@@ -56,6 +56,7 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHan
 }
 const live = makeLive({
   origins: list(env.ALLOWED_ORIGIN),
+  hello: () => ({ seen: students.recentSeen() }),
   verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(u.role), name: String(u.tgName || ''), photo: String(u.tgPhoto || ''), dev: u.dev === true } },
 })
 const login = makeLogin({ db, auth, FieldValue, teacherIds: TEACHER_IDS, devIds: DEV_IDS })
@@ -95,7 +96,9 @@ const requireTeacher = (req: Request, res: Response, next: NextFunction) => (req
 
 // Ученики. Сайт не ходит в Firestore напрямую — только через эти маршруты; доступ определяется ролью в токене.
 const inviteUrl = (code: string) => `${APP_SHORT_NAME ? `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}` : `https://t.me/${BOT_USERNAME}`}?startapp=invite_${code}`
-app.post('/me/seen', requireUser, wrap(async (req, res) => { await students.seen(req.user); res.json({ ok: true }) }))      // ученик в приложении — «в сети» (раз в минуту)
+app.post('/me/seen', requireUser, wrap(async (req, res) => {      // ученик в приложении — «в сети» (раз в минуту); преподавателям — сразу по живому соединению
+  const s = await students.seen(req.user); if (s) live.broadcast({ t: 'seen', ...s }); res.json({ ok: true })
+}))
 app.get('/students', requireUser, wrap(async (req, res) => res.json(await students.list(req.user))))      // преподаватель — все, ученик — только он сам
 app.post('/students', requireUser, requireTeacher, wrap(async (req, res) => {                              // добавить ученика + сразу ссылка-приглашение
   const student = await students.create(req.body, req.user.uid)

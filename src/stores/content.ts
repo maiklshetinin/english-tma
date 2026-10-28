@@ -2,6 +2,7 @@
 // Перечитывание — после входа, при возврате в приложение и при открытии вкладки «Ученики». Правки на экране не затираются:
 // если пока шёл запрос что-то поменяли или сохраняют, устаревший ответ не применяется.
 import { defineStore } from 'pinia'
+import { refreshOnReturn } from '../composables/useActive'
 import { isDemo } from '../firebase'
 import { fetchContent, fetchSrs } from './api'
 import { useDecksStore } from './decks'
@@ -19,13 +20,9 @@ export const useContentStore = defineStore('content', () => {
     srs.apply(s.users, was.srs)
   }
 
-  let onVisible: (() => void) | null = null
-  function startRefresh() {                  // перечитывать, когда пользователь возвращается в приложение
-    stopRefresh()
-    onVisible = () => { if (document.visibilityState === 'visible') load().catch(() => {}) }
-    document.addEventListener('visibilitychange', onVisible)
-  }
-  function stopRefresh() { if (onVisible) document.removeEventListener('visibilitychange', onVisible); onVisible = null }
+  let off: (() => void) | null = null
+  function startRefresh() { stopRefresh(); off = refreshOnReturn(() => load().catch(() => {})) }      // перечитать, когда человек вернулся в приложение
+  function stopRefresh() { off?.(); off = null }
   function clear() { stopRefresh(); usePathStore().clear(); useDecksStore().clear(); useSrsStore().clear() }
 
   return { load, startRefresh, stopRefresh, clear }

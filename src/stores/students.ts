@@ -3,6 +3,7 @@
 // после входа, после каждого действия, при возврате в приложение и при открытии вкладки «Ученики».
 // Путь, колоды и повторения — в stores/path.ts, decks.ts, srs.ts; расписание — в stores/schedule.ts.
 import { defineStore } from 'pinia'
+import { refreshOnReturn } from '../composables/useActive'
 import { ref } from 'vue'
 import type { ArchivedStudent, CreateStudentResponse, InviteResponse, Student, StudentInput } from '../../server/types'
 import { apiRequest } from '../firebase'
@@ -35,15 +36,13 @@ export const useStudentsStore = defineStore('students', () => {
     return list.value
   }
 
-  let onVisible: (() => void) | null = null, timer: ReturnType<typeof setInterval> | null = null
-  /** Обновлять список, когда пользователь возвращается в приложение; every (мс) — ещё и по таймеру, пока вкладка открыта (у преподавателя — точки «в сети»). */
-  function startRefresh(every = 0) {
+  let off: (() => void) | null = null
+  /** Перечитать список, когда человек вернулся в приложение (а не по таймеру: «в сети» приходит по живому соединению — useLive). */
+  function startRefresh() {
     stopRefresh()
-    onVisible = () => { if (document.visibilityState === 'visible') load().catch(() => {}) }
-    document.addEventListener('visibilitychange', onVisible)
-    if (every) timer = setInterval(() => { if (document.visibilityState === 'visible') load().catch(() => {}) }, every)
+    off = refreshOnReturn(() => load().catch(() => {}))
   }
-  function stopRefresh() { if (onVisible) document.removeEventListener('visibilitychange', onVisible); onVisible = null; if (timer) clearInterval(timer); timer = null }
+  function stopRefresh() { off?.(); off = null }
 
   /** Новый ученик: сервер создаёт запись (если указан ник — сразу ищет фото в Telegram) и ссылку-приглашение. Telegram-аккаунт привяжется, когда он откроет ссылку. */
   async function add({ name, level, packageSize, username, price }: StudentInput): Promise<string> {
