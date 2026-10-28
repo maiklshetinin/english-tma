@@ -8,6 +8,7 @@ vi.mock('../firebase', () => ({ isDemo: false, apiRequest: vi.fn(), apiFetch: vi
 
 import LessonSheet from './LessonSheet.vue'
 import { useStudentsStore } from '../stores/students'
+import { useScheduleStore } from '../stores/schedule'
 
 const D = '2026-10-27'
 const st = (id: string, name: string, price: number): Student => ({ id, name, level: 'A2', color: '#fff', username: '', streak: 0, coins: 0, status: 'active', tgId: null, photoUrl: '', price, priceHistory: [{ from: '', price }], payment: { status: 'paid', until: '2026-11-01', lessonsLeft: 3, packageSize: 8 } })
@@ -120,5 +121,19 @@ describe('урок с учеником, которого больше нет (у
     expect((ta.element as HTMLTextAreaElement).value).toBe('старое')
     await ta.setValue('новое'); await ta.trigger('blur')
     expect(w.emitted('details')![1]).toEqual([lesson, { note: 'новое' }])
+  })
+
+  it('«Кого назначить?»: группы сверху (нажатие — вся группа), ниже все ученики по 4 в ряд', async () => {
+    useStudentsStore().set([st('a', 'Маша', 100), st('b', 'Петя', 80), st('c', 'Оля', 50)])
+    useScheduleStore().set([{ id: 'G', date: D, hour: 20, studentIds: ['a', 'b'] }])
+    const w = mount(LessonSheet, { props: { slot: { date: D, hour: 12 } } })
+    expect(w.findAll('.pgrp')).toHaveLength(1); expect(w.find('.pgrp').text()).toContain('Группа · Вт 20:00')
+    expect(w.findAll('.ptiles > .pt.tap')).toHaveLength(3)                // все ученики, и из группы тоже
+    await w.find('.pgrp').trigger('click')
+    expect(w.emitted('pick')![0]).toEqual([['a', 'b']])
+    await w.findAll('.pt.tap').find(b => b.text().includes('Оля'))!.trigger('click')
+    expect(w.emitted('pick')![1]).toEqual([['c']])
+    await w.find('.tsearch input').setValue('оля')
+    expect(w.findAll('.pgrp')).toHaveLength(0); expect(w.findAll('.pt.tap')).toHaveLength(1)
   })
 })

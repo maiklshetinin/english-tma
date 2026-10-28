@@ -37,9 +37,10 @@ const names = (l) => l.studentIds.map(name).filter(Boolean).join(', ')
 const known = (l) => l.studentIds.filter(id => studentStore.byId(id))      // без удалённых / архивных: их id сервер не примет
 const occupant = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h))?.[0]
 
-function assign(sid, date, hour) {
-  const lesson = scheduleStore.create([sid], date, hour); haptic('light')
-  showToast(`Урок назначен: ${name(sid)} · ${fmtSlot(date, hour)}`, () => scheduleStore.remove(lesson))
+function assign(sid, date, hour) {                  // sid — ученик или список (группа из окна «Кого назначить?»)
+  const ids = [].concat(sid)
+  const lesson = scheduleStore.create(ids, date, hour); haptic('light')
+  showToast(`Урок назначен: ${ids.map(name).join(', ')} · ${fmtSlot(date, hour)}`, () => scheduleStore.remove(lesson))
 }
 function unassign(lesson) {
   if (lesson.done) return showToast('Урок проведён — сначала снимите отметку', null, 'bad')
@@ -96,7 +97,7 @@ function toggleDone(lesson) {
   scheduleStore.setDone(lesson, !was); sheet.value = null; haptic('light')
   showToast(was ? 'Отметка «проведён» снята' : `Урок проведён: ${names(lesson)}`, () => scheduleStore.setDone(lesson, was))
 }
-const pick = (sid) => { const { date, hour } = sheet.value.slot; sheet.value = null; if (!occupant(date, hour)) assign(sid, date, hour) }
+const pick = (sid) => { const { date, hour } = sheet.value.slot; sheet.value = null; if (!occupant(date, hour)) assign(sid, date, hour) }      // sid — id ученика или список (группа)
 const openStudent = (id) => { sheet.value = null; router.push({ name: 'home', params: { id } }) }
 
 onMounted(() => { setDropHandler(onDrop); scheduleStore.load().catch(() => {}) })      // при открытии вкладки перечитываем расписание

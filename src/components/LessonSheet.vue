@@ -13,6 +13,7 @@ import AvatarStack from './AvatarStack.vue'
 import AppIcon from './AppIcon.vue'
 import { useStudentsStore } from '../stores/students'
 import { priceAt } from '../utils/price'
+import { useGroups } from '../composables/useGroups'
 const MAX_GROUP = 12                                              // как на сервере (server/schedule.ts)
 const studentStore = useStudentsStore()
 const props = defineProps({ lesson: Object, slot: Object })
@@ -49,6 +50,10 @@ const match = (st) => { const s = q.value.trim().toLowerCase().replace(/^@/, '')
 const found = computed(() => (props.lesson ? others.value : studentStore.list).filter(match))
 const add = (id) => { if (!full.value) emit('students', props.lesson, [...ids.value, id]) }
 const drop = (id) => emit('students', props.lesson, ids.value.filter(x => x !== id))
+// Пустая ячейка — «Кого назначить?»: сверху группы (нажатие — урок сразу всей группе), ниже все ученики; сеткой по 4, как панель учеников
+const groups = useGroups()
+const shownGroups = computed(() => { const s = q.value.trim().toLowerCase(); return groups.value.filter(g => !s || g.label.toLowerCase().includes(s) || g.members.some(match)) })
+const pickGroup = (g) => emit('pick', g.members.map(m => m.id).slice(0, MAX_GROUP))
 const openAdd = () => { q.value = ''; adding.value = true }
 const sub = (st) => [st.level, handle(st)].filter(Boolean).join(' · ') || 'ученик'      // вторая строка в списке, как «last seen» в Telegram
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'ученика' : 'учеников')
@@ -128,11 +133,20 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
           <h2>Кого назначить?</h2>
           <div class="when">{{ when }}</div>
           <label class="tsearch"><AppIcon name="search" :size="18" /><input v-model="q" placeholder="Поиск" aria-label="Поиск ученика" /><button v-if="q" class="clr" aria-label="Очистить" @click="q = ''"><AppIcon name="x" :size="14" /></button></label>
-          <div class="rows scroll">
-            <button v-for="st in found" :key="st.id" class="prow" @click="emit('pick', st.id)">
-              <Avatar :s="st" :size="42" :online="isOnline(st)" /><span class="tx"><b>{{ st.name }}</b><small :class="{ onl: isOnline(st) }">{{ isOnline(st) ? 'в сети' : sub(st) }}</small></span>
+          <div class="pick scroll">
+            <!-- Группы: блок целиком — одна кнопка, урок назначается всем её ученикам -->
+            <div v-if="shownGroups.length" class="pgwrap">
+            <button v-for="g in shownGroups" :key="g.key" class="pgrp" :style="{ '--n': Math.min(4, g.members.length) }" :title="`Назначить урок группе: ${g.members.map(m => m.name).join(', ')}`" @click="pickGroup(g)">
+              <span class="pgl"><AppIcon name="users" :size="12" /> Группа · {{ g.label }}</span>
+              <span class="ptiles"><span v-for="st in g.members" :key="st.id" class="pt"><Avatar :s="st" :size="54" :online="isOnline(st)" /><span class="pn">{{ st.name }}</span></span></span>
             </button>
-            <div v-if="!found.length" class="hint empty">Никого не нашли</div>
+            </div>
+            <div v-if="shownGroups.length && found.length" class="pgl solo">Ученики</div>
+            <div class="ptiles">
+              <button v-for="st in found" :key="st.id" class="pt tap" :title="`${st.name} · ${isOnline(st) ? 'в сети' : sub(st)}`" @click="emit('pick', [st.id])">
+                <Avatar :s="st" :size="54" :online="isOnline(st)" /><span class="pn">{{ st.name }}</span></button>
+            </div>
+            <div v-if="!found.length && !shownGroups.length" class="hint empty">Никого не нашли</div>
           </div>
           <div class="tfoot"><button class="link" @click="emit('close')">Отмена</button></div>
         </div>
@@ -211,13 +225,26 @@ html[data-theme='dark'] .mi.green { color: var(--green) } html[data-theme='dark'
 /* полоса прокрутки — общая для всего приложения, styles/theme.css */
 
 /* Окно «Кого назначить?» — пропорции Telegram: узкое, заголовок, поиск во всю ширину с тонкой линией, длинный список, «Отмена» справа внизу */
-.sheet-box.tgbox { max-width: 400px; padding: 0; gap: 0; overflow: hidden }
+.sheet-box.tgbox { max-width: 420px; padding: 0; gap: 0; overflow: hidden }
 .tg { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; max-height: min(640px, 86vh) }
 .tg h2 { margin: 0; padding: 20px 20px 0; font-size: 19px; font-weight: 800 }
 .tg .when { padding: 2px 20px 10px; font-size: 13px; font-weight: 600; color: var(--hint) }
 .tsearch { display: flex; align-items: center; gap: 12px; padding: 0 20px; border-bottom: 1px solid var(--border); color: var(--hint-2) }
 .tsearch input { margin: 0; padding: 12px 0; border: 0; border-radius: 0; background: none; font-weight: 500; font-size: 15px } .tsearch input:focus { background: none } .tsearch input:focus-visible { outline: none }
 .tg .rows { max-height: none; min-height: 0; padding: 6px 0 }
+/* Сетка по 4 (как панель учеников): кружок 54px, имя под ним; группа — блок в рамке с подписью, нажимается целиком */
+.pick { display: grid; gap: 8px; align-content: start; min-height: 0; overflow-y: auto; padding: 8px 10px 10px }
+.ptiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 0 }
+.pt { display: grid; justify-items: center; align-content: start; gap: 3px; min-width: 0; padding: 4px 0; border: 0; border-radius: 14px; background: none; font: inherit; color: var(--text) }
+.pt.tap { cursor: pointer } .pt.tap:hover { background: var(--blue-l) } .pt.tap:active :deep(.av) { transform: scale(.94) }
+.pn { width: 100%; text-align: center; font-size: 11px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pgwrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 6px }      /* ширина группы — по числу учеников */
+.pgrp .ptiles { grid-template-columns: repeat(var(--n), minmax(0, 1fr)) }
+.pgrp .pgl { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pgrp { grid-column: span var(--n); min-width: 0; display: grid; gap: 0; width: 100%; padding: 4px 2px 2px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); font: inherit; color: var(--text); text-align: left; cursor: pointer }
+.pgrp:hover { border-color: var(--blue); background: var(--blue-l) } .pgrp:active { transform: scale(.99) }
+.pgl { display: flex; align-items: center; gap: 4px; padding: 2px 6px 4px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
+.pgl.solo { padding: 4px 6px 0 }
 .tg .prow { padding: 7px 20px; gap: 14px } .tg .prow :deep(.av) { width: 46px !important; height: 46px !important }
 .tfoot { display: flex; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border) }
 .tfoot .link { font-size: 15px; font-weight: 700; padding: 6px 10px }                        /* ничто не распирает шторку шире экрана */

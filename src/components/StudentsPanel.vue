@@ -6,37 +6,18 @@
 import { ref, computed } from 'vue'
 import { isOnline } from '../utils/online'
 import { useRouter } from 'vue-router'
-import { handle, DAYS, hh, todayYmd } from '../store/app'
+import { handle } from '../store/app'
+import { useGroups } from '../composables/useGroups'
 import { dnd, pressStart } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
 import AddStudent from './AddStudent.vue'
 import { useStudentsStore } from '../stores/students'
-import { useScheduleStore } from '../stores/schedule'
-const scheduleStore = useScheduleStore()
 const studentStore = useStudentsStore()
 const q = ref('')
 const adding = ref(false)                       // «+» — форма «Новый ученик» в шторке (та же, что во вкладке «Ученики»)
 const list = computed(() => { const k = q.value.trim().toLowerCase(); return studentStore.list.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
-// Группы по расписанию: ученики, связанные общими групповыми уроками, — одна группа (объединение по цепочке)
-const groups = computed(() => {
-  const ids = new Set(studentStore.list.map(s => s.id)), parent = {}
-  const find = (x) => (parent[x] === x ? x : (parent[x] = find(parent[x])))
-  const lessonsOf = {}                                                     // корень группы → её уроки (для подписи)
-  const multi = scheduleStore.lessons.map(l => ({ l, ids: l.studentIds.filter(id => ids.has(id) && !l.canceled?.[id]) })).filter(x => x.ids.length > 1)
-  for (const { ids: g } of multi) for (const id of g) parent[id] ??= id
-  for (const { ids: g } of multi) for (const id of g.slice(1)) parent[find(id)] = find(g[0])
-  for (const { l, ids: g } of multi) (lessonsOf[find(g[0])] ??= []).push(l)
-  const out = {}
-  for (const id of Object.keys(parent)) (out[find(id)] ??= []).push(id)
-  const today = todayYmd()
-  return Object.entries(out).map(([root, members]) => {
-    const ls = lessonsOf[root].sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour)
-    const next = ls.find(l => l.date >= today) ?? ls[ls.length - 1]
-    const dow = DAYS[(new Date(next.date + 'T12:00:00Z').getUTCDay() + 6) % 7]
-    return { key: root, label: `${dow} ${hh(next.hour, next.minute)}`, members: members.map(id => studentStore.byId(id)).sort((a, b) => a.name.localeCompare(b.name, 'ru')) }
-  }).sort((a, b) => a.label.localeCompare(b.label))
-})
+const groups = useGroups()                     // группы по расписанию (composables/useGroups)
 const match = (s) => { const k = q.value.trim().toLowerCase(); return !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k) }
 const shownGroups = computed(() => groups.value.map(g => ({ ...g, members: g.members.filter(match) })).filter(g => g.members.length))
 const solo = computed(() => { const inGroup = new Set(groups.value.flatMap(g => g.members.map(s => s.id))); return list.value.filter(s => !inGroup.has(s.id)) })
@@ -52,8 +33,10 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
       <label class="search"><AppIcon name="search" :size="16" /><input v-model="q" :placeholder="`Поиск · ${studentStore.list.length} учеников`" aria-label="Поиск ученика" /></label>
       <button class="addb" title="Добавить ученика" aria-label="Добавить ученика" @click="adding = true"><AppIcon name="plus" :size="18" /></button></header>
     <div class="list">
-      <section v-for="g in shownGroups" :key="g.key" class="grp">
-        <div class="gl"><AppIcon name="users" :size="12" /> Группа · {{ g.label }}</div>
+      <!-- Группы — ширина по числу учеников (2 → полряда), несколько маленьких групп встают в один ряд -->
+      <div v-if="shownGroups.length" class="gwrap">
+      <section v-for="g in shownGroups" :key="g.key" class="grp" :style="{ '--n': Math.min(4, g.members.length) }">
+        <div class="gl" :title="`Группа · ${g.label}`"><AppIcon name="users" :size="12" /> <template v-if="g.members.length > 2">Группа · </template>{{ g.label }}</div>
         <div class="tiles">
           <div v-for="s in g.members" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
             @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
@@ -61,6 +44,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
           </div>
         </div>
       </section>
+      </div>
       <section v-if="solo.length" class="solo">
         <div v-if="shownGroups.length" class="gl">Индивидуально</div>
         <div class="tiles">
@@ -90,7 +74,10 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 /* Сетка кружков: аватарка 54px — максимум для 4 в ряд и имя под ней, по 4 в ряд; группы — блоками в рамке с подписью, ниже «Индивидуально» */
 .list { display: grid; gap: 8px; align-content: start; overflow-y: auto; padding: 2px 6px 8px }
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 0 }
-.grp { border: 2px solid var(--border); border-radius: 14px; padding: 4px 2px 2px; background: var(--surface) }
+.gwrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 6px }
+.grp { grid-column: span var(--n); min-width: 0; border: 2px solid var(--border); border-radius: 14px; padding: 4px 2px 2px; background: var(--surface) }
+.grp .tiles { grid-template-columns: repeat(var(--n), minmax(0, 1fr)) }
+.grp .gl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block }
 .gl { display: flex; align-items: center; gap: 4px; padding: 2px 6px 4px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .st { display: grid; justify-items: center; align-content: start; gap: 3px; padding: 4px 0; border-radius: 14px; min-width: 0;
   cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: background .1s }
@@ -107,7 +94,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
   .panel { height: auto; grid-template-rows: auto; border-bottom-width: 4px }
   .ph { display: none }
   .list { display: flex; overflow-x: auto; overflow-y: hidden; padding: 6px 6px 4px; gap: 6px; scrollbar-width: none } .list::-webkit-scrollbar { display: none }
-  .tiles { display: flex; gap: 2px } .grp, .solo { flex: none } .gl { display: none } .grp { padding: 2px }
+  .tiles { display: flex; gap: 2px } .grp, .solo { flex: none } .gwrap { display: contents } .gl { display: none } .grp { padding: 2px }
   .st { flex: none; width: 64px; padding: 4px 2px } .nm { font-size: 11px; -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block }
   .st :deep(.av) { width: 44px !important; height: 44px !important; font-size: 20px !important }
   .drophint { flex-direction: row; display: flex; justify-content: center; align-items: center; gap: 8px; border-radius: 12px }
