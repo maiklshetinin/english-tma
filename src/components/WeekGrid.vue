@@ -118,19 +118,19 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
 .chip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 4px; min-width: 0;
-  border: 2px solid var(--hint-2); border-bottom-width: 4px; border-radius: 10px; background: var(--card); color: var(--text);
+  border: 0; border-radius: 10px; background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .1);      /* без обводки — заливка и лёгкая тень: меньше линий на экране */
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
-.chip.done { border-color: var(--green); background: var(--green-l); color: var(--green-d); cursor: pointer } .chip .tick { font-weight: 900 }
+.chip.done { box-shadow: none; background: var(--green-l); color: var(--green-d); cursor: pointer } .chip .tick { font-weight: 900 }
 /* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
 /* Группа: аватарки внахлёст без подписи — на телефоне две (вторая может быть «+N»), на широком экране до четырёх */
 .chip .st-lg { display: none } .chip .st-sm { display: inline-flex }
 @media (min-width: 720px) { .chip .st-lg { display: inline-flex } .chip .st-sm { display: none } }
-.cell.join { box-shadow: inset 0 0 0 2px var(--green) } .cell.join .chip { border-color: var(--green); border-style: dashed }
+.cell.join { box-shadow: inset 0 0 0 2px var(--green) }
 /* Урок, ученика которого больше нет (удалён из базы / архив): серый пунктир с «?» — нажать и убрать */
-.chip.orphan { border-style: dashed; border-color: var(--hint-2); background: var(--surface); color: var(--hint); cursor: pointer }
+.chip.orphan { border: 2px dashed var(--hint-2); background: var(--surface); color: var(--hint); cursor: pointer }
 .chip .q { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--hint-2); color: #fff; font-weight: 900; font-size: 12px; flex: none }
 /* Отменил ученик (без оплаты): красная карточка, имя зачёркнуто; значок ✕ — в углу слева */
-.chip.canceled { border-color: var(--red); background: var(--red-l); color: var(--red-d) }
+.chip.canceled { box-shadow: none; background: var(--red-l); color: var(--red-d) }
 .chip.canceled .nm { text-decoration: line-through } .chip.canceled :deep(.av), .chip.canceled :deep(.stack) { opacity: .45 }
 html[data-theme='dark'] .chip.canceled { color: var(--red) }
 .off { position: absolute; top: -6px; left: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }

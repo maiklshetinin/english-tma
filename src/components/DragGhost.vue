@@ -30,11 +30,14 @@ const fx = computed(() => b.value?.fx ?? 0.5), fy = computed(() => b.value?.fy ?
 const box = computed(() => ({ width: W.value + 'px', height: H.value + 'px', left: -fx.value * W.value + 'px', top: -fy.value * H.value + 'px' }))
 // Кружки: в панели — по одному в клетке сетки; в ячейке — внахлёст, как у урока в таблице
 const shown = computed(() => people.value.slice(0, 4))
-const avEnd = computed(() => Math.max(20, Math.min(38, H.value - 10)))
+const avEnd = computed(() => (lesson.value ? Math.max(20, Math.min(38, H.value - 10)) : Math.max(26, Math.min(40, H.value + 2))))      // кружки в полёте — как в ячейке, чуть крупнее
 const av = computed(() => (small.value || !g.value?.av ? avEnd.value : Math.round(g.value.av)))
 const ml = (i) => {
   const n = shown.value.length
-  if (small.value || !g.value) return i ? -Math.round(av.value * 0.35) + 'px' : (n > 1 ? 4 : 2) + 'px'
+  if (small.value || !g.value) {                                   // в конце — только кружки внахлёст, по центру призрака
+    const step = Math.round(av.value * 0.65), total = av.value + (n - 1) * step
+    return i ? step - av.value + 'px' : Math.round((W.value - total) / 2) + 'px'
+  }
   const col = g.value.w / n
   return Math.round(i ? col - av.value : (col - av.value) / 2) + 'px'
 }
@@ -72,7 +75,6 @@ const hintPos = computed(() => ({ left: (0.5 - fx.value) * W.value + 'px', top: 
       </template>
       <template v-else>
         <Avatar v-for="(s, i) in shown" :key="s.id" :s="s" :size="av" :style="{ marginLeft: ml(i), zIndex: 10 - i }" />
-        <span v-if="one" class="nm pn">{{ people[0].name }}</span>
       </template>
     </div>
     <Transition name="hint"><div v-if="hint" :key="hint.k + hint.t" class="dhint" :class="hint.k" :style="hintPos">{{ hint.t }}</div></Transition>
@@ -86,12 +88,14 @@ const hintPos = computed(() => ({ left: (0.5 - fx.value) * W.value + 'px', top: 
   transition: width .18s ease, height .18s ease, left .18s ease, top .18s ease, border-color .18s, background .18s, box-shadow .18s }
 .ghost :deep(.avw) { flex: none; transition: margin .18s ease } .ghost :deep(.av) { transition: width .18s ease, height .18s ease, font-size .18s ease }
 .ghost :deep(.avw + .avw .av) { box-shadow: 0 0 0 2px var(--card) }
-.ghost.small { border-color: var(--blue); border-bottom-width: 4px; border-radius: 10px; background: var(--card); box-shadow: 0 8px 20px rgba(0, 0, 0, .2) }
+/* Ученик / группа в полёте — только кружки (группа — внахлёст), без карточки; тень — будто приподняты */
+.ghost.small:not(.lesson) { background: transparent; border-color: transparent; overflow: visible }
+.ghost.small:not(.lesson) :deep(.av) { filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .28)) }
 .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; margin-left: 6px; opacity: 0; transition: opacity .15s .1s }
 .ghost.small .nm { opacity: 1 }
 @media (max-width: 719px) { .nm.pn { display: none } }
 /* Урок из таблицы: копия карточки поверх оригинала */
-.ghost.lesson { gap: 5px; justify-content: center; padding: 0; border-color: var(--hint-2); opacity: .92; transition: none }
+.ghost.lesson { gap: 5px; justify-content: center; padding: 0; border: 0; border-radius: 10px; background: var(--card); opacity: .95; transition: none; box-shadow: 0 8px 20px rgba(0, 0, 0, .2) }
 .ghost.lesson .nm { display: none; margin: 0; font-size: 12px }
 @media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px } }
 .dhint { position: absolute; transform: translate(-50%, -100%); width: max-content; max-width: 260px; padding: 5px 10px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 800; line-height: 1.3; text-align: center;
