@@ -3,11 +3,15 @@
 //  • Ученик / группа из панели: появляется ровно на месте взятого (кружки того же размера) и за мгновение сжимается
 //    до размера ячейки — кружки уменьшаются и наезжают друг на друга, получается та же карточка, что будет в таблице.
 //  • Урок из таблицы: копия карточки того же размера поверх оригинала, едет за курсором.
+// Над призраком — подсказка, что будет, если отпустить сейчас (те же правила, что у броска в TeacherHome):
+// зелёная — назначить / перенести, оранжевая — поменять местами, красная — нельзя и почему (или «снять урок» над панелью).
 import { computed, ref, watch, nextTick } from 'vue'
 import { dnd } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
 import AvatarStack from './AvatarStack.vue'
 import { useStudentsStore } from '../stores/students'
+import { useScheduleStore, slotKey } from '../stores/schedule'
+import { fmtSlot } from '../utils/dates'
 const studentStore = useStudentsStore()
 const p = computed(() => dnd.payload)
 const lesson = computed(() => p.value?.kind === 'lesson')
@@ -35,6 +39,29 @@ const ml = (i) => {
   return Math.round(i ? col - av.value : (col - av.value) / 2) + 'px'
 }
 const one = computed(() => people.value.length === 1)
+// Подсказка: что будет, если отпустить здесь
+const scheduleStore = useScheduleStore()
+const firstName = (l) => studentStore.findAny(l.studentIds[0])?.name ?? 'ученик'
+const who = (l) => (l.studentIds.length > 1 ? `группа (${l.studentIds.length})` : firstName(l))
+const hint = computed(() => {
+  const o = dnd.over, pl = p.value
+  if (!pl || !o) return null
+  if (o.kind === 'panel') return lesson.value ? { k: 'bad', t: 'Отпустите — урок снимется' } : null
+  if (o.kind !== 'cell') return null
+  const occ = scheduleStore.lessonMap.get(slotKey(o.date, o.hour))?.[0], at = fmtSlot(o.date, o.hour)
+  if (!lesson.value) {
+    if (occ) return { k: 'bad', t: 'Занято — здесь уже урок' }
+    return { k: 'ok', t: one.value ? `Урок: ${people.value[0].name} · ${at}` : `Урок группе · ${at}` }
+  }
+  const a = pl.lesson
+  if (occ?.id === a.id) return null
+  if (a.done) return { k: 'bad', t: 'Урок проведён — сначала снимите отметку' }
+  if (occ?.done) return { k: 'bad', t: 'Здесь проведённый урок — не меняется' }
+  if (occ) return { k: 'swap', t: `Поменять местами: ${who(occ)}` }
+  return { k: 'ok', t: `Перенести · ${at}` }
+})
+// Подсказка — над призраком, по центру (на тачскрине призрак над пальцем, так что и подсказку палец не закрывает)
+const hintPos = computed(() => ({ left: (0.5 - fx.value) * W.value + 'px', top: -fy.value * H.value - 8 + 'px' }))
 </script>
 <template>
   <div v-if="dnd.active && people.length" class="gw" :style="{ transform: `translate(${dnd.x}px, ${dnd.y}px)` }">
@@ -48,6 +75,7 @@ const one = computed(() => people.value.length === 1)
         <span v-if="one" class="nm pn">{{ people[0].name }}</span>
       </template>
     </div>
+    <Transition name="hint"><div v-if="hint" :key="hint.k + hint.t" class="dhint" :class="hint.k" :style="hintPos">{{ hint.t }}</div></Transition>
   </div>
 </template>
 <style scoped>
@@ -66,4 +94,8 @@ const one = computed(() => people.value.length === 1)
 .ghost.lesson { gap: 5px; justify-content: center; padding: 0; border-color: var(--hint-2); opacity: .92; transition: none }
 .ghost.lesson .nm { display: none; margin: 0; font-size: 12px }
 @media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px } }
+.dhint { position: absolute; transform: translate(-50%, -100%); max-width: 300px; padding: 5px 10px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 800; line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 6px 16px rgba(0, 0, 0, .18); background: var(--green-d) }
+.dhint.swap { background: var(--orange-d) } .dhint.bad { background: var(--red) }
+.hint-enter-active { transition: opacity .12s } .hint-enter-from { opacity: 0 }
 </style>
