@@ -1,10 +1,11 @@
 // Курсы (редактор «рельс»): courses/<id> — { teacherId, title, mode, progress, items, loose, updatedAt }.
 //  • items — задания по порядку на рельсе; loose — черновики на холсте (с x, y); у кружка и фото — file: ключ файла в S3.
-//  • Только преподаватель и только свои курсы (teacherId — заранее, на случай нескольких преподавателей).
+//  • Общее рабочее пространство: все преподаватели (TEACHER_IDS) видят и правят все курсы — как учеников и расписание.
+//    teacherId — кто создал, updatedBy — кто правил последним (пригодится, когда преподаватели разделятся: claude/multi-tutor-plan.md).
 // Ученикам курсы пока не выдаются — это следующий шаг (назначить курс ученику → его «Путь»).
 import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './login.js'
-import { ownPrefix } from './storage.js'
+import { isOurKey } from './storage.js'
 
 export interface CoursesDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 export const COURSE_TYPES = ['unit', 'video', 'photo', 'lesson', 'words', 'hw', 'test', 'tutor', 'reward']
@@ -27,7 +28,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (type === 'unit') out.sub = str(r.sub, 120)
     if ((type === 'video' || type === 'photo') && r.file != null) {
       const v = String(r.file)
-      if (!v.startsWith(ownPrefix(uid)) || v.length > 300) throw fail(403, 'foreign file')
+      if (!isOurKey(v)) throw fail(403, 'foreign file')
       out.file = v
     }
     if (loose) { out.x = num(r.x); out.y = num(r.y) }
@@ -35,22 +36,21 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
   }
   const pub = (id: string, d: Record<string, any>): Course => ({ id, title: d.title ?? '', mode: d.mode === 'line' ? 'line' : 'wave', progress: d.progress ?? 0,
     items: d.items ?? [], loose: d.loose ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined })
-  const mine = async (uid: string, id: string) => {
+  const found = async (id: string) => {
     const s = await col().doc(id).get()
     if (!s.exists) throw fail(404, 'course not found')
-    if (s.get('teacherId') !== uid) throw fail(403, 'forbidden')
     return s
   }
 
   return {
     /** Список своих курсов (без заданий): [{ id, title, count, updatedAt }] */
-    async list(uid: string) {
-      const docs = (await col().where('teacherId', '==', uid).get()).docs
+    async list() {
+      const docs = (await col().get()).docs
       return docs.map((d) => { const c = pub(d.id, d.data()); return { id: c.id, title: c.title, count: c.items.length, updatedAt: c.updatedAt } })
         .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
     },
-    async get(uid: string, rawId: unknown) { const id = checkId(rawId), s = await mine(uid, id); return pub(id, s.data()!) },
-    /** Сохранить курс целиком (создать, если ещё нет). Чужой — 403. */
+    async get(rawId: unknown) { const id = checkId(rawId), s = await found(id); return pub(id, s.data()!) },
+    /** Сохранить курс целиком (создать, если ещё нет). */
     async put(uid: string, rawId: unknown, input: unknown) {
       const id = checkId(rawId), b = (input ?? {}) as Record<string, unknown>
       if (!Array.isArray(b.items) || !Array.isArray(b.loose ?? [])) throw fail(400, 'items required')
@@ -58,15 +58,14 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       if (items.length + loose.length > COURSE_ITEMS_MAX) throw fail(413, 'too many items')
       if (new Set([...items, ...loose].map((x) => x.id)).size !== items.length + loose.length) throw fail(400, 'duplicate item id')
       const ref = col().doc(id), s = await ref.get()
-      if (s.exists && s.get('teacherId') !== uid) throw fail(403, 'forbidden')
-      if (!s.exists && (await col().where('teacherId', '==', uid).get()).size >= COURSES_MAX) throw fail(413, 'too many courses')
+      if (!s.exists && (await col().get()).size >= COURSES_MAX) throw fail(413, 'too many courses')
       const tasks = items.filter((x) => x.type !== 'unit').length
-      const doc = { teacherId: uid, title: str(b.title, 120) || 'Без названия', mode: b.mode === 'line' ? 'line' : 'wave',
+      const doc = { updatedBy: uid, title: str(b.title, 120) || 'Без названия', mode: b.mode === 'line' ? 'line' : 'wave',
         progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, updatedAt: FieldValue.serverTimestamp() }
-      await ref.set(s.exists ? doc : { ...doc, createdAt: FieldValue.serverTimestamp() }, { merge: true })
+      await ref.set(s.exists ? doc : { ...doc, teacherId: uid, createdAt: FieldValue.serverTimestamp() }, { merge: true })
       return { id, ok: true }
     },
-    async remove(uid: string, rawId: unknown) { const id = checkId(rawId); await mine(uid, id); await col().doc(id).delete() },
+    async remove(rawId: unknown) { const id = checkId(rawId); await found(id); await col().doc(id).delete() },
     /** Ключи файлов курса (кружки, фото) — чтобы после удаления курса почистить хранилище */
     filesOf: (c: Pick<Course, 'items' | 'loose'>) => [...c.items, ...c.loose].map((x) => x.file).filter(Boolean) as string[],
   }

@@ -135,13 +135,13 @@ app.delete('/presets/:id', requireUser, requireTeacher, wrap(async (req, res) =>
 app.put('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.putDeck(req.params.id, req.body, req.user.uid); res.json({ ok: true }) }))
 app.delete('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.removeDeck(req.params.id); res.json({ ok: true }) }))
 // Группы учеников — отдельная сущность (создаются и меняются только преподавателем, из панели учеников)
-// Курсы (редактор «рельс») — только преподаватель, только свои
-app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(req.user.uid), storage: storage.ready })))
-app.get('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.get(req.user.uid, req.params.id))))
+// Курсы (редактор «рельс») — только преподаватели; пространство общее (все видят все курсы)
+app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(), storage: storage.ready })))
+app.get('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.get(req.params.id))))
 app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.put(req.user.uid, req.params.id, req.body))))
 app.delete('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => {
-  const c = await courses.get(req.user.uid, req.params.id)
-  await courses.remove(req.user.uid, req.params.id)
+  const c = await courses.get(req.params.id)
+  await courses.remove(req.params.id)
   for (const k of courses.filesOf(c)) await storage.remove(req.user.uid, k).catch(() => {})      // кружки и фото курса — тоже долой
   res.json({ ok: true })
 }))

@@ -2,8 +2,8 @@
 //  • Загрузка — через наш сервер: браузер шлёт файл сюда, сервер потоком (без чтения в память) кладёт его в бакет.
 //    Так в бакете не нужна настройка CORS, а ключи хранилища никогда не попадают в браузер.
 //  • Просмотр: бакет приватный, сервер выдаёт временные ссылки (GET, 6 ч) — <video> играет по ним напрямую из хранилища.
-//  • Ключ файла: t/<преподаватель>/c/<курс>/<случайное>.<расширение> — у каждого преподавателя своя «папка» (на будущее,
-//    когда преподавателей станет несколько: чужие ключи не подписываем и не удаляем).
+//  • Ключ файла: t/<кто загрузил>/c/<курс>/<случайное>.<расширение>. Пространство пока общее: любой преподаватель видит
+//    и удаляет файлы курсов (как и сами курсы); папка по загрузившему — задел на разделение (claude/multi-tutor-plan.md).
 // Переменные окружения: S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY и S3_ENDPOINT (если не AWS).
 import { randomBytes } from 'node:crypto'
 import type { Readable } from 'node:stream'
@@ -18,6 +18,8 @@ export const VIDEO_MAX = 200 * 1024 * 1024, IMAGE_MAX = 30 * 1024 * 1024        
 const TYPES: Record<string, string> = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/x-m4v': 'm4v', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif' }
 export const safe = (s: string) => String(s).replace(/[^\w-]/g, '_').slice(0, 64)
 export const ownPrefix = (uid: string) => `t/${safe(uid)}/`
+/** Ключ из нашего хранилища курсов (а не произвольный путь в бакете) */
+export const isOurKey = (k: string) => /^t\/[\w-]{1,64}\/c\/[\w-]{1,64}\/[\w-]+\.\w{2,5}$/.test(k) && k.length <= 300
 
 export function makeStorage(env: StorageEnv, sign: Sign = (c, cmd, e) => getSignedUrl(c, cmd, { expiresIn: e }), put: Put = (c, cmd) => c.send(cmd)) {
   const { S3_BUCKET: Bucket, S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY } = env
@@ -30,9 +32,9 @@ export function makeStorage(env: StorageEnv, sign: Sign = (c, cmd, e) => getSign
     requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED',
   }) : null
   const need = () => { if (!client) throw fail(503, 'storage not configured'); return client }
-  const own = (uid: string, key: unknown): string => {
+  const own = (_uid: string, key: unknown): string => {
     const k = String(key ?? '')
-    if (!k.startsWith(ownPrefix(uid)) || k.length > 300 || /\.\.|[^\w\-./]/.test(k)) throw fail(403, 'foreign key')
+    if (!isOurKey(k)) throw fail(403, 'foreign key')
     return k
   }
 
@@ -52,7 +54,7 @@ export function makeStorage(env: StorageEnv, sign: Sign = (c, cmd, e) => getSign
       await put(c, new PutObjectCommand({ Bucket, Key: key, Body: body, ContentType: type, ContentLength: n }))
       return { key }
     },
-    /** Временные ссылки на просмотр: { keys: [...] } → { urls: { key: url } }. Только свои ключи. */
+    /** Временные ссылки на просмотр: { keys: [...] } → { urls: { key: url } }. Только ключи курсов (t/…/c/…). */
     async viewUrls(uid: string, input: unknown) {
       const c = need(), keys = (input as { keys?: unknown } | null)?.keys
       if (!Array.isArray(keys) || keys.length > 200) throw fail(400, 'keys required')
@@ -60,7 +62,7 @@ export function makeStorage(env: StorageEnv, sign: Sign = (c, cmd, e) => getSign
       for (const k of new Set(keys.map((x) => own(uid, x)))) urls[k] = await sign(c, new GetObjectCommand({ Bucket, Key: k }), 6 * 3600)
       return { urls }
     },
-    /** Удалить своё видео (из курса убрали кружок). */
+    /** Удалить файл курса (из курса убрали кружок / фото). */
     async remove(uid: string, key: unknown) {
       const c = need(), k = own(uid, key)
       await c.send(new DeleteObjectCommand({ Bucket, Key: k }))

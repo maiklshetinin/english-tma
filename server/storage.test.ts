@@ -22,9 +22,10 @@ ok('без размера — 411, слишком большое — 413', await
 ok('без курса — 400', await code(S.upload('tg:1', { type: 'video/mp4' }, body(), 10)) === 400)
 const v = await S.viewUrls('tg:1', { keys: [u.key, u.key] })
 ok('ссылки на просмотр — только свои, без повторов', Object.keys(v.urls).length === 1 && v.urls[u.key] === `https://signed/${u.key}`)
-ok('чужой ключ — 403', await code(S.viewUrls('tg:2', { keys: [u.key] })) === 403)
+ok('коллега тоже видит файл курса (пространство общее)', !!(await S.viewUrls('tg:2', { keys: [u.key] })).urls[u.key])
+ok('произвольный путь в бакете — 403', await code(S.viewUrls('tg:1', { keys: ['private/x.mp4'] })) === 403)
 ok('выход из папки (..) — 403', await code(S.viewUrls('tg:1', { keys: [ownPrefix('tg:1') + '../x'] })) === 403)
 ok('кривой запрос — 400', await code(S.viewUrls('tg:1', {})) === 400)
-ok('удалить чужое — 403', await code(S.remove('tg:2', u.key)) === 403)
+ok('удалить не файл курса — 403', await code(S.remove('tg:1', 't/tg_1/secret.txt')) === 403)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')
