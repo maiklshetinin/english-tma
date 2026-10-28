@@ -58,4 +58,20 @@ describe('LessonCalendar', () => {
     await w.findAll('button.day').find(d => d.find('.n').text() === '21')!.trigger('click')
     expect(w.find('.ls').text()).toContain('Отменил ученик'); expect(w.find('.ls .btn').exists()).toBe(false)
   })
+
+  it('преподаватель (компактно): «Чек» — проведённые уроки месяца и итог', async () => {
+    const w = mount(LessonCalendar, { props: { studentId: 's1', teacher: true, compact: true }, attachTo: document.body })
+    await w.find('.rcp').trigger('click')
+    const sheet = document.body.querySelector('.rs')!
+    expect(sheet.textContent).toContain('Маша · 1 урок')
+    expect(sheet.querySelectorAll('.ln').length).toBe(1)                 // только проведённый (запланированный не входит)
+    expect(sheet.querySelector('.tot')!.textContent).toContain('100')
+    w.unmount()
+  })
+
+  it('чека нет, если в месяце нет проведённых', async () => {
+    useScheduleStore().set([{ id: 'c1', date: `${thisMonth}-20`, hour: 18, studentIds: ['s1'] }])
+    const w = mount(LessonCalendar, { props: { studentId: 's1', teacher: true, compact: true } })
+    expect(w.find('.rcp').exists()).toBe(false)
+  })
 })

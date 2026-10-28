@@ -24,4 +24,18 @@ export const useTelegram = () => ({
     const url = `https://t.me/${username}`
     tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank')
   },
+  // «Поделиться» текстом: Telegram открывает выбор чата, текст подставляется в поле сообщения
+  shareText: (text) => {
+    const url = `https://t.me/share/url?url=${encodeURIComponent(text)}`
+    tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank')
+  },
+  // Скачать файл: в Telegram на телефоне — системное «Поделиться / Сохранить» (обычная загрузка там не работает), иначе — загрузка браузера
+  saveFile: async (blob, name) => {
+    const file = new File([blob], name, { type: blob.type })
+    if (/^(ios|android)$/.test(tg?.platform || '') && navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return } catch (e) { if (e?.name === 'AbortError') return }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+  },
 })

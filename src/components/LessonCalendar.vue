@@ -10,6 +10,9 @@ import { useScheduleStore } from '../stores/schedule'
 import { useStudentsStore } from '../stores/students'
 import { priceAt, fmtMoney } from '../utils/price'
 import { showToast } from '../composables/useToast'
+import { useAuthStore } from '../stores/auth'
+import ReceiptSheet from './ReceiptSheet.vue'
+import AppIcon from './AppIcon.vue'
 const props = defineProps({ studentId: { type: String, default: null }, teacher: Boolean, compact: Boolean })   // compact — всё в одной карточке, урок дня — по нажатию на день
 const scheduleStore = useScheduleStore(), studentStore = useStudentsStore()
 
@@ -76,6 +79,13 @@ const sum = computed(() => {
   }
   return s
 })
+// Чек за месяц (у преподавателя): проведённые уроки месяца по зафиксированным ценам
+const auth = useAuthStore(), receiptOpen = ref(false)
+const receipt = computed(() => ({
+  month: month.value, student: studentStore.findAny(props.studentId)?.name ?? '', teacher: auth.user?.first_name || '',      // имя преподавателя — из его Telegram
+  lines: all.value.filter(l => l.date.startsWith(month.value) && statusOf(l) === 'done').sort((a, b) => (a.date + hh(a.hour, a.minute)).localeCompare(b.date + hh(b.hour, b.minute)))
+    .map(l => ({ date: l.date, hour: l.hour, minute: l.minute ?? 0, price: priceOf(l) })),
+}))
 const STATUS = computed(() => ({ done: 'Проведён', plan: 'Запланирован', off: props.teacher ? 'Отменил ученик' : 'Отменён вами' }))
 // Преподаватель: «Проведён» / «Отменить» прямо в календаре (отменённый учеником урок не отмечаем)
 const locked = (l) => l.done && (Object.keys(l.names ?? {}).length > 0 || l.studentIds.some(id => studentStore.findAny(id)?.archived))
@@ -115,7 +125,8 @@ function toggle(l) {
       <!-- Итог месяца: легенда = счётчики, ниже деньги одной строкой -->
       <div class="cnt"><span><i class="done" /><b>{{ sum.done }}</b> проведено</span><span><i class="plan" /><b>{{ sum.plan }}</b> запланировано</span><span><i class="off" /><b>{{ sum.off }}</b> отменено</span></div>
       <div v-if="teacher && (sum.expected || sum.lost)" class="cm">
-        <div class="cmr"><span><b class="g">{{ fmtMoney(sum.paid) }}</b> из {{ fmtMoney(sum.expected) }} за месяц</span><b v-if="sum.lost" class="r">−{{ fmtMoney(sum.lost) }}</b></div>
+        <div class="cmr"><span><b class="g">{{ fmtMoney(sum.paid) }}</b> из {{ fmtMoney(sum.expected) }} за месяц</span><b v-if="sum.lost" class="r">−{{ fmtMoney(sum.lost) }}</b>
+          <button v-if="sum.done" class="rcp" title="Чек за месяц: скачать или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="15" /> Чек</button></div>
         <div class="mbar"><i :style="{ width: (sum.expected ? Math.min(100, sum.paid / sum.expected * 100) : 0) + '%' }" /></div>
       </div>
     </template>
@@ -147,6 +158,7 @@ function toggle(l) {
     <div v-if="sum.lost" class="mrow lost"><span>Потеряно — отменил ученик</span><b>−{{ fmtMoney(sum.lost) }}</b></div>
   </div>
   </template>
+  <ReceiptSheet v-if="receiptOpen" :receipt="receipt" @close="receiptOpen = false" />
   </div>
 </template>
 
@@ -164,7 +176,9 @@ function toggle(l) {
   font: inherit; color: var(--text); cursor: pointer; padding: 0 }
 .day.empty { background: none; cursor: default }
 .day .n { font-size: 14px; font-weight: 800; line-height: 1 } .day.past:not(.has) .n { color: var(--hint-2) }
-.day.today { border-color: var(--red); } .day.today .n { color: var(--red-d) }
+/* Сегодня — синим (красный — это «отменён»): синее число и черта под ним; у дня с уроком цвет числа — как у урока, черта остаётся */
+.day.today .n::after { content: ''; display: block; width: 14px; height: 3px; margin: 3px auto 0; border-radius: 2px; background: currentColor }
+.day.today:not(.has) .n { color: var(--blue) } .day.today.plan .n { color: var(--blue) }
 /* День с уроками: проведён — зелёный, запланирован — серый, отменён — красный (как кнопки Duolingo, с нижней гранью) */
 .day.done { background: var(--green); box-shadow: inset 0 -4px 0 var(--green-d) } .day.done .n { color: #fff }
 .day.plan { background: var(--border); box-shadow: inset 0 -4px 0 var(--hint-2) } .day.plan .n { color: var(--text) }
@@ -206,5 +220,7 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { width: 10px; height: 10px; border-radius: 3px; background: var(--c) } .cnt b { color: var(--text); font-weight: 900 }
 .cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
 .cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
+.cmr { gap: 10px } .cmr > span { flex: 1 }
+.rcp { flex: none; align-self: center; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 0; border-radius: 99px; background: var(--surface); color: var(--blue); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .rcp:hover { background: var(--blue-l) }
 .cmr .g { color: var(--green-d) } .cmr .r { color: var(--red-d); font-size: 15px } .cm .mbar { height: 8px }
 </style>
