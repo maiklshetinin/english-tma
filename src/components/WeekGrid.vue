@@ -108,7 +108,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
 /* «Сейчас» — красным и полупрозрачным (синий занят чипами уроков): день, время и ячейка на пересечении */
 .dh.today { background: rgba(255, 75, 75, .16); box-shadow: inset 0 0 0 2px rgba(255, 75, 75, .55), 0 3px 0 rgba(234, 43, 43, .45) } .dh.today b, .dh.today small { color: var(--red-d) }
-.cell { position: relative; height: 38px; border-radius: 10px; background: var(--surface); transition: background .1s, box-shadow .1s }
+.cell { position: relative; height: 38px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); transition: background .1s, box-shadow .1s }      /* белые ячейки с тонкой рамкой */
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
 /* Текущий час: время, день недели (.dh.today) и ячейка на пересечении — один красный полупрозрачный цвет */
 .tm.now { background: rgba(255, 75, 75, .16); color: var(--red-d); border: 2px solid rgba(255, 75, 75, .55); border-bottom-width: 4px; border-radius: 10px; font-weight: 900 }
