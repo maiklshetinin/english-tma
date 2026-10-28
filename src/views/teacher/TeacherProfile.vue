@@ -8,7 +8,7 @@ import DemoSwitch from '../../components/DemoSwitch.vue'
 import AppVersion from '../../components/AppVersion.vue'
 import LogoutButton from '../../components/LogoutButton.vue'
 import PingButton from '../../components/PingButton.vue'
-import { devCursors } from '../../composables/useLive'
+import { shared, setSharedCursors, live } from '../../composables/useLive'
 import { useStudentsStore } from '../../stores/students'
 import { useScheduleStore } from '../../stores/schedule'
 import { useAuthStore } from '../../stores/auth'
@@ -36,8 +36,8 @@ const needPay = computed(() => studentStore.list.filter(s => s.payment.status !=
     <template v-if="auth.isDev">
     <h4 class="dvh">Для разработчика</h4>
     <label class="card dev">
-      <span class="dt"><b>Курсоры коллег на всех экранах</b><small>Для разработки и показа: видно, где мышь у коллеги и куда он нажал, на любой странице. Работает у тех, у кого тоже включено.</small></span>
-      <input v-model="devCursors" type="checkbox" class="sw" />
+      <span class="dt"><b>Общие курсоры на всех экранах</b><small>Для разработки и показа: включаете — и все, кто в приложении, видят курсоры друг друга и клики на любой странице. Коллегам ничего включать не нужно.<template v-if="!live.on"> Нет связи с сервером.</template></small></span>
+      <input :checked="shared.cursors" :disabled="!live.on" type="checkbox" class="sw" @change="setSharedCursors($event.target.checked)" />
     </label>
     <PingButton />
     </template>

@@ -6,7 +6,7 @@ import { makeLive } from './live.js'
 let bad = 0
 const ok = (name: string, c: unknown) => { console.log(c ? 'PASS' : 'FAIL', name); if (!c) bad++ }
 const users: Record<string, { uid: string; role: string; name: string; photo: string }> = {
-  a: { uid: 'tg:1', role: 'teacher', name: 'Миша', photo: 'p1' }, b: { uid: 'tg:2', role: 'teacher', name: 'Аня', photo: '' }, s: { uid: 'tg:3', role: 'student', name: 'Ученик', photo: '' },
+  a: { uid: 'tg:1', role: 'teacher', name: 'Миша', photo: 'p1' }, d: { uid: 'tg:9', role: 'teacher', name: 'Разработчик', photo: '', dev: true } as any, b: { uid: 'tg:2', role: 'teacher', name: 'Аня', photo: '' }, s: { uid: 'tg:3', role: 'student', name: 'Ученик', photo: '' },
 }
 const live = makeLive({ origins: ['https://site'], verify: async (t) => users[t] ?? null })
 const srv = createServer(); live.attach(srv)
@@ -35,9 +35,19 @@ ok('в одном курсе: курсор, выделение и курс пр�
 ok('себе своё не приходит', !A.last('cursor') && !A.last('doc'))
 A.send({ t: 'pcursor', path: '/students', x: 300, y: 120, click: true }); await wait(80)
 ok('курсор на любой странице (режим разработчика) — коллеге, с адресом и кликом', B.last('pcursor')?.path === '/students' && B.last('pcursor')?.click === true && !A.last('pcursor'))
+A.send({ t: 'cursors', on: true }); await wait(80)
+ok('общие курсоры может включить только разработчик', !B.last('cursors'))
 const bCid = B.got.find((m) => m.t === 'hello').cid
 live.changed('schedule', bCid); await wait(80)
 ok('правка расписания: коллеге «changed», тому, кто правил, — нет', A.last('changed')?.what === 'schedule' && !B.last('changed'))
+const D = client('d'); await wait(120)
+D.send({ t: 'cursors', on: true }); await wait(80)
+ok('разработчик включил — у всех «cursors: on» с его именем', A.last('cursors')?.on === true && A.last('cursors')?.by === 'Разработчик' && B.last('cursors')?.on === true)
+const E = client('a'); await wait(120)
+ok('новичок сразу знает, что общие курсоры включены', E.got.find((m) => m.t === 'hello')?.cursors === true)
+D.send({ t: 'cursors', on: false }); await wait(80)
+ok('выключил — у всех выключено', A.last('cursors')?.on === false)
+D.ws.close(); E.ws.close()
 B.ws.close(); await wait(150)
 ok('ушёл — пропал из списка', A.last('presence').users.length === 1)
 A.ws.close(); srv.close()

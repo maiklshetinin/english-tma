@@ -1,7 +1,8 @@
 // «Кто сейчас в приложении» и правки в реальном времени — соединение с нашим сервером (WebSocket /live, server/live.ts).
 // Только преподаватели. live.users — все подключения (у человека может быть несколько вкладок), people — по одному на человека.
 // onLive('changed' | 'cursor' | 'sel' | 'doc', fn) — подписка на сообщения. В демо (без сервера) ничего не делает.
-import { reactive, computed, ref, watch } from 'vue'
+import { reactive, computed } from 'vue'
+import { showToast } from './useToast'
 import { API, fb, isDemo, liveHeaders } from '../firebase'
 
 export const live = reactive({ on: false, cid: '', users: [] })
@@ -17,11 +18,10 @@ export const people = computed(() => {
   return [...by.values()].sort((a, b) => a.me - b.me)
 })
 
-// Режим разработчика (переключатель в «Профиле»): курсоры коллег на всех экранах, а не только в редакторе курсов.
-// Запоминается на этом устройстве; работает между теми, у кого он включён (GlobalCursors.vue).
-const DEV_KEY = 'tma.dev.cursors'
-export const devCursors = ref((() => { try { return localStorage.getItem(DEV_KEY) === '1' } catch { return false } })())
-watch(devCursors, (on) => { try { localStorage.setItem(DEV_KEY, on ? '1' : '0') } catch { /* приватный режим */ } })
+// Общие курсоры на всех экранах: включает разработчик (переключатель в «Профиле») — сразу для всех, кто в приложении.
+// Состояние хранит сервер (live.ts): новичок узнаёт его при подключении. Курсоры рисует GlobalCursors.vue.
+export const shared = reactive({ cursors: false, by: '' })
+export const setSharedCursors = (on) => liveSend({ t: 'cursors', on })
 
 const subs = new Map()
 export function onLive(type, fn) { if (!subs.has(type)) subs.set(type, new Set()); subs.get(type).add(fn); return () => subs.get(type).delete(fn) }
@@ -42,12 +42,16 @@ async function connect() {
   s.onopen = () => { retry = 0; live.on = true; if (where) liveSend(where) }
   s.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data) } catch { return }
-    if (m.t === 'hello') { live.cid = m.cid; liveHeaders['X-Live-Cid'] = m.cid }
+    if (m.t === 'hello') { live.cid = m.cid; liveHeaders['X-Live-Cid'] = m.cid; Object.assign(shared, { cursors: !!m.cursors, by: m.cursorsBy || '' }) }
+    else if (m.t === 'cursors') {
+      Object.assign(shared, { cursors: m.on, by: m.by })
+      if (!m.mine) showToast(m.on ? `${m.by} включил общие курсоры — видно, где мышь у каждого` : `${m.by} выключил общие курсоры`)
+    }
     else if (m.t === 'presence') live.users = m.users
     emit(m)
   }
   s.onclose = (e) => {
-    ws = null; live.on = false; live.users = []; delete liveHeaders['X-Live-Cid']
+    ws = null; live.on = false; live.users = []; shared.cursors = false; delete liveHeaders['X-Live-Cid']
     if (stopped || e.code === 4403) return
     timer = setTimeout(connect, Math.min(30000, 1000 * 2 ** retry++))       // переподключаемся: 1, 2, 4… 30 с (Render мог уснуть)
   }
@@ -60,4 +64,4 @@ export function startLive() {
 const onVisible = () => { if (document.visibilityState === 'visible' && !ws && !stopped) { retry = 0; connect() } }
 export function stopLive() { stopped = true; clearTimeout(timer); ws?.close(); document.removeEventListener('visibilitychange', onVisible) }
 // Для проверки вида без сервера (только локальная разработка): window.__live.emit({ t: 'cursor', … })
-if (import.meta.env.DEV) window.__live = { live, emit }
+if (import.meta.env.DEV) window.__live = { live, emit, shared }

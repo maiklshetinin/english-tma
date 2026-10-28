@@ -1,15 +1,15 @@
 <script setup>
-// Режим разработчика: курсоры коллег на любой странице (как в редакторе курсов, только везде) и вспышка на месте клика.
+// Общие курсоры (включает разработчик — сразу у всех): курсоры коллег на любой странице (как в редакторе курсов, только везде) и вспышка на месте клика.
 // Координаты — от начала страницы (pageX/pageY): у вас одинаковые мониторы, так что стрелка стоит там же, где мышь коллеги.
-// Видно только у тех, у кого переключатель в «Профиле» включён. Редактор курсов показывает свои курсоры сам.
+// Редактор курсов показывает свои курсоры сам.
 import { reactive, ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { live, liveSend, onLive, devCursors } from '../composables/useLive'
+import { live, liveSend, onLive, shared } from '../composables/useLive'
 const route = useRoute()
 const cur = reactive({}), sc = ref({ x: scrollX, y: scrollY }), now = ref(Date.now())
 let t = 0, last = null
 function send(e, click = false) {
-  if (!devCursors.value || !live.on) return
+  if (!shared.cursors || !live.on) return
   last = { t: 'pcursor', path: route.fullPath, x: e.pageX, y: e.pageY, click }
   if (click) { liveSend(last); return }
   if (!t) t = setTimeout(() => { t = 0; liveSend(last) }, 60)       // не чаще ~16 раз в секунду
@@ -19,7 +19,7 @@ const off = onLive('pcursor', (m) => { cur[m.cid] = { ...m, at: Date.now(), clic
 let tick = 0
 onMounted(() => { addEventListener('pointermove', move, { passive: true }); addEventListener('pointerdown', down, { passive: true }); addEventListener('scroll', scroll, { passive: true }); tick = setInterval(() => { now.value = Date.now() }, 1000) })
 onUnmounted(() => { off(); removeEventListener('pointermove', move); removeEventListener('pointerdown', down); removeEventListener('scroll', scroll); clearInterval(tick) })
-const shown = computed(() => (devCursors.value ? Object.entries(cur).map(([cid, c]) => ({ cid, ...c, u: live.users.find(u => u.cid === cid) }))
+const shown = computed(() => (shared.cursors ? Object.entries(cur).map(([cid, c]) => ({ cid, ...c, u: live.users.find(u => u.cid === cid) }))
   .filter(c => c.u && c.path === route.fullPath && now.value - c.at < 20000) : []))
 </script>
 <template>

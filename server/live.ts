@@ -2,7 +2,8 @@
 //  • Вход: /live?t=<Firebase ID-токен>; имя и фото — из токена (как в Telegram). Сайт с чужого адреса не пускаем (ALLOWED_ORIGIN).
 //  • Присутствие: у каждого подключения — где он (вкладка) и какой курс открыт; всем рассылается список «кто здесь».
 //  • Редактор курсов: курсоры, выделение и сам курс после правки пересылаются тем, кто открыл тот же курс.
-//  • Режим разработчика (в «Профиле»): курсор на любой странице — pcursor { path, x, y, click } всем остальным.
+//  • Общие курсоры (включает разработчик в «Профиле» — сразу для всех): курсор на любой странице — pcursor { path, x, y, click }.
+//    Включено ли — общее состояние сервера (cursors), новичок получает его в hello; выключается тем же переключателем.
 //    Сохраняет курс в Firestore тот, кто правил (PUT /courses) — здесь только пересылка, ничего не пишем в базу.
 //  • После любой правки через обычные маршруты (ученики, расписание, группы…) остальным уходит «changed» — они перезагружают
 //    эти данные. Всё в памяти одного процесса: на Render один экземпляр сервера, этого достаточно.
@@ -20,7 +21,7 @@ const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.
 
 export function makeLive({ verify, origins }: { verify: Verify; origins: string[] }) {
   const conns = new Set<Conn>()
-  let seq = 0
+  let seq = 0, cursors = false, cursorsBy = ''
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
   const people = () => [...conns].map(({ cid, uid, dev, name, photo, color, where, course }) => ({ cid, uid, dev, name, photo, color, where, course }))
   const presence = () => { const m = { t: 'presence', users: people() }; for (const c of conns) send(c, m) }
@@ -34,6 +35,7 @@ export function makeLive({ verify, origins }: { verify: Verify; origins: string[
     else if (m.t === 'sel') room(c, { t: 'sel', cid: c.cid, id: str(m.id, 64) || null })
     // «Курсоры на всех экранах» (режим разработчика): курсор с адресом страницы — всем, показывают те, кто на той же странице
     else if (m.t === 'pcursor') { const out = { t: 'pcursor', cid: c.cid, path: str(m.path, 200), x: num(m.x), y: num(m.y), click: m.click === true }; for (const o of conns) if (o !== c) send(o, out) }
+    else if (m.t === 'cursors' && c.dev) { cursors = m.on === true; cursorsBy = c.name; for (const o of conns) send(o, { t: 'cursors', on: cursors, by: cursorsBy, mine: o.uid === c.uid }) }
     else if (m.t === 'doc' && m.doc && typeof m.doc === 'object') room(c, { t: 'doc', cid: c.cid, uid: c.uid, doc: m.doc })
   }
 
@@ -50,7 +52,7 @@ export function makeLive({ verify, origins }: { verify: Verify; origins: string[
         if (!u || u.role !== 'teacher') return ws.close(4401, 'unauthorized')
         const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
         conns.add(c)
-        send(c, { t: 'hello', cid: c.cid })
+        send(c, { t: 'hello', cid: c.cid, cursors, cursorsBy })
         presence()
         ws.on('message', (d) => onMessage(c, String(d)))
         ws.on('pong', () => { c.alive = true })
