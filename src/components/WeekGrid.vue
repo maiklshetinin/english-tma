@@ -24,13 +24,14 @@ const at = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h)) ?? []
 const moneyByDay = computed(() => Object.fromEntries(props.dates.map(d => [d, sumMoney(scheduleStore.lessons.filter(l => l.date === d), studentStore.byId)])))
 const money = (d) => moneyByDay.value[d]
 
-function dropState(d, h) {                       // подсветка ячейки под курсором: ok / swap / bad (в обеих таблицах одинаково)
+function dropState(d, h) {                       // подсветка ячейки под призраком: ok / swap / bad (в обеих таблицах одинаково)
   const o = dnd.over
   if (!dnd.active || o?.kind !== 'cell' || o.date !== d || o.hour !== h) return ''
   const occ = at(d, h)[0], p = dnd.payload
   if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : occ ? 'swap' : 'ok'
   if (!occ) return 'ok'
-  return occ.done || occ.studentIds.includes(p.id) || group(occ).length >= 12 ? 'bad' : 'join'      // ученик на урок — добавится в группу
+  const ids = p.ids ?? [p.id], add = ids.filter(id => !occ.studentIds.includes(id))
+  return occ.done || !add.length || group(occ).length + add.length > 12 ? 'bad' : 'join'      // ученик / группа на урок — добавятся в него
 }
 // Ученики урока, которые есть в списке. Ученика могли удалить из базы или архивировать — его id остаётся в уроке, но показывать некого.
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)

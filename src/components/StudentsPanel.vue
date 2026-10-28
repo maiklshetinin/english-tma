@@ -1,6 +1,6 @@
 <script setup>
 // Список учеников — компактная сетка кружков (как «Поделиться» в Telegram): аватарка, имя под ней.
-// Кружок можно перетащить в таблицу; урок из таблицы, брошенный сюда, снимается с расписания.
+// Кружок можно перетащить в таблицу, группу — только целиком (урок сразу всей группе); урок из таблицы, брошенный сюда, снимается с расписания.
 // Группы — сверху отдельными блоками: ученики, которые вместе стоят в групповом уроке (по расписанию), подпись — день и время урока.
 // Ниже — «Индивидуально»: остальные по алфавиту.
 import { ref, computed } from 'vue'
@@ -35,17 +35,18 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
     <div class="list">
       <!-- Одна сетка на 4 колонки: группа занимает столько колонок, сколько в ней учеников; остальные ученики заполняют свободные клетки рядом -->
       <div class="mix">
-      <section v-for="g in shownGroups" :key="g.key" class="grp" :style="{ '--n': Math.min(4, g.members.length) }">
-        <div class="gl" :title="`Группа · ${g.label}`"><AppIcon name="users" :size="12" /> <template v-if="g.members.length > 2">Группа · </template>{{ g.label }}</div>
+      <section v-for="g in shownGroups" :key="g.key" class="grp" :style="{ '--n': Math.min(4, g.members.length) }" :title="`Группа · ${g.label} — перетащите в таблицу, чтобы назначить урок всей группе`"
+        @pointerdown="pressStart($event, { kind: 'student', ids: g.members.map(m => m.id) })" @dragstart.prevent>
+        <i class="gi" aria-hidden="true"><AppIcon name="users" :size="10" /></i>
         <div class="tiles">
-          <div v-for="s in g.members" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
-            @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
+          <div v-for="s in g.members" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}, группа ${g.label}. Группа перетаскивается целиком`"
+            @click="open(s.id)" @keydown.enter="open(s.id)">
             <span class="ava"><Avatar :s="s" :size="54" :online="isOnline(s)" /></span><span class="nm">{{ s.name }}</span>
           </div>
         </div>
       </section>
       <div v-for="s in solo" :key="s.id" class="st solo" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
-        @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
+        @pointerdown="pressStart($event, { kind: 'student', ids: [s.id] })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
         <span class="ava"><Avatar :s="s" :size="54" :online="isOnline(s)" /></span><span class="nm">{{ s.name }}</span>
       </div>
       </div>
@@ -70,12 +71,14 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 .list { display: grid; gap: 8px; align-content: start; overflow-y: auto; padding: 2px 6px 8px }
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 0 }
 .mix { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 6px 0 }
-.mix > .grp { margin: 0 3px }      /* между блоками групп — небольшой зазор */
-.mix > .st.solo { align-self: end; padding-bottom: 6px }      /* рядом с группой — на одной линии с её кружками */
-.grp { grid-column: span var(--n); min-width: 0; border: 2px solid var(--border); border-radius: 14px; padding: 4px 2px 2px; background: var(--surface) }
+
+/* Значок группы — маленький кружок в левом верхнем углу подложки, в свободном месте у аватарки */
+.gi { position: absolute; top: 3px; left: 5px; z-index: 2; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--card); color: var(--hint); font-style: normal; box-shadow: 0 0 0 1.5px var(--surface) }
+/* Группа — только серая подложка под кружками (без подписи и рамки, клетки того же размера — сетка ровная); день и время — во всплывающей подсказке.
+   Подложка чуть уже блока (::before) — соседние группы не сливаются, а сетка не сдвигается */
+.grp { position: relative; grid-column: span var(--n); min-width: 0; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none } .grp:active { cursor: grabbing }
+.grp::before { content: ''; position: absolute; inset: 0 2px; border-radius: 14px; background: var(--surface); z-index: 0 } .grp .tiles { position: relative }
 .grp .tiles { grid-template-columns: repeat(var(--n), minmax(0, 1fr)) }
-.grp .gl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block }
-.gl { display: flex; align-items: center; gap: 4px; padding: 2px 6px 4px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .st { display: grid; justify-items: center; align-content: start; gap: 3px; padding: 4px 0; border-radius: 14px; min-width: 0;
   cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: background .1s }
 .st:hover { background: var(--blue-l) } .st:active { cursor: grabbing } .st:active .ava { transform: scale(.94) }
@@ -91,7 +94,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
   .panel { height: auto; grid-template-rows: auto; border-bottom-width: 4px }
   .ph { display: none }
   .list { display: flex; overflow-x: auto; overflow-y: hidden; padding: 6px 6px 4px; gap: 6px; scrollbar-width: none } .list::-webkit-scrollbar { display: none }
-  .tiles { display: flex; gap: 2px } .grp, .solo { flex: none } .mix { display: contents } .mix > .grp { margin: 0 } .mix > .st.solo { padding-bottom: 4px } .gl { display: none } .grp { padding: 2px }
+  .tiles { display: flex; gap: 2px } .gi { top: 1px; left: 3px } .grp, .solo { flex: none } .mix { display: contents }
   .st { flex: none; width: 64px; padding: 4px 2px } .nm { font-size: 11px; -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block }
   .st :deep(.av) { width: 44px !important; height: 44px !important; font-size: 20px !important }
   .drophint { flex-direction: row; display: flex; justify-content: center; align-items: center; gap: 8px; border-radius: 12px }

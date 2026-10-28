@@ -62,11 +62,13 @@ function onDrop(p, t) {
   if (t.kind === 'panel') return p.kind === 'lesson' ? unassign(p.lesson) : undefined
   if (t.kind !== 'cell') return
   const occ = occupant(t.date, t.hour)
-  if (p.kind === 'student') {
-    if (!occ) return assign(p.id, t.date, t.hour)
-    if (occ.studentIds.includes(p.id)) return showToast(`${name(p.id)} уже в этом уроке`, null, 'bad')
-    if (known(occ).length >= MAX_GROUP) return showToast(`В группе не больше ${MAX_GROUP} учеников`, null, 'bad')
-    return setStudents(occ, [...known(occ), p.id])      // ученик на занятую ячейку — добавляется в урок (группа)
+  if (p.kind === 'student') {                         // ученик или группа из панели (ids)
+    const ids = p.ids ?? [p.id]
+    if (!occ) return assign(ids, t.date, t.hour)
+    const add = ids.filter(id => !occ.studentIds.includes(id))
+    if (!add.length) return showToast(`${ids.map(name).join(', ')} уже в этом уроке`, null, 'bad')
+    if (known(occ).length + add.length > MAX_GROUP) return showToast(`В группе не больше ${MAX_GROUP} учеников`, null, 'bad')
+    return setStudents(occ, [...known(occ), ...add])      // на занятую ячейку — добавляются в урок (группа)
   }
   const a = p.lesson
   if (occ?.id === a.id) return
