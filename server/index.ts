@@ -26,7 +26,8 @@ const env = process.env
 const { BOT_TOKEN, BOT_USERNAME, APP_SHORT_NAME } = env
 if (!BOT_TOKEN || !BOT_USERNAME || !env.FIREBASE_SERVICE_ACCOUNT) throw new Error('Задайте BOT_TOKEN, BOT_USERNAME и FIREBASE_SERVICE_ACCOUNT')
 const list = (v: string | undefined) => (v || '').split(',').map(s => s.trim()).filter(Boolean)
-const TEACHER_IDS = list(env.TEACHER_IDS)               // Telegram id преподавателей (число, не @username — ник можно сменить)
+const TEACHER_IDS = list(env.TEACHER_IDS)
+const DEV_IDS = list(env.DEV_IDS)                       // разработчики: всё, что у преподавателя, + инструменты для разработки               // Telegram id преподавателей (число, не @username — ник можно сменить)
 
 initializeApp({ credential: cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) })
 const auth = getAuth(), db = getFirestore()
@@ -55,9 +56,9 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHan
 }
 const live = makeLive({
   origins: list(env.ALLOWED_ORIGIN),
-  verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(u.role), name: String(u.tgName || ''), photo: String(u.tgPhoto || '') } },
+  verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(u.role), name: String(u.tgName || ''), photo: String(u.tgPhoto || ''), dev: u.dev === true } },
 })
-const login = makeLogin({ db, auth, FieldValue, teacherIds: TEACHER_IDS })
+const login = makeLogin({ db, auth, FieldValue, teacherIds: TEACHER_IDS, devIds: DEV_IDS })
 const students = makeStudents({ db, FieldValue, photoByUsername, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })
 const groups = makeGroups({ db, FieldValue })
 const content = makeContent({ db, FieldValue })

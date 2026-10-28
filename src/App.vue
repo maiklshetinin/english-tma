@@ -8,6 +8,7 @@ import Toast from './components/Toast.vue'
 import DragGhost from './components/DragGhost.vue'
 import WakeUp from './components/WakeUp.vue'
 import PresenceBar from './components/PresenceBar.vue'
+import GlobalCursors from './components/GlobalCursors.vue'
 import { startLive, stopLive, setWhere, onLive } from './composables/useLive'
 import { useStudentsStore } from './stores/students'
 import { useScheduleStore } from './stores/schedule'
@@ -57,7 +58,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
       <PresenceBar v-if="auth.isTeacher && route.name !== 'courses'" />
       <main><RouterView v-slot="{ Component, route: r }"><component :is="Component" :key="auth.role + r.meta.tab" /></RouterView></main>
     </div>
-    <BottomNav /><Toast /><DragGhost />
+    <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" />
   </template>
 </template>
 

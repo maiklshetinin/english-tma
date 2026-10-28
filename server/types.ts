@@ -26,6 +26,7 @@ export interface SessionClaims {
   tgName: string
   tgUsername: string
   tgPhoto: string
+  dev?: boolean                // разработчик (DEV_IDS): может всё, что преподаватель, + инструменты для разработки
 }
 
 /** Пользователь из проверенного Firebase ID-токена (req.user). Роль и studentId лежат в клеймах токена. */

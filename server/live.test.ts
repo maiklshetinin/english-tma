@@ -33,6 +33,8 @@ B.send({ t: 'where', where: 'courses', course: 'k1' }); await wait(80)
 A.send({ t: 'cursor', x: 10.123, y: 5 }); A.send({ t: 'sel', id: 'n3' }); A.send({ t: 'doc', doc: { title: 'Новое' } }); await wait(100)
 ok('в одном курсе: курсор, выделение и курс приходят коллеге', B.last('cursor')?.x === 10.1 && B.last('sel')?.id === 'n3' && B.last('doc')?.doc.title === 'Новое')
 ok('себе своё не приходит', !A.last('cursor') && !A.last('doc'))
+A.send({ t: 'pcursor', path: '/students', x: 300, y: 120, click: true }); await wait(80)
+ok('курсор на любой странице (режим разработчика) — коллеге, с адресом и кликом', B.last('pcursor')?.path === '/students' && B.last('pcursor')?.click === true && !A.last('pcursor'))
 const bCid = B.got.find((m) => m.t === 'hello').cid
 live.changed('schedule', bCid); await wait(80)
 ok('правка расписания: коллеге «changed», тому, кто правил, — нет', A.last('changed')?.what === 'schedule' && !B.last('changed'))

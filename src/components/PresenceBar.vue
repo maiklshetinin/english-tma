@@ -27,7 +27,7 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
       <div class="mh">Сейчас в приложении</div>
       <div v-for="p in people" :key="p.uid" class="mi">
         <span class="av sm" :style="{ '--c': p.color }"><img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" /><b v-else :style="{ background: p.color }">{{ ini(p.name) }}</b></span>
-        <span class="tx"><b>{{ p.name }}<i v-if="p.me"> (вы)</i></b><small>{{ label(p) }}<template v-if="p.cids.length > 1"> · {{ p.cids.length }} окна</template></small></span>
+        <span class="tx"><b>{{ p.name }}<i v-if="p.me"> (вы)</i><em v-if="p.dev" class="dv">разработчик</em></b><small>{{ label(p) }}<template v-if="p.cids.length > 1"> · {{ p.cids.length }} окна</template></small></span>
       </div>
     </div>
   </div>
@@ -45,7 +45,8 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
 .menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 2; min-width: 220px; padding: 6px; border-radius: 14px; background: var(--card); box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04) }
 .mh { padding: 6px 8px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .mi { display: flex; align-items: center; gap: 10px; padding: 6px 8px } .av.sm { width: 28px; height: 28px; margin: 0 }
-.tx { display: grid; line-height: 1.2 } .tx b { font-size: 14px } .tx i { font-style: normal; color: var(--hint); font-weight: 700 } .tx small { font-size: 12px; color: var(--hint); font-weight: 600 }
+.tx { display: grid; line-height: 1.2 } .tx b { font-size: 14px } .tx i { font-style: normal; color: var(--hint); font-weight: 700 } .dv { margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: #f1e6ff; color: var(--purple-d); font-size: 10px; font-style: normal; font-weight: 800; vertical-align: 2px }
+.tx small { font-size: 12px; color: var(--hint); font-weight: 600 }
 /* Телефон: экран узкий — кружки показываем, только когда в приложении есть кто-то ещё, и помельче */
 @media (max-width: 719px) {
   /* в потоке страницы, тонкой строкой сверху (а не поверх содержимого) */

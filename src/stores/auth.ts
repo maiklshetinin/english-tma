@@ -34,6 +34,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<TgProfile | null>(null)
   const error = ref('')
   const isTeacher = ref(false)                  // настоящий преподаватель (а не просто «смотрит глазами преподавателя»)
+  const isDev = ref(false)                      // разработчик (DEV_IDS на сервере): преподаватель + блок «Для разработчика» в «Профиле»; в демо — тоже
   const role = ref<Role>('student')             // в каком режиме сейчас показано приложение
   const currentStudentId = ref<string | null>(null)   // чьими глазами показан режим «ученик»
   /** Карточка преподавателя для учеников (подпись и ссылка «Написать учителю»); фото подтягивается из Telegram. */
@@ -76,7 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
       .catch((e: Error) => showToast(e.message, null, 'bad'))
     if (c.role === 'teacher') students.loadArchived().catch(() => {})      // архивные — чтобы проведённые уроки с ними показывались (серым, «в архиве»)
     schedule.startRefresh()
-    setRole(c.role); isTeacher.value = c.role === 'teacher'
+    setRole(c.role); isTeacher.value = c.role === 'teacher'; isDev.value = c.dev === true
     syncAvatar()
   }
 
@@ -92,7 +93,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function authenticate() {
     status.value = 'loading'; error.value = ''
     try {
-      if (isDemo) { user.value = { id: 0, first_name: 'Demo', username: 'demo' }; currentStudentId.value = '1'; (await import('../store/demo')).loadDemo() }      // локальная разработка без Telegram: данные в памяти
+      if (isDemo) { isDev.value = true; user.value = { id: 0, first_name: 'Demo', username: 'demo' }; currentStudentId.value = '1'; (await import('../store/demo')).loadDemo() }      // локальная разработка без Telegram: данные в памяти
       else if (!fb || !API) throw new Error('Не настроены переменные сервера и Firebase (см. README)')
       else if (tg?.initData) await exchange('/auth/telegram', { headers: { Authorization: `tma ${tg.initData}` } })
       else {
@@ -114,8 +115,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     await signOut(fb!); useStudentsStore().clear(); useScheduleStore().clear(); useGroupsStore().clear(); useContentStore().clear()
     session.canEdit = false; session.ownKey = null
-    user.value = null; isTeacher.value = false; status.value = 'login'
+    user.value = null; isTeacher.value = false; isDev.value = false; status.value = 'login'
   }
 
-  return { status, user, error, isTeacher, role, currentStudentId, teacher, setRole, authenticate, loginWithWidget, logout }
+  return { status, user, error, isTeacher, isDev, role, currentStudentId, teacher, setRole, authenticate, loginWithWidget, logout }
 })

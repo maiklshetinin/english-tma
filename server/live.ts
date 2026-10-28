@@ -2,15 +2,16 @@
 //  • Вход: /live?t=<Firebase ID-токен>; имя и фото — из токена (как в Telegram). Сайт с чужого адреса не пускаем (ALLOWED_ORIGIN).
 //  • Присутствие: у каждого подключения — где он (вкладка) и какой курс открыт; всем рассылается список «кто здесь».
 //  • Редактор курсов: курсоры, выделение и сам курс после правки пересылаются тем, кто открыл тот же курс.
+//  • Режим разработчика (в «Профиле»): курсор на любой странице — pcursor { path, x, y, click } всем остальным.
 //    Сохраняет курс в Firestore тот, кто правил (PUT /courses) — здесь только пересылка, ничего не пишем в базу.
 //  • После любой правки через обычные маршруты (ученики, расписание, группы…) остальным уходит «changed» — они перезагружают
 //    эти данные. Всё в памяти одного процесса: на Render один экземпляр сервера, этого достаточно.
 import type { Server } from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
 
-export interface LiveUser { uid: string; role: string; name: string; photo: string }
+export interface LiveUser { uid: string; role: string; name: string; photo: string; dev?: boolean }
 type Verify = (token: string) => Promise<LiveUser | null>
-interface Conn { ws: WebSocket; cid: string; uid: string; name: string; photo: string; color: string; where: string; course: string; alive: boolean }
+interface Conn { ws: WebSocket; cid: string; uid: string; dev: boolean; name: string; photo: string; color: string; where: string; course: string; alive: boolean }
 
 const COLORS = ['#f24822', '#0d99ff', '#14ae5c', '#9747ff', '#ffa629', '#ff24bd', '#00b5ce', '#e5a000']
 const colorOf = (uid: string) => COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length]
@@ -21,7 +22,7 @@ export function makeLive({ verify, origins }: { verify: Verify; origins: string[
   const conns = new Set<Conn>()
   let seq = 0
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
-  const people = () => [...conns].map(({ cid, uid, name, photo, color, where, course }) => ({ cid, uid, name, photo, color, where, course }))
+  const people = () => [...conns].map(({ cid, uid, dev, name, photo, color, where, course }) => ({ cid, uid, dev, name, photo, color, where, course }))
   const presence = () => { const m = { t: 'presence', users: people() }; for (const c of conns) send(c, m) }
   const room = (from: Conn, m: unknown) => { for (const c of conns) if (c !== from && from.course && c.course === from.course) send(c, m) }
 
@@ -31,6 +32,8 @@ export function makeLive({ verify, origins }: { verify: Verify; origins: string[
     if (m.t === 'where') { c.where = str(m.where, 40); c.course = str(m.course, 64); presence() }
     else if (m.t === 'cursor') room(c, { t: 'cursor', cid: c.cid, x: num(m.x), y: num(m.y) })
     else if (m.t === 'sel') room(c, { t: 'sel', cid: c.cid, id: str(m.id, 64) || null })
+    // «Курсоры на всех экранах» (режим разработчика): курсор с адресом страницы — всем, показывают те, кто на той же странице
+    else if (m.t === 'pcursor') { const out = { t: 'pcursor', cid: c.cid, path: str(m.path, 200), x: num(m.x), y: num(m.y), click: m.click === true }; for (const o of conns) if (o !== c) send(o, out) }
     else if (m.t === 'doc' && m.doc && typeof m.doc === 'object') room(c, { t: 'doc', cid: c.cid, uid: c.uid, doc: m.doc })
   }
 
@@ -45,7 +48,7 @@ export function makeLive({ verify, origins }: { verify: Verify; origins: string[
         const token = new URL(req.url || '', 'http://x').searchParams.get('t') || ''
         const u = await verify(token).catch(() => null)
         if (!u || u.role !== 'teacher') return ws.close(4401, 'unauthorized')
-        const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
+        const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
         conns.add(c)
         send(c, { t: 'hello', cid: c.cid })
         presence()

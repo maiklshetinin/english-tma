@@ -15,6 +15,7 @@ New → Web Service → этот репозиторий, **Root Directory: `serv
 | `APP_SHORT_NAME` | short name мини-приложения из @BotFather → /newapp (если приложение задано как Main Mini App — не нужно) |
 | `FIREBASE_SERVICE_ACCOUNT` | весь JSON сервисного ключа в одну строку: Firebase → Project settings → Service accounts → Generate new private key (секрет) |
 | `TEACHER_IDS` | ваш Telegram id (число; узнать — @userinfobot), несколько через запятую |
+| `DEV_IDS` | Telegram id разработчиков (через запятую): всё, что у преподавателя, + блок «Для разработчика» в «Профиле» (курсоры коллег на всех экранах, проверка связи). В `TEACHER_IDS` их дублировать не нужно |
 | `SCHEDULE_TZ` | часовой пояс для «этой» и «следующей» недели (по умолчанию `Europe/Moscow`) |
 | `ALLOWED_ORIGIN` | откуда можно обращаться: `https://<ваш_ник>.github.io` (через запятую можно добавить `http://localhost:5173`) |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | хранилище видео-кружков курсов (S3 или совместимое; для Backblaze B2: `S3_ENDPOINT=https://s3.<регион>.backblazeb2.com`, `S3_REGION=<регион>`, ключ — Application Key только к этому бакету, Read and Write). Бакет приватный, CORS не нужен: загрузка идёт через сервер. Без этих переменных кружки хранятся только в браузере преподавателя |

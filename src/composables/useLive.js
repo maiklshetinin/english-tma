@@ -1,7 +1,7 @@
 // «Кто сейчас в приложении» и правки в реальном времени — соединение с нашим сервером (WebSocket /live, server/live.ts).
 // Только преподаватели. live.users — все подключения (у человека может быть несколько вкладок), people — по одному на человека.
 // onLive('changed' | 'cursor' | 'sel' | 'doc', fn) — подписка на сообщения. В демо (без сервера) ничего не делает.
-import { reactive, computed } from 'vue'
+import { reactive, computed, ref, watch } from 'vue'
 import { API, fb, isDemo, liveHeaders } from '../firebase'
 
 export const live = reactive({ on: false, cid: '', users: [] })
@@ -16,6 +16,12 @@ export const people = computed(() => {
   }
   return [...by.values()].sort((a, b) => a.me - b.me)
 })
+
+// Режим разработчика (переключатель в «Профиле»): курсоры коллег на всех экранах, а не только в редакторе курсов.
+// Запоминается на этом устройстве; работает между теми, у кого он включён (GlobalCursors.vue).
+const DEV_KEY = 'tma.dev.cursors'
+export const devCursors = ref((() => { try { return localStorage.getItem(DEV_KEY) === '1' } catch { return false } })())
+watch(devCursors, (on) => { try { localStorage.setItem(DEV_KEY, on ? '1' : '0') } catch { /* приватный режим */ } })
 
 const subs = new Map()
 export function onLive(type, fn) { if (!subs.has(type)) subs.set(type, new Set()); subs.get(type).add(fn); return () => subs.get(type).delete(fn) }

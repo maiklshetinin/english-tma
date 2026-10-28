@@ -11,9 +11,10 @@ export { fail } from './errors.js'
 export type { HttpError } from './errors.js'
 import { fail } from './errors.js'
 
-export interface LoginDeps { db: Firestore; auth: Pick<Auth, 'createCustomToken'>; FieldValue: Pick<typeof FV, 'serverTimestamp'>; teacherIds: string[] }
+export interface LoginDeps { db: Firestore; auth: Pick<Auth, 'createCustomToken'>; FieldValue: Pick<typeof FV, 'serverTimestamp'>; teacherIds: string[]; devIds?: string[] }
 
-export function makeLogin({ db, auth, FieldValue, teacherIds }: LoginDeps) {
+export function makeLogin({ db, auth, FieldValue, teacherIds, devIds = [] }: LoginDeps) {
+  const isDev = (id: number) => devIds.includes(String(id))
   return async function login({ user: u, startParam }: Verified): Promise<AuthResponse> {
     const uid = `tg:${u.id}`, ref = db.collection('users').doc(uid)
     const code = /^invite_([\w-]{8,64})$/.exec(startParam)?.[1]
@@ -34,7 +35,7 @@ export function makeLogin({ db, auth, FieldValue, teacherIds }: LoginDeps) {
       const invSt = invRef && invRef !== oldRef ? await tx.get(invRef) : oldSt
       const isAlive = (d: typeof oldSt) => !!d?.exists && !d.get('archived')      // запись ученика есть и не в архиве
 
-      if (teacherIds.includes(String(u.id))) {
+      if (isDev(u.id) || teacherIds.includes(String(u.id))) {          // разработчик — тоже преподаватель (+ dev в токене)
         role = 'teacher'; tx.set(ref, { ...profile, role }, { merge: true })
       } else if (useInvite && isAlive(invSt)) {
         // Свежая ссылка-приглашение важнее старой привязки: так ученик снова войдёт, даже если его прежнюю запись
@@ -55,9 +56,10 @@ export function makeLogin({ db, auth, FieldValue, teacherIds }: LoginDeps) {
       }
     })
     if (!role) throw fail(403, 'no access')
-    console.log(`  → вход: tg:${u.id} @${u.username || '-'} как ${role}`)
+    const dev = role === 'teacher' && isDev(u.id)
+    console.log(`  → вход: tg:${u.id} @${u.username || '-'} как ${dev ? 'разработчик' : role}`)
     // Данные профиля кладём в токен, чтобы фронту не нужен был отдельный запрос (лимит клеймов — 1000 байт)
-    const token = await auth.createCustomToken(uid, { role, studentId, tgName: profile.name, tgUsername: profile.username, tgPhoto: profile.photoUrl } satisfies SessionClaims)
+    const token = await auth.createCustomToken(uid, { role, studentId, tgName: profile.name, tgUsername: profile.username, tgPhoto: profile.photoUrl, ...(dev ? { dev } : {}) } satisfies SessionClaims)
     return { token }
   }
 }

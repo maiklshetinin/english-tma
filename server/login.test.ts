@@ -3,7 +3,7 @@ import { makeLogin } from './login.js'
 
 import { store, db, FieldValue } from './fake-db.js'
 const auth = { createCustomToken: async (uid: string, claims: object) => JSON.stringify({ uid, ...claims }) }
-const login = makeLogin({ db, auth, FieldValue, teacherIds: ['1'] })
+const login = makeLogin({ db, auth, FieldValue, teacherIds: ['1'], devIds: ['7'] })
 
 let bad = 0
 const ok = (name: string, c: unknown) => { console.log(c ? 'PASS' : 'FAIL', name); if (!c) bad++ }
@@ -15,6 +15,8 @@ store.set('invites/inviteCodeBBBB', { studentId: 's1' })
 store.set('invites/inviteCodeZZZZ', { studentId: 'nope' })
 
 let r = await tryLogin(1);                                  ok('преподаватель из TEACHER_IDS', r.role === 'teacher' && r.studentId === null)
+ok('у преподавателя нет флага разработчика', !r.dev)
+r = await tryLogin(7);                                      ok('разработчик из DEV_IDS: преподаватель + dev', r.role === 'teacher' && r.dev === true)
 r = await tryLogin(50);                                     ok('посторонний без приглашения → 403', r.err === 403)
 r = await tryLogin(50, 'invite_inviteCodeZZZZ');            ok('приглашение на несуществующего ученика → 403', r.err === 403)
 r = await tryLogin(50, 'invite_unknownCode1234');           ok('несуществующий код → 403', r.err === 403)
