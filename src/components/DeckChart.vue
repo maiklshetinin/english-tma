@@ -181,6 +181,9 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
         <div class="seg scl" role="radiogroup" aria-label="Масштаб">
           <button v-for="s in SCALES" :key="s.id" role="radio" :aria-checked="scale === s.id" :class="{ on: scale === s.id }" @click="scale = s.id">{{ s.t }}</button>
         </div>
+        <!-- В колоде «Сбросить» — значком в той же строке (без отдельной строки снизу); первое нажатие — «Точно?» -->
+        <button v-if="dock" class="rst ri" :class="{ sure }" :disabled="!started.length" :aria-label="sure ? 'Точно сбросить' : 'Сбросить прогресс колоды'" :title="sure ? '' : 'Сбросить прогресс колоды'" @click="reset" @blur="sure = false">
+          <AppIcon name="refresh" :size="15" /><template v-if="sure">Точно? {{ started.length }} {{ word(started.length) }} станут новыми</template></button>
         <button v-if="dock" class="x" aria-label="Скрыть график" title="Скрыть" @click="emit('back')"><AppIcon name="x" :size="16" /></button>
       </div>
 
@@ -194,7 +197,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
         <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, pin: pinned === b.i, later: b.i === sc.n, hot: b.items.some(fresh) }"
           :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="hover = b.i" @click="pin(b.i)">
           <span v-if="b.items.length" class="bn">{{ b.items.length }}</span>
-          <span class="stk" :style="{ height: (b.items.length ? 8 + b.items.length / maxN * (dock ? 110 : 120) : 3) + 'px' }"><i v-for="g in segs(b)" :key="g.k" :class="g.k" :style="{ flexGrow: g.n }" /></span>
+          <span class="stk" :style="{ height: b.items.length ? `calc(8px + var(--bmax) * ${b.items.length / maxN})` : '3px' }"><i v-for="g in segs(b)" :key="g.k" :class="g.k" :style="{ flexGrow: g.n }" /></span>
         </button>
       </div>
       <div class="ax" :style="{ '--n': bins.length }"><span v-for="b in bins" :key="b.i" :class="{ now: b.i === 0 }">{{ axis(b.i) }}</span></div>
@@ -228,14 +231,14 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
       </Transition>
       </div>
       <p v-if="!started.length" class="hint none">Слова ещё не начаты — ответьте на первую карточку</p>
-      <div class="foot"><button class="rst" :class="{ sure }" :disabled="!started.length" @click="reset" @blur="sure = false">
+      <div v-if="!dock" class="foot"><button class="rst" :class="{ sure }" :disabled="!started.length" @click="reset" @blur="sure = false">
         <AppIcon name="refresh" :size="14" />{{ sure ? `Точно? ${started.length} ${word(started.length)} станут новыми` : 'Сбросить прогресс колоды' }}</button></div>
     </section>
   </div>
 </template>
 
 <style scoped>
-.dc { display: grid; gap: 12px }
+.dc { display: grid; gap: 12px; --bmax: 120px } .dc.docked { --bmax: 110px }      /* высота самого высокого столбика */
 .bar { display: flex; align-items: center; gap: 10px } .dt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; text-align: center; margin-right: 90px }
 .ch { position: relative; display: grid; gap: 8px; padding: 12px 12px 10px; min-width: 0 }
 .dc.docked .ch { animation: down .25s ease } @keyframes down { from { transform: translateY(-12px); opacity: 0 } }
@@ -297,4 +300,14 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .rst { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; border-radius: 99px; background: none; color: var(--hint); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer }
 .rst:hover:not(:disabled) { background: var(--red-l); color: var(--red-d) } .rst.sure { background: var(--red); color: #fff } .rst:disabled { opacity: .4; cursor: default }
 @media (max-width: 520px) { .dt { margin-right: 0 } .scl button { padding: 4px 7px } .plot { height: 130px } }
+.ri { padding: 5px 7px } .ri.sure { padding: 5px 10px }
+/* В колоде на телефоне — компактно, чтобы карточка влезала без прокрутки: без заголовка, счётчики одной строкой, столбики ниже */
+@media (max-width: 520px) {
+  .dc.docked { --bmax: 52px } .dc.docked .ch { gap: 4px; padding: 8px 8px 10px }
+  .dc.docked .ttl { min-width: 100%; } .dc.docked .ttl > b { display: none }
+  .dc.docked .cnt { flex-wrap: nowrap; white-space: nowrap; overflow: hidden }
+  .dc.docked .top { gap: 4px 6px } .dc.docked .scl { margin-right: auto }
+  .dc.docked .plot { height: 76px; padding-top: 12px } .dc.docked .grid { inset: 12px 0 0 }
+  .dc.docked .ri.sure { position: absolute; right: 8px; top: 30px; z-index: 5 }
+}
 </style>

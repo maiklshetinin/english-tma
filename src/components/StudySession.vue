@@ -76,7 +76,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
 </script>
 
 <template>
-  <div class="ss">
+  <div class="ss" :class="{ wc: chartOpen }">
     <header class="bar">
       <button class="btn ghost sm" @click="emit('exit')"><AppIcon name="back" :size="18" /> {{ embedded ? 'Закрыть' : 'Колоды' }}</button>
       <b class="dt">{{ deck.title }}</b>
@@ -157,6 +157,8 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
 .tb { flex: none; display: inline-flex; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 12px; background: var(--card); overflow: hidden }      /* кнопки-значки одной плашкой */
 .ib { display: grid; place-items: center; width: 34px; height: 31px; border: 0; background: none; color: var(--blue); cursor: pointer } .ib + .ib { border-left: 1px solid var(--border) }
 .ib:hover { background: var(--surface) } .ib.on { background: var(--blue-l) }
+/* Телефон с открытым графиком: фото ниже (по высоте экрана), чтобы карточка и кнопки влезали без прокрутки */
+@media (max-width: 600px) { .ss.wc { gap: 8px } .ss.wc .face { padding: 2px 4px } .ss.wc .media { width: auto; max-width: 100%; height: clamp(96px, 22vh, 233px) } }
 @media (max-width: 600px) { .keys { display: none } .tools.only { display: none } .q { font-size: 28px } .a { font-size: 24px } }
 
 </style>
