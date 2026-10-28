@@ -4,7 +4,9 @@
 // inline — внутри панели редактора курсов; иначе — на компьютере плавает в правом верхнем углу, на телефоне — тонкая строка
 // над страницей (и только если в приложении есть кто-то ещё). Без соединения (демо) — не видно.
 import { ref, computed } from 'vue'
-import { live, people, WHERE } from '../composables/useLive'
+import { live, people, WHERE, shared, setSharedCursors } from '../composables/useLive'
+import { useAuthStore } from '../stores/auth'
+const auth = useAuthStore()
 const props = defineProps({ inline: Boolean })
 const open = ref(false)
 const shown = computed(() => people.value.slice(-5))                 // больше пяти — «+N»
@@ -15,6 +17,10 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
 </script>
 <template>
   <div v-if="live.on && people.length" class="pb" :class="{ inline, solo: people.length < 2 }">
+    <!-- Разработчику: общие курсоры на всех экранах — вкл/выкл сразу у всех (то же, что переключатель в «Профиле») -->
+    <button v-if="auth.isDev && !inline" class="cur" :class="{ on: shared.cursors }" :aria-pressed="shared.cursors"
+      :title="shared.cursors ? 'Общие курсоры включены — нажмите, чтобы выключить у всех' : 'Включить общие курсоры: все увидят курсоры друг друга'" @click="setSharedCursors(!shared.cursors)">
+      <svg viewBox="0 0 16 16"><path d="M2 1.5l5 13 1.9-5.4L14.5 7z" /></svg></button>
     <button class="row" :title="people.map(p => (p.me ? 'Вы' : p.name) + ' — ' + label(p)).join('\n')" @click="open = !open">
       <span v-for="p in shown" :key="p.uid" class="av" :style="{ '--c': p.color }">
         <img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" @error="bad[p.uid] = true" />
@@ -35,6 +41,10 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
 <style scoped>
 .pb { position: fixed; top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 12px); right: 14px; z-index: 25 }
 .pb.inline { position: relative; top: auto; right: auto; z-index: 6 }
+.pb:not(.inline) { display: flex; align-items: center; gap: 6px }
+.cur { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--card); color: var(--hint); box-shadow: 0 2px 10px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04); cursor: pointer; transition: background .12s, color .12s }
+.cur svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round }
+.cur:hover { color: var(--text) } .cur.on { background: #0d99ff; color: #fff }
 .row { display: flex; align-items: center; padding: 3px 4px 3px 8px; border: 0; border-radius: 999px; background: var(--card); box-shadow: 0 2px 10px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04); cursor: pointer }
 .inline .row { padding: 0; background: none; box-shadow: none }
 .av { position: relative; display: grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; border-radius: 50%; box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--c); overflow: hidden; background: var(--surface); flex: none }
@@ -53,6 +63,6 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
   .pb:not(.inline) { position: relative; top: auto; right: auto; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 10px 0 }
   .pb:not(.inline)::before { content: 'Сейчас здесь'; font-size: 12px; font-weight: 800; color: var(--hint) }
   .pb.solo:not(.inline) { display: none }
-  .av { width: 24px; height: 24px } .av b { font-size: 11px }
+  .av { width: 24px; height: 24px } .av b { font-size: 11px } .cur { width: 30px; height: 30px }
 }
 </style>
