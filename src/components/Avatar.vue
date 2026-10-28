@@ -1,18 +1,16 @@
 <script setup>
-// Аватарка из Telegram (photoUrl / tgId), а если её нет или она не загрузилась — инициал на цветном фоне.
+// Аватарка из Telegram (photoUrl / tgId / @ник через сервер — composables/useAvatar), а если её нет или она не загрузилась — инициал на цветном фоне.
 // online — зелёная точка «в сети» справа внизу, как в Telegram (utils/online.ts).
 // Архивный ученик (s.archived): серая, снизу тёмная полоска со значком архива — так он виден в истории проведённых уроков.
-import { ref, computed, watch } from 'vue'
-import { avatarSrc } from '../composables/useAvatar'
+import { computed } from 'vue'
+import { avatarSrc, markBad } from '../composables/useAvatar'
 const props = defineProps({ s: { type: Object, required: true }, size: { type: Number, default: 40 }, online: Boolean })
-const failed = ref(false)
-const src = computed(() => avatarSrc(props.s))
-watch(src, () => { failed.value = false })
+const src = computed(() => avatarSrc(props.s))      // не открылась — markBad, и avatarSrc отдаст следующий источник
 </script>
 <template>
   <span class="avw">
-  <span class="av" :class="{ img: src && !failed, arch: s.archived }" :title="s.archived ? `${s.name} — в архиве` : undefined" :style="{ width: size + 'px', height: size + 'px', background: s.color, fontSize: size * .46 + 'px' }">
-    <img v-if="src && !failed" :src="src" alt="" draggable="false" referrerpolicy="no-referrer" @error="failed = true" />
+  <span class="av" :class="{ img: src, arch: s.archived }" :title="s.archived ? `${s.name} — в архиве` : undefined" :style="{ width: size + 'px', height: size + 'px', background: s.color, fontSize: size * .46 + 'px' }">
+    <img v-if="src" :src="src" alt="" draggable="false" referrerpolicy="no-referrer" @error="markBad(src)" />
     <template v-else>{{ (s.name || '?')[0] }}</template>
     <span v-if="s.archived" class="ab" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg></span>
   </span>

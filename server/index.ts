@@ -9,7 +9,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { verifyInitData, verifyWidget } from './telegram.js'
 import { makeLogin, fail } from './login.js'
 import { makeStudents } from './students.js'
-import { photoByUsername } from './tgphoto.js'
+import { photoByUsername, nickPhoto } from './tgphoto.js'
 import { makeSchedule } from './schedule.js'
 import { makeContent } from './content.js'
 import { makeSrs } from './srs.js'
@@ -134,6 +134,13 @@ app.post('/srs/rate', requireUser, wrap(async (req, res) => { await srs.rate(req
 
 // Аватарка пользователя через Bot API (Mini App отдаёт фото только самого пользователя). Токен бота наружу не уходит.
 const tgApi = (m: string, q: Record<string, string>) => fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${m}?${new URLSearchParams(q)}`).then((r) => r.json() as Promise<any>)
+// Фото ученика по нику (ещё не вошёл в приложение): свежее со страницы t.me — сохранённая ссылка на фото со временем перестаёт открываться
+const byNick = nickPhoto({ isKnown: async (u) => !(await db.collection('students').where('username', '==', u).limit(1).get()).empty })
+app.get('/avatar/nick/:username', requireUser, requireTeacher, wrap(async (req, res) => {
+  const img = await byNick(String(req.params.username))
+  if (!img) throw fail(404, 'no photo')
+  res.set('Content-Type', img.type).set('Cache-Control', 'private, max-age=21600').send(Buffer.from(img.body))
+}))
 app.get('/avatar/:tgId', requireUser, wrap(async (req, res) => {
   const id = Number(req.params.tgId)
   if (req.user.role !== 'teacher' && req.user.uid !== `tg:${id}`) throw fail(403, 'forbidden')
