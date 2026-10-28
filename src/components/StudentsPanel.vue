@@ -70,7 +70,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
     <Teleport to="body"><div v-if="adding" class="sheet-bg" @click.self="adding = false"><div class="sheet-box"><AddStudent @close="adding = false" /></div></div></Teleport>
     <!-- Меню группы (как в iOS): ученики списком — потянуть любого в таблицу (урок только ему), нажать — его карточка -->
     <Teleport to="body">
-      <div v-if="pop" class="gpop-bg" @pointerdown.self="closePop">
+      <div v-if="pop" class="gpop-bg" @click.self="closePop">
         <div class="gpop" :class="{ up: pop.up }" :style="pop.style" role="menu" :aria-label="`Группа · ${pop.g.label}`">
           <div class="gph"><AppIcon name="users" :size="14" /> Группа · {{ pop.g.label }}</div>
           <div v-for="s in pop.g.members" :key="s.id" class="gpr" role="menuitem" tabindex="0" :title="`${s.name}: перетащите в таблицу — урок только ему; нажмите — карточка`"

@@ -3,10 +3,11 @@
 // (название, лимит новых в день, кому назначена, синхронизация, удаление).
 import { ref, computed } from 'vue'
 import { showToast } from '../composables/useToast'
-import Avatar from './Avatar.vue'
 import AvatarStack from './AvatarStack.vue'
 import AppIcon from './AppIcon.vue'
 import SheetLink from './SheetLink.vue'
+import StudentGrid from './StudentGrid.vue'
+import { useGroups } from '../composables/useGroups'
 import { useStudentsStore } from '../stores/students'
 import { useDecksStore } from '../stores/decks'
 const deckStore = useDecksStore()
@@ -21,12 +22,17 @@ function createDeck() {
   auto.value = !!link                                  // с ссылкой — сразу подтягиваем слова
 }
 const has = (id) => d.value.assigned.includes(id)
-// Выбор учеников — как «Добавить участников» в Telegram: строка «Кому назначена ›» открывает отдельную страницу окна
-// со списком, поиском по имени и нику и круглыми галочками
+// Выбор учеников — строка «Кому назначена ›» открывает отдельную страницу окна: поиск и сетка как в панели учеников
+// (группы подложкой, меню группы — вся или по одному), выбранные — с зелёной галочкой
 const wq = ref(''), page = ref('main')
 const chosen = computed(() => d.value ? studentStore.list.filter(s => d.value.assigned.includes(s.id)) : [])
 const step = (n) => { d.value.newPerDay = Math.min(500, Math.max(0, (Number(d.value.newPerDay) || 0) + n)) }
-const whoList = computed(() => { const k = wq.value.trim().toLowerCase().replace(/^@/, ''); return studentStore.list.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
+const groups = useGroups()
+const whoMatch = (s) => { const k = wq.value.trim().toLowerCase().replace(/^@/, ''); return !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k) }
+const whoGroups = computed(() => groups.value.filter(g => g.members.some(whoMatch)))
+const whoSolo = computed(() => { const inGroup = new Set(groups.value.flatMap(g => g.members.map(m => m.id))); return studentStore.list.filter(s => !inGroup.has(s.id) && whoMatch(s)) })
+// «Вся группа»: все выбраны — снять всех, иначе — выбрать недостающих
+const toggleGroup = (g) => { const a = d.value.assigned, ids = g.members.map(m => m.id); if (ids.every(id => a.includes(id))) d.value.assigned = a.filter(id => !ids.includes(id)); else for (const id of ids) if (!a.includes(id)) a.push(id) }
 const toggle = (id) => { const a = d.value.assigned; const i = a.indexOf(id); i >= 0 ? a.splice(i, 1) : a.push(id) }
 function remove() {
   const gone = deckStore.remove(d.value); emit('close')
@@ -51,10 +57,10 @@ function remove() {
         <div class="hd"><button class="x" aria-label="Назад" @click="page = 'main'; wq = ''"><AppIcon name="back" :size="18" /></button><b>Кому назначить</b><span class="wn">{{ d.forAll ? 'все' : d.assigned.length + ' выбрано' }}</span></div>
         <label class="r tap"><span class="ic"><AppIcon name="users" :size="20" /></span><span class="lb">Всем ученикам</span><input v-model="d.forAll" type="checkbox" class="sw" role="switch" /></label>
         <label class="psearch"><AppIcon name="search" :size="16" /><input v-model="wq" placeholder="Поиск" aria-label="Поиск ученика" /></label>
+        <!-- Как панель учеников: группы подложкой (нажатие — меню: вся группа или по одному), выбранные — с зелёной галочкой -->
         <div class="plist">
-          <button v-for="s in whoList" :key="s.id" class="prow" :disabled="d.forAll" @click="toggle(s.id)">
-            <Avatar :s="s" :size="40" /><span class="tx"><b>{{ s.name }}</b><small>{{ [s.level, s.username ? '@' + s.username : ''].filter(Boolean).join(' · ') }}</small></span>
-            <i class="chk" :class="{ on: d.forAll || has(s.id) }"><AppIcon v-if="d.forAll || has(s.id)" name="check" :size="13" /></i></button>
+          <StudentGrid :groups="whoGroups" :students="whoSolo" :selected="d.forAll ? studentStore.list.map(s => s.id) : d.assigned" :disabled="d.forAll" all-label="Вся группа" @pick="toggle" @group="toggleGroup" />
+          <p v-if="!whoGroups.length && !whoSolo.length" class="none">Никого не нашли</p>
         </div>
         <div class="ft"><span /><button class="lnk" @click="page = 'main'; wq = ''">Готово</button></div>
       </template>
@@ -119,9 +125,6 @@ function remove() {
 .wn { flex: none; font-size: 12px; font-weight: 800; color: var(--green-d) }
 .psearch { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: var(--hint-2) }
 .psearch input { flex: 1; margin: 0; padding: 10px 0; border: 0; border-radius: 0; background: none; font-size: 14px } .psearch input:focus { background: none }
-.plist { display: grid; max-height: 320px; overflow-y: auto; padding: 4px 0 }
-.prow { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 16px; border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer } .prow:hover:not(:disabled) { background: var(--surface) } .prow:disabled { cursor: default; opacity: .7 }
-.tx { flex: 1; display: grid; min-width: 0; line-height: 1.25 } .tx b { font-size: 15px } .tx small { font-size: 12px; color: var(--hint); font-weight: 600 }
-.chk { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); color: #fff } .chk.on { background: var(--green); border-color: var(--green) }
+.plist { display: grid; max-height: 360px; overflow-y: auto; padding: 8px 10px 10px } .none { margin: 8px 0; text-align: center; font-size: 13px; color: var(--hint) }
 .hd .wn { margin-left: auto; padding-right: 8px }
 </style>

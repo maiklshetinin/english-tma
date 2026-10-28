@@ -123,17 +123,24 @@ describe('урок с учеником, которого больше нет (у
     expect(w.emitted('details')![1]).toEqual([lesson, { note: 'новое' }])
   })
 
-  it('«Кого назначить?»: одна сетка на 4 — группы (нажатие — вся группа) и все ученики', async () => {
+  it('«Кого назначить?»: группы подложкой, нажатие — меню (вся группа или один), ученики без группы — кружками', async () => {
     useStudentsStore().set([st('a', 'Маша', 100), st('b', 'Петя', 80), st('c', 'Оля', 50)])
     useScheduleStore().set([{ id: 'G', date: D, hour: 20, studentIds: ['a', 'b'] }])
-    const w = mount(LessonSheet, { props: { slot: { date: D, hour: 12 } } })
-    expect(w.findAll('.pgrp')).toHaveLength(1); expect(w.find('.pgrp').text()).toContain('Группа · Вт 20:00')
-    expect(w.findAll('.pgwrap > .pt.tap')).toHaveLength(3)                // все ученики, и из группы тоже
-    await w.find('.pgrp').trigger('click')
-    expect(w.emitted('pick')![0]).toEqual([['a', 'b']])
-    await w.findAll('.pt.tap').find(b => b.text().includes('Оля'))!.trigger('click')
-    expect(w.emitted('pick')![1]).toEqual([['c']])
+    const w = mount(LessonSheet, { props: { slot: { date: D, hour: 12 } }, attachTo: document.body })
+    expect(w.findAll('.grp')).toHaveLength(1); expect(w.find('.grp').attributes('title')).toContain('Группа · Вт 20:00')
+    expect(w.findAll('.st.solo .nm').map(b => b.text())).toEqual(['Оля'])        // ученики группы — только в меню группы
+    await w.find('.st.solo').trigger('click')
+    expect(w.emitted('pick')![0]).toEqual([['c']])
+    await w.find('.grp').trigger('click')
+    const rows = () => [...document.body.querySelectorAll<HTMLButtonElement>('.gpop .gpr')]
+    expect(rows().map(r => r.textContent)).toEqual([expect.stringContaining('Всей группе'), expect.stringContaining('Маша'), expect.stringContaining('Петя')])
+    rows()[0].click(); await w.vm.$nextTick()
+    expect(w.emitted('pick')![1]).toEqual([['a', 'b']])
+    expect(document.body.querySelector('.gpop')).toBeNull()                // назначили — меню закрылось
+    await w.find('.grp').trigger('click'); rows()[2].click(); await w.vm.$nextTick()
+    expect(w.emitted('pick')![2]).toEqual([['b']])
     await w.find('.tsearch input').setValue('оля')
-    expect(w.findAll('.pgrp')).toHaveLength(0); expect(w.findAll('.pt.tap')).toHaveLength(1)
+    expect(w.findAll('.grp')).toHaveLength(0); expect(w.findAll('.st.solo')).toHaveLength(1)
+    w.unmount()
   })
 })
