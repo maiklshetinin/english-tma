@@ -194,7 +194,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
         <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, pin: pinned === b.i, later: b.i === sc.n, hot: b.items.some(fresh) }"
           :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="hover = b.i" @click="pin(b.i)">
           <span v-if="b.items.length" class="bn">{{ b.items.length }}</span>
-          <span class="stk" :style="{ height: (b.items.length ? 8 + b.items.length / maxN * (dock ? 74 : 100) : 3) + 'px' }"><i v-for="g in segs(b)" :key="g.k" :class="g.k" :style="{ flexGrow: g.n }" /></span>
+          <span class="stk" :style="{ height: (b.items.length ? 8 + b.items.length / maxN * (dock ? 110 : 120) : 3) + 'px' }"><i v-for="g in segs(b)" :key="g.k" :class="g.k" :style="{ flexGrow: g.n }" /></span>
         </button>
       </div>
       <div class="ax" :style="{ '--n': bins.length }"><span v-for="b in bins" :key="b.i" :class="{ now: b.i === 0 }">{{ axis(b.i) }}</span></div>
@@ -239,7 +239,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .bar { display: flex; align-items: center; gap: 10px } .dt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; text-align: center; margin-right: 90px }
 .ch { position: relative; display: grid; gap: 8px; padding: 12px 12px 10px; min-width: 0 }
 .dc.docked .ch { animation: down .25s ease } @keyframes down { from { transform: translateY(-12px); opacity: 0 } }
-.dc.docked .plot { height: 120px }
+.dc.docked .plot { height: 150px }
 /* Шапка: заголовок, счётчики, масштаб */
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px }
 .ttl { flex: 1; min-width: 180px; display: grid; gap: 2px } .ttl > b { font-size: 16px }
@@ -253,7 +253,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .jump.jq0 .to { color: #ff8a8a } .jump.jq1 .to { color: #ffc266 } .jump.jq2 .to { color: #a0f07a } .jump.jq3 .to { color: #8fdcff }
 .jmp-enter-active, .jmp-leave-active { transition: all .3s ease } .jmp-enter-from, .jmp-leave-to { opacity: 0; transform: translate(-50%, -8px) }
 /* Столбики */
-.plot { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; align-items: end; height: 150px; padding-top: 14px }
+.plot { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; align-items: end; height: 165px; padding-top: 14px }
 .grid { position: absolute; inset: 14px 0 0; display: grid; grid-template-rows: repeat(3, 1fr); pointer-events: none } .grid i { border-top: 1px dashed var(--border) }
 .bc { position: relative; display: grid; justify-items: center; align-content: end; gap: 2px; height: 100%; padding: 0 0 1px; border: 0; border-radius: 8px 8px 0 0; background: none; cursor: pointer; min-width: 0; font: inherit; z-index: 1 }
 .bc:hover, .bc.on { background: var(--blue-l) } .bc.later { border-left: 1px dashed var(--border); border-radius: 0 8px 0 0 }
