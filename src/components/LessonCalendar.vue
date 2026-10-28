@@ -79,7 +79,7 @@ const sum = computed(() => {
   }
   return s
 })
-// Чек за месяц (у преподавателя): проведённые уроки месяца по зафиксированным ценам
+// Счёт за месяц (у преподавателя): проведённые уроки месяца по зафиксированным ценам
 const auth = useAuthStore(), receiptOpen = ref(false)
 const receipt = computed(() => ({
   month: month.value, student: studentStore.findAny(props.studentId)?.name ?? '', teacher: auth.user?.first_name || '',      // имя преподавателя — из его Telegram
@@ -126,7 +126,7 @@ function toggle(l) {
       <div class="cnt"><span><i class="done" /><b>{{ sum.done }}</b> проведено</span><span><i class="plan" /><b>{{ sum.plan }}</b> запланировано</span><span><i class="off" /><b>{{ sum.off }}</b> отменено</span></div>
       <div v-if="teacher && (sum.expected || sum.lost)" class="cm">
         <div class="cmr"><span><b class="g">{{ fmtMoney(sum.paid) }}</b> из {{ fmtMoney(sum.expected) }} за месяц</span><b v-if="sum.lost" class="r">−{{ fmtMoney(sum.lost) }}</b>
-          <button v-if="sum.done" class="rcp" title="Чек за месяц: скачать или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="15" /> Чек</button></div>
+          <button v-if="sum.done" class="rcp" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="15" /> Счёт</button></div>
         <div class="mbar"><i :style="{ width: (sum.expected ? Math.min(100, sum.paid / sum.expected * 100) : 0) + '%' }" /></div>
       </div>
     </template>
