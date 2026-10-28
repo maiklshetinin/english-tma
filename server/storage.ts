@@ -1,4 +1,4 @@
-// Видео-кружки курсов — в S3 (AWS или совместимое: Backblaze B2, Yandex Object Storage, Cloudflare R2…).
+// Видео-кружки и фото курсов — в S3 (AWS или совместимое: Backblaze B2, Yandex Object Storage, Cloudflare R2…).
 //  • Загрузка — через наш сервер: браузер шлёт файл сюда, сервер потоком (без чтения в память) кладёт его в бакет.
 //    Так в бакете не нужна настройка CORS, а ключи хранилища никогда не попадают в браузер.
 //  • Просмотр: бакет приватный, сервер выдаёт временные ссылки (GET, 6 ч) — <video> играет по ним напрямую из хранилища.
@@ -14,8 +14,8 @@ import { fail } from './login.js'
 export interface StorageEnv { S3_BUCKET?: string; S3_REGION?: string; S3_ENDPOINT?: string; S3_ACCESS_KEY_ID?: string; S3_SECRET_ACCESS_KEY?: string }
 type Sign = (client: S3Client, cmd: GetObjectCommand, expiresIn: number) => Promise<string>
 type Put = (client: S3Client, cmd: PutObjectCommand) => Promise<unknown>
-export const VIDEO_MAX = 200 * 1024 * 1024
-const TYPES: Record<string, string> = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/x-m4v': 'm4v' }
+export const VIDEO_MAX = 200 * 1024 * 1024, IMAGE_MAX = 30 * 1024 * 1024        // фото — как есть, без сжатия (с телефона обычно 2–10 МБ)
+const TYPES: Record<string, string> = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/x-m4v': 'm4v', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif' }
 export const safe = (s: string) => String(s).replace(/[^\w-]/g, '_').slice(0, 64)
 export const ownPrefix = (uid: string) => `t/${safe(uid)}/`
 
@@ -38,14 +38,14 @@ export function makeStorage(env: StorageEnv, sign: Sign = (c, cmd, e) => getSign
 
   return {
     ready,
-    /** Загрузить видео потоком: query { courseId, type }, размер — из Content-Length. → { key } */
+    /** Загрузить видео или фото потоком: query { courseId, type }, размер — из Content-Length. → { key } */
     async upload(uid: string, query: unknown, body: Readable, length: unknown) {
       const c = need(), q = (query ?? {}) as { courseId?: unknown; type?: unknown }
       const type = String(q.type ?? '').split(';')[0].trim().toLowerCase(), courseId = q.courseId, ext = TYPES[type]
-      if (!ext) throw fail(400, 'video only (mp4, webm, mov)')
+      if (!ext) throw fail(400, 'video or image only (mp4, webm, mov, jpg, png, webp)')
       const n = Number(length)
       if (!Number.isInteger(n) || n <= 0) throw fail(411, 'length required')
-      if (n > VIDEO_MAX) throw fail(413, 'video too big')
+      if (n > (type.startsWith('image/') ? IMAGE_MAX : VIDEO_MAX)) throw fail(413, 'file too big')
       const course = safe(String(courseId ?? ''))
       if (!course) throw fail(400, 'courseId required')
       const key = `${ownPrefix(uid)}c/${course}/${Date.now().toString(36)}${randomBytes(6).toString('hex')}.${ext}`

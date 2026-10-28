@@ -25,10 +25,13 @@ const T = {
   test:   { t: 'Тест', c: 'var(--orange)', d: 'var(--orange-d)', ic: '<path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.1l-4.8 2.6.9-5.4-3.9-3.8 5.4-.8z"/>' },
   tutor:  { t: 'С репетитором', c: 'var(--purple)', d: 'var(--purple-d)', ic: '<rect x="3.5" y="6.5" width="12" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/>' },
   video:  { t: 'Кружок', c: '#2aabee', d: '#1a8bc9', ic: '<circle cx="12" cy="12" r="8.5"/><path d="M10.3 9.2v5.6l4.6-2.8z" fill="currentColor"/>' },
+  photo:  { t: 'Фото', c: '#ff6fb1', d: '#e0478f', ic: '<rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-8.5 8"/>' },
   reward: { t: 'Награда', c: 'var(--yellow)', d: 'var(--yellow-d)', ic: '<path d="M8 4.5h8v5.5a4 4 0 0 1-8 0z"/><path d="M8 6.5H4.5v.8A3.7 3.7 0 0 0 8 11M16 6.5h3.5v.8A3.7 3.7 0 0 1 16 11"/><path d="M12 14v4M8.5 20h7"/>' },
 }
 const CHECK = '<path d="M6 12.5l4 4 8-9"/>'
-const PALETTE = ['unit', 'video', 'lesson', 'words', 'hw', 'test', 'tutor', 'reward']
+const PALETTE = ['unit', 'video', 'photo', 'lesson', 'words', 'hw', 'test', 'tutor', 'reward']
+const MEDIA = ['video', 'photo']                         // задания с файлом (кружок, фото) — файл в S3, ключ в поле file
+const TASKS = PALETTE.filter(k => k !== 'unit' && !MEDIA.includes(k))
 const UNIT_COLORS = [['var(--green)', 'var(--green-d)'], ['var(--purple)', 'var(--purple-d)'], ['var(--blue)', 'var(--blue-d)'], ['var(--orange)', 'var(--orange-d)']]
 
 let seq = Date.now() % 100000
@@ -59,7 +62,7 @@ const save = () => {
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.video ? { video: x.video } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -82,7 +85,7 @@ onMounted(async () => {
     if (!doc.dirty && courses.length) {
       const c = await (await apiRequest(`/courses/${courses[0].id}`)).json()
       const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
-      const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.video ? { media: local.get(x.id).media } : {}) })
+      const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}) })
       Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), dirty: false })
       localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'
     } else push(0)
@@ -92,16 +95,16 @@ onMounted(async () => {
 // Видео, которые лежат только в браузере (добавлены до S3 или без сети), — догружаем в S3
 async function uploadLocal() {
   for (const x of [...doc.items, ...doc.loose]) {
-    if (x.type !== 'video' || x.video || !x.media) continue
+    if (!MEDIA.includes(x.type) || x.file || !x.media) continue
     const b = await mediaOp('readonly', s => s.get(x.media)).catch(() => null)
-    if (b) await upload(x, b instanceof File ? b : new File([b], 'kruzhok.mp4', { type: b.type || 'video/mp4' }))
+    if (b) await upload(x, b instanceof File ? b : new File([b], x.type === 'photo' ? 'photo.jpg' : 'kruzhok.mp4', { type: b.type || (x.type === 'photo' ? 'image/jpeg' : 'video/mp4') }))
   }
 }
 // Загрузка в S3 через сервер, с процентом (XHR — у fetch нет прогресса отправки)
 const upPct = reactive({})       // id задания → 0…100, пока грузится
 async function upload(item, file) {
   const token = await fb?.currentUser?.getIdToken()
-  const type = file.type || (/\.webm$/i.test(file.name) ? 'video/webm' : /\.mov$/i.test(file.name) ? 'video/quicktime' : 'video/mp4')
+  const type = file.type || (/\.webm$/i.test(file.name) ? 'video/webm' : /\.mov$/i.test(file.name) ? 'video/quicktime' : /\.png$/i.test(file.name) ? 'image/png' : /\.(jpe?g)$/i.test(file.name) ? 'image/jpeg' : 'video/mp4')
   upPct[item.id] = 0
   try {
     const key = await new Promise((ok, no) => {
@@ -115,7 +118,7 @@ async function upload(item, file) {
     })
     const it2 = findAny(item.id); if (!it2) return
     urls[key] = urls[it2.media] || URL.createObjectURL(file)
-    it2.video = key
+    it2.file = key
     if (it2.media) { mediaOp('readwrite', s => s.delete(it2.media)).catch(() => {}); delete it2.media }
     save()
   } catch { /* останется в браузере — догрузим при следующем открытии */ } finally { delete upPct[item.id] }
@@ -250,7 +253,7 @@ function up(e) {
   removeEventListener('pointermove', move)
   const p = pending; pending = null
   if (!drag.on) {                    // нажатие
-    if (p?.type === 'video') return pickFile(null)
+    if (MEDIA.includes(p?.type)) return pickFile(null, p.type)
     if (p?.type) { const x = newItem(p.type); doc.items.push(x); sel.value = x.id; save(); nextTick(() => showRailEnd()) }
     else if (p?.item) sel.value = sel.value === p.item.id ? null : p.item.id
     return
@@ -270,7 +273,7 @@ function drop(where, w) {
     if (from !== 'loose') doc.loose.push(x)
   }
   Object.assign(drag, { on: false, item: null, over: false })
-  if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (x.type === 'video' && !x.media) pickFile(findAny(x.id)) }
+  if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
 }
 function newItem(type) {
@@ -321,29 +324,32 @@ function askView(key) {
   }, 50)
 }
 function mediaUrl(x) {
-  if (x?.video && online) { if (!(x.video in urls)) { urls[x.video] = ''; askView(x.video) } return urls[x.video] }
+  if (x?.file && online) { if (!(x.file in urls)) { urls[x.file] = ''; askView(x.file) } return urls[x.file] }
   if (!x?.media) return ''
   if (!(x.media in urls)) { urls[x.media] = ''; mediaOp('readonly', s => s.get(x.media)).then(b => { if (b) urls[x.media] = URL.createObjectURL(b) }).catch(() => {}) }
   return urls[x.media]
 }
 const isVideo = (f) => f && (f.type?.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(f.name))
+const isImage = (f) => f && (/^image\/(jpeg|png|webp|heic|heif|gif)$/.test(f.type) || /\.(jpe?g|png|webp|heic|gif)$/i.test(f.name))
+const kindOf = (f) => (isVideo(f) ? 'video' : isImage(f) ? 'photo' : null)
 const MAX_MB = 200
 async function attach(item, file) {
   if (!item) return
-  if (!isVideo(file)) return alert('Это не видео. Перетащите кружок из Telegram (видеофайл).')
-  if (file.size > MAX_MB * 1024 * 1024) return alert(`Видео больше ${MAX_MB} МБ — слишком большое для черновика.`)
+  const kind = kindOf(file)
+  if (!kind || kind !== item.type) return alert(item.type === 'photo' ? 'Это не фото. Нужна картинка (JPG, PNG, WebP).' : 'Это не видео. Перетащите кружок из Telegram (видеофайл).')
+  if (file.size > MAX_MB * 1024 * 1024) return alert(`Файл больше ${MAX_MB} МБ — слишком большой.`)
   const id = 'm' + item.id
-  try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return alert('Не удалось сохранить видео в браузере (мало места?).') }
+  try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return alert('Не удалось сохранить файл в браузере (мало места?).') }
   urls[id] = URL.createObjectURL(file); item.media = id; save()
   if (storageOn.value) upload(item, file)                   // и сразу в S3 (копия в браузере удалится после загрузки)
 }
-const fileInput = ref(null); let pickFor = null
-const pickFile = (item) => { pickFor = item; fileInput.value.value = ''; fileInput.value.click() }
+const fileInput = ref(null), pickKind = ref('video'); let pickFor = null
+const pickFile = (item, kind = item?.type ?? 'video') => { pickFor = item; pickKind.value = kind; fileInput.value.value = ''; nextTick(() => fileInput.value.click()) }
 async function onPicked(e) {
-  const files = [...e.target.files].filter(isVideo); if (!files.length) return
+  const files = [...e.target.files].filter(f => kindOf(f) === pickKind.value); if (!files.length) return
   let item = pickFor
   for (const f of files) {
-    if (!item) { item = newItem('video'); doc.items.push(item) }
+    if (!item) { item = newItem(pickKind.value); doc.items.push(item) }
     await attach(findAny(item.id), f); sel.value = item.id; item = null
   }
   if (!pickFor) nextTick(() => showRailEnd())
@@ -353,7 +359,10 @@ const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
 function fileOver(e) {
   if (!hasFiles(e)) return
   e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
-  if (!drag.on) { sel.value = null; Object.assign(drag, { on: true, item: newItem('video'), from: 'file' }) }
+  if (!drag.on) {        // тип видно по первому файлу ещё до броска (картинка → «Фото», иначе — кружок)
+    const t = e.dataTransfer.items?.[0]?.type ?? ''
+    sel.value = null; Object.assign(drag, { on: true, item: newItem(t.startsWith('image/') ? 'photo' : 'video'), from: 'file' })
+  }
   drag.x = e.clientX; drag.y = e.clientY
   const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
 }
@@ -361,9 +370,10 @@ function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.from === 'file')
 async function fileDrop(e) {
   if (!hasFiles(e)) return
   e.preventDefault()
-  const files = [...e.dataTransfer.files].filter(isVideo), first = drag.item, w = toWorld(e.clientX, e.clientY), onRail = drag.over
-  if (!files.length || !first) { Object.assign(drag, { on: false, item: null }); return alert('Перетащите видео — кружок из Telegram или файл .mp4') }
-  const extra = files.slice(1).map(() => newItem('video'))
+  const files = [...e.dataTransfer.files].filter(kindOf), first = drag.item, w = toWorld(e.clientX, e.clientY), onRail = drag.over
+  if (!files.length || !first) { Object.assign(drag, { on: false, item: null }); return alert('Перетащите кружок из Telegram (видео) или фото') }
+  first.type = kindOf(files[0]); if (first.title === T.video.t || first.title === T.photo.t) first.title = T[first.type].t
+  const extra = files.slice(1).map(f => newItem(kindOf(f)))
   if (onRail) {
     const list = order.value.slice(), at = list.findIndex(v => v.id === first.id)
     list.splice(at + 1, 0, ...extra); doc.items.splice(0, doc.items.length, ...list)
@@ -384,7 +394,7 @@ function remove() {
   const a = doc.items.findIndex(v => v.id === x.id); if (a >= 0) doc.items.splice(a, 1)
   const b = doc.loose.findIndex(v => v.id === x.id); if (b >= 0) doc.loose.splice(b, 1)
   if (x.media) mediaOp('readwrite', s => s.delete(x.media)).catch(() => {})
-  if (x.video && online) apiRequest('/media/delete', { method: 'POST', body: JSON.stringify({ key: x.video }) }).catch(() => {})
+  if (x.file && online) apiRequest('/media/delete', { method: 'POST', body: JSON.stringify({ key: x.file }) }).catch(() => {})
   sel.value = null; setProgress(doc.progress)
 }
 function toRailEnd() { const x = selItem.value; doc.loose.splice(doc.loose.findIndex(v => v.id === x.id), 1); delete x.x; delete x.y; doc.items.push(x); setProgress(doc.progress); nextTick(showRailEnd) }
@@ -410,7 +420,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 
 <template>
   <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
-    <input ref="fileInput" type="file" accept="video/*" multiple hidden @change="onPicked" />
+    <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
     <div ref="board" class="board" :style="dots" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @wheel="onWheel">
       <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
         <!-- Сводка, как увидит ученик -->
@@ -427,8 +437,9 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
           <template v-if="x.type === 'unit'"><b class="no">{{ unitNo(i) }}</b><div class="sign"><b>{{ x.title }}</b><span>{{ x.sub }}</span></div></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
+            <img v-else-if="x.type === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" alt="" draggable="false" />
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
-            <svg v-if="x.type !== 'video' || !mediaUrl(x) || stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ic" :class="{ badge: x.type === 'video' && mediaUrl(x) }" v-html="stateOf(x, i) === 'done' ? CHECK : T[x.type].ic" />
+            <svg v-if="!MEDIA.includes(x.type) || !mediaUrl(x) || stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ic" :class="{ badge: MEDIA.includes(x.type) && mediaUrl(x) }" v-html="stateOf(x, i) === 'done' ? CHECK : T[x.type].ic" />
             <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small v-if="x.title !== T[x.type].t">{{ T[x.type].t }}</small></em>
           </template>
         </div>
@@ -438,8 +449,9 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
           <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
-            <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
+            <img v-else-if="x.type === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" alt="" draggable="false" />
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
+            <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <em class="cap">{{ x.title }}<small>не на рельсе</small></em>
           </template>
         </div>
@@ -449,6 +461,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
     <!-- Взятое — за пальцем в масштабе холста; мимо рельса — полупрозрачное -->
     <div v-if="drag.on" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x + 'px', top: drag.y + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d, transform: `scale(${view.z * 1.06})` }">
       <video v-if="drag.item.type === 'video' && mediaUrl(drag.item)" :src="mediaUrl(drag.item)" class="vid" muted />
+      <img v-else-if="drag.item.type === 'photo' && mediaUrl(drag.item)" :src="mediaUrl(drag.item)" class="vid img" alt="" />
       <b v-else-if="drag.item.type === 'unit'" class="no">+</b><svg v-else viewBox="0 0 24 24" class="ic" v-html="T[drag.item.type].ic" />
     </div>
 
@@ -461,8 +474,12 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
         <video v-if="mediaUrl(selItem)" :src="mediaUrl(selItem)" class="vbig" controls playsinline />
         <button class="btn-v" @click="pickFile(selItem)">{{ mediaUrl(selItem) ? 'Заменить видео' : 'Выбрать видео' }}</button>
       </template>
+      <template v-else-if="selItem.type === 'photo'">
+        <a v-if="mediaUrl(selItem)" :href="mediaUrl(selItem)" target="_blank" rel="noopener" title="Открыть крупно"><img :src="mediaUrl(selItem)" class="pbig" alt="" /></a>
+        <button class="btn-v" @click="pickFile(selItem)">{{ mediaUrl(selItem) ? 'Заменить фото' : 'Выбрать фото' }}</button>
+      </template>
       <div v-else-if="selItem.type !== 'unit'" class="types">
-        <button v-for="k in PALETTE.slice(1)" :key="k" class="tt" :class="{ on: selItem.type === k }" :style="{ '--c': T[k].c }" :title="T[k].t" @click="selItem.type = k; save()"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></button>
+        <button v-for="k in TASKS" :key="k" class="tt" :class="{ on: selItem.type === k }" :style="{ '--c': T[k].c }" :title="T[k].t" @click="selItem.type = k; save()"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></button>
       </div>
       <button v-if="selLoose" class="btn-r" @click="toRailEnd">На рельс — в конец</button>
       <button class="del" @click="remove">{{ selLoose ? 'Удалить' : 'Убрать с рельса' }}</button>
@@ -516,6 +533,12 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .bead.video.todo .vid { filter: grayscale(1); opacity: .6; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #d6d6d6 }
 .ic.badge { position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; padding: 3px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px #fff; box-sizing: border-box; stroke-width: 3 }
 .bead.video:has(.vid) { background: transparent; box-shadow: none }
+/* Фото: скруглённый квадрат с миниатюрой (кружок — круглый, фото — нет: сразу видно, что где) */
+.bead.photo { width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 20px; overflow: visible }
+.vid.img { border-radius: 18px } .bead.photo:has(.img) { background: transparent; box-shadow: none }
+.bead.photo.todo .img { filter: grayscale(1); opacity: .6; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #d6d6d6 }
+.bead.photo .upl { inset: -6px } .fly.photo { border-radius: 20px }
+.pbig { display: block; width: 100%; max-height: 220px; object-fit: contain; border-radius: 12px; background: var(--surface) }
 .vbig { justify-self: center; width: min(100%, 200px); aspect-ratio: 1; border-radius: 50%; object-fit: cover; background: #000 }
 .btn-v { border: 0; border-radius: 9px; padding: 8px; background: #e3f4fd; color: #1a8bc9; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
 .bead.current { box-shadow: 0 6px 0 var(--d), 0 0 0 7px #fff, 0 0 0 11px color-mix(in srgb, var(--c) 35%, transparent); animation: pulse 1.6s ease-in-out infinite }

@@ -142,10 +142,10 @@ app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => re
 app.delete('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => {
   const c = await courses.get(req.user.uid, req.params.id)
   await courses.remove(req.user.uid, req.params.id)
-  for (const k of courses.videosOf(c)) await storage.remove(req.user.uid, k).catch(() => {})      // видео курса — тоже долой
+  for (const k of courses.filesOf(c)) await storage.remove(req.user.uid, k).catch(() => {})      // кружки и фото курса — тоже долой
   res.json({ ok: true })
 }))
-// Кружки: загрузка потоком через сервер (тело — сам файл, Content-Type: video/…), ссылки на просмотр, удаление
+// Кружки и фото: загрузка потоком через сервер (тело — сам файл, Content-Type: video/… или image/…), ссылки на просмотр, удаление
 app.post('/media/upload', requireUser, requireTeacher, wrap(async (req, res) => res.json(await storage.upload(req.user.uid, { courseId: req.query.courseId, type: req.headers['content-type'] }, req, req.headers['content-length']))))
 app.post('/media/view', requireUser, requireTeacher, wrap(async (req, res) => res.json(await storage.viewUrls(req.user.uid, req.body))))
 app.post('/media/delete', requireUser, requireTeacher, wrap(async (req, res) => { await storage.remove(req.user.uid, req.body?.key); res.json({ ok: true }) }))
