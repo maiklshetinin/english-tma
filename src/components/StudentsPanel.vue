@@ -3,7 +3,7 @@
 // Группы — отдельная сущность (stores/groups): создаются только здесь (кнопка «группа +»), состав — только через меню группы.
 // Кружок можно перетащить в таблицу, группу — только целиком (урок всей группе); урок из таблицы, брошенный сюда, снимается с расписания.
 // Нажатие на группу — меню (как в iOS): её ученики (потянуть — урок только ему, нажать — карточка, ✕ — убрать из группы),
-// «Добавить ученика», «Расформировать». Изменения — с подтверждением; состав группы меняется и в её будущих уроках.
+// «Добавить ученика», «Расформировать». Ученик может быть в нескольких группах — в списках у таких пометка «уже в группе …». Изменения — с подтверждением; состав группы меняется и в её будущих уроках.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { isOnline } from '../utils/online'
 import { useRouter } from 'vue-router'
@@ -57,6 +57,13 @@ const futureOf = (g) => lessonsOfGroup(g.members.map(m => m.id), scheduleStore.l
 const gname = (g) => (g.label === 'без урока' ? 'группы' : `группы ${g.label}`)      // «из группы Пт 20:00» / «из группы»
 const lessonsWord = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'урок' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'урока' : 'уроков')
 const inPop = computed(() => new Set(pop.value?.g ? pop.value.g.members.map(m => m.id) : []))
+// Ученик может быть в нескольких группах (как в Telegram): в списках — все, кого нет в этой группе; у состоящих в других — пометка
+const otherGroups = (s) => groups.value.filter(g => g.key !== pop.value?.g?.key && g.members.some(m => m.id === s.id))
+// «в группе Пт 20:00» — если у группы есть урок, иначе «в группе: Егор Т., Леня С.»
+const candSub = (s) => {
+  const o = otherGroups(s); if (!o.length) return sub(s)
+  return o.map(g => g.label !== 'без урока' ? `в группе ${g.label}` : `в группе: ${g.members.filter(m => m.id !== s.id).slice(0, 2).map(m => m.name).join(', ')}${g.members.length > 3 ? '…' : ''}`).join(' · ')
+}
 const candidates = computed(() => {
   if (!pop.value) return []
   const k = pop.value.aq.trim().toLowerCase().replace(/^@/, '')
@@ -143,9 +150,9 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
             <div class="gph"><AppIcon name="users" :size="14" /> Новая группа<span v-if="pop.sel.length" class="gcnt">{{ pop.sel.length }}</span></div>
             <label class="gsearch"><AppIcon name="search" :size="14" /><input v-model="pop.aq" placeholder="Поиск" aria-label="Поиск ученика" /></label>
             <div class="glist">
-              <button v-for="s in candidates" :key="s.id" class="gpr" :aria-pressed="pop.sel.includes(s.id)" @click="pickNew(s.id)"><Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) }">{{ sub(s) }}</small></span>
+              <button v-for="s in candidates" :key="s.id" class="gpr" :aria-pressed="pop.sel.includes(s.id)" @click="pickNew(s.id)"><Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) && !otherGroups(s).length, og: otherGroups(s).length }">{{ candSub(s) }}</small></span>
                 <i class="chk" :class="{ on: pop.sel.includes(s.id) }"><AppIcon v-if="pop.sel.includes(s.id)" name="check" :size="13" /></i></button>
-              <p v-if="!candidates.length" class="gnone">Никого не нашли</p>
+              <p v-if="!candidates.length" class="gnone">{{ pop.aq ? 'Никого не нашли' : 'Все ученики уже в этой группе' }}</p>
             </div>
             <div class="gbt pad"><button class="lnk" @click="closePop">Отмена</button><button class="gok" :disabled="pop.sel.length < 2" @click="createGroup">Создать{{ pop.sel.length > 1 ? ` (${pop.sel.length})` : '' }}</button></div>
           </template>
@@ -154,8 +161,8 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
             <div class="gph"><button class="gback" aria-label="Назад" @click="pop = { ...pop, view: 'list' }"><AppIcon name="back" :size="14" /></button> В группу · {{ pop.g.label }}</div>
             <label class="gsearch"><AppIcon name="search" :size="14" /><input v-model="pop.aq" placeholder="Поиск" aria-label="Поиск ученика" /></label>
             <div class="glist">
-              <button v-for="s in candidates" :key="s.id" class="gpr" @click="ask('add', s)"><Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) }">{{ sub(s) }}</small></span></button>
-              <p v-if="!candidates.length" class="gnone">Никого не нашли</p>
+              <button v-for="s in candidates" :key="s.id" class="gpr" @click="ask('add', s)"><Avatar :s="s" :size="36" :online="isOnline(s)" /><span class="gtx"><b>{{ s.name }}</b><small :class="{ onl: isOnline(s) && !otherGroups(s).length, og: otherGroups(s).length }">{{ candSub(s) }}</small></span></button>
+              <p v-if="!candidates.length" class="gnone">{{ pop.aq ? 'Никого не нашли' : 'Все ученики уже в этой группе' }}</p>
             </div>
           </template>
           <!-- Подтверждение -->
@@ -241,6 +248,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 .gsearch { display: flex; align-items: center; gap: 8px; margin: 0 10px 4px; padding: 0 10px; border-radius: 10px; background: var(--surface); color: var(--hint-2) }
 .gsearch input { flex: 1; min-width: 0; margin: 0; padding: 7px 0; border: 0; background: none; font-size: 14px } .gsearch input:focus { background: none } .gsearch input:focus-visible { outline: none }
 .glist { display: grid; max-height: 260px; overflow-y: auto } .glist .gpr { width: 100%; border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer } .glist .gpr:hover { background: var(--surface) }
+.gtx small.og { color: var(--hint-2); font-style: italic }
 .gnone { margin: 8px 0; text-align: center; font-size: 13px; color: var(--hint) }
 /* Подтверждение — как алерт iOS: аватарка, вопрос, пояснение, две кнопки */
 .gcf { display: grid; justify-items: center; gap: 6px; padding: 14px 14px 10px; text-align: center }

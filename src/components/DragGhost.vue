@@ -50,7 +50,7 @@ const hint = computed(() => {
   if (o.kind !== 'cell') return null
   const occ = scheduleStore.lessonMap.get(slotKey(o.date, o.hour))?.[0], at = fmtSlot(o.date, o.hour)
   if (!lesson.value) {
-    if (occ) return { k: 'bad', t: 'Занято — здесь уже урок' }
+    if (occ) return { k: 'bad', t: 'Занято. Добавить в этот урок — откройте его → «Добавить ученика»' }
     return { k: 'ok', t: one.value ? `Урок: ${people.value[0].name} · ${at}` : `Урок группе · ${at}` }
   }
   const a = pl.lesson
@@ -94,8 +94,8 @@ const hintPos = computed(() => ({ left: (0.5 - fx.value) * W.value + 'px', top: 
 .ghost.lesson { gap: 5px; justify-content: center; padding: 0; border-color: var(--hint-2); opacity: .92; transition: none }
 .ghost.lesson .nm { display: none; margin: 0; font-size: 12px }
 @media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px } }
-.dhint { position: absolute; transform: translate(-50%, -100%); max-width: 300px; padding: 5px 10px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 800; line-height: 1.25;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 6px 16px rgba(0, 0, 0, .18); background: var(--green-d) }
+.dhint { position: absolute; transform: translate(-50%, -100%); width: max-content; max-width: 260px; padding: 5px 10px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 800; line-height: 1.3; text-align: center;
+  white-space: normal; box-shadow: 0 6px 16px rgba(0, 0, 0, .18); background: var(--green-d) }
 .dhint.swap { background: var(--orange-d) } .dhint.bad { background: var(--red) }
 .hint-enter-active { transition: opacity .12s } .hint-enter-from { opacity: 0 }
 </style>

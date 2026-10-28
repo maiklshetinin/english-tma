@@ -20,18 +20,24 @@ ok('больше 12 — 400', await code(G.create({ studentIds: Array.from({ len
 ok('архивный или несуществующий — 404', await code(G.create({ studentIds: ['a', 'z'] })) === 404 && await code(G.create({ studentIds: ['a', 'nope'] })) === 404)
 ok('кривые данные — 400', await code(G.create(null)) === 400 && await code(G.create({ studentIds: 'a,b' })) === 400)
 
+store.set('students/d', { name: 'Дима', archived: false })
+const both = await G.create({ studentIds: ['a', 'd'] })
+ok('ученик может быть в двух группах', both.studentIds.includes('a') && store.get(`groups/${g.id}`).studentIds.includes('a'))
+await G.remove(both.id)
 const u = await G.update(g.id, { studentIds: ['a', 'b', 'c'] })
 ok('изменить состав', u.studentIds.length === 3 && store.get(`groups/${g.id}`).studentIds.includes('c'))
 ok('изменить несуществующую — 404, кривой id — 400', await code(G.update('nope', { studentIds: ['a', 'b'] })) === 404 && await code(G.update('a/b', { studentIds: ['a', 'b'] })) === 400)
 ok('изменить до одного ученика — 400', await code(G.update(g.id, { studentIds: ['a'] })) === 400)
 
 // Разовый перенос старых групп из расписания
-const s1 = await G.seed({ groups: [['b', 'c'], ['a', 'z'], ['a']] })
+for (const k of [...store.keys()]) if (k.startsWith('groups/')) store.delete(k)
+const s1 = await G.seed({ groups: [['b', 'c'], ['a', 'z'], ['a'], ['c', 'd']] })
 ok('перенос: валидные созданы, кривые пропущены, флаг стоит', s1.seeded && s1.groups.length === 2 && store.get('meta/groups').seeded === true)
 const s2 = await G.seed({ groups: [['a', 'c']] })
 ok('повторный перенос ничего не делает', s2.groups.length === 2)
 ok('перенос без groups — 400', await code(G.seed({})) === 400)
 
-await G.remove(g.id)
-ok('расформировать', !store.has(`groups/${g.id}`) && (await G.list()).groups.length === 1)
+const last = s2.groups[0]
+await G.remove(last.id)
+ok('расформировать', !store.has(`groups/${last.id}`) && (await G.list()).groups.length === 1)
 process.exit(bad ? 1 : 0)

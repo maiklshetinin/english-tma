@@ -46,10 +46,10 @@ describe('группы', () => {
     s.remove(g); expect(s.list).toHaveLength(0); expect(apiRequest.mock.calls[2][1].method).toBe('DELETE')
   })
 
-  it('уроки группы: 2+ ученика и все из группы; будущие — без проведённых и прошедших', () => {
+  it('уроки группы: 2+ ученика из группы (гость не мешает); будущие — без проведённых и прошедших', () => {
     const alive = (id: string) => id !== 'gone'
     const ls = [L('1', ['a', 'b']), L('2', ['a', 'b', 'c']), L('3', ['a']), L('4', ['a', 'b'], { done: true }), L('5', ['a', 'b'], { date: '2000-01-01' }), L('6', ['a', 'b', 'gone'])]
-    expect(lessonsOfGroup(['a', 'b'], ls, alive).map((l: Lesson) => l.id)).toEqual(['1', '4', '5', '6'])
-    expect(lessonsOfGroup(['a', 'b'], ls, alive, true).map((l: Lesson) => l.id)).toEqual(['1', '6'])
+    expect(lessonsOfGroup(['a', 'b'], ls, alive).map((l: Lesson) => l.id)).toEqual(['1', '2', '4', '5', '6'])      // 2 — с гостем c
+    expect(lessonsOfGroup(['a', 'b'], ls, alive, true).map((l: Lesson) => l.id)).toEqual(['1', '2', '6'])
   })
 })

@@ -32,25 +32,36 @@ describe('LessonSheet', () => {
     expect(w.find('.plus').exists()).toBe(false)
   })
 
-  it('добавить ученика в урок нельзя (группы — только в панели); убрать из группового — можно', async () => {
+  it('добавить — только в этот урок (шторка отдаёт новый состав); убрать из группового — можно', async () => {
     const lesson = { id: 'L', date: D, hour: 9, studentIds: ['a'] } as Lesson
     const w = mount(LessonSheet, { props: { lesson } })
     expect(w.find('.x').exists()).toBe(false)                              // один ученик — крестика нет
-    expect(w.find('.plus').exists()).toBe(false)                           // «Добавить ученика» больше нет
     expect(w.find('.total').text()).toContain('100')
+    expect(w.find('.plus').text()).toContain('только в этот урок')
+    await w.find('.plus').trigger('click')
+    expect(w.findAll('.add .prow')).toHaveLength(2)                       // Петя и Оля, без Маши
+    await w.find('.search input').setValue('пет')
+    expect(w.findAll('.add .prow')).toHaveLength(1)
+    await w.findAll('.add .prow')[0].trigger('click')
+    expect(w.emitted('students')![0]).toEqual([lesson, ['a', 'b']])
+    await w.find('.add .foot .link').trigger('click')                    // «Готово»
     await w.setProps({ lesson: { ...lesson, studentIds: ['a', 'b'] } })
+    expect(w.find('.plus').text()).toContain('в группу не добавится')      // групповой урок — явно: состав группы не меняется
     await w.findAll('.x')[0].trigger('click')
-    expect(w.emitted('students')![0][1]).toEqual(['b'])
+    expect(w.emitted('students')![1][1]).toEqual(['b'])
   })
 })
 
 describe('урок с учеником, которого больше нет (удалён из базы / в архиве)', () => {
   beforeEach(() => { setActivePinia(createPinia()); useStudentsStore().set([st('a', 'Маша', 100), st('b', 'Петя', 80)]) })
 
-  it('шторка поясняет, что учеников урока больше нет', async () => {
+  it('шторка поясняет, а добавление отправляет только известных учеников', async () => {
     const lesson = { id: 'L', date: D, hour: 9, studentIds: ['gone'] } as Lesson
     const w = mount(LessonSheet, { props: { lesson } })
     expect(w.find('.orphan').exists()).toBe(true)
+    await w.find('.plus').trigger('click')
+    await w.findAll('.add .prow').find(b => b.text().includes('Петя'))!.trigger('click')
+    expect(w.emitted('students')![0][1]).toEqual(['b'])                     // 'gone' не уходит на сервер (иначе 404)
   })
 
   it('сетка: «пустой» урок виден серым «?», группа без первого ученика не пропадает', async () => {

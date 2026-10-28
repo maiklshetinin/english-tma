@@ -1,19 +1,19 @@
 // Группы учеников для экрана: отдельная сущность (stores/groups → server/groups.ts) + подпись по расписанию —
 // день и время ближайшего урока группы («Пт 20:00»), уроков нет — «без урока». Общая для панели учеников,
 // окна «Кого назначить?» и выбора учеников колоды.
-// Урок группы — урок, где 2+ учеников и все они из этой группы (урок может быть и без кого-то — например, его убрали).
+// Урок группы — урок, где 2+ ученика из этой группы (может быть и без кого-то из группы, и с разовым гостем — его добавили
+// только в этот урок из карточки урока).
 import { computed } from 'vue'
 import { DAYS, hh, todayYmd } from '../store/app'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore } from '../stores/schedule'
 import { useGroupsStore } from '../stores/groups'
 
-/** Уроки группы: 2+ живых ученика, все из группы. future — только непроведённые с сегодняшнего дня. */
+/** Уроки группы: 2+ живых ученика из группы (гости не мешают). future — только непроведённые с сегодняшнего дня. */
 export function lessonsOfGroup(memberIds, lessons, alive, future = false) {
   const ids = new Set(memberIds), today = todayYmd()
   return lessons.filter((l) => {
-    const live = l.studentIds.filter((id) => alive(id))
-    return live.length > 1 && live.every((id) => ids.has(id)) && (!future || (!l.done && l.date >= today))
+    return l.studentIds.filter((id) => alive(id) && ids.has(id)).length > 1 && (!future || (!l.done && l.date >= today))
   })
 }
 
