@@ -1,301 +1,407 @@
 <script setup>
-// ЧЕРНОВИК. Редактор курсов — холст как в Figma на Vue Flow (https://vueflow.dev): поле в точку, масштаб,
-// выделение рамкой, перетаскивание нескольких сразу, связи тянутся от кружка на узле. Внизу — инструменты.
-// Элементы — как путь в Duolingo: баннер юнита, круглые уроки (урок / слова / тест / награда), занятие с репетитором,
-// плюс стикер и текст для заметок. Хранится только в этом браузере (localStorage), с сервером и остальным
-// приложением не связан; Vue Flow попадает только в этот экран (маршрут грузится отдельно).
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+// ЧЕРНОВИК. Редактор курсов — «рельс»: одна змейка, на неё по порядку нанизаны задания (как бусины).
+// Рельс и есть шкала прогресса: пройденная часть закрашена, текущее задание — с пульсом.
+//  • Снизу — типы заданий: тянуть на рельс (встанет в ближайший промежуток, соседи раздвинутся) или нажать — в конец.
+//  • Задание на рельсе: тянуть — переставить; нажать — карточка (название, тип, убрать).
+//  • Юнит — «станция» на рельсе: с неё начинается раздел, над ней — табличка с названием.
+// Ни рисования, ни свободных фигур. Хранится только в этом браузере (localStorage), с сервером не связан.
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { VueFlow, Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Background } from '@vue-flow/background'
-import { NodeResizer } from '@vue-flow/node-resizer'
-import '@vue-flow/core/dist/style.css'
-import '@vue-flow/node-resizer/dist/style.css'
 
 const router = useRouter()
 const goBack = () => (history.length > 1 ? router.back() : router.push({ name: 'profile' }))
-const KEY = 'tma.courseDraft.v2', OLD_KEY = 'tma.courseDraft.v1'
+const KEY = 'tma.courseRail.v1'
 
-// Курс: { title, nodes: [{ id, type: 'item', position, data: { kind, title, sub?, color? }, style? }], edges: [{ id, source, target }] }
-const box = (w, h) => ({ width: w + 'px', height: h + 'px' })
-const mk = (id, kind, x, y, title, extra = {}) => ({ id, type: 'item', position: { x, y }, data: { kind, title, ...extra.data }, ...(extra.style ? { style: extra.style } : {}) })
-const edge = (a, b) => ({ id: `e-${a}-${b}`, source: a, target: b })
-const seed = () => ({
-  title: 'Базовый курс A1',
-  nodes: [
-    mk('u1', 'unit', -150, -300, 'Юнит 1', { data: { sub: 'Present Simple', color: 'green' }, style: box(300, 74) }),
-    mk('n1', 'lesson', -36, -180, 'Глаголы to be'), mk('n2', 'words', 44, -50, 'Слова: семья'), mk('n3', 'lesson', -36, 80, 'Отрицания'),
-    mk('n4', 'tutor', -118, 210, 'Разговор с репетитором'), mk('n5', 'test', -36, 340, 'Тест юнита'), mk('n6', 'reward', -36, 470, 'Награда'),
-    mk('u2', 'unit', 380, -300, 'Юнит 2', { data: { sub: 'Past Simple', color: 'purple' }, style: box(300, 74) }),
-    mk('m1', 'lesson', 494, -180, 'Правильные глаголы'), mk('m2', 'words', 574, -50, 'Слова: путешествия'), mk('m3', 'lesson', 494, 80, 'Неправильные глаголы'),
-    mk('s1', 'sticky', -470, -150, 'Добавить аудирование после 2-го урока', { data: { color: 'yellow' }, style: box(190, 130) }),
-    mk('t1', 'text', -470, -300, 'Черновик курса'),
-  ],
-  edges: [['n1', 'n2'], ['n2', 'n3'], ['n3', 'n4'], ['n4', 'n5'], ['n5', 'n6'], ['m1', 'm2'], ['m2', 'm3']].map(([a, b]) => edge(a, b)),
-})
-// Черновик первой версии (до Vue Flow) — переносим, чтобы ничего не потерялось
-const fromV1 = (o) => ({
-  title: o.title,
-  nodes: o.items.map(i => mk(i.id, i.kind, i.x, i.y, i.title, { data: { sub: i.sub, color: i.color }, style: i.w ? box(i.w, i.h) : undefined })),
-  edges: (o.links || []).map(([a, b]) => edge(a, b)),
-})
-function load() {
-  try { const v2 = JSON.parse(localStorage.getItem(KEY)); if (v2?.nodes) return v2 } catch { /* битый — ниже */ }
-  try { const v1 = JSON.parse(localStorage.getItem(OLD_KEY)); if (v1?.items) return fromV1(v1) } catch { /* нет */ }
-  return seed()
+// ---------- Типы заданий ----------
+const T = {
+  unit:   { t: 'Юнит', c: 'var(--green)', d: 'var(--green-d)' },
+  lesson: { t: 'Урок', c: 'var(--green)', d: 'var(--green-d)', ic: '<circle cx="12" cy="12" r="8"/><path d="M9 12.3l2 2 4-4"/>' },
+  words:  { t: 'Слова', c: 'var(--blue)', d: 'var(--blue-d)', ic: '<rect x="4" y="7" width="12" height="13" rx="2.5"/><path d="M8 4h9.5A2.5 2.5 0 0 1 20 6.5V16"/>' },
+  hw:     { t: 'Домашка', c: '#2ec4b6', d: '#1f9e93', ic: '<path d="M14.6 6.1l3.3 3.3"/><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z"/>' },
+  test:   { t: 'Тест', c: 'var(--orange)', d: 'var(--orange-d)', ic: '<path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.1l-4.8 2.6.9-5.4-3.9-3.8 5.4-.8z"/>' },
+  tutor:  { t: 'С репетитором', c: 'var(--purple)', d: 'var(--purple-d)', ic: '<rect x="3.5" y="6.5" width="12" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/>' },
+  video:  { t: 'Кружок', c: '#2aabee', d: '#1a8bc9', ic: '<circle cx="12" cy="12" r="8.5"/><path d="M10.3 9.2v5.6l4.6-2.8z" fill="currentColor"/>' },
+  reward: { t: 'Награда', c: 'var(--yellow)', d: 'var(--yellow-d)', ic: '<path d="M8 4.5h8v5.5a4 4 0 0 1-8 0z"/><path d="M8 6.5H4.5v.8A3.7 3.7 0 0 0 8 11M16 6.5h3.5v.8A3.7 3.7 0 0 1 16 11"/><path d="M12 14v4M8.5 20h7"/>' },
 }
-const start = load()
-const title = ref(start.title)
-const nodes = ref(start.nodes), edges = ref(start.edges)
-
-const { screenToFlowCoordinate, addNodes, addEdges, removeNodes, removeEdges, findNode, getSelectedNodes, getSelectedEdges, addSelectedNodes,
-  removeSelectedElements, fitView, zoomIn, zoomOut, zoomTo, viewport, onConnect, onNodeClick, onPaneClick, onNodesInitialized, toObject } = useVueFlow('course-editor')
-
-// Сохранение: после каждого изменения, не чаще раза в 300 мс
-let t = 0
-function save() {
-  clearTimeout(t)
-  t = setTimeout(() => {
-    const o = toObject()
-    const data = { title: title.value, nodes: o.nodes.map(({ id, type, position, data, style }) => ({ id, type, position: { x: Math.round(position.x), y: Math.round(position.y) }, data, ...(style && Object.keys(style).length ? { style } : {}) })),
-      edges: o.edges.map(({ id, source, target, sourceHandle, targetHandle }) => ({ id, source, target, sourceHandle, targetHandle })) }
-    try { localStorage.setItem(KEY, JSON.stringify(data)) } catch { /* приватный режим */ }
-  }, 300)
-}
-onUnmounted(() => clearTimeout(t))
-
-// Инструменты (нижняя панель, как в Figma)
-const TOOLS = [
-  { id: 'select', t: 'Выбор', k: 'V' }, { id: 'hand', t: 'Рука', k: 'H' }, { sep: true },
-  { id: 'unit', t: 'Юнит', k: 'U' }, { id: 'lesson', t: 'Урок', k: 'L' }, { id: 'words', t: 'Слова', k: 'W' }, { id: 'test', t: 'Тест', k: 'T' },
-  { id: 'tutor', t: 'С репетитором', k: 'R' }, { id: 'reward', t: 'Награда', k: 'G' }, { sep: true },
-  { id: 'link', t: 'Связь', k: 'C' }, { id: 'sticky', t: 'Стикер', k: 'S' }, { id: 'text', t: 'Текст', k: 'X' },
-]
-const tool = ref('select'), linkFrom = ref(null)
-const setTool = (id) => { tool.value = id; linkFrom.value = null }
-const KIND = { unit: 'Юнит', lesson: 'Урок', words: 'Слова', test: 'Тест', tutor: 'Занятие с репетитором', reward: 'Награда', sticky: 'Стикер', text: 'Текст' }
-const PATH = ['unit', 'lesson', 'words', 'test', 'tutor', 'reward']             // у этих есть кружки для связей
-const SIZE = { unit: [300, 74], sticky: [180, 130], tutor: [76, 76], text: [160, 34] }
-const sz = (k) => SIZE[k] ?? [72, 72]
-
-// Телефон / планшет: один палец двигает поле (как в Figma на iPad), рамкой — на компьютере
-const touch = matchMedia('(pointer: coarse)').matches
-const placing = computed(() => !['select', 'hand', 'link'].includes(tool.value))
+const CHECK = '<path d="M6 12.5l4 4 8-9"/>'
+const PALETTE = ['unit', 'video', 'lesson', 'words', 'hw', 'test', 'tutor', 'reward']
+const UNIT_COLORS = [['var(--green)', 'var(--green-d)'], ['var(--purple)', 'var(--purple-d)'], ['var(--blue)', 'var(--blue-d)'], ['var(--orange)', 'var(--orange-d)']]
 
 let seq = Date.now() % 100000
-async function add(kind, at) {
-  const [w, h] = sz(kind), id = 'i' + (++seq)
-  const data = { kind, title: kind === 'unit' ? 'Новый юнит' : kind === 'sticky' ? 'Заметка' : kind === 'text' ? 'Текст' : KIND[kind] }
-  if (kind === 'unit') Object.assign(data, { sub: 'Тема юнита', color: 'blue' })
-  if (kind === 'sticky') data.color = 'yellow'
-  addNodes({ id, type: 'item', position: { x: Math.round(at.x - w / 2), y: Math.round(at.y - h / 2) }, data, ...(kind === 'unit' || kind === 'sticky' ? { style: box(w, h) } : {}) })
-  setTool('select')
-  await nextTick(); removeSelectedElements(); const n = findNode(id); if (n) addSelectedNodes([n])
-  save()
-}
-onPaneClick((e) => { if (placing.value) add(tool.value, screenToFlowCoordinate({ x: e.clientX, y: e.clientY })); else linkFrom.value = null })
-onNodeClick(({ node, event }) => {
-  if (placing.value) return add(tool.value, screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
-  if (tool.value !== 'link') return
-  if (!linkFrom.value) { linkFrom.value = node.id; return }
-  if (linkFrom.value !== node.id) link(linkFrom.value, node.id)
-  setTool('select')
+const uid = () => 'i' + (++seq)
+const it = (type, title, extra = {}) => ({ id: uid(), type, title, ...extra })
+const seed = () => ({
+  title: 'Базовый курс A1', progress: 5,
+  items: [
+    it('unit', 'Юнит 1', { sub: 'Present Simple' }),
+    it('lesson', 'Глагол to be'), it('words', 'Слова: семья'), it('hw', 'Упражнения 1–5'), it('lesson', 'Отрицания'), it('tutor', 'Разговор с репетитором'), it('test', 'Тест юнита'), it('reward', 'Сундук'),
+    it('unit', 'Юнит 2', { sub: 'Past Simple' }),
+    it('lesson', 'Правильные глаголы'), it('words', 'Слова: путешествия'), it('lesson', 'Неправильные глаголы'), it('hw', 'Рассказ о выходных'), it('test', 'Тест юнита'),
+  ],
 })
-function link(a, b, extra = {}) {
-  if (edges.value.some(e => e.source === a && e.target === b)) return
-  addEdges({ ...extra, id: `e-${a}-${b}-${++seq}`, source: a, target: b }); save()
-}
-onConnect((c) => link(c.source, c.target, { sourceHandle: c.sourceHandle, targetHandle: c.targetHandle }))
-let fitted = false     // «показать всё» при открытии — когда узлы уже измерены
-onNodesInitialized(() => { if (!fitted) { fitted = true; fitView({ padding: touch ? 0.3 : 0.4 }) } })
+const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return v } catch { /* нет */ } return seed() }
+const doc = reactive(load())
+let st = 0
+const save = () => { clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250) }
+onUnmounted(() => clearTimeout(st))
 
-// Выбранное: одно — панель свойств; несколько — счётчик и «Удалить»
-const selNodes = computed(() => getSelectedNodes.value)
-const selected = computed(() => (selNodes.value.length === 1 ? selNodes.value[0] : null))
-const selCount = computed(() => selNodes.value.length + getSelectedEdges.value.length)
-function remove() { removeEdges(getSelectedEdges.value); removeNodes(selNodes.value); save() }
-const setData = (k, v) => { if (selected.value) { selected.value.data = { ...selected.value.data, [k]: v }; save() } }
+// ---------- Перетаскивание (состояние нужно раскладке) ----------
+const drag = reactive({ on: false, item: null, fresh: false, to: 0, x: 0, y: 0, over: false })
 
-// Горячие клавиши инструментов (Delete / Backspace, Shift, пробел — у Vue Flow)
-function key(e) {
-  if (/INPUT|TEXTAREA/.test(e.target?.tagName) || e.ctrlKey || e.metaKey || e.altKey) return
-  if (e.key === 'Escape') { removeSelectedElements(); setTool('select'); return }
-  const x = TOOLS.find(t => t.k && t.k.toLowerCase() === e.key.toLowerCase()); if (x) setTool(x.id)
+// ---------- Раскладка змейкой ----------
+const wrap = ref(null), W = ref(innerWidth)
+const ro = new ResizeObserver(([e]) => { W.value = e.contentRect.width })
+onMounted(() => ro.observe(wrap.value)); onUnmounted(() => ro.disconnect())
+const phone = computed(() => W.value < 720)
+// Два вида: «Волна» (как путь в Duolingo — плавно влево-вправо) и «Прямая». Идёт сверху вниз.
+const mode = computed({ get: () => doc.mode ?? 'wave', set: (v) => { doc.mode = v; save() } })
+const G = computed(() => (phone.value ? { step: 112, unitGap: 150, amp: 64, top: 300 } : { step: 116, unitGap: 160, amp: 84, top: 290 }))
+const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
+// Порядок на экране: во время перетаскивания взятое уже стоит на месте прицела (соседи раздвигаются)
+const order = computed(() => {
+  const list = doc.items.slice()
+  if (drag.on && drag.item) {
+    const from = list.findIndex(x => x.id === drag.item.id); if (from >= 0) list.splice(from, 1)
+    if (drag.over || !drag.fresh) list.splice(Math.min(drag.to, list.length), 0, drag.item)
+  }
+  return list
+})
+const layout = computed(() => {
+  const { step, unitGap, amp, top } = G.value, cx = W.value / 2, out = []
+  let y = top
+  order.value.forEach((x, i) => {
+    if (i) y += x.type === 'unit' ? unitGap : step
+    const off = mode.value === 'wave' ? K[i % 8] * amp : 0
+    out.push({ x: cx + off, y, side: off > 0 ? 'l' : 'r' })        // подпись — с той стороны, где больше места
+  })
+  return out
+})
+const pos = (i) => layout.value[i] ?? { x: W.value / 2, y: G.value.top, side: 'r' }
+const height = computed(() => pos(Math.max(0, order.value.length - 1)).y + 200)
+// Рельс: плавная кривая через центры (Catmull-Rom → Безье); у «Прямой» — просто линия
+function railPath(n) {
+  if (!n) return ''
+  const P = layout.value.slice(0, n); let d = `M${P[0].x},${P[0].y}`
+  for (let i = 1; i < P.length; i++) {
+    const p0 = P[i - 2] ?? P[i - 1], p1 = P[i - 1], p2 = P[i], p3 = P[i + 1] ?? p2
+    d += ` C${p1.x + (p2.x - p0.x) / 6},${p1.y + (p2.y - p0.y) / 6} ${p2.x - (p3.x - p1.x) / 6},${p2.y - (p3.y - p1.y) / 6} ${p2.x},${p2.y}`
+  }
+  return d
 }
-onMounted(() => addEventListener('keydown', key))
-onUnmounted(() => removeEventListener('keydown', key))
+const rail = computed(() => railPath(order.value.length))
+// Прогресс: progress — сколько заданий (станции не в счёт) пройдено; рельс закрашен до текущего
+const taskIdx = computed(() => { let k = 0; return order.value.map(x => (x.type === 'unit' ? null : k++)) })
+const tasksCount = computed(() => doc.items.filter(x => x.type !== 'unit').length)
+const curIndex = computed(() => { const i = taskIdx.value.findIndex(k => k === doc.progress); return i < 0 ? order.value.length - 1 : i })
+const doneRail = computed(() => railPath(curIndex.value + 1))
+const stateOf = (x, i) => (x.type === 'unit' ? (i <= curIndex.value ? 'done' : 'todo') : taskIdx.value[i] < doc.progress ? 'done' : taskIdx.value[i] === doc.progress ? 'current' : 'todo')
+const unitNo = (i) => order.value.slice(0, i + 1).filter(x => x.type === 'unit').length
+const unitColor = (i) => UNIT_COLORS[(Math.max(1, unitNo(i)) - 1) % UNIT_COLORS.length]
+const pct = computed(() => (tasksCount.value ? Math.round(doc.progress / tasksCount.value * 100) : 0))
+const curUnit = computed(() => { let u = null; order.value.slice(0, curIndex.value + 1).forEach(x => { if (x.type === 'unit') u = x }); return u ?? order.value.find(x => x.type === 'unit') })
+const curUnitNo = computed(() => order.value.filter(x => x.type === 'unit').indexOf(curUnit.value) + 1)
+const unitsCount = computed(() => doc.items.filter(x => x.type === 'unit').length)
+const setProgress = (v) => { doc.progress = Math.max(0, Math.min(tasksCount.value, v)); save() }
+
+// ---------- Перетаскивание: с панели и по рельсу ----------
+let pending = null
+function nearest(cx, cy) {
+  const r = wrap.value.getBoundingClientRect(), x = cx - r.left, y = cy - r.top + wrap.value.scrollTop
+  const keep = order.value.filter(v => v.id !== drag.item?.id), n = keep.length
+  const ys = order.value.map((v, i) => [v.id, pos(i)]).filter(([id]) => id !== drag.item?.id).map(([, p]) => p)
+  let best = n, bd = Infinity
+  for (let i = 0; i <= n; i++) {          // промежутки: перед каждым и после последнего
+    const a = ys[i - 1], b = ys[i]
+    const g = a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : b ? { x: b.x, y: b.y - 55 } : { x: a.x, y: a.y + 55 }
+    const d = ((g.x - x) * .35) ** 2 + (g.y - y) ** 2
+    if (d < bd) { bd = d; best = i }
+  }
+  const toolbar = cy > innerHeight - 100
+  return { i: best, inside: !toolbar && Math.abs(x - W.value / 2) < 260 && bd < 130 ** 2 }
+}
+function startDrag(e, src) { if (editing.value) return; pending = { ...src, sx: e.clientX, sy: e.clientY }; addEventListener('pointermove', move); addEventListener('pointerup', up, { once: true }) }
+function move(e) {
+  if (pending && !drag.on) {
+    if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return
+    sel.value = null
+    Object.assign(drag, pending.type ? { on: true, fresh: true, item: newItem(pending.type) } : { on: true, fresh: false, item: pending.item })
+  }
+  if (!drag.on) return
+  drag.x = e.clientX; drag.y = e.clientY
+  const n = nearest(e.clientX, e.clientY); drag.over = n.inside; drag.to = n.i
+  // у края — прокрутка
+  const r = wrap.value.getBoundingClientRect()
+  if (e.clientY > r.bottom - 130 && e.clientY < innerHeight - 100) wrap.value.scrollTop += 12; else if (e.clientY < r.top + 90) wrap.value.scrollTop -= 12
+}
+function up() {
+  removeEventListener('pointermove', move)
+  const p = pending; pending = null
+  if (!drag.on) {                    // это было нажатие
+    if (p?.type === 'video') { pickFile(null); return }          // «Кружок» — сразу выбрать видео
+    if (p?.type) { const x = newItem(p.type); doc.items.push(x); sel.value = x.id; save(); nextTick(() => wrap.value.scrollTo({ top: wrap.value.scrollHeight, behavior: 'smooth' })) }
+    else if (p?.item) sel.value = sel.value === p.item.id ? null : p.item.id
+    return
+  }
+  const placed = drag.over || !drag.fresh
+  if (placed) doc.items.splice(0, doc.items.length, ...order.value)
+  if (placed && drag.fresh) sel.value = drag.item.id
+  if (placed && drag.fresh && drag.item.type === 'video') pickFile(doc.items.find(v => v.id === drag.item.id))
+  Object.assign(drag, { on: false, item: null }); setProgress(doc.progress)
+}
+
+// ---------- Кружки из Telegram: перетащить видео на рельс (или «Кружок» на панели — выбрать файл) ----------
+// Видео хранится в IndexedDB этого браузера (в localStorage не влезет); на сервер пока не уходит.
+const IDB = 'tma-course-media'
+const idb = () => new Promise((ok, no) => { const r = indexedDB.open(IDB, 1); r.onupgradeneeded = () => r.result.createObjectStore('v'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) })
+async function mediaOp(mode, fn) { const db = await idb(); return new Promise((ok, no) => { const tx = db.transaction('v', mode), r = fn(tx.objectStore('v')); tx.oncomplete = () => ok(r?.result ?? null); tx.onerror = () => no(tx.error) }) }
+const urls = reactive({})
+function mediaUrl(x) {
+  if (!x?.media) return ''
+  if (!(x.media in urls)) { urls[x.media] = ''; mediaOp('readonly', st => st.get(x.media)).then(b => { if (b) urls[x.media] = URL.createObjectURL(b) }).catch(() => {}) }
+  return urls[x.media]
+}
+const isVideo = (f) => f && (f.type?.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(f.name))
+const MAX_MB = 200
+async function attach(item, file) {
+  if (!isVideo(file)) return alert('Это не видео. Перетащите кружок из Telegram (видеофайл).')
+  if (file.size > MAX_MB * 1024 * 1024) return alert(`Видео больше ${MAX_MB} МБ — слишком большое для черновика.`)
+  const id = 'm' + item.id
+  try { await mediaOp('readwrite', st => st.put(file, id)) } catch { return alert('Не удалось сохранить видео в браузере (мало места?).') }
+  urls[id] = URL.createObjectURL(file); item.media = id; save()
+}
+// Выбор файла: для конкретного кружка или новый — в конец
+const fileInput = ref(null); let pickFor = null
+const pickFile = (item) => { pickFor = item; fileInput.value.value = ''; fileInput.value.click() }
+async function onPicked(e) {
+  const files = [...e.target.files].filter(isVideo); if (!files.length) return
+  let item = pickFor
+  for (const f of files) {
+    if (!item) { item = newItem('video'); doc.items.push(item) }
+    await attach(doc.items.find(v => v.id === item.id), f); sel.value = item.id; item = null
+  }
+  nextTick(() => { if (!pickFor) wrap.value.scrollTo({ top: wrap.value.scrollHeight, behavior: 'smooth' }) })
+}
+// Файл тащат из Telegram / проводника: показываем место вставки, как при перетаскивании с панели
+const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
+function fileOver(e) {
+  if (!hasFiles(e)) return
+  e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
+  if (!drag.on) { sel.value = null; Object.assign(drag, { on: true, fresh: true, item: newItem('video') }) }
+  drag.x = e.clientX; drag.y = e.clientY
+  const n = nearest(e.clientX, e.clientY); drag.over = n.inside; drag.to = n.i
+}
+function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.fresh && drag.item?.type === 'video') Object.assign(drag, { on: false, item: null }) }
+async function fileDrop(e) {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  const files = [...e.dataTransfer.files].filter(isVideo)
+  const first = drag.item, over = drag.over
+  if (!files.length) { Object.assign(drag, { on: false, item: null }); return alert('Перетащите видео — кружок из Telegram или файл .mp4') }
+  const list = over ? order.value.slice() : [...doc.items, first]
+  let at = list.findIndex(v => v.id === first.id)
+  const extra = files.slice(1).map(() => newItem('video'))
+  list.splice(at + 1, 0, ...extra)
+  doc.items.splice(0, doc.items.length, ...list)
+  Object.assign(drag, { on: false, item: null })
+  const targets = [first, ...extra]
+  for (let k = 0; k < files.length; k++) await attach(doc.items.find(v => v.id === targets[k].id), files[k])
+  sel.value = first.id; setProgress(doc.progress)
+}
+const play = (e, on) => { const v = e.currentTarget.querySelector('video'); if (v) on ? v.play().catch(() => {}) : v.pause() }
+function newItem(type) {
+  const nUnits = doc.items.filter(x => x.type === 'unit').length
+  return it(type, type === 'unit' ? `Юнит ${nUnits + 1}` : T[type].t, type === 'unit' ? { sub: 'Тема юнита' } : {})
+}
+
+// ---------- Карточка выбранного ----------
+const sel = ref(null), editing = ref(false)
+const selItem = computed(() => doc.items.find(x => x.id === sel.value))
+const selIndex = computed(() => order.value.findIndex(x => x.id === sel.value))
+function remove() {
+  const i = doc.items.findIndex(x => x.id === sel.value)
+  if (i >= 0) { const [x] = doc.items.splice(i, 1); if (x.media) mediaOp('readwrite', st => st.delete(x.media)).catch(() => {}) }
+  sel.value = null; setProgress(doc.progress)
+}
+const popStyle = computed(() => {
+  if (selIndex.value < 0) return null
+  const p = pos(selIndex.value), w = 260
+  const want = p.side === 'r' ? p.x - w - 52 : p.x + 52           // напротив подписи
+  return { left: Math.min(Math.max(8, want), W.value - w - 8) + 'px', top: p.y - 60 + 'px', width: w + 'px' }
+})
+const onKey = (e) => {
+  if (/INPUT|TEXTAREA/.test(e.target?.tagName)) return
+  if (e.key === 'Escape') sel.value = null
+  if ((e.key === 'Delete' || e.key === 'Backspace') && sel.value) remove()
+}
+onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEventListener('keydown', onKey))
 
 function exportJson() {
-  save(); const o = toObject()
-  const data = { title: title.value, nodes: o.nodes.map(({ id, position, data, style }) => ({ id, position, data, style })), edges: o.edges.map(({ source, target }) => ({ source, target })) }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
 }
-async function reset() {
-  if (!confirm('Вернуть пример курса? Текущий черновик удалится.')) return
-  const s = seed(); title.value = s.title; nodes.value = s.nodes; edges.value = s.edges
-  await nextTick(); fitView({ padding: touch ? 0.3 : 0.4 }); save()
-}
-const zoomPct = computed(() => Math.round(viewport.value.zoom * 100))
-
-// Значки инструментов и узлов (SVG 24×24)
-const IC = {
-  select: '<path d="M5 3l14 8-6 2-2 6z"/>', hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-3l-2.5-4a1.5 1.5 0 0 1 2.5-1.6L8 13"/>',
-  unit: '<rect x="3" y="7" width="18" height="10" rx="3"/><path d="M7 12h6"/>', lesson: '<circle cx="12" cy="12" r="8"/><path d="M9 12.5l2 2 4-4"/>',
-  words: '<rect x="3" y="6" width="14" height="14" rx="3"/><path d="M7 3h11a3 3 0 0 1 3 3v11"/>', test: '<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/>',
-  tutor: '<rect x="3" y="6" width="13" height="12" rx="3"/><path d="M16 10l5-3v10l-5-3z"/>', reward: '<path d="M8 4h8v6a4 4 0 0 1-8 0z"/><path d="M8 6H4v1a4 4 0 0 0 4 4M16 6h4v1a4 4 0 0 1-4 4"/><path d="M12 14v4M8 21h8"/>',
-  link: '<path d="M5 19C5 11 19 13 19 5"/><path d="M15 5h4v4"/>', sticky: '<path d="M4 4h16v11l-5 5H4z"/><path d="M15 20v-5h5"/>', text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
-}
+function reset() { if (!confirm('Вернуть пример курса? Текущий черновик удалится.')) return; Object.assign(doc, seed()); sel.value = null; save() }
 </script>
 
 <template>
-  <div class="ce" :class="[`t-${tool}`, { placing }]">
-    <VueFlow id="course-editor" v-model:nodes="nodes" v-model:edges="edges" class="board"
-      :min-zoom="0.2" :max-zoom="3" :pan-on-scroll="!touch" :zoom-on-double-click="false"
-      :pan-on-drag="tool === 'hand' || touch ? true : [1, 2]" :selection-key-code="tool === 'select' && !touch ? true : null"
-      multi-selection-key-code="Shift" :delete-key-code="['Delete', 'Backspace']" :nodes-draggable="tool !== 'hand'" :elements-selectable="tool !== 'hand'"
-      connection-mode="loose" :connection-radius="28" :default-edge-options="{ type: 'default' }"
-      @nodes-change="save" @edges-change="save">
-      <Background variant="dots" :gap="20" :size="1.6" color="#bdbdbd" />
-      <template #node-item="{ id, data, selected: on, dimensions }">
-        <div class="it" :class="[data.kind, data.color, { on, from: linkFrom === id }]">
-          <NodeResizer v-if="data.kind === 'unit' || data.kind === 'sticky'" :is-visible="on" :min-width="data.kind === 'unit' ? 160 : 110" :min-height="data.kind === 'unit' ? 56 : 70" @resize-end="save" />
-          <template v-if="data.kind === 'unit'"><b>{{ data.title }}</b><span>{{ data.sub }}</span></template>
-          <template v-else-if="data.kind === 'sticky' || data.kind === 'text'">{{ data.title }}</template>
-          <template v-else><svg viewBox="0 0 24 24" class="ni" v-html="IC[data.kind]" /><em class="cap">{{ data.title }}</em></template>
-          <!-- Выделение как в Figma: рамка, ручки по углам (у юнита и стикера — настоящие, ими меняют размер), подпись -->
-          <template v-if="on && data.kind !== 'unit' && data.kind !== 'sticky'"><i class="h tl" /><i class="h tr" /><i class="h bl" /><i class="h br" /></template>
-          <span v-if="on && selNodes.length === 1" class="tag">{{ KIND[data.kind] }} · {{ Math.round(dimensions.width) }}×{{ Math.round(dimensions.height) }}</span>
-          <template v-if="PATH.includes(data.kind)">
-            <Handle id="t" type="target" :position="Position.Top" /><Handle id="b" type="source" :position="Position.Bottom" />
+  <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
+    <input ref="fileInput" type="file" accept="video/*" multiple hidden @change="onPicked" />
+    <div ref="wrap" class="sc" @pointerdown.self="sel = null">
+      <div class="world" :style="{ height: height + 'px' }" @pointerdown.self="sel = null">
+        <!-- Сводка, как увидит ученик -->
+        <div class="sum">
+          <div class="sh"><span><i class="dt" />Юнит {{ curUnitNo }} из {{ unitsCount }}</span><b class="pp">{{ pct }}%</b></div>
+          <div class="st">{{ curUnit?.sub || curUnit?.title }}</div>
+          <div class="bar"><i :style="{ width: pct + '%' }" /></div>
+          <div class="sf"><span>Пройдено: <b>{{ doc.progress }} из {{ tasksCount }}</b></span><span>Осталось {{ tasksCount - doc.progress }}</span></div>
+        </div>
+        <svg class="rail" :width="W" :height="height"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
+        <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id }]"
+          :style="{ left: pos(i).x + 'px', top: pos(i).y + 'px', '--c': x.type === 'unit' ? unitColor(i)[0] : T[x.type].c, '--d': x.type === 'unit' ? unitColor(i)[1] : T[x.type].d }"
+          @pointerdown.stop="startDrag($event, { item: x })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          <template v-if="x.type === 'unit'">
+            <b class="no">{{ unitNo(i) }}</b>
+            <div class="sign"><b>{{ x.title }}</b><span>{{ x.sub }}</span></div>
+          </template>
+          <template v-else>
+            <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
+            <svg v-if="x.type !== 'video' || !mediaUrl(x) || stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ic" :class="{ badge: x.type === 'video' && mediaUrl(x) }" v-html="stateOf(x, i) === 'done' ? CHECK : T[x.type].ic" />
+            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small v-if="x.title !== T[x.type].t">{{ T[x.type].t }}</small></em>
           </template>
         </div>
-      </template>
-    </VueFlow>
+        <!-- Карточка выбранного -->
+        <div v-if="selItem && !drag.on" class="pop" :style="popStyle" @pointerdown.stop>
+          <div class="ph">{{ T[selItem.type].t }}</div>
+          <input v-model="selItem.title" class="in" :placeholder="T[selItem.type].t" @focus="editing = true" @blur="editing = false" @input="save" />
+          <input v-if="selItem.type === 'unit'" v-model="selItem.sub" class="in sub" placeholder="Тема юнита" @focus="editing = true" @blur="editing = false" @input="save" />
+          <template v-if="selItem.type === 'video'">
+            <video v-if="mediaUrl(selItem)" :src="mediaUrl(selItem)" class="vbig" controls playsinline />
+            <button class="btn-v" @click="pickFile(selItem)">{{ mediaUrl(selItem) ? 'Заменить видео' : 'Выбрать видео' }}</button>
+          </template>
+          <div v-else class="types">
+            <button v-for="k in PALETTE.slice(1)" :key="k" class="tt" :class="{ on: selItem.type === k }" :style="{ '--c': T[k].c }" :title="T[k].t" @click="selItem.type = k; save()"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></button>
+          </div>
+          <button class="del" @click="remove">Убрать с рельса</button>
+        </div>
+      </div>
+    </div>
 
-    <!-- Слева сверху: курс -->
+    <!-- Взятое — едет за пальцем в настоящем размере; не над рельсом — полупрозрачное -->
+    <div v-if="drag.on" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x + 'px', top: drag.y + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d }">
+      <b v-if="drag.item.type === 'unit'" class="no">+</b><svg v-else viewBox="0 0 24 24" class="ic" v-html="T[drag.item.type].ic" />
+    </div>
+
+    <!-- Сверху -->
     <div class="fl tl-panel">
       <button class="ib" title="Назад" @click="goBack"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg></button>
-      <input v-model="title" class="ttl" aria-label="Название курса" @input="save" />
-      <span class="badge-local" title="Хранится только в этом браузере">черновик<span class="wide"> · только в этом браузере</span></span>
+      <input v-model="doc.title" class="ttl" aria-label="Название курса" @input="save" />
+      <span class="badge-local" title="Хранится только в этом браузере">черновик</span>
     </div>
-    <!-- Справа сверху: показать всё, экспорт, сброс -->
     <div class="fl tr-panel">
-      <button class="pill" @click="fitView({ padding: touch ? 0.3 : 0.4, duration: 250 })">Показать всё</button>
-      <button class="pill" @click="exportJson">Экспорт</button>
-      <button class="pill grey" @click="reset">Сброс</button>
+      <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
+      <span class="pl">Прогресс<small>пример</small></span>
+      <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
+      <i class="vs" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
     </div>
 
-    <!-- Справа: свойства выбранного -->
-    <aside v-if="selected" class="fl props">
-      <div class="ph">{{ KIND[selected.data.kind] }}</div>
-      <label class="f"><span>Название</span><input :value="selected.data.title" @input="setData('title', $event.target.value)" /></label>
-      <label v-if="selected.data.kind === 'unit'" class="f"><span>Тема</span><input :value="selected.data.sub" @input="setData('sub', $event.target.value)" /></label>
-      <div v-if="selected.data.kind === 'unit' || selected.data.kind === 'sticky'" class="f"><span>Цвет</span>
-        <div class="cols"><button v-for="c in (selected.data.kind === 'unit' ? ['green', 'purple', 'blue', 'orange'] : ['yellow', 'pink', 'blue', 'green'])" :key="c" class="cl" :class="[c, { on: selected.data.color === c }]" @click="setData('color', c)" /></div></div>
-      <div class="f xy"><span>X</span><b>{{ Math.round(selected.position.x) }}</b><span>Y</span><b>{{ Math.round(selected.position.y) }}</b></div>
-      <button class="del" @click="remove">Удалить</button>
-    </aside>
-    <div v-else-if="selCount > 1" class="fl props multi"><div class="ph">Выбрано: {{ selCount }}</div><button class="del" @click="remove">Удалить</button></div>
-
-    <!-- Снизу: инструменты (как в Figma) -->
+    <!-- Снизу: что нанизать -->
     <div class="fl tools" role="toolbar">
-      <template v-for="(x, i) in TOOLS" :key="i">
-        <i v-if="x.sep" class="sep" />
-        <button v-else class="tb" :class="[x.id, { on: tool === x.id }]" :title="`${x.t} (${x.k})`" @click="setTool(x.id)">
-          <svg viewBox="0 0 24 24" v-html="IC[x.id]" /><span class="tip">{{ x.t }} <kbd>{{ x.k }}</kbd></span></button>
-      </template>
+      <span class="tl">Тяните на рельс<small>или нажмите — в конец</small></span><i class="sep" />
+      <button v-for="k in PALETTE" :key="k" class="pb" :class="k" :style="{ '--c': T[k].c, '--d': T[k].d }" :title="T[k].t" @pointerdown.prevent="startDrag($event, { type: k })">
+        <span class="pc"><b v-if="k === 'unit'">1</b><svg v-else viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small>
+      </button>
     </div>
-    <!-- Справа снизу: масштаб -->
-    <div class="fl zoom"><button @click="zoomOut({ duration: 150 })">−</button><b title="100%" @click="zoomTo(1, { duration: 150 })">{{ zoomPct }}%</b><button @click="zoomIn({ duration: 150 })">+</button></div>
-    <div v-if="tool !== 'select' && tool !== 'hand'" class="fl hintbar">{{ tool === 'link' ? (linkFrom ? 'Теперь нажмите на второй элемент' : 'Нажмите на первый элемент, потом на второй') : `Нажмите на поле — появится «${TOOLS.find(x => x.id === tool).t}»` }}</div>
   </div>
 </template>
 
 <style scoped>
-.ce { position: fixed; inset: 0; z-index: 30; background: #f4f4f4; overflow: hidden; user-select: none; -webkit-user-select: none; font-family: var(--font) }
-.board { position: absolute; inset: 0 }
-.ce.placing :deep(.vue-flow__pane) { cursor: copy } .ce.t-link :deep(.vue-flow__node) { cursor: crosshair }
-.ce.t-hand :deep(.vue-flow__pane), .ce.t-hand :deep(.vue-flow__node) { cursor: grab }
-
-/* Связи — пунктир, как путь в Duolingo; выбранная — синяя; тянущаяся — синий штрих */
-.ce :deep(.vue-flow__edge-path) { stroke: #c4c4c4; stroke-width: 4; stroke-dasharray: 2 10; stroke-linecap: round }
-.ce :deep(.vue-flow__edge.selected .vue-flow__edge-path), .ce :deep(.vue-flow__edge:hover .vue-flow__edge-path) { stroke: #0d99ff }
-.ce :deep(.vue-flow__connection-path) { stroke: #0d99ff; stroke-width: 2; stroke-dasharray: 6 6 }
-/* Рамка выделения и общий прямоугольник выбранных — как в Figma */
-.ce :deep(.vue-flow__selection) { background: rgba(13, 153, 255, .08); border: 1px solid #0d99ff }
-.ce :deep(.vue-flow__nodesselection-rect) { background: rgba(13, 153, 255, .04); border: 1px solid #0d99ff; cursor: move }
-/* Кружки для связей: видны при наведении на узел и пока тянем связь */
-.ce :deep(.vue-flow__handle) { width: 12px; height: 12px; background: #fff; border: 2px solid #0d99ff; opacity: 0; transition: opacity .1s }
-.ce :deep(.vue-flow__node:hover .vue-flow__handle), .ce :deep(.vue-flow__node.selected .vue-flow__handle), .ce :deep(.vue-flow.connecting .vue-flow__handle) { opacity: 1 }
-.ce :deep(.vue-flow__handle-top) { top: -14px } .ce :deep(.vue-flow__handle-bottom) { bottom: -14px }
-@media (pointer: coarse) { .ce :deep(.vue-flow__handle) { width: 18px; height: 18px } }
-/* Ручки изменения размера (юнит, стикер) — квадратики Figma */
-.ce :deep(.vue-flow__resize-control.handle) { width: 9px; height: 9px; background: #fff; border: 2px solid #0d99ff; border-radius: 2px }
-.ce :deep(.vue-flow__resize-control.line) { border-color: transparent }
-
-/* Элементы */
-.it { position: relative; display: grid; place-items: center; box-sizing: border-box; width: 100%; height: 100% }
-.it.on { outline: 2px solid #0d99ff; outline-offset: 4px } .it.from { outline: 2px dashed var(--blue); outline-offset: 4px }
-.ce :deep(.vue-flow__node:hover) .it:not(.on) { outline: 2px solid #0d99ff80; outline-offset: 4px }
-.h { position: absolute; width: 9px; height: 9px; background: #fff; border: 2px solid #0d99ff; border-radius: 2px; z-index: 3; box-sizing: border-box }
-.h.tl { left: -10px; top: -10px } .h.tr { right: -10px; top: -10px } .h.bl { left: -10px; bottom: -10px } .h.br { right: -10px; bottom: -10px }
-.tag { position: absolute; left: 50%; bottom: -36px; transform: translateX(-50%); padding: 2px 7px; border-radius: 5px; background: #0d99ff; color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap; pointer-events: none }
-.it.lesson .tag, .it.words .tag, .it.test .tag, .it.reward .tag, .it.tutor .tag { bottom: -40px }
-/* Юнит — баннер как в Duolingo */
-.it.unit { place-items: start; align-content: center; padding: 0 18px; border-radius: 16px; color: #fff; background: var(--c); box-shadow: 0 5px 0 var(--cd) }
-.it.unit b { font-size: 19px; line-height: 1.2 } .it.unit span { font-size: 14px; opacity: .85 }
-.green { --c: var(--green); --cd: var(--green-d) } .purple { --c: var(--purple); --cd: var(--purple-d) } .blue { --c: var(--blue); --cd: var(--blue-d) } .orange { --c: var(--orange); --cd: var(--orange-d) }
-/* Узлы — круглые кнопки как в Duolingo */
-.it.lesson, .it.words, .it.test, .it.reward { width: 72px; height: 72px; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 7px 0 var(--cd) }
-.it.lesson { --c: var(--green); --cd: var(--green-d) } .it.words { --c: var(--blue); --cd: var(--blue-d) } .it.test { --c: var(--orange); --cd: var(--orange-d) } .it.reward { --c: var(--yellow); --cd: var(--yellow-d) }
-.it.tutor { width: 76px; height: 76px; border-radius: 24px; color: #fff; background: var(--purple); box-shadow: 0 7px 0 var(--purple-d) }
-.ni { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
-.cap { position: absolute; top: calc(100% + 12px); left: 50%; transform: translateX(-50%); font-style: normal; font-size: 13px; font-weight: 800; color: var(--text); white-space: nowrap; pointer-events: none }
-.it.on .cap { display: none }
-/* Стикер и текст */
-.it.sticky { place-items: start; padding: 14px; font-size: 14px; font-weight: 700; line-height: 1.3; color: #3c3c3c; background: #fff3b0; box-shadow: 0 6px 14px rgba(0, 0, 0, .12); border-radius: 4px; overflow: visible }
-.it.sticky.pink { background: #ffd6e7 } .it.sticky.blue { background: #cfe9ff } .it.sticky.green { background: #d7f7c2 }
-.it.text { place-items: center start; height: 34px; padding: 0 2px; font-size: 24px; font-weight: 900; color: var(--text); white-space: nowrap }
-.props.multi { width: auto }
-
-/* Плавающие панели */
-.fl { position: absolute; z-index: 5; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .05) }
+.ce { position: fixed; inset: 0; z-index: 30; background: #f5f5f5; user-select: none; -webkit-user-select: none; font-family: var(--font) }
+.ce.dragging, .ce.dragging * { cursor: grabbing !important }
+.sc { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; background-image: radial-gradient(circle, #cfcfcf 1px, transparent 1.3px); background-size: 20px 20px; background-attachment: local }
+.world { position: relative; width: 100%; min-height: 100%; padding-bottom: 110px }
+/* Рельс: серая дорога, пройденное — зелёным поверх */
+.rail { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none }
+.rail path { fill: none; stroke-linecap: round; stroke-linejoin: round }
+.r0 { stroke: #e0e0e0; stroke-width: 12 } .r1 { stroke: var(--green); stroke-width: 12 }
+/* Бусина-задание */
+.bead { position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 6px 0 var(--d);
+  cursor: grab; transition: left .22s ease, top .22s ease, transform .12s, opacity .15s; touch-action: none; z-index: 2 }
+.bead:hover { transform: translateY(-2px) }
+.bead.todo { background: #e5e5e5; box-shadow: 0 6px 0 #cdcdcd; color: #afafaf } .bead.todo .cap { color: var(--hint) }
+.bead.tutor { border-radius: 20px }
+/* Кружок: само видео в круге, с голубым кольцом как в Telegram; при наведении играет без звука */
+.bead.video { width: 76px; height: 76px; margin: -38px 0 0 -38px; overflow: visible }
+.vid { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--c); pointer-events: none; background: #000 }
+.bead.video.todo .vid { filter: grayscale(1); opacity: .6; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #d6d6d6 }
+.ic.badge { position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; padding: 3px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px #fff; box-sizing: border-box; stroke-width: 3 }
+.bead.video:has(.vid) { background: transparent; box-shadow: none }
+.vbig { justify-self: center; width: min(100%, 200px); aspect-ratio: 1; border-radius: 50%; object-fit: cover; background: #000 }
+.btn-v { border: 0; border-radius: 9px; padding: 8px; background: #e3f4fd; color: #1a8bc9; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
+.bead.current { box-shadow: 0 6px 0 var(--d), 0 0 0 7px #fff, 0 0 0 11px color-mix(in srgb, var(--c) 35%, transparent); animation: pulse 1.6s ease-in-out infinite }
+@keyframes pulse { 50% { box-shadow: 0 6px 0 var(--d), 0 0 0 7px #fff, 0 0 0 16px color-mix(in srgb, var(--c) 12%, transparent) } }
+.bead.on { outline: 3px solid #0d99ff; outline-offset: 6px }
+/* Место, куда встанет взятое: пустое кольцо на рельсе */
+.bead.lift { background: #fff !important; color: transparent; box-shadow: none !important; outline: 3px dashed var(--c); outline-offset: -3px; animation: none; transform: none }
+.bead.lift > * { visibility: hidden }
+.ic { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
+/* Подпись — сбоку от бусины, с той стороны, где больше места; линия остаётся чистой */
+.cap { position: absolute; top: 50%; left: calc(100% + 16px); transform: translateY(-50%); width: 150px; display: grid; justify-items: start; gap: 1px; font-style: normal; font-size: 14px; font-weight: 800; line-height: 1.2; color: var(--text); pointer-events: none }
+.cap small { font-size: 11px; font-weight: 700; color: var(--hint) }
+.bead.s-l .cap { left: auto; right: calc(100% + 16px); justify-items: end; text-align: right }
+.start { margin-bottom: 3px; padding: 3px 8px; border-radius: 9px; background: #fff; color: var(--c); font-size: 11px; font-weight: 900; text-transform: uppercase; box-shadow: 0 0 0 2px #e5e5e5, 0 3px 0 #e5e5e5; white-space: nowrap; pointer-events: none }
+/* Станция юнита: круг с номером и табличка над рельсом */
+.bead.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px; box-shadow: 0 0 0 6px #fff, 0 0 0 9px var(--c) }
+.bead.unit.todo { background: #e5e5e5; box-shadow: 0 0 0 6px #fff, 0 0 0 9px #e0e0e0 } .bead.unit.todo .sign { background: #e5e5e5; color: #9a9a9a; box-shadow: 0 4px 0 #cdcdcd }
+.no { font-size: 21px; font-weight: 900 }
+.sign { position: absolute; top: 50%; left: calc(100% + 20px); transform: translateY(-50%); display: grid; padding: 7px 14px; border-radius: 12px; background: var(--c); box-shadow: 0 4px 0 var(--d); color: #fff; white-space: nowrap; pointer-events: none }
+.bead.s-l .sign { left: auto; right: calc(100% + 20px) }
+.sign b { font-size: 15px }
+/* Сводка сверху */
+.sum { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); width: min(440px, calc(100% - 16px)); box-sizing: border-box; display: grid; gap: 6px; padding: 16px 18px; border-radius: 18px; background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04); z-index: 3 }
+.sh { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
+.dt { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--green); vertical-align: 1px }
+.pp { padding: 4px 9px; border-radius: 9px; background: var(--green-l); color: var(--green-d); font-size: 14px; letter-spacing: 0 }
+.st { font-size: 18px; font-weight: 900; color: var(--text) }
+.bar { height: 10px; margin: 4px 0 2px; border-radius: 6px; background: #ececec; overflow: hidden } .bar i { display: block; height: 100%; border-radius: 6px; background: var(--green); transition: width .25s }
+.sf { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--hint) } .sf b { color: var(--text) }
+.seg { display: flex; padding: 2px; border-radius: 9px; background: var(--surface) } .seg button { border: 0; border-radius: 7px; padding: 5px 10px; background: none; font: inherit; font-size: 12px; font-weight: 800; color: var(--hint); cursor: pointer } .seg button.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12) } .sign span { font-size: 12px; font-weight: 700; opacity: .85 }
+/* Карточка выбранного */
+.pop { position: absolute; z-index: 6; display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04); cursor: default; animation: pop .14s ease-out }
+@keyframes pop { from { opacity: 0; transform: translateY(-4px) } }
+.ph { font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
+.in { margin: 0; padding: 8px 10px; font-size: 15px; font-weight: 700; border-width: 1px; border-radius: 9px } .in.sub { font-size: 13px; font-weight: 600 }
+.types { display: flex; gap: 6px } .tt { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #f0f0f0; color: var(--c); cursor: pointer; padding: 0 }
+.tt svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round } .tt.on { background: var(--c); color: #fff }
+.del { border: 0; border-radius: 9px; padding: 8px; background: var(--red-l); color: var(--red-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
+/* Летящее */
+.fly { position: fixed; z-index: 50; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 6px 0 var(--d), 0 14px 26px rgba(0, 0, 0, .22); pointer-events: none; transform: scale(1.06); transition: opacity .12s }
+.fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px } .fly.tutor { border-radius: 20px } .fly.out { opacity: .45 }
+/* Панели */
+.fl { position: absolute; z-index: 5; background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }
 .tl-panel { left: 14px; top: 14px; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px }
 .ttl { width: 220px; margin: 0; padding: 6px 8px; border: 0; background: none; font-size: 15px; font-weight: 800 } .ttl:focus { background: var(--surface) }
 .badge-local { font-size: 11px; font-weight: 700; color: var(--purple-d); background: #f1e6ff; border-radius: 6px; padding: 2px 7px; white-space: nowrap }
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; cursor: pointer } .ib:hover { background: var(--surface) }
 .ib svg { width: 20px; height: 20px; fill: none; stroke: var(--text); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
-.tr-panel { right: 14px; top: 14px; display: flex; gap: 4px; padding: 6px }
+.tr-panel { right: 14px; top: 14px; display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px }
+.pl { display: grid; font-size: 12px; font-weight: 800; line-height: 1.15; margin-right: 6px } .pl small { font-size: 10px; color: var(--hint); font-weight: 700 }
+.sb { width: 30px; height: 30px; border: 0; border-radius: 8px; background: var(--surface); font: inherit; font-size: 17px; font-weight: 800; cursor: pointer }
+.pv { min-width: 52px; text-align: center; font-size: 14px; color: var(--green-d) }
+.vs { width: 1px; height: 24px; margin: 0 6px; background: var(--border) }
 .pill { border: 0; border-radius: 9px; padding: 7px 12px; background: var(--blue); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .pill.grey { background: var(--surface); color: var(--hint) }
-.pill:first-child { background: var(--surface); color: var(--text) }
-/* Нижняя панель инструментов */
-.tools { left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 6px }
-.tb { position: relative; display: grid; place-items: center; width: 42px; height: 42px; border: 0; border-radius: 10px; background: none; color: var(--text); cursor: pointer }
-.tb svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.tb:hover { background: var(--surface) } .tb.on { background: #0d99ff; color: #fff }
-.tb.lesson:not(.on) { color: var(--green-d) } .tb.words:not(.on) { color: var(--blue) } .tb.test:not(.on) { color: var(--orange-d) } .tb.tutor:not(.on) { color: var(--purple) } .tb.reward:not(.on) { color: var(--yellow-d) }
-.tip { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); padding: 4px 8px; border-radius: 6px; background: #1e1e1e; color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .1s }
-.tip kbd { margin-left: 4px; color: #aaa; font: inherit } .tb:hover .tip { opacity: 1 }
-.sep { width: 1px; height: 26px; margin: 0 6px; background: var(--border) }
-.zoom { right: 14px; bottom: 18px; display: flex; align-items: center; padding: 4px } .zoom button { width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 18px; cursor: pointer } .zoom button:hover { background: var(--surface) }
-.zoom b { min-width: 48px; text-align: center; font-size: 13px; cursor: pointer }
-.hintbar { left: 50%; bottom: 82px; transform: translateX(-50%); padding: 7px 14px; background: #1e1e1e; color: #fff; font-size: 13px; font-weight: 700; border-radius: 10px }
-/* Свойства */
-.props { right: 14px; top: 64px; width: 230px; display: grid; gap: 10px; padding: 12px }
-.ph { font-size: 12px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
-.f { display: grid; gap: 4px } .f > span { font-size: 11px; font-weight: 800; color: var(--hint) } .f input { margin: 0; padding: 7px 9px; font-size: 14px; border-width: 1px; border-radius: 8px }
-.cols { display: flex; gap: 6px } .cl { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; background: var(--c) } .cl.on { border-color: #0d99ff; box-shadow: 0 0 0 2px #fff inset }
-.cl.yellow { background: #ffe97a } .cl.pink { background: #ffb3d1 } .props .cl.blue { --c: var(--blue) }
-.xy { grid-template-columns: auto 1fr auto 1fr; align-items: center; gap: 6px } .xy b { font-size: 13px }
-.del { border: 0; border-radius: 9px; padding: 8px; background: var(--red-l); color: var(--red-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
-/* Телефон: шапка в две строки, инструменты — над масштабом, без наложений */
+.tools { left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; height: 74px; padding: 0 12px; border-radius: 18px; box-shadow: 0 2px 6px rgba(0, 0, 0, .06), 0 6px 22px rgba(0, 0, 0, .1) }
+.tl { display: grid; font-size: 13px; font-weight: 800; line-height: 1.2; padding: 0 4px; white-space: nowrap } .tl small { font-size: 11px; color: var(--hint); font-weight: 600 }
+.sep { width: 1px; height: 44px; margin: 0 8px; background: #e6e6e6 }
+.pb { display: grid; justify-items: center; gap: 4px; width: 68px; padding: 6px 0 4px; border: 0; border-radius: 12px; background: none; font: inherit; cursor: grab; touch-action: none }
+.pb:hover { background: #f3f3f3 } .pb:hover .pc { transform: translateY(-2px) }
+.pc { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 3px 0 var(--d); transition: transform .12s }
+.pb.tutor .pc { border-radius: 12px } .pb.unit .pc { width: 30px; height: 30px; margin: 4px; box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--c) }
+.pc svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round } .pc b { font-size: 15px; font-weight: 900 }
+.pb small { font-size: 11px; font-weight: 700; color: var(--text); white-space: nowrap; max-width: 66px; overflow: hidden; text-overflow: ellipsis }
 @media (max-width: 719px) {
   .tl-panel { left: 8px; right: 8px; top: 8px; padding: 4px 8px 4px 4px } .ttl { flex: 1; width: auto; min-width: 0 }
-  .wide { display: none }
-  .tr-panel { left: 8px; right: auto; top: 58px; padding: 4px } .pill { padding: 6px 10px; font-size: 12px }
-  .tools { left: 8px; right: 8px; bottom: 62px; transform: none; justify-content: space-between; gap: 0; padding: 4px; overflow-x: auto; scrollbar-width: none }
-  .tb { flex: none; width: 36px; height: 36px } .tb svg { width: 20px; height: 20px } .sep { margin: 0 2px } .tip { display: none }
-  .zoom { right: 8px; bottom: 12px } .hintbar { bottom: 116px; max-width: calc(100% - 32px); text-align: center }
-  .props { left: 8px; right: 8px; top: auto; bottom: 116px; width: auto; gap: 8px; padding: 10px } .props .xy { display: none }
+  .tr-panel { left: 8px; right: 8px; top: 58px; padding: 4px 4px 4px 10px } .tr-panel .pill { padding: 6px 9px; font-size: 12px } .pl { flex: 1 }
+  .tools { left: 8px; right: 8px; bottom: 10px; transform: none; overflow-x: auto; scrollbar-width: none; padding: 0 6px; height: 70px } .tl, .tools .sep { display: none }
+  .pb { flex: none; width: 58px }
+  .pop { position: fixed; left: 8px !important; right: 8px; top: auto !important; bottom: 88px; width: auto !important; max-height: 62vh; overflow-y: auto; z-index: 20 }      /* телефон: карточка — снизу над панелью */
+  .sum { top: 108px } .pl, .tr-panel .pill, .tr-panel .vs:last-of-type { display: none } .tr-panel { justify-content: space-between; gap: 3px } .cap { width: 120px; font-size: 13px }      /* телефон: только вид и прогресс; экспорт и сброс — на компьютере */
 }
 </style>
