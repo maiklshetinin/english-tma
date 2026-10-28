@@ -13,7 +13,14 @@ class Snap {
 }
 type Ref = { path: string; id: string; get(): Promise<Snap>; set(d: Doc, o?: { merge?: boolean }): Promise<void>; update(d: Doc): Promise<void>; delete(): Promise<void> }
 type Op = 'set' | 'update' | 'delete'
+// Как настоящий Firestore: массив внутри массива и undefined записать нельзя (иначе в проде — 500)
+function checkDoc(v: unknown, inArray = false): void {
+  if (v === undefined) throw new Error('Cannot use "undefined" as a Firestore value')
+  if (Array.isArray(v)) { if (inArray) throw new Error('Nested arrays are not supported'); v.forEach((x) => checkDoc(x, true)); return }
+  if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) for (const x of Object.values(v)) checkDoc(x, false)
+}
 const apply = (op: Op, ref: { path: string }, d?: Doc, o?: { merge?: boolean }) => {
+  if (op !== 'delete') checkDoc(d)
   if (op === 'set') store.set(ref.path, o?.merge ? { ...store.get(ref.path), ...d } : { ...d })
   if (op === 'update') { if (!store.has(ref.path)) throw new Error('update of missing doc ' + ref.path); store.set(ref.path, { ...store.get(ref.path), ...d }) }
   if (op === 'delete') store.delete(ref.path)

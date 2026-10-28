@@ -108,7 +108,7 @@ watch(lastKey, (v, was) => {
   if (!v || !was) return                                    // при открытии графика не всплываем
   const id = v.split(':')[0], r = started.value.find(x => x.c.id === id); if (!r) return
   const h = r.s.hist?.at(-1)
-  jump.value = { id, word: r.c.front, q: h?.[1] ?? 2, to: h ? (h[2] < 0 ? fmtSpan(-h[2], 0) : fmtSpan(0, h[2])) : '' }
+  jump.value = { id, word: r.c.front, q: h?.q ?? 2, to: h ? (h.i < 0 ? fmtSpan(-h.i, 0) : fmtSpan(0, h.i)) : '' }
   hover.value = null; pinned.value = binOf(r); open.value = null
   clearTimeout(jumpTimer); jumpTimer = setTimeout(() => { jump.value = null }, 4500)
 })
@@ -117,7 +117,7 @@ const fresh = (r) => jump.value?.id === r.c.id
 
 // История слова
 const picked = computed(() => started.value.find(r => r.c.id === open.value) ?? null)
-const histOf = (r) => (r.s?.hist ?? []).map(([at, q, iv]) => ({ at, q, label: iv < 0 ? fmtSpan(-iv, 0) : fmtSpan(0, iv), days: iv < 0 ? -iv / 1440 : iv }))
+const histOf = (r) => (r.s?.hist ?? []).filter(h => !Array.isArray(h)).map(({ t: at, q, i: iv }) => ({ at, q, label: iv < 0 ? fmtSpan(-iv, 0) : fmtSpan(0, iv), days: iv < 0 ? -iv / 1440 : iv }))
 const histMax = (r) => Math.max(1, ...histOf(r).map(h => h.days))
 const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')}` }
 </script>

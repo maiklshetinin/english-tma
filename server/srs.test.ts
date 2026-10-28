@@ -62,4 +62,8 @@ store.set('students/s3', { name: 'Новый', archived: false, tgId: 12 })
 const fresh = await S.list({ uid: 'tg:12', role: 'student', studentId: 's3' })
 ok('ученик без документа: пустой прогресс, не ошибка', Object.keys(fresh.users.s3.cards).length === 0 && Object.keys(fresh.users.s3.log).length === 0)
 
+// Состояние планировщика как в Anki (FSRS) с историей ответов — должно сохраняться (Firestore не принимает массив в массиве)
+await S.rate(masha, rate('c9', st({ phase: 'learning', step: 1, dueAt: Date.now() + 600000, stab: 3.17, diff: 5.3, lastAt: Date.now(), hist: [{ t: Date.now(), q: 2, i: -10 }] } as any)))
+ok('FSRS-состояние с историей сохранено', store.get('srs/' + masha.studentId)?.cards?.c9?.hist?.[0]?.i === -10 && store.get('srs/' + masha.studentId)?.cards?.c9?.phase === 'learning')
+ok('история в старом виде (массив в массиве) → 400, а не 500', (await code(S.rate(masha, rate('c9', st({ hist: [[1, 2, 3]] } as any))))) === 400)
 process.exit(bad ? 1 : 0)

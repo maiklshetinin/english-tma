@@ -64,7 +64,7 @@ describe('алгоритм повторений (как в Anki)', () => {
   it('история ответов для графика (не больше 12)', () => {
     let s = nextSrs(null, 2, T)
     for (let i = 0; i < 20; i++) s = nextSrs(s, 2, T + i * DAY)
-    expect(s.hist).toHaveLength(12); expect(s.hist!.at(-1)![1]).toBe(2)
+    expect(s.hist).toHaveLength(12); expect(s.hist!.at(-1)!.q).toBe(2)
   })
 })
 

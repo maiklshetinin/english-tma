@@ -245,8 +245,10 @@ export interface SrsState {
   stab?: number                // стабильность памяти S, дней (через сколько вероятность вспомнить упадёт до 90 %)
   diff?: number                // сложность D, 1–10
   lastAt?: number              // мс — последний ответ
-  hist?: [number, number, number][]   // последние 12 ответов: [мс, оценка 0–3, интервал: дни или −минуты] — для графика слова
+  hist?: SrsAnswer[]           // последние 12 ответов — для графика слова (объекты: Firestore не хранит массив в массиве)
 }
+/** Один ответ в истории слова. */
+export interface SrsAnswer { t: number; q: number; i: number }   // мс; оценка 0–3; интервал после ответа: дни или −минуты
 export interface SrsUser {
   cards: Record<string, SrsState>      // id карточки → состояние
   log: Record<string, number>          // 'YYYY-MM-DD' → сколько ответов дано в этот день

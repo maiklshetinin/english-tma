@@ -92,7 +92,7 @@ export function answer(s: SrsState | null, q: number, now = Date.now()): SrsStat
   const g = (q + 1) as Grade, p = plan(s, g, now), t = ymdOf(now), ph = phaseOf(s)
   const lapse = ph === 'review' && g === 1
   const due = p.minutes ? ymdOf(now + p.minutes * MIN) : addDaysYmd(t, p.days)
-  const hist = [...(s?.hist ?? []), [now, q, p.minutes ? -Math.round(p.minutes) : p.days] as [number, number, number]].slice(-12)
+  const hist = [...(s?.hist ?? []).filter((h) => !Array.isArray(h)), { t: now, q, i: p.minutes ? -Math.round(p.minutes) : p.days }].slice(-12)
   return {
     ease: Math.round(clamp(3 - (p.diff - 1) / 9 * 1.7, 1.3, 5) * 100) / 100,         // для совместимости со старыми записями
     interval: p.minutes ? 0 : p.days,

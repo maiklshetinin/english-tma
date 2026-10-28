@@ -131,8 +131,8 @@ function srsExtra(x: Record<string, unknown>): Partial<SrsState> {
   if (x.hist != null) {
     if (!Array.isArray(x.hist) || x.hist.length > 12) throw fail(400, 'bad hist')
     o.hist = x.hist.map((h) => {
-      if (!Array.isArray(h) || h.length !== 3) throw fail(400, 'bad hist')
-      return [Math.round(num(h[0], 'hist', 0, 1e13)), Math.round(num(h[1], 'hist', 0, 3)), Math.round(num(h[2], 'hist', -100000, 36500))] as [number, number, number]
+      if (!isObj(h)) throw fail(400, 'bad hist')
+      return { t: Math.round(num(h.t, 'hist', 0, 1e13)), q: Math.round(num(h.q, 'hist', 0, 3)), i: Math.round(num(h.i, 'hist', -100000, 36500)) }
     })
   }
   return o
