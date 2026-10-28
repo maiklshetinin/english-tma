@@ -7,6 +7,7 @@ import { fmtMoney } from '../../utils/price'
 import { showToast } from '../../composables/useToast'
 import { useTelegram } from '../../composables/useTelegram'
 import Avatar from '../../components/Avatar.vue'
+import PhotoZoom from '../../components/PhotoZoom.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import PathEditor from '../../components/PathEditor.vue'
 import StudentDecks from '../../components/StudentDecks.vue'
@@ -90,18 +91,19 @@ const saveAsPreset = () => {
   const p = pathStore.presetFromPath(pname.value.trim() || `Путь: ${s.value.name}`, pathStore.of(props.id))
   pid.value = p.id; pname.value = ''; showToast(`Сохранено как пресет «${p.name}»`)
 }
+const zoom = ref(false)      // фото ученика крупно (как в Telegram — нажатие на аватарку)
 </script>
 <template>
   <!-- Карточка ученика — одна колонка блоками: шапка (данные и все правки), календарь уроков, внизу — архив -->
   <div v-if="s" class="page sd">
     <div class="pcard hd">
       <div class="top">
-        <button class="ib" :aria-label="`Назад: ${backLabel}`" :title="backLabel" @click="$emit('back')"><AppIcon name="back" :size="20" /></button>
-        <Avatar :s="s" :size="56" :online="isOnline(s)" />
+        <button class="ib" :aria-label="`Назад: ${backLabel}`" :title="backLabel" @click="$emit('back')"><AppIcon name="back" :size="24" /></button>
+        <button class="avb" :aria-label="`Фото: ${s.name}`" title="Открыть фото" @click="zoom = true"><Avatar :s="s" :size="56" :online="isOnline(s)" /></button>
         <div class="who"><h2>{{ s.name }}</h2>
           <div class="sub">{{ s.level }} · <span :class="s.status !== 'active' ? 'wait' : isOnline(s) ? 'on' : ''">{{ s.status !== 'active' ? 'ждёт приглашения' : seenLabel(s) || 'в приложении' }}</span><template v-if="s.username"> · @{{ s.username }}</template></div></div>
-        <button class="ib" :class="{ on: panel === 'remind' }" aria-label="Напомнить" title="Напомнить" @click="panel = panel === 'remind' ? null : 'remind'"><AppIcon name="bell" :size="19" /></button>
-        <button class="ib" :class="{ on: panel === 'edit' }" aria-label="Изменить" title="Изменить" @click="openEdit"><AppIcon name="pencil" :size="18" /></button>
+        <button class="ib" :class="{ on: panel === 'remind' }" aria-label="Напомнить" title="Напомнить" @click="panel = panel === 'remind' ? null : 'remind'"><AppIcon name="bell" :size="24" /></button>
+        <button class="ib" :class="{ on: panel === 'edit' }" aria-label="Изменить" title="Изменить" @click="openEdit"><AppIcon name="pencil" :size="23" /></button>
       </div>
       <!-- Приборы: всё главное одной строкой -->
       <div class="stats">
@@ -150,6 +152,7 @@ const saveAsPreset = () => {
     </template>
 
     <button class="arch" @click="archive" @blur="confirmArchive = false"><AppIcon name="trash" :size="18" />{{ confirmArchive ? 'Точно архивировать? Ученик потеряет вход' : 'Архивировать ученика' }}</button>
+    <PhotoZoom v-if="zoom" :s="s" @close="zoom = false" />
   </div>
   <div v-else class="page wide">      <!-- старая ссылка или ученик в архиве -->
     <button class="btn ghost" style="justify-self:start" @click="$emit('back')"><AppIcon name="back" :size="18" /> {{ backLabel }}</button>
@@ -158,13 +161,14 @@ const saveAsPreset = () => {
 </template>
 
 <style scoped>
+.avb { flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: zoom-in; transition: transform .08s } .avb:active { transform: scale(.94) }
 /* Одна колонка, ширина как у обычной страницы */
 .sd { max-width: 640px }
 .pcard { background: var(--card); border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 18px; overflow: hidden }
 .top { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 4px }
 .who { flex: 1; min-width: 0 } .who h2 { margin: 0; font-size: 19px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .sub { font-size: 13px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .sub .on { color: var(--blue) } .sub .wait { color: var(--orange-d) }
-.ib { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border: 0; border-radius: 50%; background: none; color: var(--hint); cursor: pointer } .ib:hover, .ib.on { background: var(--blue-l); color: var(--blue) }
+.ib { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: var(--blue); cursor: pointer } .ib:hover, .ib.on { background: var(--blue-l); color: var(--blue) }
 .stats { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--border) }
 .stats div { display: grid; justify-items: center; gap: 1px; padding: 8px 2px; min-width: 0 } .stats div + div { border-left: 1px solid var(--border) }
 .stats b { font-size: 16px; font-weight: 900; white-space: nowrap } .stats small { font-size: 11px; font-weight: 700; color: var(--hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100% }

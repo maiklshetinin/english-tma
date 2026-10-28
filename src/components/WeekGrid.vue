@@ -58,7 +58,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
         <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
       </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
-        <span v-if="money(d).plan" class="dsum" :class="{ ok: money(d).real === money(d).plan }" :title="`Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}`">{{ fmtMoneyK(money(d).plan) }}</span>
+        <span class="dsum" :class="{ ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'">{{ money(d).plan ? fmtMoneyK(money(d).plan) : 0 }}</span>
         <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−{{ fmtMoneyK(money(d).lost) }}</span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
@@ -103,9 +103,11 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .dn { display: grid; justify-items: center }
 .dh small { font-weight: 800; font-size: 12px; color: var(--hint-2) } .dh.we b { color: var(--purple-d) }
 /* Деньги дня — одна цифра под датой: сумма уроков дня; зелёная, когда все проведены */
-.dsum { margin-top: 2px; font-size: 12px; font-weight: 900; color: var(--hint-2); white-space: nowrap } .dsum.ok { color: var(--green-d) }
+.dsum { margin-top: 2px; line-height: 1.25; font-size: 12px; font-weight: 900; color: var(--hint-2); white-space: nowrap } .dsum.ok { color: var(--green-d) }
 html[data-theme='dark'] .dsum.ok { color: var(--green) }
-.dlost { font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 1.1; white-space: nowrap }      /* потеряно из-за отмен — мелко красным под суммой дня */
+.dsum.zero { opacity: .45 }      /* место под доход есть всегда (0) — шапка не меняет высоту, когда появляется первый урок */
+.dh { position: relative }
+.dlost { position: absolute; left: 50%; top: calc(100% - 7px); transform: translateX(-50%); z-index: 2; padding: 0 4px; border-radius: 6px; background: var(--card); font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 14px; white-space: nowrap; pointer-events: none }      /* потеряно из-за отмен — мелко красным под суммой, поверх зазора: шапка не прыгает */
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
 /* «Сейчас» — красным и полупрозрачным (синий занят чипами уроков): день, время и ячейка на пересечении */
 .dh.today { background: rgba(255, 75, 75, .16); box-shadow: inset 0 0 0 2px rgba(255, 75, 75, .55), 0 3px 0 rgba(234, 43, 43, .45) } .dh.today b, .dh.today small { color: var(--red-d) }
