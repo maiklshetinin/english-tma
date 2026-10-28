@@ -7,7 +7,7 @@
 //  • В реальном времени: ответили в сессии — над графиком всплывает «budget · Снова → <1 мин.», столбик с этим словом
 //    подсвечивается и сразу открывается. Часы тикают раз в секунду.
 //  dock — график сверху сессии (над карточкой), без него — отдельный экран из списка колод.
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { srsOf, kindOf, today, LEARNED_DAYS, resetDeck, buildQueue, deckCounts } from '../composables/useSrs'
 import { showToast } from '../composables/useToast'
 import { dueMs, recallNow, fmtSpan, memoryOf } from '../utils/fsrs'
@@ -93,6 +93,16 @@ const hover = ref(null), pinned = ref(null), open = ref(null), autoPin = ref(fal
 watch(scale, (v) => { store('tma.chartScale', v); pinned.value = null; hover.value = null; open.value = null })
 const activeI = computed(() => hover.value ?? pinned.value)
 const active = computed(() => activeI.value == null ? null : bins.value[activeI.value] ?? null)
+// Подсказка — над столбиком: низ подсказки на 8px выше верхушки столбика; высота — сколько есть места до верха экрана
+const plotw = ref(null), tipPos = ref({ bottom: 0, maxH: 260 })
+function placeTip() {
+  const w = plotw.value, i = activeI.value; if (!w || i == null) return
+  const bar = w.querySelectorAll('.bc')[i]?.querySelector('.bn') || w.querySelectorAll('.bc')[i]?.querySelector('.stk'); if (!bar) return
+  const wr = w.getBoundingClientRect(), br = bar.getBoundingClientRect()
+  tipPos.value = { bottom: Math.round(wr.bottom - br.top + 8), maxH: Math.max(140, Math.min(300, Math.round(br.top - 16))) }
+}
+watch([activeI, () => bins.value.map(b => b.items.length).join()], () => nextTick(placeTip))
+onMounted(() => addEventListener('resize', placeTip)); onUnmounted(() => removeEventListener('resize', placeTip))
 const tipLeft = computed(() => activeI.value == null ? 50 : (activeI.value + 0.5) / bins.value.length * 100)
 const pin = (i) => { autoPin.value = false; open.value = null; pinned.value = pinned.value === i ? null : i; hover.value = null }
 // Нажатие мимо графика закрывает закреплённую подсказку
@@ -176,7 +186,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 
 
       <!-- Столбики; подсказка со словами всплывает поверх — ничего не сдвигается -->
-      <div class="plotw">
+      <div ref="plotw" class="plotw">
       <div class="plot" :style="{ '--n': bins.length }" @mouseleave="hover = null">
         <div class="grid"><i /><i /><i /></div>
         <!-- Всплывашка над столбиками: слово только что ушло -->
@@ -191,7 +201,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 
       <!-- Подсказка столбика -->
       <Transition name="tipf">
-        <div v-if="active" class="tip" :class="{ pinned: pinned === active.i }" :style="{ '--x': tipLeft + '%' }">
+        <div v-if="active" class="tip" :class="{ pinned: pinned === active.i }" :style="{ '--x': tipLeft + '%', '--b': tipPos.bottom + 'px', '--mh': tipPos.maxH + 'px' }">
           <div class="th"><b>{{ title(active.i) }}</b><span>{{ active.items.length ? `${active.items.length} ${word(active.items.length)}` : 'слов нет' }}</span></div>
           <div v-if="active.items.length" class="tl">
             <template v-for="(r, idx) in tipItems.slice(0, open ? 99 : MAXW)" :key="r.c.id">
@@ -256,11 +266,11 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .none { margin: 0; text-align: center; font-size: 13px }
 /* Подсказка столбика — поверх графика, ничего не сдвигает */
 .plotw { position: relative }
-.tip { position: absolute; z-index: 20; top: calc(100% + 6px); pointer-events: none; left: clamp(min(130px, 50%), var(--x), calc(100% - min(130px, 50%))); transform: translateX(-50%); width: min(260px, 100%); box-sizing: border-box; max-height: 260px; overflow-y: auto;
+.tip { position: absolute; z-index: 20; bottom: var(--b, 100%); pointer-events: none; left: clamp(min(130px, 50%), var(--x), calc(100% - min(130px, 50%))); transform: translateX(-50%); width: min(260px, 100%); box-sizing: border-box; max-height: var(--mh, 260px); overflow-y: auto;
   display: grid; gap: 4px; padding: 8px 8px 6px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 10px 28px rgba(0, 0, 0, .16) }
 .tip.pinned { pointer-events: auto }      /* наведённая подсказка не мешает водить по столбикам; закреплённую можно нажимать */
-.tip::before { content: ''; position: absolute; top: -6px; left: calc(50% - 6px); width: 12px; height: 12px; background: var(--card); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg) }
-.tipf-enter-active, .tipf-leave-active { transition: opacity .12s, transform .12s } .tipf-enter-from, .tipf-leave-to { opacity: 0; transform: translate(-50%, 4px) }
+/* подсказка над столбиком — уголок снизу */
+.tipf-enter-active, .tipf-leave-active { transition: opacity .12s, transform .12s } .tipf-enter-from, .tipf-leave-to { opacity: 0; transform: translate(-50%, -4px) }
 .th { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 0 4px 2px; font-size: 13px } .th span { flex: none; font-size: 12px; font-weight: 800; color: var(--hint) }
 .tl { display: grid; gap: 1px }
 .tw { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 5px 6px; border: 0; border-radius: 8px; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer }
