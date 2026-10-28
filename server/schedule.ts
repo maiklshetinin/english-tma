@@ -164,6 +164,15 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
       return asStudent ? all.map((l) => forStudent(l, sid!)) : all
     },
 
+    // Все уроки за период (раздел «Информация»: доходы по месяцам и неделям) — только преподавателю.
+    // Даты включительно, период — не больше 400 дней. Индекс не нужен: диапазон по одному полю date.
+    async range(from: unknown, to: unknown): Promise<Lesson[]> {
+      const day = (v: unknown) => { if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) throw fail(400, 'bad date'); return v }
+      const a = day(from), b = day(to)
+      if (a > b || (Date.parse(b) - Date.parse(a)) / 864e5 > 400) throw fail(400, 'bad range')
+      return (await lessons().where('date', '>=', a).where('date', '<=', b).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc)).sort(byTime)
+    },
+
     async list(user: TokenUser): Promise<ScheduleResponse> {
       const [cur, next] = liveWeeks()
       let me: string | null = null

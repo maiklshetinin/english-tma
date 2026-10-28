@@ -43,6 +43,8 @@ export const routes: RouteRecordRaw[] = [
   { path: '/path', name: 'path', component: byRole({ teacher: TeacherPath, student: StudentPath }), meta: { tab: 'path' } },
   { path: '/students/:id?', name: 'students', component: TeacherStudents, meta: { tab: 'students', roles: ['teacher'] } },
   { path: '/courses', name: 'courses', component: () => import('./views/teacher/CourseEditor.vue'), meta: { tab: 'courses', roles: ['teacher'] } },      // ЭСКИЗ: редактор курсов (холст), грузится лениво
+  { path: '/cards-studio', name: 'cards-studio', component: () => import('./views/teacher/CardStudio.vue'), meta: { tab: 'words', roles: ['teacher'] } },      // ЭСКИЗ: редактор карточек
+  { path: '/info', name: 'info', component: () => import('./views/teacher/TeacherInfo.vue'), meta: { tab: 'info', roles: ['teacher'] } },      // доходы по месяцам (грузится лениво)
   { path: '/words', name: 'words', component: TeacherWords, meta: { tab: 'words', roles: ['teacher'] } },
   { path: '/cards', name: 'cards', component: StudentCards, meta: { tab: 'cards', roles: ['student'] } },
   { path: '/lessons', name: 'lessons', component: Schedule, meta: { tab: 'lessons', roles: ['student'] } },

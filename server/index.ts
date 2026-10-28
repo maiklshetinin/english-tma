@@ -131,6 +131,7 @@ app.post('/students/:id/archive', requireUser, requireTeacher, wrap(async (req, 
 app.get('/schedule', requireUser, wrap(async (req, res) => res.json(await schedule.list(req.user))))      // преподаватель — всё, ученик — только свои уроки
 app.get('/schedule/weeks', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await schedule.weeksList())))   // недели, которые есть в базе (с уроками)
 app.get('/schedule/week', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.week(req.query.start))))   // ?start=понедельник → { weekStart, lessons }
+app.get('/lessons/range', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.range(req.query.from, req.query.to))))   // ?from&to — все уроки за период («Информация»)
 app.get('/lessons/history', requireUser, wrap(async (req, res) => res.json(await schedule.history(req.user, req.query.studentId))))   // все уроки ученика (календарь): ученик — свои, преподаватель — ?studentId
 app.post('/lessons', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.create(req.body, req.user.uid))))   // { studentId | studentIds, date, hour }
 app.post('/lessons/swap', requireUser, requireTeacher, wrap(async (req, res) => { await schedule.swap(String(req.body?.a || ''), String(req.body?.b || '')); res.json({ ok: true }) }))
@@ -161,7 +162,10 @@ app.delete('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) =>
   res.json({ ok: true })
 }))
 // Кружки и фото: загрузка потоком через сервер (тело — сам файл, Content-Type: video/… или image/…), ссылки на просмотр, удаление
-app.post('/media/upload', requireUser, requireTeacher, wrap(async (req, res) => res.json(await storage.upload(req.user.uid, { courseId: req.query.courseId, type: req.headers['content-type'] }, req, req.headers['content-length']))))
+app.post('/media/upload', requireUser, requireTeacher, wrap(async (req, res) => res.json(await storage.upload(req.user.uid, { courseId: req.query.courseId, deckId: req.query.deckId, type: req.headers['content-type'] }, req, req.headers['content-length']))))
+// Фото и озвучка карточек: ссылка в колоде — сюда, без входа (как ссылка на Диск); пересылаем на временную ссылку хранилища.
+// Браузер запоминает пересылку на час — повторно сервер не дёргает.
+app.get(/^\/media\/f\/(.+)$/, wrap(async (req, res) => { res.set('Cache-Control', 'public, max-age=3600'); res.redirect(302, await storage.open(req.params[0])) }))
 app.post('/media/view', requireUser, requireTeacher, wrap(async (req, res) => res.json(await storage.viewUrls(req.user.uid, req.body))))
 app.post('/media/delete', requireUser, requireTeacher, wrap(async (req, res) => { await storage.remove(req.user.uid, req.body?.key); res.json({ ok: true }) }))
 

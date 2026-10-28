@@ -45,7 +45,7 @@ export const TABS: Record<Role, { id: string; label: string; icon: string }[]> =
   teacher: [
     { id: 'home', label: 'Главная', icon: 'home' }, { id: 'path', label: 'Курсы', icon: 'route' },
     { id: 'students', label: 'Ученики', icon: 'users' }, { id: 'words', label: 'Слова', icon: 'cards' },
-    { id: 'profile', label: 'Профиль', icon: 'user' },
+    { id: 'info', label: 'Инфо', icon: 'chart' }, { id: 'profile', label: 'Профиль', icon: 'user' },
   ],
 }
 export const handle = (s: { username?: string; status?: string }) => (s.username ? '@' + s.username : s.status === 'invited' ? 'ждёт приглашения' : '')   // подпись под именем ученика

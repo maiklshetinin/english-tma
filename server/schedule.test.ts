@@ -236,6 +236,9 @@ ok('история ученика: только он сам, своя цена, 
 ok('история: чужой studentId / без роли — пусто', !(await S.history({ uid: 'tg:99', role: 'student', studentId: h3.id })).length && !(await S.history({ uid: 'tg:99' })).length)
 const tHist = await S.history(teacher, h4.id)
 ok('история у преподавателя: по ?studentId, со всеми учениками и заметкой', tHist.length === 1 && tHist[0].studentIds.length === 2 && tHist[0].note === 'секрет')
+const rg = await S.range('2026-01-01', '2026-12-31')
+ok('уроки за период: все ученики, по времени, в пределах дат', rg.length > 0 && rg.every(l => l.date >= '2026-01-01' && l.date <= '2026-12-31') && rg.every((l, i) => !i || rg[i - 1].date <= l.date))
+ok('период: кривые даты и больше 400 дней — 400', (await code(S.range('2026-1-1', '2026-02-01'))) === 400 && (await code(S.range('2025-01-01', '2026-12-31'))) === 400 && (await code(S.range('2026-03-01', '2026-02-01'))) === 400)
 ok('история у преподавателя без studentId → 400', (await code(S.history(teacher, undefined))) === 400)
 
 // --- смена недели: в понедельник «следующая» становится «текущей», старая неделя остаётся в базе ---
