@@ -107,7 +107,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 <template>
   <StudentDetail v-if="route.params.id" :id="route.params.id" back-label="Главная" @back="goUp(router)" />
   <div v-else class="home">
-    <div class="side"><StudentsPanel /></div>
+    <div class="side stick-bg"><StudentsPanel /></div>
     <section class="main">
       <div class="weeks">
         <div class="wcol">

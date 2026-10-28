@@ -1,8 +1,8 @@
 <script setup>
-// Кнопка с решёткой над таблицей недели: меню (как в iOS) — вид сетки с маленьким превью. См. utils/gridStyle.js.
+// Кнопка с решёткой над таблицей недели: меню (как в iOS) — вид сетки с маленьким превью и фон экрана (точки, как в Figma). См. utils/gridStyle.js.
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { GRID_STYLES, gridStyle, setGridStyle } from '../utils/gridStyle'
+import { GRID_STYLES, gridStyle, setGridStyle, bgDots, setBgDots } from '../utils/gridStyle'
 const open = ref(null)
 function toggle(e) {
   if (open.value) { open.value = null; return }
@@ -27,6 +27,12 @@ onUnmounted(() => removeEventListener('keydown', onKey))
           <span class="gs-tx"><b>{{ s.title }}</b><small>{{ s.sub }}</small></span>
           <span v-if="gridStyle === s.id" class="gs-ok"><AppIcon name="check" :size="16" /></span>
         </button>
+        <div class="gs-h sep">Фон</div>
+        <label class="gs-r" role="menuitemcheckbox" :aria-checked="bgDots">
+          <span class="gs-pv bgd" />
+          <span class="gs-tx"><b>Точки</b><small>как в Figma</small></span>
+          <input type="checkbox" class="sw" :checked="bgDots" @change="setBgDots($event.target.checked)" />
+        </label>
       </div>
     </div>
   </Teleport>
@@ -50,4 +56,10 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .gs-pv.gray i { background: var(--border) }
 .gs-pv.none i { background: transparent }
 .gs-pv.lines { gap: 0 2px } .gs-pv.lines i { border-radius: 0; box-shadow: inset 0 -1px 0 var(--hint-2); height: 9px }
+.gs-h.sep { margin-top: 2px; padding-top: 10px; box-shadow: inset 0 1px 0 var(--border) }
+.gs-pv.bgd { width: 38px; height: 25px; padding: 0; background-color: #f4f4f4; background-image: radial-gradient(circle, #bdbdbd .9px, transparent 1.2px); background-size: 5px 5px }
+/* Переключатель как в Telegram */
+.sw { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 99px; background: var(--border); cursor: pointer; transition: background .15s }
+.sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s }
+.sw:checked { background: var(--blue) } .sw:checked::after { transform: translateX(16px) }
 </style>

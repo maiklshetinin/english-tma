@@ -26,6 +26,12 @@ html[data-theme='dark'] {
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 700 16px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
 h1, h2, h3 { font-weight: 800; color: var(--text); }
 :focus, :focus-visible { outline: none; }      /* без синей обводки фокуса во всём приложении */
+/* Фон в точку, как холст в Figma (настройка в меню вида сетки — utils/gridStyle.js): карточки лежат на нём белыми досками */
+html.bg-dots, html.bg-dots body { background-color: #f4f4f4; background-image: radial-gradient(circle, #cdcdcd 1px, transparent 1.4px); background-size: 18px 18px; background-attachment: fixed; }
+/* Липкие полосы (панель учеников на телефоне) — тот же фон в точку, «приклеенный» к экрану, чтобы не выделялись белым */
+html.bg-dots .stick-bg { background-color: #f4f4f4 !important; background-image: radial-gradient(circle, #cdcdcd 1px, transparent 1.4px); background-size: 18px 18px; background-attachment: fixed }
+html[data-theme='dark'].bg-dots .stick-bg { background-color: #0e181c !important; background-image: radial-gradient(circle, rgba(255, 255, 255, .13) 1px, transparent 1.4px) }
+html[data-theme='dark'].bg-dots, html[data-theme='dark'].bg-dots body { background-color: #0e181c; background-image: radial-gradient(circle, rgba(255, 255, 255, .13) 1px, transparent 1.4px); }
 html.dragging, html.dragging * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 

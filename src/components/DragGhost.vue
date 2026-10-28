@@ -64,20 +64,27 @@ const hint = computed(() => {
   return { k: 'ok', t: `Перенести · ${at}` }
 })
 // Подсказка — над призраком, по центру (на тачскрине призрак над пальцем, так что и подсказку палец не закрывает)
-const hintPos = computed(() => ({ left: (0.5 - fx.value) * W.value + 'px', top: -fy.value * H.value - 8 + 'px' }))
+// …но не за краем экрана: центр подсказки прижимается так, чтобы она целиком помещалась (ширину меряем после показа)
+const hintEl = ref(null), hintW = ref(0)
+watch(() => hint.value?.t, () => nextTick(() => { hintW.value = hintEl.value?.offsetWidth ?? 0 }))
+const hintPos = computed(() => {
+  const want = dnd.x + (0.5 - fx.value) * W.value, half = hintW.value / 2 + 8
+  const at = hintW.value ? Math.min(Math.max(want, half), innerWidth - half) : want
+  return { left: at - dnd.x + 'px', top: -fy.value * H.value - 8 + 'px' }
+})
 </script>
 <template>
   <div v-if="dnd.active && people.length" class="gw" :style="{ transform: `translate(${dnd.x}px, ${dnd.y}px)` }">
     <div class="ghost" :class="{ lesson, small: small || lesson, one }" :style="box">
       <template v-if="lesson">
-        <AvatarStack v-if="!one" :students="people" :size="20" :max="3" ring="var(--card)" />
-        <template v-else><Avatar :s="people[0]" :size="20" /><span class="nm">{{ people[0].name }}</span></template>
+        <AvatarStack v-if="!one" :students="people" :size="47" :max="3" ring="var(--surface)" />
+        <template v-else><Avatar :s="people[0]" :size="47" /><span class="nm">{{ people[0].name }}</span></template>
       </template>
       <template v-else>
         <Avatar v-for="(s, i) in shown" :key="s.id" :s="s" :size="av" :style="{ marginLeft: ml(i), zIndex: 10 - i }" />
       </template>
     </div>
-    <Transition name="hint"><div v-if="hint" :key="hint.k + hint.t" class="dhint" :class="hint.k" :style="hintPos">{{ hint.t }}</div></Transition>
+    <Transition name="hint"><div v-if="hint" ref="hintEl" :key="hint.k + hint.t" class="dhint" :class="hint.k" :style="hintPos">{{ hint.t }}</div></Transition>
   </div>
 </template>
 <style scoped>
@@ -95,9 +102,12 @@ const hintPos = computed(() => ({ left: (0.5 - fx.value) * W.value + 'px', top: 
 .ghost.small .nm { opacity: 1 }
 @media (max-width: 719px) { .nm.pn { display: none } }
 /* Урок из таблицы: копия карточки поверх оригинала */
-.ghost.lesson { gap: 5px; justify-content: center; padding: 0; border: 0; border-radius: 10px; background: var(--card); opacity: .95; transition: none; box-shadow: 0 8px 20px rgba(0, 0, 0, .2) }
-.ghost.lesson .nm { display: none; margin: 0; font-size: 12px }
-@media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px } }
+/* Урок из таблицы — точная копия плашки в ячейке (WeekGrid .chip): серая, кружок во всю высоту, имя рядом */
+.ghost.lesson { gap: 5px; justify-content: center; padding: 0; border: 0; border-radius: 10px; background: var(--surface); color: var(--text); opacity: .97; transition: none; box-shadow: 0 8px 20px rgba(0, 0, 0, .2); overflow: visible }
+.ghost.lesson :deep(.av) { width: 31px !important; height: 31px !important; font-size: 13px !important }
+.ghost.lesson .nm { display: none; margin: 0; font-size: 13px; font-weight: 700; opacity: .85 }
+@media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px } .ghost.lesson :deep(.av) { width: 47px !important; height: 47px !important; font-size: 17px !important } }
+@media (max-width: 420px) { .ghost.lesson :deep(.av) { width: 29px !important; height: 29px !important } }
 .dhint { position: absolute; transform: translate(-50%, -100%); width: max-content; max-width: 260px; padding: 5px 10px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 800; line-height: 1.3; text-align: center;
   white-space: normal; box-shadow: 0 6px 16px rgba(0, 0, 0, .18); background: var(--green-d) }
 .dhint.swap { background: var(--orange-d) } .dhint.bad { background: var(--red) }
