@@ -61,8 +61,13 @@ function zoomAt(f, cx, cy) {
 const zoomBtn = (f) => { const r = board.value.getBoundingClientRect(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2) }
 function onWheel(e) {
   e.preventDefault()
-  if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY)
-  else { view.x -= e.deltaX; view.y -= e.deltaY }
+  const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1          // строки / страницы → пиксели
+  const dx = e.deltaX * k, dy = e.deltaY * k
+  if (e.ctrlKey || e.metaKey) {
+    // щелчок колёсика мыши (большой шаг) — ±15 %, как в Figma; щипок тачпада (мелкие шаги) — плавно
+    const f = Math.abs(dy) >= 40 ? (dy < 0 ? 1.15 : 1 / 1.15) : Math.exp(-dy * 0.01)
+    zoomAt(f, e.clientX, e.clientY)
+  } else { view.x -= dx; view.y -= dy }
 }
 // «Весь курс»: рельс, черновики и сводка — на экране целиком
 function fit(anim = true) {
