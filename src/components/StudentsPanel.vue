@@ -33,8 +33,8 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
       <label class="search"><AppIcon name="search" :size="16" /><input v-model="q" :placeholder="`Поиск · ${studentStore.list.length} учеников`" aria-label="Поиск ученика" /></label>
       <button class="addb" title="Добавить ученика" aria-label="Добавить ученика" @click="adding = true"><AppIcon name="plus" :size="18" /></button></header>
     <div class="list">
-      <!-- Группы — ширина по числу учеников (2 → полряда), несколько маленьких групп встают в один ряд -->
-      <div v-if="shownGroups.length" class="gwrap">
+      <!-- Одна сетка на 4 колонки: группа занимает столько колонок, сколько в ней учеников; остальные ученики заполняют свободные клетки рядом -->
+      <div class="mix">
       <section v-for="g in shownGroups" :key="g.key" class="grp" :style="{ '--n': Math.min(4, g.members.length) }">
         <div class="gl" :title="`Группа · ${g.label}`"><AppIcon name="users" :size="12" /> <template v-if="g.members.length > 2">Группа · </template>{{ g.label }}</div>
         <div class="tiles">
@@ -44,16 +44,11 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
           </div>
         </div>
       </section>
+      <div v-for="s in solo" :key="s.id" class="st solo" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
+        @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
+        <span class="ava"><Avatar :s="s" :size="54" :online="isOnline(s)" /></span><span class="nm">{{ s.name }}</span>
       </div>
-      <section v-if="solo.length" class="solo">
-        <div v-if="shownGroups.length" class="gl">Индивидуально</div>
-        <div class="tiles">
-          <div v-for="s in solo" :key="s.id" class="st" role="button" tabindex="0" :title="`${s.name}${handle(s) ? ' · ' + handle(s) : ''}`" :aria-label="`${s.name}. Перетащите в таблицу, чтобы назначить урок`"
-            @pointerdown="pressStart($event, { kind: 'student', id: s.id })" @click="open(s.id)" @keydown.enter="open(s.id)" @dragstart.prevent>
-            <span class="ava"><Avatar :s="s" :size="54" :online="isOnline(s)" /></span><span class="nm">{{ s.name }}</span>
-          </div>
-        </div>
-      </section>
+      </div>
       <p v-if="!list.length" class="hint empty">Никого не нашли</p>
     </div>
     <Teleport to="body"><div v-if="adding" class="sheet-bg" @click.self="adding = false"><div class="sheet-box"><AddStudent @close="adding = false" /></div></div></Teleport>
@@ -74,7 +69,9 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 /* Сетка кружков: аватарка 54px — максимум для 4 в ряд и имя под ней, по 4 в ряд; группы — блоками в рамке с подписью, ниже «Индивидуально» */
 .list { display: grid; gap: 8px; align-content: start; overflow-y: auto; padding: 2px 6px 8px }
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 0 }
-.gwrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 6px }
+.mix { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 6px 0 }
+.mix > .grp { margin: 0 3px }      /* между блоками групп — небольшой зазор */
+.mix > .st.solo { align-self: end; padding-bottom: 6px }      /* рядом с группой — на одной линии с её кружками */
 .grp { grid-column: span var(--n); min-width: 0; border: 2px solid var(--border); border-radius: 14px; padding: 4px 2px 2px; background: var(--surface) }
 .grp .tiles { grid-template-columns: repeat(var(--n), minmax(0, 1fr)) }
 .grp .gl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block }
@@ -94,7 +91,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
   .panel { height: auto; grid-template-rows: auto; border-bottom-width: 4px }
   .ph { display: none }
   .list { display: flex; overflow-x: auto; overflow-y: hidden; padding: 6px 6px 4px; gap: 6px; scrollbar-width: none } .list::-webkit-scrollbar { display: none }
-  .tiles { display: flex; gap: 2px } .grp, .solo { flex: none } .gwrap { display: contents } .gl { display: none } .grp { padding: 2px }
+  .tiles { display: flex; gap: 2px } .grp, .solo { flex: none } .mix { display: contents } .mix > .grp { margin: 0 } .mix > .st.solo { padding-bottom: 4px } .gl { display: none } .grp { padding: 2px }
   .st { flex: none; width: 64px; padding: 4px 2px } .nm { font-size: 11px; -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block }
   .st :deep(.av) { width: 44px !important; height: 44px !important; font-size: 20px !important }
   .drophint { flex-direction: row; display: flex; justify-content: center; align-items: center; gap: 8px; border-radius: 12px }

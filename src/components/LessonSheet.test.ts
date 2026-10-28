@@ -123,12 +123,12 @@ describe('урок с учеником, которого больше нет (у
     expect(w.emitted('details')![1]).toEqual([lesson, { note: 'новое' }])
   })
 
-  it('«Кого назначить?»: группы сверху (нажатие — вся группа), ниже все ученики по 4 в ряд', async () => {
+  it('«Кого назначить?»: одна сетка на 4 — группы (нажатие — вся группа) и все ученики', async () => {
     useStudentsStore().set([st('a', 'Маша', 100), st('b', 'Петя', 80), st('c', 'Оля', 50)])
     useScheduleStore().set([{ id: 'G', date: D, hour: 20, studentIds: ['a', 'b'] }])
     const w = mount(LessonSheet, { props: { slot: { date: D, hour: 12 } } })
     expect(w.findAll('.pgrp')).toHaveLength(1); expect(w.find('.pgrp').text()).toContain('Группа · Вт 20:00')
-    expect(w.findAll('.ptiles > .pt.tap')).toHaveLength(3)                // все ученики, и из группы тоже
+    expect(w.findAll('.pgwrap > .pt.tap')).toHaveLength(3)                // все ученики, и из группы тоже
     await w.find('.pgrp').trigger('click')
     expect(w.emitted('pick')![0]).toEqual([['a', 'b']])
     await w.findAll('.pt.tap').find(b => b.text().includes('Оля'))!.trigger('click')

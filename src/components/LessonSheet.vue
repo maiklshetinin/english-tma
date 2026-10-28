@@ -134,16 +134,13 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
           <div class="when">{{ when }}</div>
           <label class="tsearch"><AppIcon name="search" :size="18" /><input v-model="q" placeholder="Поиск" aria-label="Поиск ученика" /><button v-if="q" class="clr" aria-label="Очистить" @click="q = ''"><AppIcon name="x" :size="14" /></button></label>
           <div class="pick scroll">
-            <!-- Группы: блок целиком — одна кнопка, урок назначается всем её ученикам -->
-            <div v-if="shownGroups.length" class="pgwrap">
+            <!-- Одна сетка на 4: группа — столько колонок, сколько учеников (нажатие — вся группа); ученики заполняют свободные клетки рядом -->
+            <div class="pgwrap">
             <button v-for="g in shownGroups" :key="g.key" class="pgrp" :style="{ '--n': Math.min(4, g.members.length) }" :title="`Назначить урок группе: ${g.members.map(m => m.name).join(', ')}`" @click="pickGroup(g)">
               <span class="pgl"><AppIcon name="users" :size="12" /> Группа · {{ g.label }}</span>
               <span class="ptiles"><span v-for="st in g.members" :key="st.id" class="pt"><Avatar :s="st" :size="54" :online="isOnline(st)" /><span class="pn">{{ st.name }}</span></span></span>
             </button>
-            </div>
-            <div v-if="shownGroups.length && found.length" class="pgl solo">Ученики</div>
-            <div class="ptiles">
-              <button v-for="st in found" :key="st.id" class="pt tap" :title="`${st.name} · ${isOnline(st) ? 'в сети' : sub(st)}`" @click="emit('pick', [st.id])">
+              <button v-for="st in found" :key="st.id" class="pt tap solo" :title="`${st.name} · ${isOnline(st) ? 'в сети' : sub(st)}`" @click="emit('pick', [st.id])">
                 <Avatar :s="st" :size="54" :online="isOnline(st)" /><span class="pn">{{ st.name }}</span></button>
             </div>
             <div v-if="!found.length && !shownGroups.length" class="hint empty">Никого не нашли</div>
@@ -238,7 +235,8 @@ html[data-theme='dark'] .mi.green { color: var(--green) } html[data-theme='dark'
 .pt { display: grid; justify-items: center; align-content: start; gap: 3px; min-width: 0; padding: 4px 0; border: 0; border-radius: 14px; background: none; font: inherit; color: var(--text) }
 .pt.tap { cursor: pointer } .pt.tap:hover { background: var(--blue-l) } .pt.tap:active :deep(.av) { transform: scale(.94) }
 .pn { width: 100%; text-align: center; font-size: 11px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.pgwrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 6px }      /* ширина группы — по числу учеников */
+.pgwrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 6px 0 }
+.pgwrap > .pgrp { margin: 0 3px; width: auto } .pgwrap > .pt.solo { align-self: end; margin-bottom: 4px }      /* ширина группы — по числу учеников */
 .pgrp .ptiles { grid-template-columns: repeat(var(--n), minmax(0, 1fr)) }
 .pgrp .pgl { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .pgrp { grid-column: span var(--n); min-width: 0; display: grid; gap: 0; width: 100%; padding: 4px 2px 2px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); font: inherit; color: var(--text); text-align: left; cursor: pointer }
