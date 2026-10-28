@@ -43,7 +43,7 @@ export const TABS: Record<Role, { id: string; label: string; icon: string }[]> =
     { id: 'lessons', label: 'Уроки', icon: 'calendar' }, { id: 'profile', label: 'Профиль', icon: 'user' },
   ],
   teacher: [
-    { id: 'home', label: 'Главная', icon: 'home' }, { id: 'path', label: 'Путь', icon: 'route' },
+    { id: 'home', label: 'Главная', icon: 'home' }, { id: 'path', label: 'Курсы', icon: 'route' },
     { id: 'students', label: 'Ученики', icon: 'users' }, { id: 'words', label: 'Слова', icon: 'cards' },
     { id: 'profile', label: 'Профиль', icon: 'user' },
   ],

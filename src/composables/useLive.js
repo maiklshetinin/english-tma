@@ -5,7 +5,7 @@ import { reactive, computed } from 'vue'
 import { API, fb, isDemo, liveHeaders } from '../firebase'
 
 export const live = reactive({ on: false, cid: '', users: [] })
-export const WHERE = { home: 'Главная', path: 'Путь', students: 'Ученики', courses: 'Курсы', words: 'Слова', profile: 'Профиль' }
+export const WHERE = { home: 'Главная', path: 'Курсы', students: 'Ученики', courses: 'Редактор курсов', words: 'Слова', profile: 'Профиль' }
 /** По одному на человека: свой — последним (как во Figma), у каждого — где он сейчас */
 export const people = computed(() => {
   const by = new Map()

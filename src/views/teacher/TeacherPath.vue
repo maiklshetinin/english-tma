@@ -1,11 +1,12 @@
 <script setup>
-// Вкладка «Путь» преподавателя: режим редактирования и пресеты пути. Пресет — заготовка (юниты + кружки),
+// Вкладка «Курсы» (раньше «Путь») преподавателя: сверху — курсы (редактор с холстом и рельсом), ниже — пресеты пути. Пресет — заготовка (юниты + кружки),
 // которую добавляют в путь ученика из его профиля. Путь конкретного ученика правится в карточке ученика.
 import { ref, computed } from 'vue'
 import { newId } from '../../utils/id'
 import { showToast } from '../../composables/useToast'
 import PathEditor from '../../components/PathEditor.vue'
 import AppIcon from '../../components/AppIcon.vue'
+import CourseList from '../../components/CourseList.vue'
 import { usePathStore } from '../../stores/path'
 const pathStore = usePathStore()
 const sel = ref(pathStore.presets[0]?.id ?? null), name = ref(''), creating = ref(false)
@@ -23,6 +24,8 @@ function remove() {
 </script>
 <template>
   <div class="page wide">
+    <CourseList />
+    <h3 class="psh">Пресеты пути <small>старый вид — со временем переедут в курсы</small></h3>
     <div class="card">
       <div class="seg tabs"><button v-for="p in pathStore.presets" :key="p.id" :class="{ on: preset && p.id === preset.id }" @click="sel = p.id">{{ p.name }}</button>
         <button v-if="!creating" aria-label="Новый пресет" @click="creating = true"><AppIcon name="plus" :size="16" /></button></div>
@@ -44,4 +47,5 @@ function remove() {
 </template>
 <style scoped>
 .tabs { flex-wrap: wrap }
+.psh { margin: 6px 0 8px; font-size: 15px } .psh small { font-size: 12px; font-weight: 600; color: var(--hint) }
 </style>

@@ -9,14 +9,14 @@
 // Только для преподавателя. Хранение: на сервере (Firestore, курс целиком; кружки — в S3 через сервер), а в браузере —
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../../firebase'
 import { showToast } from '../../composables/useToast'
 import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 
-const router = useRouter()
-const goBack = () => (history.length > 1 ? router.back() : router.push({ name: 'profile' }))
+const router = useRouter(), route = useRoute()
+const goBack = () => router.push({ name: 'path' })            // назад — в «Курсы»
 const KEY = 'tma.courseRail.v1'
 
 // ---------- Типы заданий ----------
@@ -112,21 +112,38 @@ function push(delay = 900) {
   }, delay)
 }
 onUnmounted(() => { clearTimeout(st); clearTimeout(pt) })
-// Открыли редактор: есть несохранённые правки — отправляем их; нет — берём курс с сервера (последний изменённый)
+// Открыли редактор (из «Курсов»: #/courses?id=<курс> или ?id=new). В браузере — копия последнего открытого курса:
+// если в ней несохранённые правки другого курса — сначала отправляем их, потом открываем нужный.
+const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'wave',
+  items: [it('unit', 'Юнит 1', { sub: 'Тема юнита' })], loose: [], dirty: false })
+const fromServer = (c) => {
+  const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
+  const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}) })
+  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), dirty: false })
+  localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'
+}
+const flush = () => apiRequest(`/courses/${doc.id}`, { method: 'PUT', body: JSON.stringify(payload()) }).then(r => { if (r.ok) doc.dirty = false })
 onMounted(async () => {
+  const want = String(route.query.id || '')
+  if (want === 'new' || (!online && want && want !== doc.id && want !== 'local')) {
+    if (online && doc.dirty) await flush().catch(() => {})
+    Object.assign(doc, blank()); save()
+    router.replace({ name: 'courses', query: { id: doc.id } })
+  }
   setWhere('courses', doc.id)                // коллеги видят, что я в этом курсе
   if (!online) return
   try {
     const r = await apiRequest('/courses'); if (!r.ok) throw new Error(String(r.status))
     const { courses, storage } = await r.json(); storageOn.value = !!storage
-    if (!doc.dirty && courses.length) {
-      const c = await (await apiRequest(`/courses/${courses[0].id}`)).json()
-      const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
-      const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}) })
-      Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), dirty: false })
-      setWhere('courses', doc.id)
-      localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'
-    } else push(0)
+    const target = want && want !== 'new' ? want : doc.id
+    if (target !== doc.id && doc.dirty) await flush().catch(() => {})
+    if (courses.some(c => c.id === target) && !(target === doc.id && doc.dirty)) {
+      const c = await (await apiRequest(`/courses/${target}`)).json()
+      if (target !== doc.id) Object.assign(doc, { items: [], loose: [] })         // другой курс — чужие локальные видео не тащим
+      fromServer(c)
+    } else if (!want && !doc.dirty && courses.length) fromServer(await (await apiRequest(`/courses/${courses[0].id}`)).json())
+    else push(0)                                                                  // новый или с несохранёнными правками — на сервер
+    setWhere('courses', doc.id)
     if (storageOn.value) uploadLocal()
   } catch { sync.value = 'offline'; push(15000) }
 })
