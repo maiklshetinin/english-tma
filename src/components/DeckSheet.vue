@@ -21,8 +21,9 @@ function createDeck() {
   auto.value = !!link                                  // с ссылкой — сразу подтягиваем слова
 }
 const has = (id) => d.value.assigned.includes(id)
-// Выбор учеников — сеткой по 4, как «Поделиться» в Telegram; поиск по имени и нику
-const wq = ref(''), picking = ref(false)                                     // сетка учеников раскрывается по нажатию на строку «Ученики»
+// Выбор учеников — как «Добавить участников» в Telegram: строка «Кому назначена ›» открывает отдельную страницу окна
+// со списком, поиском по имени и нику и круглыми галочками
+const wq = ref(''), page = ref('main')
 const chosen = computed(() => d.value ? studentStore.list.filter(s => d.value.assigned.includes(s.id)) : [])
 const step = (n) => { d.value.newPerDay = Math.min(500, Math.max(0, (Number(d.value.newPerDay) || 0) + n)) }
 const whoList = computed(() => { const k = wq.value.trim().toLowerCase().replace(/^@/, ''); return studentStore.list.filter(s => !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k)) })
@@ -35,7 +36,7 @@ function remove() {
 
 <template>
   <div class="sheet-bg" @click.self="emit('close')">
-    <!-- Компактно, как настройки в Telegram: шапка с названием, строки с иконками, раскрывающийся выбор учеников, опасное — красным внизу -->
+    <!-- Компактно, как настройки в Telegram: шапка с названием, строки с иконками, выбор учеников — отдельной страницей, опасное — красным внизу -->
     <div class="sheet-box ds" role="dialog" aria-modal="true">
       <template v-if="!d">
         <div class="hd"><b>Новая колода</b><button class="x" aria-label="Закрыть" @click="emit('close')"><AppIcon name="x" :size="18" /></button></div>
@@ -44,6 +45,18 @@ function remove() {
           <div class="r"><span class="ic sh"><AppIcon name="sheet" :size="20" /></span><input v-model="url" class="in" placeholder="Ссылка на Google Таблицу (можно позже)" @keyup.enter="createDeck" /></div>
         </div>
         <div class="ft"><button class="lnk grey" @click="emit('close')">Отмена</button><button class="lnk" @click="createDeck">Создать</button></div>
+      </template>
+
+      <template v-else-if="page === 'who'">
+        <div class="hd"><button class="x" aria-label="Назад" @click="page = 'main'; wq = ''"><AppIcon name="back" :size="18" /></button><b>Кому назначить</b><span class="wn">{{ d.forAll ? 'все' : d.assigned.length + ' выбрано' }}</span></div>
+        <label class="r tap"><span class="ic"><AppIcon name="users" :size="20" /></span><span class="lb">Всем ученикам</span><input v-model="d.forAll" type="checkbox" class="sw" role="switch" /></label>
+        <label class="psearch"><AppIcon name="search" :size="16" /><input v-model="wq" placeholder="Поиск" aria-label="Поиск ученика" /></label>
+        <div class="plist">
+          <button v-for="s in whoList" :key="s.id" class="prow" :disabled="d.forAll" @click="toggle(s.id)">
+            <Avatar :s="s" :size="40" /><span class="tx"><b>{{ s.name }}</b><small>{{ [s.level, s.username ? '@' + s.username : ''].filter(Boolean).join(' · ') }}</small></span>
+            <i class="chk" :class="{ on: d.forAll || has(s.id) }"><AppIcon v-if="d.forAll || has(s.id)" name="check" :size="13" /></i></button>
+        </div>
+        <div class="ft"><span /><button class="lnk" @click="page = 'main'; wq = ''">Готово</button></div>
       </template>
 
       <template v-else>
@@ -56,21 +69,10 @@ function remove() {
         <div class="sec">
           <div class="r"><span class="ic"><AppIcon name="plus" :size="20" /></span><span class="lb">Новых карточек в день</span>
             <span class="stp"><button aria-label="Меньше" @click="step(-5)">−</button><input v-model.number="d.newPerDay" type="number" min="0" max="500" aria-label="Новых карточек в день" /><button aria-label="Больше" @click="step(5)">+</button></span></div>
-          <label class="r tap"><span class="ic"><AppIcon name="users" :size="20" /></span><span class="lb">Всем ученикам</span>
-            <input v-model="d.forAll" type="checkbox" class="sw" role="switch" /></label>
-          <button v-if="!d.forAll" class="r tap" :aria-expanded="picking" @click="picking = !picking">
-            <span class="ic"><AppIcon name="user" :size="20" /></span><span class="lb">Ученики</span>
-            <AvatarStack v-if="chosen.length" :students="chosen" :size="26" :max="5" />
-            <span class="val">{{ chosen.length ? '' : 'выбрать' }}</span><span class="chev" :class="{ up: picking }">›</span></button>
-          <div v-if="!d.forAll && picking" class="wbox">
-            <label class="wsearch"><AppIcon name="search" :size="15" /><input v-model="wq" placeholder="Поиск" aria-label="Поиск ученика" /><span class="wn">{{ d.assigned.length }} выбрано</span></label>
-            <div class="wgrid">
-              <button v-for="s in whoList" :key="s.id" class="who" :class="{ on: has(s.id) }" :aria-pressed="has(s.id)" :title="s.name" @click="toggle(s.id)">
-                <span class="wa"><Avatar :s="s" :size="44" /><i v-if="has(s.id)" class="ok"><AppIcon name="check" :size="12" /></i></span><b>{{ s.name }}</b>
-              </button>
-              <p v-if="!whoList.length" class="hint" style="grid-column:1/-1;text-align:center;margin:6px 0">Никого не нашли</p>
-            </div>
-          </div>
+          <!-- Одна строка: выбранные — аватарками, сам выбор — на отдельной странице окна -->
+          <button class="r tap" @click="page = 'who'"><span class="ic"><AppIcon name="users" :size="20" /></span><span class="lb">Кому назначена</span>
+            <AvatarStack v-if="!d.forAll && chosen.length" :students="chosen" :size="26" :max="4" />
+            <span class="val">{{ d.forAll ? 'всем ученикам' : chosen.length ? '' : 'никому' }}</span><span class="chev">›</span></button>
           <div class="r sl"><SheetLink :deck="d" :auto="auto" /></div>
         </div>
 
@@ -99,7 +101,7 @@ function remove() {
 .r.tap { cursor: pointer } .r.tap:hover { background: var(--surface) }
 .ic { flex: none; display: grid; place-items: center; width: 28px; color: var(--hint) } .ic.sh { color: var(--green-d) }
 .lb { flex: 1; font-size: 15px; font-weight: 700 } .val { font-size: 14px; font-weight: 600; color: var(--blue) }
-.chev { font-size: 20px; color: var(--hint-2); transition: transform .15s } .chev.up { transform: rotate(90deg) }
+.chev { font-size: 20px; color: var(--hint-2); }
 .in { flex: 1; margin: 0; padding: 8px 10px; font-size: 14px; border-width: 1px; border-radius: 10px }
 .stp { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; overflow: hidden }
 .stp button { width: 30px; height: 30px; border: 0; background: var(--surface); color: var(--text); font: inherit; font-size: 17px; font-weight: 900; cursor: pointer } .stp button:hover { background: var(--blue-l); color: var(--blue) }
@@ -113,17 +115,13 @@ function remove() {
 .ft { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border) }
 .lnk { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--blue); cursor: pointer }
 .lnk:hover { background: var(--surface) } .lnk.grey { color: var(--hint) } .lnk.red { color: var(--red-d); font-size: 14px } .lnk.red.on { background: var(--red); color: #fff }
-/* Выбор учеников — как «Поделиться» в Telegram: поиск сверху, сетка 4 в ряд с прокруткой, выбранный — зелёное кольцо и галочка */
-.wbox { display: grid; margin: 0 14px 6px 58px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden }
-.wsearch { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); color: var(--hint-2) }
-.wsearch input { flex: 1; margin: 0; padding: 7px 0; font-size: 14px; border: 0; border-radius: 0; background: none } .wsearch input:focus { background: none } .wsearch input:focus-visible { outline: none }
+/* Страница выбора учеников: поиск, список с аватарками, круглая галочка справа */
 .wn { flex: none; font-size: 12px; font-weight: 800; color: var(--green-d) }
-.wgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 0; max-height: 186px; overflow-y: auto; padding: 6px 4px; overscroll-behavior: contain }
-.who { display: grid; justify-items: center; align-content: start; gap: 5px; padding: 4px 2px; border: 0; border-radius: 14px; background: none; color: var(--text); font: inherit; cursor: pointer; min-width: 0 }
-.who:hover { background: var(--surface) }
-.wa { position: relative; display: grid; border-radius: 50%; padding: 3px; box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .12s }
-.who.on .wa { box-shadow: inset 0 0 0 3px var(--green) }
-.ok { position: absolute; right: 0; bottom: 0; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 0 0 2px var(--card) }
-.who b { width: 100%; font-size: 11px; font-weight: 700; line-height: 1.2; text-align: center; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word }
-.who.on b { color: var(--green-d) }
+.psearch { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: var(--hint-2) }
+.psearch input { flex: 1; margin: 0; padding: 10px 0; border: 0; border-radius: 0; background: none; font-size: 14px } .psearch input:focus { background: none }
+.plist { display: grid; max-height: 320px; overflow-y: auto; padding: 4px 0 }
+.prow { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 16px; border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer } .prow:hover:not(:disabled) { background: var(--surface) } .prow:disabled { cursor: default; opacity: .7 }
+.tx { flex: 1; display: grid; min-width: 0; line-height: 1.25 } .tx b { font-size: 15px } .tx small { font-size: 12px; color: var(--hint); font-weight: 600 }
+.chk { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); color: #fff } .chk.on { background: var(--green); border-color: var(--green) }
+.hd .wn { margin-left: auto; padding-right: 8px }
 </style>

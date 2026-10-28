@@ -1,10 +1,10 @@
 <script setup>
 // Сессия повторения как в Anki: очередь пересчитывается после каждого ответа (изучаю, чьё время пришло → к повторению → новые),
 // карточка на шаге «1 мин / 10 мин» возвращается сама, когда подойдёт её время; «Показать ответ», 4 оценки с интервалами,
-// отмена последнего ответа, счётчики «новые / изучаю / к повторению». Клавиши: Пробел — ответ/«Хорошо», 1–4 — оценка, Z — отмена.
+// счётчики «новые / изучаю / к повторению». Сверху — общая панель: график колоды и ✏️ правка карточки. Клавиши: Пробел — ответ/«Хорошо», 1–4 — оценка, R — звук.
 // Используется и во вкладке «Слова», и внутри кружка пути (embedded).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { buildQueue, srsOf, kindOf, rate, restore, snapshot, intervalLabel, nextDueInfo, deckCounts, nextLearnAt } from '../composables/useSrs'
+import { buildQueue, srsOf, kindOf, rate, intervalLabel, nextDueInfo, deckCounts, nextLearnAt } from '../composables/useSrs'
 import { imageSrc, audioSrc } from '../utils/media'
 import AppIcon from './AppIcon.vue'
 import CardEditor from './CardEditor.vue'
@@ -13,7 +13,7 @@ const props = defineProps({ deck: { type: Object, required: true }, userKey: { t
 const emit = defineEmits(['finish', 'exit'])
 
 const queue = ref(buildQueue(props.deck, props.userKey))
-const flipped = ref(false), answered = ref(0), hist = ref([]), editing = ref(false)
+const flipped = ref(false), answered = ref(0), editing = ref(false)
 const card = computed(() => queue.value[0])
 const kind = (c) => kindOf(srsOf(props.userKey, c))
 const counts = computed(() => { tick.value; const c = deckCounts(props.deck, props.userKey); return { new: c.new, learn: c.learn, due: c.due } })
@@ -57,19 +57,13 @@ watch(card, (c) => {
 
 function answer(q) {
   const c = card.value; if (!c || !flipped.value) return
-  hist.value.push({ c, prev: snapshot(props.userKey, c), queue: queue.value.slice() })
   rate(props.userKey, c, q); answered.value++; flipped.value = false
   queue.value = buildQueue(props.deck, props.userKey)                              // как в Anki: «Снова» вернётся через 1 мин, «Хорошо» на шаге — через 10 мин
-}
-function undo() {
-  const h = hist.value.pop(); if (!h) return
-  restore(props.userKey, h.c, h.prev); queue.value = [h.c, ...buildQueue(props.deck, props.userKey).filter((x) => x.id !== h.c.id)]; answered.value--; flipped.value = false
 }
 function onKey(e) {
   if (editing.value || e.metaKey || e.ctrlKey || e.altKey) return
   const tag = e.target?.tagName
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return
-  if ((e.key === 'z' || e.key === 'я') && hist.value.length) return undo()
   if ((e.key === 'r' || e.key === 'к') && card.value?.audio) return play()
   if (!card.value) return
   if (e.key === ' ' || e.key === 'Enter') {
@@ -86,13 +80,17 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
     <header class="bar">
       <button class="btn ghost sm" @click="emit('exit')"><AppIcon name="back" :size="18" /> {{ embedded ? 'Закрыть' : 'Колоды' }}</button>
       <b class="dt">{{ deck.title }}</b>
-      <button class="chartb" :class="{ on: chartOpen }" :aria-pressed="chartOpen" aria-label="График колоды" title="График: когда повторять каждое слово" @click="chartOpen = !chartOpen"><AppIcon name="chart" :size="18" /></button>
+      <!-- Общая панель инструментов: график колоды и правка текущей карточки -->
+      <span class="tb">
+        <button class="ib" :class="{ on: chartOpen }" :aria-pressed="chartOpen" aria-label="График колоды" title="График: когда повторять каждое слово" @click="chartOpen = !chartOpen"><AppIcon name="chart" :size="18" /></button>
+        <button v-if="canEdit && card" class="ib" aria-label="Править карточку" title="Править карточку" @click="editing = true"><AppIcon name="pencil" :size="17" /></button>
+      </span>
       <span class="cnt" aria-label="Новые, изучаю, к повторению">
         <b class="n" :class="{ on: cur === 'new' }">{{ counts.new }}</b><b class="l" :class="{ on: cur === 'learn' }">{{ counts.learn }}</b><b class="d" :class="{ on: cur === 'due' }">{{ counts.due }}</b>
       </span>
     </header>
     <!-- График колоды — сверху, над карточкой (как статистика в списке колод): ответили — видно, куда ушло слово -->
-    <DeckChart v-if="chartOpen" :deck="deck" :user-key="userKey" :current-id="card?.id ?? null" dock @back="chartOpen = false" @reset="queue = buildQueue(deck, userKey); hist = []; flipped = false" />
+    <DeckChart v-if="chartOpen" :deck="deck" :user-key="userKey" :current-id="card?.id ?? null" dock @back="chartOpen = false" @reset="queue = buildQueue(deck, userKey); flipped = false" />
 
     <template v-if="card">
       <!-- Как в Anki: слово и перевод — над фото, пример — под ним. Все блоки на месте до и после «Показать ответ», поэтому ничего не прыгает -->
@@ -111,11 +109,9 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
           <button v-for="g in GRADES" :key="g.q" :class="['g', 'g' + g.q]" @click="answer(g.q)">{{ g.t }}<small>{{ intervalLabel(userKey, card, g.q) }}</small></button>
         </div>
       </div>
-      <div class="tools">
-        <button :disabled="!hist.length" @click="undo"><AppIcon name="undo" :size="16" /> Отменить</button>
-        <button v-if="canEdit" @click="editing = true"><AppIcon name="pencil" :size="16" /> Править</button>
+      <div class="tools" :class="{ only: !hasAudio }">
         <button v-if="hasAudio" @click="toggleAuto">🔊 Автозвук: {{ autoplay ? 'вкл' : 'выкл' }}</button>
-        <span class="hint keys">Пробел · 1–4 · Z<template v-if="hasAudio"> · R</template></span>
+        <span class="hint keys">Пробел · 1–4<template v-if="hasAudio"> · R</template></span>
       </div>
     </template>
 
@@ -125,7 +121,6 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
       <p class="hint">{{ answered ? `Повторено карточек: ${answered}` : 'На сегодня всё выучено' }}</p>
       <p v-if="next && !waitAt" class="hint">{{ next }}</p>
       <div class="row2" style="justify-content:center">
-        <button v-if="hist.length" class="btn ghost" @click="undo"><AppIcon name="undo" :size="16" /> Отменить</button>
         <button class="btn" @click="emit('finish')">{{ embedded ? 'Завершить' : 'Готово' }}</button>
       </div>
     </div>
@@ -134,7 +129,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
 </template>
 
 <style scoped>
-.ss { display: grid; gap: 14px }
+.ss { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px }      /* колонка не шире экрана — длинное название сжимается с «…» */
 .bar { display: flex; align-items: center; gap: 10px } .dt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; text-align: center }
 .cnt { display: flex; gap: 10px; font-size: 16px } .cnt b { min-width: 14px; text-align: center; opacity: .55; border-bottom: 3px solid transparent } .cnt b.on { opacity: 1; border-bottom-color: currentColor }
 .n { color: var(--blue) } .l { color: var(--red) } .d { color: var(--green-d) }
@@ -154,13 +149,14 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
 .g { height: 54px; display: grid; align-content: center; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 14px; padding: 0 4px; font: inherit; font-weight: 800; cursor: pointer; background: var(--card); color: var(--text) }
 .g:active { transform: translateY(2px); border-bottom-width: 2px } .g small { display: block; font-weight: 600; color: var(--hint); font-size: 11px }
 .g0 { color: var(--red) } .g1 { color: var(--orange-d) } .g2 { color: var(--green-d) } .g3 { color: var(--blue) }
-.tools { height: 36px; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none }      /* одна строка фиксированной высоты — «Отменить / Править» не прыгают */
+.tools { height: 36px; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none }      /* одна строка фиксированной высоты — ничего не прыгает */
 .tools button { flex: none; white-space: nowrap }
 .tools button { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--border); background: var(--card); color: var(--hint); font: inherit; font-weight: 800; font-size: 13px; border-radius: 12px; padding: 6px 10px; cursor: pointer }
 .tools button:disabled { opacity: .45; cursor: default } .keys { margin-left: auto; font-size: 12px; white-space: nowrap }
 .done { text-align: center; display: grid; gap: 6px } .done p { margin: 0 } .wl { color: var(--blue); font-variant-numeric: tabular-nums }
-.chartb.on { background: var(--blue-l); border-color: var(--blue) }
-.chartb { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 12px; background: var(--card); color: var(--blue); cursor: pointer }
-@media (max-width: 600px) { .keys { display: none } .q { font-size: 28px } .a { font-size: 24px } }
+.tb { flex: none; display: inline-flex; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 12px; background: var(--card); overflow: hidden }      /* кнопки-значки одной плашкой */
+.ib { display: grid; place-items: center; width: 34px; height: 31px; border: 0; background: none; color: var(--blue); cursor: pointer } .ib + .ib { border-left: 1px solid var(--border) }
+.ib:hover { background: var(--surface) } .ib.on { background: var(--blue-l) }
+@media (max-width: 600px) { .keys { display: none } .tools.only { display: none } .q { font-size: 28px } .a { font-size: 24px } }
 
 </style>
