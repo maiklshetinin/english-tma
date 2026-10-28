@@ -6,9 +6,11 @@
 //  • Задание можно просто положить на холст рядом (черновики), потом перетащить на рельс — встанет в ближайший промежуток,
 //    соседи расступятся. С рельса — оттащить на холст. С панели — тянуть куда угодно или нажать (в конец рельса).
 //  • Кружки из Telegram: перетащить видео на холст / рельс (или «Кружок» на панели — выбрать файл).
-// Только для преподавателя. Хранится только в этом браузере (localStorage, видео — IndexedDB), с сервером не связан.
+// Только для преподавателя. Хранение: на сервере (Firestore, курс целиком; кружки — в S3 через сервер), а в браузере —
+// копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { API, apiRequest, fb, isDemo } from '../../firebase'
 
 const router = useRouter()
 const goBack = () => (history.length > 1 ? router.back() : router.push({ name: 'profile' }))
@@ -45,8 +47,79 @@ const seed = () => ({
 const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], ...v } } catch { /* нет */ } return seed() }
 const doc = reactive(load())
 let st = 0
-const save = () => { clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250) }
-onUnmounted(() => clearTimeout(st))
+if (!doc.id) doc.id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+const save = () => {
+  doc.dirty = true
+  clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250)
+  push()
+}
+
+// ---------- Сервер: курс — в Firestore, кружки — в S3 ----------
+// sync: 'local' — сервера нет (демо) | 'saving' | 'saved' | 'offline' (нет связи — сохраним позже, копия в браузере есть)
+const online = !isDemo && !!API && !!fb
+const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
+let pt = 0, busy = false
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.video ? { video: x.video } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+function push(delay = 900) {
+  if (!online) return
+  clearTimeout(pt); pt = setTimeout(async () => {
+    if (busy) return push(400)
+    busy = true; sync.value = 'saving'
+    try {
+      const r = await apiRequest(`/courses/${doc.id}`, { method: 'PUT', body: JSON.stringify({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)) }) })
+      if (!r.ok) throw new Error(String(r.status))
+      doc.dirty = false; sync.value = 'saved'; localStorage.setItem(KEY, JSON.stringify(doc))
+    } catch { sync.value = 'offline'; push(15000) } finally { busy = false }
+  }, delay)
+}
+onUnmounted(() => { clearTimeout(st); clearTimeout(pt) })
+// Открыли редактор: есть несохранённые правки — отправляем их; нет — берём курс с сервера (последний изменённый)
+onMounted(async () => {
+  if (!online) return
+  try {
+    const r = await apiRequest('/courses'); if (!r.ok) throw new Error(String(r.status))
+    const { courses, storage } = await r.json(); storageOn.value = !!storage
+    if (!doc.dirty && courses.length) {
+      const c = await (await apiRequest(`/courses/${courses[0].id}`)).json()
+      const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
+      const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.video ? { media: local.get(x.id).media } : {}) })
+      Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), dirty: false })
+      localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'
+    } else push(0)
+    if (storageOn.value) uploadLocal()
+  } catch { sync.value = 'offline'; push(15000) }
+})
+// Видео, которые лежат только в браузере (добавлены до S3 или без сети), — догружаем в S3
+async function uploadLocal() {
+  for (const x of [...doc.items, ...doc.loose]) {
+    if (x.type !== 'video' || x.video || !x.media) continue
+    const b = await mediaOp('readonly', s => s.get(x.media)).catch(() => null)
+    if (b) await upload(x, b instanceof File ? b : new File([b], 'kruzhok.mp4', { type: b.type || 'video/mp4' }))
+  }
+}
+// Загрузка в S3 через сервер, с процентом (XHR — у fetch нет прогресса отправки)
+const upPct = reactive({})       // id задания → 0…100, пока грузится
+async function upload(item, file) {
+  const token = await fb?.currentUser?.getIdToken()
+  const type = file.type || (/\.webm$/i.test(file.name) ? 'video/webm' : /\.mov$/i.test(file.name) ? 'video/quicktime' : 'video/mp4')
+  upPct[item.id] = 0
+  try {
+    const key = await new Promise((ok, no) => {
+      const x = new XMLHttpRequest()
+      x.open('POST', `${API}/media/upload?courseId=${encodeURIComponent(doc.id)}`)
+      x.setRequestHeader('Content-Type', type); if (token) x.setRequestHeader('Authorization', `Bearer ${token}`)
+      x.upload.onprogress = (e) => { if (e.lengthComputable) upPct[item.id] = Math.round(e.loaded / e.total * 100) }
+      x.onload = () => (x.status < 300 ? ok(JSON.parse(x.responseText).key) : no(new Error(String(x.status))))
+      x.onerror = () => no(new Error('network'))
+      x.send(file)
+    })
+    const it2 = findAny(item.id); if (!it2) return
+    urls[key] = urls[it2.media] || URL.createObjectURL(file)
+    it2.video = key
+    if (it2.media) { mediaOp('readwrite', s => s.delete(it2.media)).catch(() => {}); delete it2.media }
+    save()
+  } catch { /* останется в браузере — догрузим при следующем открытии */ } finally { delete upPct[item.id] }
+}
 
 // ---------- Холст: сдвиг и масштаб ----------
 const board = ref(null), W = ref(innerWidth), H = ref(innerHeight)
@@ -238,7 +311,17 @@ const IDB = 'tma-course-media'
 const idb = () => new Promise((ok, no) => { const r = indexedDB.open(IDB, 1); r.onupgradeneeded = () => r.result.createObjectStore('v'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) })
 async function mediaOp(mode, fn) { const db = await idb(); return new Promise((ok, no) => { const tx = db.transaction('v', mode), r = fn(tx.objectStore('v')); tx.oncomplete = () => ok(r?.result ?? null); tx.onerror = () => no(tx.error) }) }
 const urls = reactive({})
+// Ссылки на просмотр из S3 — пачкой (сервер подписывает на 6 ч)
+const want = new Set(); let vt = 0
+function askView(key) {
+  want.add(key); clearTimeout(vt)
+  vt = setTimeout(async () => {
+    const keys = [...want]; want.clear()
+    try { const r = await apiRequest('/media/view', { method: 'POST', body: JSON.stringify({ keys }) }); if (r.ok) Object.assign(urls, (await r.json()).urls) } catch { /* без сети — позже */ }
+  }, 50)
+}
 function mediaUrl(x) {
+  if (x?.video && online) { if (!(x.video in urls)) { urls[x.video] = ''; askView(x.video) } return urls[x.video] }
   if (!x?.media) return ''
   if (!(x.media in urls)) { urls[x.media] = ''; mediaOp('readonly', s => s.get(x.media)).then(b => { if (b) urls[x.media] = URL.createObjectURL(b) }).catch(() => {}) }
   return urls[x.media]
@@ -252,6 +335,7 @@ async function attach(item, file) {
   const id = 'm' + item.id
   try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return alert('Не удалось сохранить видео в браузере (мало места?).') }
   urls[id] = URL.createObjectURL(file); item.media = id; save()
+  if (storageOn.value) upload(item, file)                   // и сразу в S3 (копия в браузере удалится после загрузки)
 }
 const fileInput = ref(null); let pickFor = null
 const pickFile = (item) => { pickFor = item; fileInput.value.value = ''; fileInput.value.click() }
@@ -300,6 +384,7 @@ function remove() {
   const a = doc.items.findIndex(v => v.id === x.id); if (a >= 0) doc.items.splice(a, 1)
   const b = doc.loose.findIndex(v => v.id === x.id); if (b >= 0) doc.loose.splice(b, 1)
   if (x.media) mediaOp('readwrite', s => s.delete(x.media)).catch(() => {})
+  if (x.video && online) apiRequest('/media/delete', { method: 'POST', body: JSON.stringify({ key: x.video }) }).catch(() => {})
   sel.value = null; setProgress(doc.progress)
 }
 function toRailEnd() { const x = selItem.value; doc.loose.splice(doc.loose.findIndex(v => v.id === x.id), 1); delete x.x; delete x.y; doc.items.push(x); setProgress(doc.progress); nextTick(showRailEnd) }
@@ -342,6 +427,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
           <template v-if="x.type === 'unit'"><b class="no">{{ unitNo(i) }}</b><div class="sign"><b>{{ x.title }}</b><span>{{ x.sub }}</span></div></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
+            <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <svg v-if="x.type !== 'video' || !mediaUrl(x) || stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ic" :class="{ badge: x.type === 'video' && mediaUrl(x) }" v-html="stateOf(x, i) === 'done' ? CHECK : T[x.type].ic" />
             <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small v-if="x.title !== T[x.type].t">{{ T[x.type].t }}</small></em>
           </template>
@@ -352,6 +438,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
           <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
+            <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <em class="cap">{{ x.title }}<small>не на рельсе</small></em>
           </template>
@@ -385,7 +472,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
     <div class="fl tl-panel">
       <button class="ib" title="Назад" @click="goBack"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg></button>
       <input v-model="doc.title" class="ttl" aria-label="Название курса" @input="save" />
-      <span class="badge-local" title="Хранится только в этом браузере">черновик</span>
+      <span class="sync" :class="sync" :title="{ local: 'Демо: курс хранится только в этом браузере', saving: 'Сохраняю на сервер…', saved: 'Сохранено на сервере', offline: 'Нет связи с сервером — копия в браузере, отправлю, когда появится сеть' }[sync]">{{ { local: 'в браузере', saving: 'сохраняю…', saved: 'сохранено', offline: 'нет сети' }[sync] }}</span>
     </div>
     <div class="fl tr-panel">
       <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
@@ -480,6 +567,10 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .fl { position: absolute; z-index: 5; background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }
 .tl-panel { left: 14px; top: 14px; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px }
 .ttl { width: 220px; margin: 0; padding: 6px 8px; border: 0; background: none; font-size: 15px; font-weight: 800 } .ttl:focus { background: var(--surface) }
+.sync { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 2px 7px; white-space: nowrap; color: var(--hint); background: var(--surface) }
+.sync.saved { color: var(--green-d); background: var(--green-l) } .sync.offline { color: var(--red-d); background: var(--red-l) } .sync.local { color: var(--purple-d); background: #f1e6ff }
+.upl { position: absolute; inset: -6px; pointer-events: none; transform: rotate(-90deg) } .upl circle { fill: none; stroke: var(--c); stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset .2s }
+.upn { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 900; color: var(--c); font-style: normal; pointer-events: none }
 .badge-local { font-size: 11px; font-weight: 700; color: var(--purple-d); background: #f1e6ff; border-radius: 6px; padding: 2px 7px; white-space: nowrap }
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; cursor: pointer } .ib:hover { background: var(--surface) }
 .ib svg { width: 20px; height: 20px; fill: none; stroke: var(--text); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }

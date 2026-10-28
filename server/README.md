@@ -17,6 +17,7 @@ New → Web Service → этот репозиторий, **Root Directory: `serv
 | `TEACHER_IDS` | ваш Telegram id (число; узнать — @userinfobot), несколько через запятую |
 | `SCHEDULE_TZ` | часовой пояс для «этой» и «следующей» недели (по умолчанию `Europe/Moscow`) |
 | `ALLOWED_ORIGIN` | откуда можно обращаться: `https://<ваш_ник>.github.io` (через запятую можно добавить `http://localhost:5173`) |
+| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | хранилище видео-кружков курсов (S3 или совместимое; для Backblaze B2: `S3_ENDPOINT=https://s3.<регион>.backblazeb2.com`, `S3_REGION=<регион>`, ключ — Application Key только к этому бакету, Read and Write). Бакет приватный, CORS не нужен: загрузка идёт через сервер. Без этих переменных кружки хранятся только в браузере преподавателя |
 
 Локально: скопируйте их в `server/.env` и `npm run dev` (`tsx watch`, перезапускается при правках).
 
@@ -56,6 +57,11 @@ New → Web Service → этот репозиторий, **Root Directory: `serv
 - `GET /avatar/:tgId`, `GET /sheets/csv?url=` — с `Authorization: Bearer <Firebase ID token>`
 
 Файлы: `types.ts` (**все сущности в одном месте**, см. ниже), `index.ts` (маршруты), `login.ts` (вход и роли), `students.ts` (ученики, приглашения, архив), `schedule.ts` (уроки и недели), `content.ts` (путь, пресеты, колоды), `srs.ts` (прогресс повторений), `clean.ts` (проверка входных данных), `errors.ts` (HTTP-ошибки), `access.ts` (привязка ученика к аккаунту), `telegram.ts` (проверка подписи). Тесты без Firebase (база в памяти, `fake-db.ts`): `npm test`. Проверка типов без сборки: `npm run typecheck`.
+
+- `GET /courses` → `{ courses: [{ id, title, count, updatedAt }], storage }` — свои курсы (преподаватель); `storage` — подключено ли S3
+- `GET /courses/:id`, `PUT /courses/:id` `{ title, mode, progress, items, loose }`, `DELETE /courses/:id` — курс целиком (редактор «рельс»); только свои (`teacherId`), удаление чистит и видео
+- `POST /media/upload?courseId=…` — тело — сам видеофайл (`Content-Type: video/mp4|webm|quicktime`, до 200 МБ) → `{ key }`; сервер потоком кладёт его в S3
+- `POST /media/view` `{ keys }` → `{ urls }` — временные ссылки на просмотр (6 ч); `POST /media/delete` `{ key }` — удалить. Только свои ключи (`t/<uid>/…`)
 
 ## Сущности (`types.ts`)
 Файл `types.ts` — единственное место, где описаны поля всех коллекций Firestore (`users`, `students`, `invites`, `lessons`, `schedule`, `paths`, `presets`, `decks`, `srs`). У каждой сущности до трёх форм: `<Имя>Doc` — документ в базе (со служебными полями), `<Имя>` — то, что сервер отдаёт на сайт, `*Input` — то, что сайт присылает. Файл не импортирует ничего, кроме типов, поэтому фронт может брать оттуда типы (`import type`), а в браузер ничего из сервера не попадает. Добавляя поле, меняйте сначала `types.ts` — компилятор покажет все места, которые нужно поправить.

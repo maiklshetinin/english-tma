@@ -14,6 +14,8 @@ import { makeGroups } from './groups.js'
 import { makeSchedule } from './schedule.js'
 import { makeContent } from './content.js'
 import { makeSrs } from './srs.js'
+import { makeCourses } from './courses.js'
+import { makeStorage } from './storage.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -30,7 +32,7 @@ const auth = getAuth(), db = getFirestore()
 
 const app = express()
 const small = express.json({ limit: '10kb' }), big = express.json({ limit: '1mb' })            // путь, пресеты и колоды с карточками — крупнее обычных запросов
-app.use(cors({ origin: list(env.ALLOWED_ORIGIN) }), (req, res, next) => (/^\/(paths|presets|decks)\//.test(req.path) ? big : small)(req, res, next))
+app.use(cors({ origin: list(env.ALLOWED_ORIGIN) }), (req, res, next) => (/^\/(paths|presets|decks|courses)\//.test(req.path) ? big : small)(req, res, next))
 app.use((req, res, next) => {                              // строка в логах на каждый запрос: метод, путь, код ответа, время
   const t = Date.now()
   res.on('finish', () => req.path !== '/' && console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - t}ms`))
@@ -46,6 +48,8 @@ const students = makeStudents({ db, FieldValue, photoByUsername, tz: env.SCHEDUL
 const groups = makeGroups({ db, FieldValue })
 const content = makeContent({ db, FieldValue })
 const srs = makeSrs({ db, FieldValue })
+const courses = makeCourses({ db, FieldValue })
+const storage = makeStorage(env)                // кружки курсов — в S3 (см. storage.ts); без переменных S3_* — выключено
 const schedule = makeSchedule({ db, FieldValue, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })      // часовой пояс, по которому считаются «эта» и «следующая» неделя
 
 app.post('/auth/telegram', wrap(async (req, res) => {
@@ -131,6 +135,21 @@ app.delete('/presets/:id', requireUser, requireTeacher, wrap(async (req, res) =>
 app.put('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.putDeck(req.params.id, req.body, req.user.uid); res.json({ ok: true }) }))
 app.delete('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.removeDeck(req.params.id); res.json({ ok: true }) }))
 // Группы учеников — отдельная сущность (создаются и меняются только преподавателем, из панели учеников)
+// Курсы (редактор «рельс») — только преподаватель, только свои
+app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(req.user.uid), storage: storage.ready })))
+app.get('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.get(req.user.uid, req.params.id))))
+app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.put(req.user.uid, req.params.id, req.body))))
+app.delete('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => {
+  const c = await courses.get(req.user.uid, req.params.id)
+  await courses.remove(req.user.uid, req.params.id)
+  for (const k of courses.videosOf(c)) await storage.remove(req.user.uid, k).catch(() => {})      // видео курса — тоже долой
+  res.json({ ok: true })
+}))
+// Кружки: загрузка потоком через сервер (тело — сам файл, Content-Type: video/…), ссылки на просмотр, удаление
+app.post('/media/upload', requireUser, requireTeacher, wrap(async (req, res) => res.json(await storage.upload(req.user.uid, { courseId: req.query.courseId, type: req.headers['content-type'] }, req, req.headers['content-length']))))
+app.post('/media/view', requireUser, requireTeacher, wrap(async (req, res) => res.json(await storage.viewUrls(req.user.uid, req.body))))
+app.post('/media/delete', requireUser, requireTeacher, wrap(async (req, res) => { await storage.remove(req.user.uid, req.body?.key); res.json({ ok: true }) }))
+
 app.get('/groups', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await groups.list())))
 app.post('/groups', requireUser, requireTeacher, wrap(async (req, res) => res.json(await groups.create(req.body))))                 // { studentIds } → группа
 app.post('/groups/seed', requireUser, requireTeacher, wrap(async (req, res) => res.json(await groups.seed(req.body))))          // разовый перенос старых групп из расписания
