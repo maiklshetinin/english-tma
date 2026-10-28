@@ -8,9 +8,12 @@
 //  • Кружки из Telegram: перетащить видео на холст / рельс (или «Кружок» на панели — выбрать файл).
 // Только для преподавателя. Хранение: на сервере (Firestore, курс целиком; кружки — в S3 через сервер), а в браузере —
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../../firebase'
+import { showToast } from '../../composables/useToast'
+import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
+import PresenceBar from '../../components/PresenceBar.vue'
 
 const router = useRouter()
 const goBack = () => (history.length > 1 ? router.back() : router.push({ name: 'profile' }))
@@ -52,10 +55,43 @@ const doc = reactive(load())
 let st = 0
 if (!doc.id) doc.id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 const save = () => {
+  if (remote) return                       // это пришло от коллеги — не сохраняем и не пересылаем обратно
   doc.dirty = true
   clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250)
-  push()
+  push(); share()
 }
+
+// ---------- Вместе в реальном времени (useLive): курс, курсоры и выделение коллег ----------
+// Курс после правки уходит коллегам в этом же курсе через ~0,1 с (сохраняет в базу тот, кто правил). Одновременные правки:
+// побеждает последняя — поэтому выбранное коллегой подсвечено его цветом.
+let remote = false, shareT = 0
+const payload = () => ({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)) })
+function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
+const offDoc = onLive('doc', ({ doc: d }) => {
+  if (!d || !Array.isArray(d.items)) return
+  const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
+  const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}) })
+  remote = true
+  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), dirty: false })
+  nextTick(() => { remote = false })
+  clearTimeout(pt); if (online) sync.value = 'saved'       // коллега сам сохранил это в базу
+  try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ }
+})
+// Курсоры коллег (в координатах холста) и их выделение
+const cursors = reactive({}), rsel = reactive({})
+const offCur = onLive('cursor', ({ cid, x, y }) => { cursors[cid] = { x, y, at: Date.now() } })
+const offSel = onLive('sel', ({ cid, id }) => { rsel[cid] = id })
+const who = (cid) => live.users.find(u => u.cid === cid)
+const otherCursors = computed(() => Object.entries(cursors).map(([cid, c]) => ({ cid, ...c, u: who(cid) })).filter(c => c.u && Date.now() - c.at < 30000))
+const selColor = computed(() => { const m = {}; for (const [cid, id] of Object.entries(rsel)) { const u = who(cid); if (u && id) m[id] = u.color } return m })
+let curT = 0, lastCur = null
+function sendCursor(e) {
+  if (!live.on) return
+  lastCur = toWorld(e.clientX, e.clientY)
+  if (!curT) curT = setTimeout(() => { curT = 0; liveSend({ t: 'cursor', ...lastCur }) }, 60)      // не чаще ~16 раз в секунду
+}
+const tick = ref(0); const tickT = setInterval(() => { tick.value++ }, 5000)                        // убирать замолчавшие курсоры
+onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTimeout(shareT); liveSend({ t: 'sel', id: null }) })
 
 // ---------- Сервер: курс — в Firestore, кружки — в S3 ----------
 // sync: 'local' — сервера нет (демо) | 'saving' | 'saved' | 'offline' (нет связи — сохраним позже, копия в браузере есть)
@@ -78,6 +114,7 @@ function push(delay = 900) {
 onUnmounted(() => { clearTimeout(st); clearTimeout(pt) })
 // Открыли редактор: есть несохранённые правки — отправляем их; нет — берём курс с сервера (последний изменённый)
 onMounted(async () => {
+  setWhere('courses', doc.id)                // коллеги видят, что я в этом курсе
   if (!online) return
   try {
     const r = await apiRequest('/courses'); if (!r.ok) throw new Error(String(r.status))
@@ -87,6 +124,7 @@ onMounted(async () => {
       const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
       const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}) })
       Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), dirty: false })
+      setWhere('courses', doc.id)
       localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'
     } else push(0)
     if (storageOn.value) uploadLocal()
@@ -112,7 +150,7 @@ async function upload(item, file) {
       x.open('POST', `${API}/media/upload?courseId=${encodeURIComponent(doc.id)}`)
       x.setRequestHeader('Content-Type', type); if (token) x.setRequestHeader('Authorization', `Bearer ${token}`)
       x.upload.onprogress = (e) => { if (e.lengthComputable) upPct[item.id] = Math.round(e.loaded / e.total * 100) }
-      x.onload = () => (x.status < 300 ? ok(JSON.parse(x.responseText).key) : no(new Error(String(x.status))))
+      x.onload = () => { if (x.status < 300) return ok(JSON.parse(x.responseText).key); let m = ''; try { m = JSON.parse(x.responseText).error } catch { /* не JSON */ } no(new Error(`${x.status}${m ? ': ' + m : ''}`)) }
       x.onerror = () => no(new Error('network'))
       x.send(file)
     })
@@ -121,7 +159,9 @@ async function upload(item, file) {
     it2.file = key
     if (it2.media) { mediaOp('readwrite', s => s.delete(it2.media)).catch(() => {}); delete it2.media }
     save()
-  } catch { /* останется в браузере — догрузим при следующем открытии */ } finally { delete upPct[item.id] }
+  } catch (e) {        // файл остался в браузере — догрузим при следующем открытии; причину показываем
+    showToast(`Не удалось загрузить ${item.type === 'photo' ? 'фото' : 'кружок'} в хранилище (${e.message}). Он сохранён в браузере, попробую снова при следующем открытии.`, null, 'bad')
+  } finally { delete upPct[item.id] }
 }
 
 // ---------- Холст: сдвиг и масштаб ----------
@@ -216,7 +256,7 @@ const curUnit = computed(() => { let u = null; order.value.slice(0, curIndex.val
 const curUnitNo = computed(() => order.value.filter(x => x.type === 'unit').indexOf(curUnit.value) + 1)
 const unitsCount = computed(() => doc.items.filter(x => x.type === 'unit').length)
 const looseShown = computed(() => doc.loose.filter(l => !(drag.on && l.id === drag.item?.id)))
-const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1] })
+const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1], ...(selColor.value[x.id] ? { '--rc': selColor.value[x.id] } : {}) })
 const colorOf = (x, i) => (x.type === 'unit' ? (i == null ? UNIT_COLORS[0] : unitColor(i)) : [T[x.type].c, T[x.type].d])
 
 // ---------- Перетаскивание: с панели, с рельса, с холста ----------
@@ -240,6 +280,7 @@ function startDrag(e, src) {
   addEventListener('pointermove', move); addEventListener('pointerup', up, { once: true }); addEventListener('pointercancel', up, { once: true })
 }
 function move(e) {
+  sendCursor(e)
   if (pending && !drag.on) {
     if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return
     sel.value = null
@@ -291,6 +332,7 @@ function boardDown(e) {
   board.value.setPointerCapture?.(e.pointerId)
 }
 function boardMove(e) {
+  sendCursor(e)
   if (touches.has(e.pointerId)) {
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (pinch && touches.size === 2) {
@@ -387,10 +429,12 @@ const play = (e, on) => { const v = e.currentTarget.querySelector('video'); if (
 
 // ---------- Карточка выбранного ----------
 const sel = ref(null), editing = ref(false)
+watch(sel, (id) => liveSend({ t: 'sel', id }))
 const selItem = computed(() => findAny(sel.value))
 const selLoose = computed(() => !!doc.loose.find(v => v.id === sel.value))
 function remove() {
   const x = selItem.value; if (!x) return
+  if (x.file && !confirm(`Удалить ${x.type === 'photo' ? 'фото' : 'кружок'}? Файл удалится и из хранилища.`)) return
   const a = doc.items.findIndex(v => v.id === x.id); if (a >= 0) doc.items.splice(a, 1)
   const b = doc.loose.findIndex(v => v.id === x.id); if (b >= 0) doc.loose.splice(b, 1)
   if (x.media) mediaOp('readwrite', s => s.delete(x.media)).catch(() => {})
@@ -432,7 +476,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
         </div>
         <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
         <!-- Рельс -->
-        <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id }]"
+        <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id, rsel: !!selColor[x.id] }]"
           :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'"><b class="no">{{ unitNo(i) }}</b><div class="sign"><b>{{ x.title }}</b><span>{{ x.sub }}</span></div></template>
           <template v-else>
@@ -444,7 +488,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
           </template>
         </div>
         <!-- Черновики на холсте: ещё не на рельсе -->
-        <div v-for="x in looseShown" :key="x.id" class="bead loose" :class="[x.type, { on: sel === x.id }]" :style="beadStyle(x, x, colorOf(x))"
+        <div v-for="x in looseShown" :key="x.id" class="bead loose" :class="[x.type, { on: sel === x.id, rsel: !!selColor[x.id] }]" :style="beadStyle(x, x, colorOf(x))"
           @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
           <template v-else>
@@ -458,6 +502,10 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
       </div>
     </div>
 
+    <!-- Курсоры коллег: стрелка их цвета и имя -->
+    <div v-for="c in otherCursors" :key="c.cid + tick * 0" class="rcur" :style="{ transform: `translate(${toScreen(c).x}px, ${toScreen(c).y}px)`, '--rc': c.u.color }">
+      <svg viewBox="0 0 16 16"><path d="M1 1l5.2 13.5 2-5.6L14 7z" /></svg><span>{{ c.u.name }}</span>
+    </div>
     <!-- Взятое — за пальцем в масштабе холста; мимо рельса — полупрозрачное -->
     <div v-if="drag.on" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x + 'px', top: drag.y + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d, transform: `scale(${view.z * 1.06})` }">
       <video v-if="drag.item.type === 'video' && mediaUrl(drag.item)" :src="mediaUrl(drag.item)" class="vid" muted />
@@ -492,6 +540,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
       <span class="sync" :class="sync" :title="{ local: 'Демо: курс хранится только в этом браузере', saving: 'Сохраняю на сервер…', saved: 'Сохранено на сервере', offline: 'Нет связи с сервером — копия в браузере, отправлю, когда появится сеть' }[sync]">{{ { local: 'в браузере', saving: 'сохраняю…', saved: 'сохранено', offline: 'нет сети' }[sync] }}</span>
     </div>
     <div class="fl tr-panel">
+      <PresenceBar inline /><i v-if="live.on" class="vs" />
       <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
       <span class="pl">Прогресс<small>пример</small></span>
       <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
@@ -590,6 +639,11 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .fl { position: absolute; z-index: 5; background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }
 .tl-panel { left: 14px; top: 14px; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px }
 .ttl { width: 220px; margin: 0; padding: 6px 8px; border: 0; background: none; font-size: 15px; font-weight: 800 } .ttl:focus { background: var(--surface) }
+.rcur { position: fixed; left: 0; top: 0; z-index: 40; pointer-events: none; transition: transform .08s linear }
+.rcur svg { width: 18px; height: 18px; fill: var(--rc); stroke: #fff; stroke-width: 1.4; stroke-linejoin: round; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .25)) }
+.rcur span { position: absolute; left: 14px; top: 16px; padding: 2px 7px; border-radius: 6px 6px 6px 2px; background: var(--rc); color: #fff; font-size: 11px; font-weight: 800; white-space: nowrap }
+.bead.rsel::after { content: ''; position: absolute; inset: -9px; border: 3px solid var(--rc); border-radius: inherit; pointer-events: none }
+.bead.rsel:not(.tutor):not(.photo)::after { border-radius: 50% }
 .sync { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 2px 7px; white-space: nowrap; color: var(--hint); background: var(--surface) }
 .sync.saved { color: var(--green-d); background: var(--green-l) } .sync.offline { color: var(--red-d); background: var(--red-l) } .sync.local { color: var(--purple-d); background: #f1e6ff }
 .upl { position: absolute; inset: -6px; pointer-events: none; transform: rotate(-90deg) } .upl circle { fill: none; stroke: var(--c); stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset .2s }

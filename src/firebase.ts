@@ -16,10 +16,13 @@ export const isDemo = !tg?.initData && !!env.DEV
 /** Выход нужен только в браузере: в Telegram вход автоматический. */
 export const canLogout = !tg?.initData && !!fb
 
+/** Заголовки «живого» соединения (useLive): X-Live-Cid — чтобы сервер не слал «обнови» тому, кто сам правил. */
+export const liveHeaders: Record<string, string> = {}
+
 /** Запрос к нашему серверу с Firebase ID-токеном (он сам обновляется). */
 export const apiFetch = async (path: string, opts: RequestInit = {}): Promise<Response> => {
   const token = await fb?.currentUser?.getIdToken()
-  return fetch(`${API}${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }), ...opts.headers } })
+  return fetch(`${API}${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }), ...liveHeaders, ...opts.headers } })
 }
 
 /** То же, но сетевая ошибка превращается в понятное сообщение (бесплатный Render может спать до ~30 с). */

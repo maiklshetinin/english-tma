@@ -7,6 +7,12 @@ import BottomNav from './components/BottomNav.vue'
 import Toast from './components/Toast.vue'
 import DragGhost from './components/DragGhost.vue'
 import WakeUp from './components/WakeUp.vue'
+import PresenceBar from './components/PresenceBar.vue'
+import { startLive, stopLive, setWhere, onLive } from './composables/useLive'
+import { useStudentsStore } from './stores/students'
+import { useScheduleStore } from './stores/schedule'
+import { useGroupsStore } from './stores/groups'
+import { useContentStore } from './stores/content'
 import { redirectFor, goUp } from './router'
 import { useBackButton } from './composables/useBackButton'
 import { useAuthStore } from './stores/auth'
@@ -23,6 +29,16 @@ watch(() => [booted.value, auth.status, auth.role, route.fullPath], () => {
 // Открыта карточка ученика → в шапке Telegram появляется системная «Назад»
 useBackButton(computed(() => auth.status === 'ready' && !!route.params.id), () => goUp(router))
 // В демо-режиме роль можно задать в URL: ?demo&role=teacher (переключатель — в «Профиле»)
+// Вместе в реальном времени (только преподаватели): кто где сейчас и «коллега поменял данные — перезагрузить»
+watch(() => auth.status === 'ready' && auth.isTeacher, (on) => (on ? startLive() : stopLive()), { immediate: true })
+watch(() => route.meta.tab, (t) => { if (t !== 'courses') setWhere(String(t || '')) }, { immediate: true })      // в редакторе он сам скажет, какой курс
+const RELOAD = { students: () => useStudentsStore().load(), schedule: () => useScheduleStore().load(), groups: () => useGroupsStore().load(),
+  paths: () => useContentStore().load(), presets: () => useContentStore().load(), decks: () => useContentStore().load(), content: () => useContentStore().load() }
+const pending = new Map()
+onLive('changed', ({ what }) => {          // несколько правок подряд — одна перезагрузка
+  const fn = RELOAD[what]; if (!fn) return
+  clearTimeout(pending.get(what)); pending.set(what, setTimeout(() => fn()?.catch?.(() => {}), 250))
+})
 const demo = import.meta.env.DEV || new URLSearchParams(location.search).has('demo')
 onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(location.search).get('role'); if (demo && (r === 'teacher' || r === 'student')) auth.setRole(r) }).finally(() => { booted.value = true }))
 </script>
@@ -38,6 +54,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
   </div>
   <template v-else>
     <div class="shell">
+      <PresenceBar v-if="auth.isTeacher && route.name !== 'courses'" />
       <main><RouterView v-slot="{ Component, route: r }"><component :is="Component" :key="auth.role + r.meta.tab" /></RouterView></main>
     </div>
     <BottomNav /><Toast /><DragGhost />

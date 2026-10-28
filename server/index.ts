@@ -16,6 +16,7 @@ import { makeContent } from './content.js'
 import { makeSrs } from './srs.js'
 import { makeCourses } from './courses.js'
 import { makeStorage } from './storage.js'
+import { makeLive } from './live.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -38,11 +39,24 @@ app.use((req, res, next) => {                              // строка в л
   res.on('finish', () => req.path !== '/' && console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - t}ms`))
   next()
 })
+// Правки в реальном времени: после удачной правки (не GET) остальным преподавателям — «перезагрузите это» (live.ts)
+const LIVE_SKIP = new Set(['courses', 'media', 'me', 'ping', 'auth'])        // курсы синхронизируются сами, остальное — не данные
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    const what = req.path.split('/')[1] || ''
+    if (req.method !== 'GET' && res.statusCode < 400 && req.user?.role === 'teacher' && !LIVE_SKIP.has(what)) live.changed(what, String(req.headers['x-live-cid'] || ''))
+  })
+  next()
+})
 app.get('/', (_, res) => res.send('ok'))                  // для проверки Render и «будилки»
 
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHandler => (req, res) => {
   fn(req, res).catch((e) => { e.status < 500 ? console.log(`  → ${e.status} ${e.message}`) : console.error(e); res.status(e.status || 500).json({ error: e.message || 'error' }) })
 }
+const live = makeLive({
+  origins: list(env.ALLOWED_ORIGIN),
+  verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(u.role), name: String(u.tgName || ''), photo: String(u.tgPhoto || '') } },
+})
 const login = makeLogin({ db, auth, FieldValue, teacherIds: TEACHER_IDS })
 const students = makeStudents({ db, FieldValue, photoByUsername, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })
 const groups = makeGroups({ db, FieldValue })
@@ -190,4 +204,4 @@ app.get('/sheets/csv', requireUser, requireTeacher, wrap(async (req, res) => {
   res.type('text/csv').send(await r.text())
 }))
 
-app.listen(env.PORT || 3000, () => console.log('server up'))
+live.attach(app.listen(env.PORT || 3000, () => console.log('server up')))      // WebSocket /live — на том же порту

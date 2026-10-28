@@ -22,7 +22,9 @@ export const ownPrefix = (uid: string) => `t/${safe(uid)}/`
 export const isOurKey = (k: string) => /^t\/[\w-]{1,64}\/c\/[\w-]{1,64}\/[\w-]+\.\w{2,5}$/.test(k) && k.length <= 300
 
 export function makeStorage(env: StorageEnv, sign: Sign = (c, cmd, e) => getSignedUrl(c, cmd, { expiresIn: e }), put: Put = (c, cmd) => c.send(cmd)) {
-  const { S3_BUCKET: Bucket, S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY } = env
+  // Значения обрезаем: лишний пробел или перенос строки в конце (частая ошибка при вставке в Render) ломает подпись запроса
+  const t = (v?: string) => v?.trim() || undefined
+  const Bucket = t(env.S3_BUCKET), S3_REGION = t(env.S3_REGION), S3_ENDPOINT = t(env.S3_ENDPOINT)?.replace(/\/+$/, ''), S3_ACCESS_KEY_ID = t(env.S3_ACCESS_KEY_ID), S3_SECRET_ACCESS_KEY = t(env.S3_SECRET_ACCESS_KEY)
   const ready = !!(Bucket && S3_ACCESS_KEY_ID && S3_SECRET_ACCESS_KEY)
   const client = ready ? new S3Client({
     region: S3_REGION || 'us-east-1',

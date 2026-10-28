@@ -12,6 +12,7 @@ const body = () => Readable.from(['x'])
 
 ok('без переменных — выключено (503)', !makeStorage({}).ready && await code(makeStorage({}).upload('tg:1', {}, body(), 1)) === 503)
 ok('с переменными — включено', S.ready)
+ok('пробелы и переносы в переменных не мешают', makeStorage({ ...env, S3_ACCESS_KEY_ID: ' id\n', S3_SECRET_ACCESS_KEY: 'secret \n', S3_ENDPOINT: env.S3_ENDPOINT + '/\n' }).ready)
 const u = await S.upload('tg:1', { courseId: 'c1', type: 'video/mp4; codecs=avc1' }, body(), 1234)
 ok('загрузка: ключ в своей папке и в папке курса, тип и размер переданы', u.key.startsWith('t/tg_1/c/c1/') && u.key.endsWith('.mp4') && puts[0].Key === u.key && puts[0].ContentType === 'video/mp4' && puts[0].ContentLength === 1234 && puts[0].Bucket === 'b')
 const ph = await S.upload('tg:1', { courseId: 'c1', type: 'image/jpeg' }, body(), 300000)
