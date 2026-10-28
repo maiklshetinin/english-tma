@@ -111,7 +111,15 @@ function push(delay = 900) {
     } catch { sync.value = 'offline'; push(15000) } finally { busy = false }
   }, delay)
 }
-onUnmounted(() => { clearTimeout(st); clearTimeout(pt) })
+// Вышли из редактора: несохранённое — сразу на сервер и коллегам (не ждём таймеров), копия в браузере — тоже сразу
+onUnmounted(() => {
+  clearTimeout(st); clearTimeout(pt)
+  try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ }
+  if (online && doc.dirty) {
+    liveSend({ t: 'doc', doc: payload() })
+    apiRequest(`/courses/${doc.id}`, { method: 'PUT', body: JSON.stringify(payload()) }).then(r => { if (r.ok) { doc.dirty = false; try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* — */ } } }).catch(() => {})
+  }
+})
 // Открыли редактор (из «Курсов»: #/courses?id=<курс> или ?id=new). В браузере — копия последнего открытого курса:
 // если в ней несохранённые правки другого курса — сначала отправляем их, потом открываем нужный.
 const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'wave',
@@ -552,7 +560,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 
     <!-- Сверху -->
     <div class="fl tl-panel">
-      <button class="ib" title="Назад" @click="goBack"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg></button>
+      <button class="ib back" title="Назад, в «Курсы»" @click="goBack"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg><span>Курсы</span></button><i class="vs" />
       <input v-model="doc.title" class="ttl" aria-label="Название курса" @input="save" />
       <span class="sync" :class="sync" :title="{ local: 'Демо: курс хранится только в этом браузере', saving: 'Сохраняю на сервер…', saved: 'Сохранено на сервере', offline: 'Нет связи с сервером — копия в браузере, отправлю, когда появится сеть' }[sync]">{{ { local: 'в браузере', saving: 'сохраняю…', saved: 'сохранено', offline: 'нет сети' }[sync] }}</span>
     </div>
@@ -666,6 +674,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .upl { position: absolute; inset: -6px; pointer-events: none; transform: rotate(-90deg) } .upl circle { fill: none; stroke: var(--c); stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset .2s }
 .upn { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 900; color: var(--c); font-style: normal; pointer-events: none }
 .badge-local { font-size: 11px; font-weight: 700; color: var(--purple-d); background: #f1e6ff; border-radius: 6px; padding: 2px 7px; white-space: nowrap }
+.ib.back { display: flex; gap: 2px; width: auto; padding: 0 10px 0 4px; font: inherit; font-size: 14px; font-weight: 800; color: var(--text) }
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; cursor: pointer } .ib:hover { background: var(--surface) }
 .ib svg { width: 20px; height: 20px; fill: none; stroke: var(--text); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
 .tr-panel { right: 14px; top: 14px; display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px }

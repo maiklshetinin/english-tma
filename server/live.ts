@@ -2,7 +2,8 @@
 //  • Вход: /live?t=<Firebase ID-токен>; имя и фото — из токена (как в Telegram). Сайт с чужого адреса не пускаем (ALLOWED_ORIGIN).
 //  • Присутствие: у каждого подключения — где он (вкладка) и какой курс открыт; всем рассылается список «кто здесь».
 //  • Редактор курсов: курсоры, выделение и сам курс после правки пересылаются тем, кто открыл тот же курс.
-//  • Общие курсоры (включает разработчик в «Профиле» — сразу для всех): курсор на любой странице — pcursor { path, x, y, click }.
+//  • Общие курсоры (включает разработчик в «Профиле» — сразу для всех): курсор на любой странице — pcursor { path, sel, rx, ry, x, y, click }:
+//    sel — элемент под мышкой (путь в странице), rx/ry — где внутри него (0…1): так стрелка попадает туда же при любом масштабе и ширине окна.
 //    Включено ли — общее состояние сервера (cursors), новичок получает его в hello; выключается тем же переключателем.
 //    Сохраняет курс в Firestore тот, кто правил (PUT /courses) — здесь только пересылка, ничего не пишем в базу.
 //  • После любой правки через обычные маршруты (ученики, расписание, группы…) остальным уходит «changed» — они перезагружают
@@ -34,7 +35,11 @@ export function makeLive({ verify, origins }: { verify: Verify; origins: string[
     else if (m.t === 'cursor') room(c, { t: 'cursor', cid: c.cid, x: num(m.x), y: num(m.y) })
     else if (m.t === 'sel') room(c, { t: 'sel', cid: c.cid, id: str(m.id, 64) || null })
     // «Курсоры на всех экранах» (режим разработчика): курсор с адресом страницы — всем, показывают те, кто на той же странице
-    else if (m.t === 'pcursor') { const out = { t: 'pcursor', cid: c.cid, path: str(m.path, 200), x: num(m.x), y: num(m.y), click: m.click === true }; for (const o of conns) if (o !== c) send(o, out) }
+    else if (m.t === 'pcursor') {
+      const frac = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1, Math.min(2, v)) * 1000) / 1000 : 0)
+      const out = { t: 'pcursor', cid: c.cid, path: str(m.path, 200), sel: str(m.sel, 600), rx: frac(m.rx), ry: frac(m.ry), x: num(m.x), y: num(m.y), click: m.click === true }
+      for (const o of conns) if (o !== c) send(o, out)
+    }
     else if (m.t === 'cursors' && c.dev) { cursors = m.on === true; cursorsBy = c.name; for (const o of conns) send(o, { t: 'cursors', on: cursors, by: cursorsBy, mine: o.uid === c.uid }) }
     else if (m.t === 'doc' && m.doc && typeof m.doc === 'object') room(c, { t: 'doc', cid: c.cid, uid: c.uid, doc: m.doc })
   }
