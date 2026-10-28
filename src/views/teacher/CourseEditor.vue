@@ -1,10 +1,12 @@
 <script setup>
-// ЧЕРНОВИК. Редактор курсов — «рельс»: одна змейка, на неё по порядку нанизаны задания (как бусины).
-// Рельс и есть шкала прогресса: пройденная часть закрашена, текущее задание — с пульсом.
-//  • Снизу — типы заданий: тянуть на рельс (встанет в ближайший промежуток, соседи раздвинутся) или нажать — в конец.
-//  • Задание на рельсе: тянуть — переставить; нажать — карточка (название, тип, убрать).
-//  • Юнит — «станция» на рельсе: с неё начинается раздел, над ней — табличка с названием.
-// Ни рисования, ни свободных фигур. Хранится только в этом браузере (localStorage), с сервером не связан.
+// ЧЕРНОВИК. Редактор курсов — холст как во FigJam + «рельс».
+//  • Холст: тянуть по пустому месту / колёсико — двигать; Ctrl + колёсико, щипок, кнопки — масштаб; «Весь курс» — показать всё.
+//  • Рельс — одна линия сверху вниз («Волна» или «Прямая»), на ней по порядку задания. Рельс и есть шкала прогресса:
+//    пройденное закрашено, текущее — «Сейчас». Сверху — сводка, как увидит ученик.
+//  • Задание можно просто положить на холст рядом (черновики), потом перетащить на рельс — встанет в ближайший промежуток,
+//    соседи расступятся. С рельса — оттащить на холст. С панели — тянуть куда угодно или нажать (в конец рельса).
+//  • Кружки из Telegram: перетащить видео на холст / рельс (или «Кружок» на панели — выбрать файл).
+// Только для преподавателя. Хранится только в этом браузере (localStorage, видео — IndexedDB), с сервером не связан.
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -31,54 +33,83 @@ let seq = Date.now() % 100000
 const uid = () => 'i' + (++seq)
 const it = (type, title, extra = {}) => ({ id: uid(), type, title, ...extra })
 const seed = () => ({
-  title: 'Базовый курс A1', progress: 5,
+  title: 'Базовый курс A1', progress: 5, mode: 'wave',
   items: [
     it('unit', 'Юнит 1', { sub: 'Present Simple' }),
     it('lesson', 'Глагол to be'), it('words', 'Слова: семья'), it('hw', 'Упражнения 1–5'), it('lesson', 'Отрицания'), it('tutor', 'Разговор с репетитором'), it('test', 'Тест юнита'), it('reward', 'Сундук'),
     it('unit', 'Юнит 2', { sub: 'Past Simple' }),
     it('lesson', 'Правильные глаголы'), it('words', 'Слова: путешествия'), it('lesson', 'Неправильные глаголы'), it('hw', 'Рассказ о выходных'), it('test', 'Тест юнита'),
   ],
+  loose: [it('words', 'Слова: еда', { x: 300, y: 90 }), it('lesson', 'Артикли a / the', { x: 300, y: 220 })],
 })
-const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return v } catch { /* нет */ } return seed() }
+const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], ...v } } catch { /* нет */ } return seed() }
 const doc = reactive(load())
 let st = 0
 const save = () => { clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250) }
 onUnmounted(() => clearTimeout(st))
 
-// ---------- Перетаскивание (состояние нужно раскладке) ----------
-const drag = reactive({ on: false, item: null, fresh: false, to: 0, x: 0, y: 0, over: false })
-
-// ---------- Раскладка змейкой ----------
-const wrap = ref(null), W = ref(innerWidth)
-const ro = new ResizeObserver(([e]) => { W.value = e.contentRect.width })
-onMounted(() => ro.observe(wrap.value)); onUnmounted(() => ro.disconnect())
+// ---------- Холст: сдвиг и масштаб ----------
+const board = ref(null), W = ref(innerWidth), H = ref(innerHeight)
+const view = reactive({ x: innerWidth / 2, y: 330, z: 1 })
 const phone = computed(() => W.value < 720)
-// Два вида: «Волна» (как путь в Duolingo — плавно влево-вправо) и «Прямая». Идёт сверху вниз.
+const toWorld = (cx, cy) => { const r = board.value.getBoundingClientRect(); return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z } }
+const toScreen = (p) => ({ x: p.x * view.z + view.x, y: p.y * view.z + view.y })
+function zoomAt(f, cx, cy) {
+  const r = board.value.getBoundingClientRect(), z = Math.min(2.5, Math.max(0.15, view.z * f)), k = z / view.z
+  view.x = cx - r.left - (cx - r.left - view.x) * k; view.y = cy - r.top - (cy - r.top - view.y) * k; view.z = z
+}
+const zoomBtn = (f) => { const r = board.value.getBoundingClientRect(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2) }
+function onWheel(e) {
+  e.preventDefault()
+  if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY)
+  else { view.x -= e.deltaX; view.y -= e.deltaY }
+}
+// «Весь курс»: рельс, черновики и сводка — на экране целиком
+function fit(anim = true) {
+  const ps = [...layout.value, ...doc.loose.map(l => ({ x: l.x, y: l.y }))]
+  const xs = [...ps.map(p => p.x - 200), ...ps.map(p => p.x + 200), -230, 230], ys = [...ps.map(p => p.y + 70), -250]
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+  const top = phone.value ? 110 : 76, bottom = 110
+  const z = Math.min(1.1, (W.value - 24) / (x1 - x0), (H.value - top - bottom) / (y1 - y0))
+  animView({ z, x: W.value / 2 - (x0 + x1) / 2 * z, y: top - y0 * z }, anim)
+}
+function animView(to, anim) {
+  if (!anim) return Object.assign(view, to)
+  const from = { ...view }, t0 = performance.now()
+  const step = (t) => { const k = Math.min(1, (t - t0) / 220), e = 1 - (1 - k) ** 3; view.x = from.x + (to.x - from.x) * e; view.y = from.y + (to.y - from.y) * e; view.z = from.z + (to.z - from.z) * e; if (k < 1) requestAnimationFrame(step) }
+  requestAnimationFrame(step)
+}
+const onResize = () => { W.value = innerWidth; H.value = innerHeight }
+onMounted(() => {
+  addEventListener('resize', onResize)
+  // при открытии — начало курса крупно (на телефоне чуть мельче, чтобы влезли подписи)
+  view.z = Math.min(1, W.value / 560); view.x = W.value / 2; view.y = (phone.value ? 120 : 80) + 260 * view.z
+})
+onUnmounted(() => removeEventListener('resize', onResize))
+// Точки фона двигаются вместе с холстом; при отдалении — реже
+const dots = computed(() => { let s = 20 * view.z; while (s < 10) s *= 4; return { backgroundSize: `${s}px ${s}px`, backgroundPosition: `${view.x}px ${view.y}px` } })
+
+// ---------- Раскладка рельса (в координатах холста; центр линии — x = 0) ----------
 const mode = computed({ get: () => doc.mode ?? 'wave', set: (v) => { doc.mode = v; save() } })
-const G = computed(() => (phone.value ? { step: 112, unitGap: 150, amp: 64, top: 300 } : { step: 116, unitGap: 160, amp: 84, top: 290 }))
+const G = { step: 116, unitGap: 160, amp: 84 }
 const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
-// Порядок на экране: во время перетаскивания взятое уже стоит на месте прицела (соседи раздвигаются)
+const drag = reactive({ on: false, item: null, from: null, over: false, to: 0, x: 0, y: 0 })
+const layoutOf = (list) => {
+  let y = 0
+  return list.map((x, i) => {
+    if (i) y += x.type === 'unit' ? G.unitGap : G.step
+    const off = mode.value === 'wave' ? K[i % 8] * G.amp : 0
+    return { x: off, y, side: off > 0 ? 'l' : 'r' }
+  })
+}
+// Порядок на рельсе: взятое (если целимся в рельс) уже стоит на месте прицела
 const order = computed(() => {
-  const list = doc.items.slice()
-  if (drag.on && drag.item) {
-    const from = list.findIndex(x => x.id === drag.item.id); if (from >= 0) list.splice(from, 1)
-    if (drag.over || !drag.fresh) list.splice(Math.min(drag.to, list.length), 0, drag.item)
-  }
+  const list = doc.items.filter(x => !(drag.on && x.id === drag.item?.id))
+  if (drag.on && drag.over) list.splice(Math.min(drag.to, list.length), 0, drag.item)
   return list
 })
-const layout = computed(() => {
-  const { step, unitGap, amp, top } = G.value, cx = W.value / 2, out = []
-  let y = top
-  order.value.forEach((x, i) => {
-    if (i) y += x.type === 'unit' ? unitGap : step
-    const off = mode.value === 'wave' ? K[i % 8] * amp : 0
-    out.push({ x: cx + off, y, side: off > 0 ? 'l' : 'r' })        // подпись — с той стороны, где больше места
-  })
-  return out
-})
-const pos = (i) => layout.value[i] ?? { x: W.value / 2, y: G.value.top, side: 'r' }
-const height = computed(() => pos(Math.max(0, order.value.length - 1)).y + 200)
-// Рельс: плавная кривая через центры (Catmull-Rom → Безье); у «Прямой» — просто линия
+const layout = computed(() => layoutOf(order.value))
+const pos = (i) => layout.value[i] ?? { x: 0, y: 0, side: 'r' }
 function railPath(n) {
   if (!n) return ''
   const P = layout.value.slice(0, n); let d = `M${P[0].x},${P[0].y}`
@@ -89,7 +120,8 @@ function railPath(n) {
   return d
 }
 const rail = computed(() => railPath(order.value.length))
-// Прогресс: progress — сколько заданий (станции не в счёт) пройдено; рельс закрашен до текущего
+const railBox = computed(() => { const ys = layout.value.map(p => p.y); return { y1: Math.max(0, ...ys) + 200 } })
+// Прогресс: progress — сколько заданий (станции не в счёт) пройдено
 const taskIdx = computed(() => { let k = 0; return order.value.map(x => (x.type === 'unit' ? null : k++)) })
 const tasksCount = computed(() => doc.items.filter(x => x.type !== 'unit').length)
 const curIndex = computed(() => { const i = taskIdx.value.findIndex(k => k === doc.progress); return i < 0 ? order.value.length - 1 : i })
@@ -97,79 +129,125 @@ const doneRail = computed(() => railPath(curIndex.value + 1))
 const stateOf = (x, i) => (x.type === 'unit' ? (i <= curIndex.value ? 'done' : 'todo') : taskIdx.value[i] < doc.progress ? 'done' : taskIdx.value[i] === doc.progress ? 'current' : 'todo')
 const unitNo = (i) => order.value.slice(0, i + 1).filter(x => x.type === 'unit').length
 const unitColor = (i) => UNIT_COLORS[(Math.max(1, unitNo(i)) - 1) % UNIT_COLORS.length]
+const setProgress = (v) => { doc.progress = Math.max(0, Math.min(tasksCount.value, v)); save() }
 const pct = computed(() => (tasksCount.value ? Math.round(doc.progress / tasksCount.value * 100) : 0))
 const curUnit = computed(() => { let u = null; order.value.slice(0, curIndex.value + 1).forEach(x => { if (x.type === 'unit') u = x }); return u ?? order.value.find(x => x.type === 'unit') })
 const curUnitNo = computed(() => order.value.filter(x => x.type === 'unit').indexOf(curUnit.value) + 1)
 const unitsCount = computed(() => doc.items.filter(x => x.type === 'unit').length)
-const setProgress = (v) => { doc.progress = Math.max(0, Math.min(tasksCount.value, v)); save() }
+const looseShown = computed(() => doc.loose.filter(l => !(drag.on && l.id === drag.item?.id)))
+const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1] })
+const colorOf = (x, i) => (x.type === 'unit' ? (i == null ? UNIT_COLORS[0] : unitColor(i)) : [T[x.type].c, T[x.type].d])
 
-// ---------- Перетаскивание: с панели и по рельсу ----------
+// ---------- Перетаскивание: с панели, с рельса, с холста ----------
 let pending = null
-function nearest(cx, cy) {
-  const r = wrap.value.getBoundingClientRect(), x = cx - r.left, y = cy - r.top + wrap.value.scrollTop
-  const keep = order.value.filter(v => v.id !== drag.item?.id), n = keep.length
-  const ys = order.value.map((v, i) => [v.id, pos(i)]).filter(([id]) => id !== drag.item?.id).map(([, p]) => p)
+// Ближайший промежуток рельса к точке холста; «на рельсе» — если близко к линии
+function nearest(w) {
+  const keep = doc.items.filter(v => v.id !== drag.item?.id), P = layoutOf(keep), n = keep.length
   let best = n, bd = Infinity
-  for (let i = 0; i <= n; i++) {          // промежутки: перед каждым и после последнего
-    const a = ys[i - 1], b = ys[i]
-    const g = a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : b ? { x: b.x, y: b.y - 55 } : { x: a.x, y: a.y + 55 }
-    const d = ((g.x - x) * .35) ** 2 + (g.y - y) ** 2
+  for (let i = 0; i <= n; i++) {
+    const a = P[i - 1], b = P[i]
+    const g = a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : b ? { x: b.x, y: b.y - 58 } : { x: a ? a.x : 0, y: a ? a.y + 58 : 0 }
+    const d = ((g.x - w.x) * .7) ** 2 + (g.y - w.y) ** 2
     if (d < bd) { bd = d; best = i }
   }
-  const toolbar = cy > innerHeight - 100
-  return { i: best, inside: !toolbar && Math.abs(x - W.value / 2) < 260 && bd < 130 ** 2 }
+  return { i: best, near: bd < 95 ** 2 }
 }
-function startDrag(e, src) { if (editing.value) return; pending = { ...src, sx: e.clientX, sy: e.clientY }; addEventListener('pointermove', move); addEventListener('pointerup', up, { once: true }) }
+const overToolbar = (cy) => cy > H.value - (phone.value ? 92 : 104)
+function startDrag(e, src) {
+  if (editing.value || touches.size > 1) return
+  pending = { ...src, sx: e.clientX, sy: e.clientY }
+  addEventListener('pointermove', move); addEventListener('pointerup', up, { once: true }); addEventListener('pointercancel', up, { once: true })
+}
 function move(e) {
   if (pending && !drag.on) {
     if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return
     sel.value = null
-    Object.assign(drag, pending.type ? { on: true, fresh: true, item: newItem(pending.type) } : { on: true, fresh: false, item: pending.item })
+    Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, from: pending.type ? 'new' : pending.from })
   }
   if (!drag.on) return
   drag.x = e.clientX; drag.y = e.clientY
-  const n = nearest(e.clientX, e.clientY); drag.over = n.inside; drag.to = n.i
-  // у края — прокрутка
-  const r = wrap.value.getBoundingClientRect()
-  if (e.clientY > r.bottom - 130 && e.clientY < innerHeight - 100) wrap.value.scrollTop += 12; else if (e.clientY < r.top + 90) wrap.value.scrollTop -= 12
+  const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
 }
-function up() {
+function up(e) {
   removeEventListener('pointermove', move)
   const p = pending; pending = null
-  if (!drag.on) {                    // это было нажатие
-    if (p?.type === 'video') { pickFile(null); return }          // «Кружок» — сразу выбрать видео
-    if (p?.type) { const x = newItem(p.type); doc.items.push(x); sel.value = x.id; save(); nextTick(() => wrap.value.scrollTo({ top: wrap.value.scrollHeight, behavior: 'smooth' })) }
+  if (!drag.on) {                    // нажатие
+    if (p?.type === 'video') return pickFile(null)
+    if (p?.type) { const x = newItem(p.type); doc.items.push(x); sel.value = x.id; save(); nextTick(() => showRailEnd()) }
     else if (p?.item) sel.value = sel.value === p.item.id ? null : p.item.id
     return
   }
-  const placed = drag.over || !drag.fresh
-  if (placed) doc.items.splice(0, doc.items.length, ...order.value)
-  if (placed && drag.fresh) sel.value = drag.item.id
-  if (placed && drag.fresh && drag.item.type === 'video') pickFile(doc.items.find(v => v.id === drag.item.id))
-  Object.assign(drag, { on: false, item: null }); setProgress(doc.progress)
+  drop(drag.over ? 'rail' : overToolbar(e.clientY) ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))
+}
+// Куда легло взятое: на рельс (в промежуток), на холст (где отпустили) или отмена (над панелью)
+function drop(where, w) {
+  const x = drag.item, from = drag.from
+  if (where === 'rail') {
+    if (from === 'loose') doc.loose.splice(doc.loose.findIndex(l => l.id === x.id), 1)
+    delete x.x; delete x.y
+    doc.items.splice(0, doc.items.length, ...order.value)
+  } else if (where === 'canvas') {
+    if (from === 'rail') doc.items.splice(doc.items.findIndex(v => v.id === x.id), 1)
+    x.x = Math.round(w.x); x.y = Math.round(w.y)
+    if (from !== 'loose') doc.loose.push(x)
+  }
+  Object.assign(drag, { on: false, item: null, over: false })
+  if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (x.type === 'video' && !x.media) pickFile(findAny(x.id)) }
+  setProgress(doc.progress)
+}
+function newItem(type) {
+  const nUnits = doc.items.filter(x => x.type === 'unit').length
+  return it(type, type === 'unit' ? `Юнит ${nUnits + 1}` : T[type].t, type === 'unit' ? { sub: 'Тема юнита' } : {})
+}
+const findAny = (id) => doc.items.find(v => v.id === id) ?? doc.loose.find(v => v.id === id)
+function showRailEnd() { const p = toScreen(pos(order.value.length - 1)); if (p.y > H.value - 160 || p.y < 100) animView({ ...view, y: view.y - (p.y - H.value / 2) }, true) }
+
+// ---------- Пустое место: двигать холст; два пальца — масштаб ----------
+const touches = new Map(); let pan = null, pinch = null
+function boardDown(e) {
+  if (e.pointerType === 'touch') { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 }; pan = null; return } }
+  pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, moved: false }
+  board.value.setPointerCapture?.(e.pointerId)
+}
+function boardMove(e) {
+  if (touches.has(e.pointerId)) {
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pinch && touches.size === 2) {
+      const [a, b] = [...touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2
+      view.x += cx - pinch.cx; view.y += cy - pinch.cy; zoomAt(d / pinch.d, cx, cy); pinch = { d, cx, cy }; return
+    }
+  }
+  if (!pan) return
+  if (Math.hypot(e.clientX - pan.sx, e.clientY - pan.sy) > 3) pan.moved = true
+  view.x = pan.vx + e.clientX - pan.sx; view.y = pan.vy + e.clientY - pan.sy
+}
+function boardUp(e) {
+  touches.delete(e.pointerId); if (touches.size < 2) pinch = null
+  if (pan && !pan.moved) sel.value = null
+  pan = null
 }
 
-// ---------- Кружки из Telegram: перетащить видео на рельс (или «Кружок» на панели — выбрать файл) ----------
-// Видео хранится в IndexedDB этого браузера (в localStorage не влезет); на сервер пока не уходит.
+// ---------- Кружки из Telegram ----------
+// Видео — в IndexedDB этого браузера (в localStorage не влезет); на сервер пока не уходит.
 const IDB = 'tma-course-media'
 const idb = () => new Promise((ok, no) => { const r = indexedDB.open(IDB, 1); r.onupgradeneeded = () => r.result.createObjectStore('v'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) })
 async function mediaOp(mode, fn) { const db = await idb(); return new Promise((ok, no) => { const tx = db.transaction('v', mode), r = fn(tx.objectStore('v')); tx.oncomplete = () => ok(r?.result ?? null); tx.onerror = () => no(tx.error) }) }
 const urls = reactive({})
 function mediaUrl(x) {
   if (!x?.media) return ''
-  if (!(x.media in urls)) { urls[x.media] = ''; mediaOp('readonly', st => st.get(x.media)).then(b => { if (b) urls[x.media] = URL.createObjectURL(b) }).catch(() => {}) }
+  if (!(x.media in urls)) { urls[x.media] = ''; mediaOp('readonly', s => s.get(x.media)).then(b => { if (b) urls[x.media] = URL.createObjectURL(b) }).catch(() => {}) }
   return urls[x.media]
 }
 const isVideo = (f) => f && (f.type?.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(f.name))
 const MAX_MB = 200
 async function attach(item, file) {
+  if (!item) return
   if (!isVideo(file)) return alert('Это не видео. Перетащите кружок из Telegram (видеофайл).')
   if (file.size > MAX_MB * 1024 * 1024) return alert(`Видео больше ${MAX_MB} МБ — слишком большое для черновика.`)
   const id = 'm' + item.id
-  try { await mediaOp('readwrite', st => st.put(file, id)) } catch { return alert('Не удалось сохранить видео в браузере (мало места?).') }
+  try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return alert('Не удалось сохранить видео в браузере (мало места?).') }
   urls[id] = URL.createObjectURL(file); item.media = id; save()
 }
-// Выбор файла: для конкретного кружка или новый — в конец
 const fileInput = ref(null); let pickFor = null
 const pickFile = (item) => { pickFor = item; fileInput.value.value = ''; fileInput.value.click() }
 async function onPicked(e) {
@@ -177,56 +255,55 @@ async function onPicked(e) {
   let item = pickFor
   for (const f of files) {
     if (!item) { item = newItem('video'); doc.items.push(item) }
-    await attach(doc.items.find(v => v.id === item.id), f); sel.value = item.id; item = null
+    await attach(findAny(item.id), f); sel.value = item.id; item = null
   }
-  nextTick(() => { if (!pickFor) wrap.value.scrollTo({ top: wrap.value.scrollHeight, behavior: 'smooth' }) })
+  if (!pickFor) nextTick(() => showRailEnd())
 }
-// Файл тащат из Telegram / проводника: показываем место вставки, как при перетаскивании с панели
+// Файл тащат из Telegram / проводника: на рельс — с местом вставки, мимо — на холст
 const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
 function fileOver(e) {
   if (!hasFiles(e)) return
   e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
-  if (!drag.on) { sel.value = null; Object.assign(drag, { on: true, fresh: true, item: newItem('video') }) }
+  if (!drag.on) { sel.value = null; Object.assign(drag, { on: true, item: newItem('video'), from: 'file' }) }
   drag.x = e.clientX; drag.y = e.clientY
-  const n = nearest(e.clientX, e.clientY); drag.over = n.inside; drag.to = n.i
+  const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
 }
-function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.fresh && drag.item?.type === 'video') Object.assign(drag, { on: false, item: null }) }
+function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.from === 'file') Object.assign(drag, { on: false, item: null }) }
 async function fileDrop(e) {
   if (!hasFiles(e)) return
   e.preventDefault()
-  const files = [...e.dataTransfer.files].filter(isVideo)
-  const first = drag.item, over = drag.over
-  if (!files.length) { Object.assign(drag, { on: false, item: null }); return alert('Перетащите видео — кружок из Telegram или файл .mp4') }
-  const list = over ? order.value.slice() : [...doc.items, first]
-  let at = list.findIndex(v => v.id === first.id)
+  const files = [...e.dataTransfer.files].filter(isVideo), first = drag.item, w = toWorld(e.clientX, e.clientY), onRail = drag.over
+  if (!files.length || !first) { Object.assign(drag, { on: false, item: null }); return alert('Перетащите видео — кружок из Telegram или файл .mp4') }
   const extra = files.slice(1).map(() => newItem('video'))
-  list.splice(at + 1, 0, ...extra)
-  doc.items.splice(0, doc.items.length, ...list)
-  Object.assign(drag, { on: false, item: null })
+  if (onRail) {
+    const list = order.value.slice(), at = list.findIndex(v => v.id === first.id)
+    list.splice(at + 1, 0, ...extra); doc.items.splice(0, doc.items.length, ...list)
+  } else [first, ...extra].forEach((x, k) => { x.x = Math.round(w.x + k * 90); x.y = Math.round(w.y); doc.loose.push(x) })
+  Object.assign(drag, { on: false, item: null, over: false })
   const targets = [first, ...extra]
-  for (let k = 0; k < files.length; k++) await attach(doc.items.find(v => v.id === targets[k].id), files[k])
+  for (let k = 0; k < files.length; k++) await attach(findAny(targets[k].id), files[k])
   sel.value = first.id; setProgress(doc.progress)
 }
 const play = (e, on) => { const v = e.currentTarget.querySelector('video'); if (v) on ? v.play().catch(() => {}) : v.pause() }
-function newItem(type) {
-  const nUnits = doc.items.filter(x => x.type === 'unit').length
-  return it(type, type === 'unit' ? `Юнит ${nUnits + 1}` : T[type].t, type === 'unit' ? { sub: 'Тема юнита' } : {})
-}
 
 // ---------- Карточка выбранного ----------
 const sel = ref(null), editing = ref(false)
-const selItem = computed(() => doc.items.find(x => x.id === sel.value))
-const selIndex = computed(() => order.value.findIndex(x => x.id === sel.value))
+const selItem = computed(() => findAny(sel.value))
+const selLoose = computed(() => !!doc.loose.find(v => v.id === sel.value))
 function remove() {
-  const i = doc.items.findIndex(x => x.id === sel.value)
-  if (i >= 0) { const [x] = doc.items.splice(i, 1); if (x.media) mediaOp('readwrite', st => st.delete(x.media)).catch(() => {}) }
+  const x = selItem.value; if (!x) return
+  const a = doc.items.findIndex(v => v.id === x.id); if (a >= 0) doc.items.splice(a, 1)
+  const b = doc.loose.findIndex(v => v.id === x.id); if (b >= 0) doc.loose.splice(b, 1)
+  if (x.media) mediaOp('readwrite', s => s.delete(x.media)).catch(() => {})
   sel.value = null; setProgress(doc.progress)
 }
+function toRailEnd() { const x = selItem.value; doc.loose.splice(doc.loose.findIndex(v => v.id === x.id), 1); delete x.x; delete x.y; doc.items.push(x); setProgress(doc.progress); nextTick(showRailEnd) }
 const popStyle = computed(() => {
-  if (selIndex.value < 0) return null
-  const p = pos(selIndex.value), w = 260
-  const want = p.side === 'r' ? p.x - w - 52 : p.x + 52           // напротив подписи
-  return { left: Math.min(Math.max(8, want), W.value - w - 8) + 'px', top: p.y - 60 + 'px', width: w + 'px' }
+  const x = selItem.value; if (!x) return null
+  const i = order.value.findIndex(v => v.id === x.id), p = i >= 0 ? pos(i) : { x: x.x, y: x.y, side: 'r' }
+  const s = toScreen(p), w = 260, r = 36 * view.z
+  const want = p.side === 'r' ? s.x - w - r - 16 : s.x + r + 16
+  return { left: Math.min(Math.max(8, want), W.value - w - 8) + 'px', top: Math.min(Math.max(70, s.y - 60), H.value - 380) + 'px', width: w + 'px' }
 })
 const onKey = (e) => {
   if (/INPUT|TEXTAREA/.test(e.target?.tagName)) return
@@ -238,55 +315,65 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 function exportJson() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
 }
-function reset() { if (!confirm('Вернуть пример курса? Текущий черновик удалится.')) return; Object.assign(doc, seed()); sel.value = null; save() }
+function reset() { if (!confirm('Вернуть пример курса? Текущий черновик удалится.')) return; Object.assign(doc, seed()); sel.value = null; save(); nextTick(() => fit()) }
 </script>
 
 <template>
   <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
     <input ref="fileInput" type="file" accept="video/*" multiple hidden @change="onPicked" />
-    <div ref="wrap" class="sc" @pointerdown.self="sel = null">
-      <div class="world" :style="{ height: height + 'px' }" @pointerdown.self="sel = null">
+    <div ref="board" class="board" :style="dots" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @wheel="onWheel">
+      <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
         <!-- Сводка, как увидит ученик -->
-        <div class="sum">
+        <div class="sum" @pointerdown.stop>
           <div class="sh"><span><i class="dt" />Юнит {{ curUnitNo }} из {{ unitsCount }}</span><b class="pp">{{ pct }}%</b></div>
           <div class="st">{{ curUnit?.sub || curUnit?.title }}</div>
           <div class="bar"><i :style="{ width: pct + '%' }" /></div>
           <div class="sf"><span>Пройдено: <b>{{ doc.progress }} из {{ tasksCount }}</b></span><span>Осталось {{ tasksCount - doc.progress }}</span></div>
         </div>
-        <svg class="rail" :width="W" :height="height"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
+        <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
+        <!-- Рельс -->
         <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id }]"
-          :style="{ left: pos(i).x + 'px', top: pos(i).y + 'px', '--c': x.type === 'unit' ? unitColor(i)[0] : T[x.type].c, '--d': x.type === 'unit' ? unitColor(i)[1] : T[x.type].d }"
-          @pointerdown.stop="startDrag($event, { item: x })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
-          <template v-if="x.type === 'unit'">
-            <b class="no">{{ unitNo(i) }}</b>
-            <div class="sign"><b>{{ x.title }}</b><span>{{ x.sub }}</span></div>
-          </template>
+          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          <template v-if="x.type === 'unit'"><b class="no">{{ unitNo(i) }}</b><div class="sign"><b>{{ x.title }}</b><span>{{ x.sub }}</span></div></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
             <svg v-if="x.type !== 'video' || !mediaUrl(x) || stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ic" :class="{ badge: x.type === 'video' && mediaUrl(x) }" v-html="stateOf(x, i) === 'done' ? CHECK : T[x.type].ic" />
             <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small v-if="x.title !== T[x.type].t">{{ T[x.type].t }}</small></em>
           </template>
         </div>
-        <!-- Карточка выбранного -->
-        <div v-if="selItem && !drag.on" class="pop" :style="popStyle" @pointerdown.stop>
-          <div class="ph">{{ T[selItem.type].t }}</div>
-          <input v-model="selItem.title" class="in" :placeholder="T[selItem.type].t" @focus="editing = true" @blur="editing = false" @input="save" />
-          <input v-if="selItem.type === 'unit'" v-model="selItem.sub" class="in sub" placeholder="Тема юнита" @focus="editing = true" @blur="editing = false" @input="save" />
-          <template v-if="selItem.type === 'video'">
-            <video v-if="mediaUrl(selItem)" :src="mediaUrl(selItem)" class="vbig" controls playsinline />
-            <button class="btn-v" @click="pickFile(selItem)">{{ mediaUrl(selItem) ? 'Заменить видео' : 'Выбрать видео' }}</button>
+        <!-- Черновики на холсте: ещё не на рельсе -->
+        <div v-for="x in looseShown" :key="x.id" class="bead loose" :class="[x.type, { on: sel === x.id }]" :style="beadStyle(x, x, colorOf(x))"
+          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
+          <template v-else>
+            <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
+            <svg v-else viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
+            <em class="cap">{{ x.title }}<small>не на рельсе</small></em>
           </template>
-          <div v-else class="types">
-            <button v-for="k in PALETTE.slice(1)" :key="k" class="tt" :class="{ on: selItem.type === k }" :style="{ '--c': T[k].c }" :title="T[k].t" @click="selItem.type = k; save()"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></button>
-          </div>
-          <button class="del" @click="remove">Убрать с рельса</button>
         </div>
       </div>
     </div>
 
-    <!-- Взятое — едет за пальцем в настоящем размере; не над рельсом — полупрозрачное -->
-    <div v-if="drag.on" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x + 'px', top: drag.y + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d }">
-      <b v-if="drag.item.type === 'unit'" class="no">+</b><svg v-else viewBox="0 0 24 24" class="ic" v-html="T[drag.item.type].ic" />
+    <!-- Взятое — за пальцем в масштабе холста; мимо рельса — полупрозрачное -->
+    <div v-if="drag.on" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x + 'px', top: drag.y + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d, transform: `scale(${view.z * 1.06})` }">
+      <video v-if="drag.item.type === 'video' && mediaUrl(drag.item)" :src="mediaUrl(drag.item)" class="vid" muted />
+      <b v-else-if="drag.item.type === 'unit'" class="no">+</b><svg v-else viewBox="0 0 24 24" class="ic" v-html="T[drag.item.type].ic" />
+    </div>
+
+    <!-- Карточка выбранного -->
+    <div v-if="selItem && !drag.on" class="pop" :style="popStyle" @pointerdown.stop>
+      <div class="ph">{{ T[selItem.type].t }}<span v-if="selLoose" class="lz">на холсте</span></div>
+      <input v-model="selItem.title" class="in" :placeholder="T[selItem.type].t" @focus="editing = true" @blur="editing = false" @input="save" />
+      <input v-if="selItem.type === 'unit'" v-model="selItem.sub" class="in sub" placeholder="Тема юнита" @focus="editing = true" @blur="editing = false" @input="save" />
+      <template v-if="selItem.type === 'video'">
+        <video v-if="mediaUrl(selItem)" :src="mediaUrl(selItem)" class="vbig" controls playsinline />
+        <button class="btn-v" @click="pickFile(selItem)">{{ mediaUrl(selItem) ? 'Заменить видео' : 'Выбрать видео' }}</button>
+      </template>
+      <div v-else-if="selItem.type !== 'unit'" class="types">
+        <button v-for="k in PALETTE.slice(1)" :key="k" class="tt" :class="{ on: selItem.type === k }" :style="{ '--c': T[k].c }" :title="T[k].t" @click="selItem.type = k; save()"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></button>
+      </div>
+      <button v-if="selLoose" class="btn-r" @click="toRailEnd">На рельс — в конец</button>
+      <button class="del" @click="remove">{{ selLoose ? 'Удалить' : 'Убрать с рельса' }}</button>
     </div>
 
     <!-- Сверху -->
@@ -299,12 +386,14 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
       <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
       <span class="pl">Прогресс<small>пример</small></span>
       <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
-      <i class="vs" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
+      <i class="vs dk" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
     </div>
+    <!-- Масштаб -->
+    <div class="fl zoom"><button title="Отдалить" @click="zoomBtn(1 / 1.25)">−</button><b title="100%" @click="zoomAt(1 / view.z, W / 2, H / 2)">{{ Math.round(view.z * 100) }}%</b><button title="Приблизить" @click="zoomBtn(1.25)">+</button><i class="vs" /><button class="all" title="Показать весь курс" @click="fit()">Весь курс</button></div>
 
-    <!-- Снизу: что нанизать -->
+    <!-- Снизу: что положить -->
     <div class="fl tools" role="toolbar">
-      <span class="tl">Тяните на рельс<small>или нажмите — в конец</small></span><i class="sep" />
+      <span class="tl">Тяните на рельс или на холст<small>или нажмите — в конец рельса</small></span><i class="sep" />
       <button v-for="k in PALETTE" :key="k" class="pb" :class="k" :style="{ '--c': T[k].c, '--d': T[k].d }" :title="T[k].t" @pointerdown.prevent="startDrag($event, { type: k })">
         <span class="pc"><b v-if="k === 'unit'">1</b><svg v-else viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small>
       </button>
@@ -315,10 +404,12 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 <style scoped>
 .ce { position: fixed; inset: 0; z-index: 30; background: #f5f5f5; user-select: none; -webkit-user-select: none; font-family: var(--font) }
 .ce.dragging, .ce.dragging * { cursor: grabbing !important }
-.sc { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; background-image: radial-gradient(circle, #cfcfcf 1px, transparent 1.3px); background-size: 20px 20px; background-attachment: local }
-.world { position: relative; width: 100%; min-height: 100%; padding-bottom: 110px }
+/* Холст: бесконечное поле в точку; содержимое — в координатах холста (центр рельса — x = 0) */
+.board { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab; background-image: radial-gradient(circle, #cfcfcf 1px, transparent 1.3px) }
+.board:active { cursor: grabbing }
+.world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0 }
 /* Рельс: серая дорога, пройденное — зелёным поверх */
-.rail { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none }
+.rail { position: absolute; left: 0; top: 0; width: 1px; overflow: visible; pointer-events: none }
 .rail path { fill: none; stroke-linecap: round; stroke-linejoin: round }
 .r0 { stroke: #e0e0e0; stroke-width: 12 } .r1 { stroke: var(--green); stroke-width: 12 }
 /* Бусина-задание */
@@ -355,7 +446,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .bead.s-l .sign { left: auto; right: calc(100% + 20px) }
 .sign b { font-size: 15px }
 /* Сводка сверху */
-.sum { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); width: min(440px, calc(100% - 16px)); box-sizing: border-box; display: grid; gap: 6px; padding: 16px 18px; border-radius: 18px; background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04); z-index: 3 }
+.sum { position: absolute; left: -220px; top: -250px; width: 440px; cursor: default; box-sizing: border-box; display: grid; gap: 6px; padding: 16px 18px; border-radius: 18px; background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04); z-index: 3 }
 .sh { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .dt { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--green); vertical-align: 1px }
 .pp { padding: 4px 9px; border-radius: 9px; background: var(--green-l); color: var(--green-d); font-size: 14px; letter-spacing: 0 }
@@ -364,15 +455,21 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .sf { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--hint) } .sf b { color: var(--text) }
 .seg { display: flex; padding: 2px; border-radius: 9px; background: var(--surface) } .seg button { border: 0; border-radius: 7px; padding: 5px 10px; background: none; font: inherit; font-size: 12px; font-weight: 800; color: var(--hint); cursor: pointer } .seg button.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12) } .sign span { font-size: 12px; font-weight: 700; opacity: .85 }
 /* Карточка выбранного */
-.pop { position: absolute; z-index: 6; display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04); cursor: default; animation: pop .14s ease-out }
+.pop { position: fixed; z-index: 20; display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04); cursor: default; animation: pop .14s ease-out }
 @keyframes pop { from { opacity: 0; transform: translateY(-4px) } }
+.lz { margin-left: 8px; padding: 1px 6px; border-radius: 5px; background: #fff4d6; color: #b07800; text-transform: none; letter-spacing: 0 }
+.btn-r { border: 0; border-radius: 9px; padding: 8px; background: var(--green-l); color: var(--green-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
+/* Черновик на холсте: цветной, с пунктирным кольцом — «ещё не на рельсе» */
+.bead.loose { box-shadow: 0 6px 0 var(--d), 0 0 0 5px #f5f5f5, 0 0 0 7px color-mix(in srgb, var(--c) 45%, transparent); transition: transform .12s }
+.bead.loose .cap small { color: #b07800 }
 .ph { font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .in { margin: 0; padding: 8px 10px; font-size: 15px; font-weight: 700; border-width: 1px; border-radius: 9px } .in.sub { font-size: 13px; font-weight: 600 }
 .types { display: flex; gap: 6px } .tt { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #f0f0f0; color: var(--c); cursor: pointer; padding: 0 }
 .tt svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round } .tt.on { background: var(--c); color: #fff }
 .del { border: 0; border-radius: 9px; padding: 8px; background: var(--red-l); color: var(--red-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
 /* Летящее */
-.fly { position: fixed; z-index: 50; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 6px 0 var(--d), 0 14px 26px rgba(0, 0, 0, .22); pointer-events: none; transform: scale(1.06); transition: opacity .12s }
+.fly { position: fixed; z-index: 50; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 6px 0 var(--d), 0 14px 26px rgba(0, 0, 0, .22); pointer-events: none; transform-origin: 50% 50%; transition: opacity .12s }
+.fly .vid { box-shadow: none }
 .fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px } .fly.tutor { border-radius: 20px } .fly.out { opacity: .45 }
 /* Панели */
 .fl { position: absolute; z-index: 5; background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }
@@ -387,6 +484,8 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .pv { min-width: 52px; text-align: center; font-size: 14px; color: var(--green-d) }
 .vs { width: 1px; height: 24px; margin: 0 6px; background: var(--border) }
 .pill { border: 0; border-radius: 9px; padding: 7px 12px; background: var(--blue); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .pill.grey { background: var(--surface); color: var(--hint) }
+.zoom { right: 14px; bottom: 112px; display: flex; align-items: center; padding: 4px } .zoom button { min-width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 18px; font-weight: 700; cursor: pointer } .zoom button:hover { background: var(--surface) }
+.zoom b { min-width: 46px; text-align: center; font-size: 13px; cursor: pointer } .zoom .all { padding: 0 10px; font-size: 13px; font-weight: 800 } .zoom .vs { margin: 0 2px }
 .tools { left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; height: 74px; padding: 0 12px; border-radius: 18px; box-shadow: 0 2px 6px rgba(0, 0, 0, .06), 0 6px 22px rgba(0, 0, 0, .1) }
 .tl { display: grid; font-size: 13px; font-weight: 800; line-height: 1.2; padding: 0 4px; white-space: nowrap } .tl small { font-size: 11px; color: var(--hint); font-weight: 600 }
 .sep { width: 1px; height: 44px; margin: 0 8px; background: #e6e6e6 }
@@ -402,6 +501,6 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
   .tools { left: 8px; right: 8px; bottom: 10px; transform: none; overflow-x: auto; scrollbar-width: none; padding: 0 6px; height: 70px } .tl, .tools .sep { display: none }
   .pb { flex: none; width: 58px }
   .pop { position: fixed; left: 8px !important; right: 8px; top: auto !important; bottom: 88px; width: auto !important; max-height: 62vh; overflow-y: auto; z-index: 20 }      /* телефон: карточка — снизу над панелью */
-  .sum { top: 108px } .pl, .tr-panel .pill, .tr-panel .vs:last-of-type { display: none } .tr-panel { justify-content: space-between; gap: 3px } .cap { width: 120px; font-size: 13px }      /* телефон: только вид и прогресс; экспорт и сброс — на компьютере */
+  .zoom { right: 8px; bottom: 88px; padding: 2px } .zoom b { display: none } .zoom .all { font-size: 12px; padding: 0 8px } .pl, .tr-panel .pill, .tr-panel .vs.dk { display: none } .tr-panel { justify-content: space-between; gap: 3px } .cap { width: 120px; font-size: 13px }      /* телефон: только вид и прогресс; экспорт и сброс — на компьютере */
 }
 </style>
