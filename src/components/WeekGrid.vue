@@ -3,6 +3,7 @@
 import { computed } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
+import { gridStyle } from '../utils/gridStyle'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney, fmtMoneyK } from '../utils/price'
 import AvatarStack from './AvatarStack.vue'
@@ -50,7 +51,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 </script>
 
 <template>
-  <div class="card wk">
+  <div class="card wk" :class="`gs-${gridStyle}`">
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
         <span>{{ tzShort(tz) }}</span>
@@ -150,4 +151,15 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 
 /* На телефоне галочку «проведён» не показываем — кружок крупный, проведённый урок и так зелёный */
 @media (max-width: 719px) { .chip .tick { display: none } }
+/* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
+.wk.gs-gray .cell { background: var(--surface); box-shadow: none }
+.wk.gs-none .cell { background: transparent; box-shadow: none }      /* без линий: чистый фон, только уроки */
+.wk.gs-lines { gap: 0 } .wk.gs-lines .g.head { margin-bottom: 4px }
+.wk.gs-lines .g:not(.head) { box-shadow: inset 0 -1px 0 var(--border); padding: 2px 0 }      /* линия под каждым часом во всю ширину */
+.wk.gs-lines .cell { background: transparent; box-shadow: none; border-radius: 8px }
+.wk.gs-gray .cell.free:hover, .wk.gs-lines .cell.free:hover, .wk.gs-none .cell.free:hover { background: var(--blue-l) }
+.wk.gs-lines .cell.ok, .wk.gs-gray .cell.ok, .wk.gs-none .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
+.wk.gs-lines .cell.swap, .wk.gs-gray .cell.swap, .wk.gs-none .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
+.wk.gs-lines .cell.bad, .wk.gs-gray .cell.bad, .wk.gs-none .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
+.wk.gs-lines .cell.join, .wk.gs-gray .cell.join, .wk.gs-none .cell.join { box-shadow: inset 0 0 0 2px var(--green) }
 </style>

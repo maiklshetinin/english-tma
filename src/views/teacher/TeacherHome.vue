@@ -7,6 +7,7 @@ import { goUp } from '../../router'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
 import { useTelegram } from '../../composables/useTelegram'
+import GridStyleButton from '../../components/GridStyleButton.vue'
 import WeekGrid from '../../components/WeekGrid.vue'
 import StudentsPanel from '../../components/StudentsPanel.vue'
 import LessonSheet from '../../components/LessonSheet.vue'
@@ -115,6 +116,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
               <button v-for="o in [0, 1]" :key="o" role="tab" :aria-selected="week === o" :class="{ on: week === o }" @click="week = o"><b>{{ o ? 'Следующая' : 'Эта' }}<span class="wfull"> неделя</span></b><small>{{ weekRange(o ? w2 : w1) }}</small></button>
             </div>
             <WeekLoad :lessons="scheduleStore.lessons" :dates="week ? w2 : w1" :active-of="activeOf" />
+            <GridStyleButton />
             <WeekMoney class="money" :m="week ? m2 : m1" />
           </div>
           <WeekGrid :dates="week ? w2 : w1" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
