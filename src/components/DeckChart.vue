@@ -164,8 +164,8 @@ watch(lastKey, (v, was) => {
   const id = v.split(':')[0], r = started.value.find(x => x.c.id === id); if (!r) return
   const h = r.s.hist?.at(-1)
   jump.value = { id, word: r.c.front, q: h?.q ?? 2, to: h ? (h.i < 0 ? fmtSpan(-h.i, 0) : fmtSpan(0, h.i)) : '' }
-  hover.value = null; pinned.value = binOf(r); autoPin.value = true; open.value = null
-  clearTimeout(jumpTimer); jumpTimer = setTimeout(() => { jump.value = null; if (autoPin.value) pinned.value = null }, 4500)
+  // подсказку сами не открываем и не показываем всплывашку — карточка просто падает в свою стопку и подсвечивается
+  clearTimeout(jumpTimer); jumpTimer = setTimeout(() => { jump.value = null }, 2500)
 })
 onUnmounted(() => clearTimeout(jumpTimer))
 const fresh = (r) => jump.value?.id === r.c.id
@@ -209,7 +209,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
       <div class="plot" :style="{ '--n': bins.length }" @mouseleave="hover = null">
         <div class="grid"><i /><i /><i /></div>
         <!-- Всплывашка над столбиками: слово только что ушло -->
-        <Transition name="jmp"><div v-if="jump && !active" class="jump" :class="'jq' + jump.q"><b>{{ jump.word }}</b> · {{ GRADE[jump.q] }} → <b class="to">{{ jump.to }}</b></div></Transition>
+        <Transition name="jmp"><div v-if="false" class="jump" :class="'jq' + jump.q"><b>{{ jump.word }}</b> · {{ GRADE[jump.q] }} → <b class="to">{{ jump.to }}</b></div></Transition>
         <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, pin: pinned === b.i, later: b.i === sc.n, hot: b.items.some(fresh) }"
           :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="hover = b.i" @click="pin(b.i)">
           <span v-if="b.items.length" class="bn">{{ b.items.length }}</span>

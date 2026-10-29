@@ -42,7 +42,7 @@ const audience = (d) => {
     <template v-else>
       <div v-if="canManage" class="top"><button class="btn sm add" @click="sheet = { create: true }"><AppIcon name="plus" :size="16" /> Добавить</button></div>
 
-      <div v-for="d in decks" :key="d.id" class="card deck">
+      <div v-for="d in decks" :key="d.id" class="card deck" title="Учить" @click="open('study', d)">
         <div class="info">
           <h3>{{ d.title }}</h3>
           <div class="hint">{{ d.cards.length }} карт.<template v-if="canManage"> · {{ audience(d) }}</template></div>
@@ -56,8 +56,7 @@ const audience = (d) => {
           <b class="l" title="Изучаю" :class="{ z: !deckCounts(d, userKey).learn }">{{ deckCounts(d, userKey).learn }}</b>
           <b class="d" title="К повторению" :class="{ z: !deckCounts(d, userKey).due }">{{ deckCounts(d, userKey).due }}</b>
         </div>
-        <div class="acts">
-          <button class="btn ghost sm" @click="open('study', d)">Учить</button>
+        <div class="acts" @click.stop>
           <button class="ib" aria-label="График колоды" title="График: когда повторять каждое слово" @click="open('chart', d)"><AppIcon name="chart" :size="18" /></button>
           <button class="ib" aria-label="Карточки колоды" title="Карточки" @click="canManage ? router.push({ name: 'cards-studio', query: { id: d.id } }) : open('browse', d)"><AppIcon name="list" :size="18" /></button>
           <button v-if="canManage" class="ib" aria-label="Настройки колоды" title="Настройки" @click="sheet = { deck: d }"><AppIcon name="sliders" :size="18" /></button>
@@ -75,7 +74,7 @@ const audience = (d) => {
 .top { display: flex; justify-content: flex-end }
 .add { display: inline-flex; align-items: center; gap: 6px }
 .n { color: var(--blue) } .l { color: var(--red) } .d { color: var(--green-d) }
-.deck { display: flex; align-items: center; gap: 12px; padding: 14px 16px } .info { flex: 1; min-width: 0 } .info h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.deck { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; transition: background .12s } .deck:hover { background: var(--surface) } .info { flex: 1; min-width: 0 } .info h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .cnt { display: flex; gap: 12px; font-size: 18px } .cnt b { min-width: 18px; text-align: center } .cnt b.z { color: var(--hint-2); font-weight: 700 }
 .fc { flex: none; display: grid; justify-items: end; gap: 3px; width: 150px }
 .fb { display: flex; align-items: flex-end; gap: 2px; height: 26px; width: 100% }
