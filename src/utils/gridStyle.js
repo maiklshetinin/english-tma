@@ -13,6 +13,11 @@ const read = () => { try { const v = localStorage.getItem(KEY); return GRID_STYL
 export const gridStyle = ref(read())
 export function setGridStyle(id) { gridStyle.value = id; try { localStorage.setItem(KEY, id) } catch { /* приватный режим — просто не запомним */ } }
 
+// Внешняя рамка таблицы недели (обводка карточки): можно убрать — останется только сетка
+const FRAME = 'tma.gridFrame'
+export const gridFrame = ref((() => { try { return localStorage.getItem(FRAME) !== '0' } catch { return true } })())
+export function setGridFrame(on) { gridFrame.value = !!on; try { localStorage.setItem(FRAME, on ? '1' : '0') } catch { /* приватный режим */ } }
+
 // Фон экрана в точку (как холст в Figma)
 const DOTS = 'tma.bgDots'
 export const bgDots = ref((() => { try { return localStorage.getItem(DOTS) === '1' } catch { return false } })())

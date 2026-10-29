@@ -9,6 +9,9 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDecksStore } from '../../stores/decks'
+import { useStudentsStore } from '../../stores/students'
+import { srsOf, kindOf } from '../../composables/useSrs'
+import { relDay } from '../../utils/dates'
 import { API, apiRequest, fb, isDemo } from '../../firebase'
 import { imageSrc, audioSrc } from '../../utils/media'
 import { newId } from '../../utils/id'
@@ -32,7 +35,7 @@ const FIELDS = [
 // Слово и перевод — в одной ячейке (сверху слово, снизу перевод), пример и его перевод — во второй; дальше фото и озвучка
 const COLS = [
   { ...FIELDS[4], short: 'Фото' },
-  { k: 'w', kind: 'pair', short: 'Слово', pair: [FIELDS[0], FIELDS[1]] }, { k: 'audio', kind: 'aud', short: 'Звук', snd: 'audio' },
+  { k: 'w', kind: 'pair', short: 'Слово', pair: [FIELDS[0], FIELDS[1]], snd: 'audio' },
   { k: 'e', kind: 'pair', short: 'Пример', pair: [FIELDS[2], FIELDS[3]] },
 ]
 const filled = (k) => cards.value.filter(c => c[k]).length
@@ -149,9 +152,9 @@ function dragOver(e) {
 function dragLeave() { clearTimeout(leaveT); leaveT = setTimeout(() => { over.value = false; overCell.value = ''; overRow.value = '' }, 80) }
 async function drop(e) {
   e.preventDefault(); over.value = false
-  const fs = [...(e.dataTransfer?.files ?? [])], sheet = fs.find(isSheet)
-  if (sheet) return void startImport(sheet)                          // таблица Excel / CSV — сразу в колоду
-  await dropOnTable(fs)
+  const sheet = [...(e.dataTransfer?.files ?? [])].find(isSheet)
+  if (sheet) startImport(sheet)                                      // в список можно бросить только таблицу Excel / CSV; фото и звук — в карточке
+  else showToast('Фото и звук добавляются в карточке: нажмите на слово и перетащите файл на неё', null, 'bad')
 }
 // Файл на строку: на ячейку фото / звука — в неё; на слово, перевод и т.п. — в эту карточку: фото → «Фото», звук → «Озвучка слова».
 // Можно бросить сразу фото и звук. Имя файла тут не важно.
@@ -248,6 +251,22 @@ function delCard(c) {
   files.forEach(k => forget(c[k]))
   const i = deck.value.cards.findIndex(x => x.id === c.id); if (i >= 0) deck.value.cards.splice(i, 1)
 }
+// ---------- Статистика по карточке: кто из учеников её учит и когда повтор ----------
+const studentsStore = useStudentsStore()
+const learners = computed(() => (deck.value?.forAll ? studentsStore.list : studentsStore.list.filter(x => deck.value?.assigned.includes(x.id))))
+const dayLabel = (d) => { const r = relDay(d); return r === 'Прошло' ? 'пора повторить' : r.toLowerCase() }
+function statsOf(c) {
+  const bars = []; let lapses = 0, next = ''
+  for (const st of learners.value) {
+    const s = srsOf(st.id, c); if (!s) continue
+    const k = kindOf(s), iv = s.interval || 0
+    lapses += s.lapses || 0
+    if (s.due && (!next || s.due < next)) next = s.due
+    bars.push({ id: st.id, h: Math.max(12, Math.min(100, Math.log2(iv + 1) / Math.log2(61) * 100)), cls: k === 'review' ? (iv >= 21 ? 'mature' : 'rev') : 'lrn',
+      title: `${st.name}: ${k === 'learn' ? 'учит (шаги)' : `интервал ${iv} дн.`}${s.due ? ', повтор — ' + dayLabel(s.due) : ''}${s.lapses ? `, ошибок ${s.lapses}` : ''}` })
+  }
+  return { n: bars.length, bars, lapses, next: next ? 'повтор: ' + dayLabel(next) : '' }
+}
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'карточки' : 'карточек')
 const back = () => router.push({ name: 'words' })
 </script>
@@ -272,8 +291,7 @@ const back = () => router.push({ name: 'words' })
       <!-- Тащат файлы над таблицей — подсвечиваем всю область и говорим, что будет -->
       <div v-if="over" class="dropov"><div class="pill"><AppIcon name="download" :size="22" />
         <span v-if="overSheet"><b>Отпустите — карточки добавятся в колоду</b>столбцы угадаю сам, если что — «Поменять столбцы»</span>
-        <span v-else-if="overRowCard"><b>Отпустите — к слову «{{ overRowCard.front || 'без слова' }}»</b>фото → «Фото», звук → «Озвучка{{ overCell.endsWith('exampleAudio') ? ' примера' : ' слова' }}»</span>
-        <span v-else><b>Отпустите — файлы разойдутся по строкам</b>по имени: apple.jpg → фото, apple.mp3 → озвучка. Или наведите на строку слова</span></div></div>
+        <span v-else><b>Сюда — только таблица Excel</b>фото и звук добавляются в карточке: нажмите на слово</span></div></div>
       <div v-if="lastImport" class="rep imp">
         <span>Добавлено <b>{{ lastImport.added }}</b><template v-if="lastImport.updated">, обновлено <b>{{ lastImport.updated }}</b></template> из «{{ lastImport.file }}»</span>
         <button class="lnkb" :title="lastImport.cols.join(' · ')" @click="remapImport">Не те столбцы?</button><button class="lnkb" @click="undoImport">Отменить</button>
@@ -294,80 +312,78 @@ const back = () => router.push({ name: 'words' })
           <thead><tr><th class="n" />
             <th v-for="col in COLS" :key="col.k" :class="col.kind">
               <span class="hd1">{{ col.short }}</span><small v-for="f in (col.pair || [])" :key="f.k" v-show="f.need && filled(f.k) < cards.length" class="miss"> · без {{ f.k === 'front' ? 'слова' : 'перевода' }}: {{ cards.length - filled(f.k) }}</small></th>
-            <th class="act" /></tr></thead>
+            <th class="stc" title="Столбик — ученик, который учит карточку: чем выше, тем дольше до повтора. Розовый — ещё запоминает, зелёный — повторяет, тёмно-зелёный — выучил (21+ дн.)"><span class="hd1">Ученики</span></th><th class="act" /></tr></thead>
+          <!-- Список — только смотреть: нажали на строку — карточка-редактор; в строке можно лишь послушать звук и удалить -->
           <tbody>
-            <template v-for="(c, i) in shown.slice(0, limit)" :key="c.id">
-            <tr :class="{ bad: !c.front || !c.back, off: c.suspended, rowhot: overRow === c.id, editing: edit === c.id }">
+            <tr v-for="(c, i) in shown.slice(0, limit)" :key="c.id" class="crow" :class="{ bad: !c.front || !c.back, off: c.suspended, editing: edit === c.id }" title="Открыть карточку" @click="openEdit(c)">
               <td class="n">{{ i + 1 }}</td>
-              <td v-for="f in COLS" :key="f.k" :class="[f.kind, { dz: f.kind !== 'pair', hot: overCell === c.id + f.k }]"
-                @dragover="cellOver($event, c, f)" @drop="dropCell($event, c, f)">
-                <div v-if="f.kind === 'pair'" class="two" title="Нажмите, чтобы изменить" @click="openEdit(c, f.pair[0].k)">
-                  <span class="t1" :class="{ ph: !c[f.pair[0].k], miss: f.pair[0].need && !c[f.pair[0].k] }">{{ c[f.pair[0].k] || (f.pair[0].need ? 'нет слова' : '') }}</span>
+              <td v-for="f in COLS" :key="f.k" :class="[f.kind, 'c-' + f.k]">
+                <div v-if="f.kind === 'pair'" class="two">
+                  <span class="t1" :class="{ ph: !c[f.pair[0].k], miss: f.pair[0].need && !c[f.pair[0].k] }">{{ c[f.pair[0].k] || (f.pair[0].need ? 'нет слова' : '') }}<em v-if="f.k === 'e' && c.exampleAudio" class="ea" title="У примера есть звук">🔊</em></span>
                   <span class="t2" :class="[f.k, { ph: !c[f.pair[1].k], miss: f.pair[1].need && !c[f.pair[1].k] }]">{{ c[f.pair[1].k] || (f.pair[1].need ? 'нет перевода' : '') }}</span>
+                  <!-- звук слова — под переводом -->
+                  <span v-if="f.snd && busy[c.id + f.snd] != null" class="up wvup"><i :style="{ '--p': busy[c.id + f.snd] }" />{{ busy[c.id + f.snd] }}%</span>
+                  <span v-else-if="f.snd && c[f.snd]" class="wvrow"><AudioWave :src="audSrc(c[f.snd])" :meta="c[f.snd + 'Meta'] || ''" small @meta="c[f.snd + 'Meta'] = $event" /></span>
                 </div>
-                <!-- Звук — своя ячейка справа от текста: ▶, волна и длительность -->
-                <template v-else-if="f.kind === 'aud'"><span v-if="busy[c.id + f.snd] != null" class="up wvup"><i :style="{ '--p': busy[c.id + f.snd] }" />{{ busy[c.id + f.snd] }}%</span>
-                <div v-else-if="c[f.snd]" class="wvrow"><AudioWave :src="audSrc(c[f.snd])" :meta="c[f.snd + 'Meta'] || ''" small @meta="c[f.snd + 'Meta'] = $event" />
-                  <i v-if="isLink(c[f.snd])" class="lnk inl" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i>
-                  <button class="rm" title="Убрать звук" @click="clearField(c, f.snd)">✕</button></div>
-                <span v-else-if="f.snd === 'audio' || c.example" class="addsnd"><button title="Выбрать файл (или перетащите на строку)" @click="choose(c, f)">+ звук</button></span></template>
-                <span v-else-if="busy[c.id + f.k] != null" class="up"><i :style="{ '--p': busy[c.id + f.k] }" />{{ busy[c.id + f.k] }}%</span>
+                <template v-else-if="f.kind === 'aud'">
+                  <span v-if="busy[c.id + f.snd] != null" class="up wvup"><i :style="{ '--p': busy[c.id + f.snd] }" />{{ busy[c.id + f.snd] }}%</span>
+                  <div v-else-if="c[f.snd]" class="wvrow"><AudioWave :src="audSrc(c[f.snd])" :meta="c[f.snd + 'Meta'] || ''" small @meta="c[f.snd + 'Meta'] = $event" />
+                    <i v-if="isLink(c[f.snd])" class="lnk inl" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i></div>
+                </template>
                 <span v-else-if="f.kind === 'image'" class="cell">
-                  <template v-if="c.image"><img :src="src(c.image)" alt="" :title="isLink(c.image) ? 'Фото по ссылке (не в нашем хранилище): ' + c.image + ' · нажмите — изменить' : info[c.id + 'image'] ? 'сжато: ' + info[c.id + 'image'] + ' · нажмите — изменить' : 'Нажмите — изменить'" @click.stop="openMenu($event, c)" />
-                    <i v-if="isLink(c.image)" class="lnk"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i>
-                    <button class="rm" title="Убрать фото" @click="clearField(c, 'image')">✕</button>
-                    <!-- Нажали на фото — что с ним сделать -->
-                    <span v-if="menu === c.id" class="pm" :style="menuPos" @click.stop>
-                      <small>{{ isLink(c.image) ? 'Фото по ссылке' : 'Фото в хранилище' }}<template v-if="info[c.id + 'image']"> · {{ info[c.id + 'image'] }}</template></small>
-                      <button @click="menu = ''; choose(c, f)">Заменить своим файлом</button>
-                      <button @click="menu = ''; linkPhoto(c)">{{ isLink(c.image) ? 'Изменить ссылку' : 'Заменить ссылкой' }}</button>
-                      <a :href="src(c.image)" target="_blank" rel="noopener" @click="menu = ''">Открыть в новой вкладке</a>
-                      <button class="red" @click="menu = ''; clearField(c, 'image')">{{ isLink(c.image) ? 'Убрать ссылку' : 'Удалить фото' }}</button>
-                    </span></template>
-                  <template v-else><button class="slot ph52" title="Добавить фото — файл (или перетащите на строку)" @click="choose(c, f)">+</button><button class="mic lnkadd" title="Вставить ссылку на фото" @click="linkPhoto(c)">🔗</button></template>
-                </span>
-                <span v-else class="cell au">
-                  <template v-if="c[f.k]"><button class="play" :title="isLink(c[f.k]) ? 'Звук по ссылке (не в нашем хранилище) — послушать' : 'Послушать'" @click="play(c[f.k])">▶<i v-if="isLink(c[f.k])" class="lnk"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i></button><button class="rm" title="Убрать озвучку" @click="clearField(c, f.k)">✕</button></template>
-                  <template v-else><button class="slot" title="Выбрать файл" @click="choose(c, f)">+ звук</button></template>
+                  <span v-if="busy[c.id + 'image'] != null" class="up"><i :style="{ '--p': busy[c.id + 'image'] }" /></span>
+                  <template v-else-if="c.image"><img :src="src(c.image)" alt="" /><i v-if="isLink(c.image)" class="lnk" title="Фото по ссылке"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i></template>
+                  <i v-else class="noph" />
                 </span>
               </td>
-              <td class="act"><button class="hide" :class="{ on: c.suspended }" :title="c.suspended ? 'Скрыта — ученики её не учат. Нажмите, чтобы вернуть' : 'Скрыть от учеников (не удалять)'" @click="c.suspended ? delete c.suspended : (c.suspended = true)">{{ c.suspended ? 'скрыта' : 'скрыть' }}</button><button class="del" title="Удалить карточку" @click="delCard(c)"><AppIcon name="trash" :size="16" /></button></td>
+              <!-- Как карточку учат ученики (как график активности у репозиториев GitHub): столбик на ученика — высота = через сколько дней повтор -->
+              <td class="stc"><template v-for="st in [statsOf(c)]" :key="0">
+                <span v-if="!st.n" class="sx">{{ learners.length ? 'ещё не начали' : '' }}</span>
+                <template v-else><span class="sx"><b>{{ st.n }}</b> из {{ learners.length }} учат<template v-if="st.lapses"> · <em>ошибок {{ st.lapses }}</em></template></span>
+                  <span class="spark"><i v-for="b in st.bars" :key="b.id" :class="b.cls" :style="{ height: b.h + '%' }" :title="b.title" /></span>
+                  <span class="sx">{{ st.next }}</span></template>
+              </template></td>
+              <td class="act"><span v-if="c.suspended" class="hid" title="Скрыта от учеников">скрыта</span><button class="del" title="Удалить карточку" @click.stop="delCard(c)"><AppIcon name="trash" :size="22" /></button></td>
             </tr>
-            </template>
           </tbody>
         </table>
         <button v-if="shown.length > limit" class="more" @click="limit += 300">Показать ещё {{ Math.min(300, shown.length - limit) }} из {{ shown.length - limit }}</button>
         <p v-if="!cards.length" class="empty">Карточек пока нет. Бросьте сюда таблицу Excel, нажмите «+ Карточка» или бросьте фото и аудио — слово возьмётся из имени файла.</p>
       </div>
     </section>
-    <!-- Карточка для правки: как у ученика, всё правится прямо на ней; файл можно просто бросить на карточку -->
+    <!-- Карточка-редактор: как у ученика, всё правится прямо на ней; фото и звук — перетащить на карточку или нажать.
+         Листать — большие стрелки по бокам или ← →, Esc — закрыть -->
     <div v-if="ec" class="ce-bg" @click.self="edit = ''">
-      <div class="ce" :class="{ over: ceOver }" @dragover.prevent="ceOver = true; ceZone = ''" @dragleave="ceOver = false; ceZone = ''" @drop="ceDrop">
-        <div class="ceh"><button class="nv" :disabled="eIdx <= 0" title="Предыдущая (←)" @click="step(-1)">‹</button><small>{{ eIdx + 1 }} / {{ shown.length }}</small>
-          <button class="nv" :disabled="eIdx >= shown.length - 1" title="Следующая (→)" @click="step(1)">›</button><span class="sp" />
-          <button class="nv" title="Удалить карточку" @click="delCard(ec); edit = ''"><AppIcon name="trash" :size="14" /></button><button class="nv x" title="Закрыть (Esc)" @click="edit = ''">✕</button></div>
+      <button class="side l" :disabled="eIdx <= 0" title="Предыдущая (←)" @click="step(-1)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg></button>
+      <div class="ce" :class="{ over: ceOver, off: ec.suspended }" @dragover.prevent="ceOver = true; ceZone = ''" @dragleave="ceOver = false; ceZone = ''" @drop="ceDrop">
+        <div class="ceh"><small>{{ eIdx + 1 }} из {{ shown.length }}</small><span class="sp" />
+          <button class="hb" :class="{ on: ec.suspended }" :title="ec.suspended ? 'Скрыта от учеников — вернуть' : 'Скрыть от учеников'" @click="ec.suspended ? delete ec.suspended : (ec.suspended = true)">
+            <svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /><path v-if="ec.suspended" d="M4 4l16 16" /></svg></button>
+          <button class="hb red" title="Удалить карточку" @click="delCard(ec); edit = ''"><AppIcon name="trash" :size="22" /></button>
+          <button class="hb" title="Закрыть (Esc)" @click="edit = ''"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button></div>
         <div class="wrow"><input v-model.trim="ec.front" data-k="front" class="cw" placeholder="слово" :class="{ miss: !ec.front }" />
           <span class="spk2" :class="{ zon: ceZone === 'audio' }" @dragover.prevent.stop="ceZone = 'audio'; ceOver = true" @drop.stop="zoneDrop($event, 'audio')">
             <span v-if="busy[ec.id + 'audio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'audio'] }" /></span>
             <template v-else-if="ec.audio"><AudioWave :src="audSrc(ec.audio)" :meta="ec.audioMeta || ''" small @meta="ec.audioMeta = $event" /><i v-if="isLink(ec.audio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'audio')">✕</button></template>
-            <span v-else class="nos"><button title="Добавить звук — файл (или перетащите)" @click="choose(ec, FIELDS[5])">🔊 +</button></span>
+            <button v-else class="addsnd2" title="Добавить звук — выбрать файл или перетащить сюда" @click="choose(ec, FIELDS[5])"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><b>+</b></button>
           </span></div>
         <input v-model.trim="ec.back" data-k="back" class="ct" placeholder="перевод" :class="{ miss: !ec.back }" />
         <div class="cph" :class="{ empty: !ec.image, zon: ceZone === 'image' }" @dragover.prevent.stop="ceZone = 'image'; ceOver = true" @drop.stop="zoneDrop($event, 'image')" @click="!ec.image && busy[ec.id + 'image'] == null && choose(ec, FIELDS[4])">
           <span v-if="busy[ec.id + 'image'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'image'] }" />{{ busy[ec.id + 'image'] }}%</span>
           <template v-else-if="ec.image"><img :src="src(ec.image)" alt="" /><i v-if="isLink(ec.image)" class="lk big" title="Фото по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i>
-            <span class="ctl"><button title="Заменить" @click.stop="choose(ec, FIELDS[4])">↻</button><button title="Убрать фото" @click.stop="clearField(ec, 'image')">✕</button></span></template>
-          <span v-else class="addph">перетащите фото</span>
+            <span class="ctl"><button @click.stop="choose(ec, FIELDS[4])">Заменить</button><button class="red" @click.stop="clearField(ec, 'image')">Убрать</button></span></template>
+          <span v-else class="addph"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="M21 15l-5-5-8 9" /></svg>Перетащите фото или нажмите</span>
         </div>
         <div class="wrow"><textarea v-model.trim="ec.example" data-k="example" class="ce1" rows="2" placeholder="пример" />
           <span class="spk2" :class="{ zon: ceZone === 'exampleAudio' }" @dragover.prevent.stop="ceZone = 'exampleAudio'; ceOver = true" @drop.stop="zoneDrop($event, 'exampleAudio')">
             <span v-if="busy[ec.id + 'exampleAudio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'exampleAudio'] }" /></span>
             <template v-else-if="ec.exampleAudio"><AudioWave :src="audSrc(ec.exampleAudio)" :meta="ec.exampleAudioMeta || ''" small @meta="ec.exampleAudioMeta = $event" /><i v-if="isLink(ec.exampleAudio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'exampleAudio')">✕</button></template>
-            <span v-else class="nos"><button title="Добавить звук — файл (или перетащите)" @click="choose(ec, FIELDS[6])">🔊 +</button></span>
+            <button v-else class="addsnd2" title="Добавить звук — выбрать файл или перетащить сюда" @click="choose(ec, FIELDS[6])"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><b>+</b></button>
           </span></div>
         <textarea v-model.trim="ec.exampleTr" data-k="exampleTr" class="ce2" rows="1" placeholder="перевод примера" />
-        <div v-if="ceOver && !ceZone" class="ceov">Отпустите</div>
+        <div v-if="ceOver && !ceZone" class="ceov">Отпустите — фото или звук в эту карточку</div>
       </div>
+      <button class="side r" :disabled="eIdx >= shown.length - 1" title="Следующая (→)" @click="step(1)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg></button>
     </div>
     <CardImport v-if="importFile && deck" :key="importFile.name + importAuto" :deck="deck" :file="importFile" :auto="importAuto" @close="importFile = null" @done="imported" />
   </div>
@@ -377,6 +393,7 @@ const back = () => router.push({ name: 'words' })
 /* Обычная страница приложения — та же ширина, что у списка колод (.page.wide), меню слева остаётся */
 .st { gap: 12px }
 .bar { display: flex; align-items: center; gap: 10px }
+@media (min-width: 720px) { .bar { padding-right: max(0px, calc(150px - (100vw - 920px) / 2)) } }      /* не уезжать под кружки «кто здесь» справа сверху */
 .bk { display: flex; align-items: center; gap: 2px; border: 0; background: none; font: inherit; font-weight: 800; color: var(--text); cursor: pointer; padding: 6px 8px; border-radius: 10px } .bk:hover { background: var(--surface) }
 .vs { width: 1px; height: 22px; background: var(--border) } .dt { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .cnt { color: var(--hint); font-size: 13px; font-weight: 700; white-space: nowrap } .sp { flex: 1 }
 .search { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; background: var(--surface); color: var(--hint); width: 200px } .search input { margin: 0; border: 0; background: none; padding: 8px 0; font-size: 14px; min-width: 0 }
@@ -391,10 +408,10 @@ const back = () => router.push({ name: 'words' })
 .rep { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 14px; border-radius: 12px; background: var(--green-l); color: var(--green-d); font-size: 13px; font-weight: 600 }
 .rep.imp { background: var(--blue-l); color: #136d99 } .rep .cols { font-weight: 800; color: var(--blue) }
 .rep.warn { background: #fff4d6; color: #8a5b00 } .rep .x { margin-left: auto; border: 0; background: none; cursor: pointer; color: inherit; font-weight: 900 }
-thead th:nth-child(3) { width: 28% } th.image .hd1 { visibility: hidden }
+thead th:nth-child(3) { width: 27% } th.image .hd1 { visibility: hidden }
 .wvrow { position: relative; display: flex; align-items: center; gap: 6px; padding: 2px 8px 4px } .lnk.inl { position: static; width: 16px; height: 16px; flex: none }
 .wvup { padding: 2px 8px }
-.addsnd { display: inline-flex; gap: 4px; opacity: 0 } tr:hover .addsnd, tr.rowhot .addsnd { opacity: 1 }
+.addsnd { display: inline-flex; gap: 4px; opacity: 0 } tr:hover .addsnd, tr.crowhot .addsnd { opacity: 1 }
 .addsnd button { border: 0; border-radius: 8px; padding: 5px 8px; background: var(--surface); font: inherit; font-size: 12px; font-weight: 800; color: var(--hint); cursor: pointer } .addsnd button:hover { color: var(--blue) }
 th.aud { width: 200px } td.aud { overflow: hidden } td.pair { vertical-align: middle }
 @media (hover: none) { .addsnd { opacity: 1 } }
@@ -405,49 +422,70 @@ tbody tr:not(:hover):not(.rowhot) .slot, tbody tr:not(:hover):not(.rowhot) .mic 
 .imx { position: relative } .ghostb { border: 0; border-radius: 10px; padding: 8px 12px; background: var(--surface); font: inherit; font-size: 14px; font-weight: 800; color: var(--text); cursor: pointer } .ghostb:hover { background: var(--border) }
 .pm.down { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40 }
 .lnkb { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 800; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; cursor: pointer }
-.tbl { overflow-x: auto; border-radius: var(--radius); background: var(--card); border: 2px solid var(--border); border-bottom-width: 4px }
+.tbl { overflow-x: auto }      /* без рамки — просто строки с линиями, как список в GitHub */
+th.stc { width: 150px } td.stc { padding-top: 18px }
+.sx { display: block; font-size: 12px; font-weight: 700; color: var(--hint-2); white-space: nowrap } .sx b { color: var(--text) } .sx em { font-style: normal; color: var(--red-d) }
+.spark { display: flex; align-items: flex-end; gap: 3px; height: 30px; margin: 6px 0 4px; padding-bottom: 1px; border-bottom: 1.5px solid #9be9a8 }
+.spark i { width: 7px; border-radius: 2px 2px 0 0 } .spark .lrn { background: #ff9b9b } .spark .rev { background: #40c463 } .spark .mature { background: #216e39 }
 table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; table-layout: fixed; font-size: 14px }
 th { position: sticky; top: 0; z-index: 1; background: var(--card); text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--border); vertical-align: top }
 .hd { display: grid; gap: 4px; justify-items: stretch; text-align: left } .hd small { display: block; text-align: left } .hd span { font-weight: 900; font-size: 13px } .hd em { color: var(--red); font-style: normal }
 .hd small { font-size: 11px; font-weight: 700; color: var(--hint-2) } .hd small.miss { color: var(--red-d) }
 .fill { display: block; height: 4px; border-radius: 3px; background: var(--surface); overflow: hidden } .fill b { display: block; height: 100%; background: var(--green) }
-th.image { width: 86px } td.image { padding-right: 0 } td.image + td .two { padding-left: 4px } th.n, td.n { width: 34px; color: var(--hint-2); text-align: center; font-size: 12px } th.act { width: 104px } td.act { white-space: nowrap; text-align: right }
+th.image { width: 150px } td.image { padding-right: 0 } td.image + td .two { padding-left: 4px } th.n, td.n { width: 34px; color: var(--hint-2); text-align: center; font-size: 12px } th.act { width: 104px } td.act { white-space: nowrap; text-align: right }
 td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: middle }
-tr:hover td { background: #fafafa } tr.rowhot td { background: var(--blue-l) !important } tr.rowhot td:first-child { box-shadow: inset 3px 0 0 var(--blue) } tr.bad td.n { color: var(--red) }
+tr:hover td { background: #fafafa } tr.crowhot td { background: var(--blue-l) !important } tr.crowhot td:first-child { box-shadow: inset 3px 0 0 var(--blue) } tr.bad td.n { color: var(--red) }
 td input { margin: 0; padding: 6px 8px; width: 100%; box-sizing: border-box; border: 1px solid transparent; border-radius: 8px; background: none; font-size: 14px }
-.two { display: grid; gap: 3px; padding: 6px 8px; border-radius: 8px; cursor: text } .two:hover { background: var(--surface) }
+.two { display: grid; gap: 3px; padding: 6px 8px; border-radius: 8px; cursor: text } 
 .two span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .two .t1 { font-size: 15px; font-weight: 800; color: var(--text) } .two .t2 { font-size: 14px; font-weight: 700; color: var(--blue); min-height: 1em } .two .t2.e { color: var(--hint) }
 .two .ph { color: var(--hint-2); font-weight: 600; font-size: 13px } .two .miss { color: var(--red-d) }
 tr.editing td { background: var(--blue-l) }
 /* Карточка для правки */
-.ce-bg { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .35) }
-.ce { position: relative; width: min(380px, 100%); max-height: 100%; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px 16px 16px; border-radius: 22px; background: var(--card); border: 2px solid var(--border); border-bottom-width: 4px; box-shadow: 0 20px 50px rgba(0, 0, 0, .25) }
-.ce.over { border-color: var(--blue) }
-.ceh { display: flex; align-items: center; gap: 4px; margin-bottom: 2px } .ceh small { font-size: 12px; font-weight: 800; color: var(--hint-2); min-width: 44px; text-align: center }
-.nv { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; font-size: 18px; font-weight: 900; color: var(--hint); cursor: pointer; line-height: 1 } .nv:hover { background: var(--surface); color: var(--text) } .nv:disabled { opacity: .25; cursor: default } .nv.x { font-size: 13px }
-.ce input, .ce textarea { margin: 0; width: 100%; border: 1.5px solid transparent; border-radius: 10px; background: none; text-align: center; padding: 3px 6px; resize: none; font-family: inherit; line-height: 1.3 }
-.ce input:hover, .ce textarea:hover { border-color: var(--border) } .ce input:focus, .ce textarea:focus { border-color: var(--blue); background: var(--card) }
+.ce-bg { position: fixed; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center; gap: 18px; padding: 16px; background: rgba(17, 24, 39, .45); backdrop-filter: blur(2px) }
+.ce { position: relative; width: min(400px, 100%); max-height: 100%; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 10px 16px 18px; border-radius: 24px; background: var(--card); box-shadow: 0 24px 60px rgba(0, 0, 0, .28) }
+.ce.over { box-shadow: 0 0 0 3px var(--blue), 0 24px 60px rgba(0, 0, 0, .28) } .ce.off { opacity: .85 }
+.side { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .95); color: var(--text); cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, .2); transition: transform .1s, opacity .1s }
+.side svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
+.side:hover:not(:disabled) { transform: scale(1.06); color: var(--blue) } .side:disabled { opacity: 0; pointer-events: none }
+.ceh { display: flex; align-items: center; gap: 4px; margin: 0 -6px 4px 0 } .ceh small { font-size: 13px; font-weight: 800; color: var(--hint-2) }
+.hb { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: none; color: var(--hint); cursor: pointer }
+.hb svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.hb:hover { background: var(--surface); color: var(--text) } .hb.red:hover { background: var(--red-l); color: var(--red-d) } .hb.on { color: var(--orange-d); background: #fff4d6 }
+.ce input, .ce textarea { margin: 0; width: 100%; border: 0; border-radius: 12px; background: none; text-align: center; padding: 4px 8px; resize: none; font-family: inherit; line-height: 1.3; outline: none; transition: background .1s }
+.ce input:hover, .ce textarea:hover { background: var(--surface) } .ce input:focus, .ce textarea:focus { background: var(--blue-l) }
 .ce input::placeholder, .ce textarea::placeholder { color: var(--hint-2); font-weight: 600 }
 .cw { font-size: 28px; font-weight: 900 } .ct { font-size: 19px; font-weight: 800; color: var(--blue) } .ce .miss { background: #fff1f1 }
 .ce1 { font-size: 16px; font-weight: 700 } .ce2 { font-size: 14px; font-weight: 600; color: var(--hint) }
 .wrow { display: flex; align-items: center; gap: 6px } .wrow > :first-child { flex: 1; min-width: 0 }
-.spk2 { position: relative; flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: 150px; border-radius: 10px; padding: 2px }
-.spk2 .aw { width: 120px } .spk2 .lk { position: static }
-.xx { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--hint-2); font-size: 10px; cursor: pointer; opacity: 0 } .spk2:hover .xx { opacity: 1 } .xx:hover { color: var(--red-d) }
-.nos { display: inline-flex; gap: 2px; opacity: .45; transition: opacity .1s } .ce:hover .nos { opacity: 1 }
-.nos button { border: 0; border-radius: 8px; padding: 5px 7px; background: var(--surface); font: inherit; font-size: 12px; font-weight: 800; color: var(--hint); cursor: pointer } .nos button:hover { color: var(--blue) }
-.cph { position: relative; aspect-ratio: 3 / 2; border-radius: 14px; overflow: hidden; background: var(--surface); display: grid; place-items: center; margin: 4px 0 }
-.cph.empty { border: 2px dashed var(--border); background: none; cursor: pointer } .cph.empty:hover { border-color: var(--blue) }
+.spk2 { position: relative; flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: 150px; border-radius: 12px; padding: 2px }
+.spk2 .aw { width: 116px } .spk2 .lk { position: static }
+.addsnd2 { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 2px dashed var(--border); border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer }
+.addsnd2 b { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--card); font-size: 14px; line-height: 1 }
+.addsnd2:hover { border-color: var(--blue); color: var(--blue) }
+.xx { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--hint-2); font-size: 11px; cursor: pointer; opacity: 0 } .spk2:hover .xx { opacity: 1 } .xx:hover { color: var(--red-d) }
+.cph { position: relative; aspect-ratio: 3 / 2; border-radius: 16px; overflow: hidden; background: var(--surface); display: grid; place-items: center; margin: 8px 0 }
+.cph.empty { border: 2px dashed var(--border); background: none; cursor: pointer } .cph.empty:hover { border-color: var(--blue); background: var(--blue-l) }
 .cph img { width: 100%; height: 100%; object-fit: contain }
-.addph { font-size: 14px; font-weight: 700; color: var(--hint-2) } .cph.empty:hover .addph { color: var(--blue) }
-.ctl { position: absolute; right: 8px; top: 8px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s } .cph:hover .ctl { opacity: 1 }
-@media (hover: none) { .ctl, .xx, .nos { opacity: 1 } }
-.ctl button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .92); font-size: 13px; font-weight: 900; color: var(--text); cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, .2) }
+.addph { display: grid; justify-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--hint-2) } .cph.empty:hover .addph { color: var(--blue) }
+.ctl { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 8px; padding: 18px 10px 10px; background: linear-gradient(transparent, rgba(0, 0, 0, .35)); opacity: 0; transition: opacity .15s } .cph:hover .ctl { opacity: 1 }
+@media (hover: none) { .ctl, .xx { opacity: 1 } }
+.ctl button { border: 0; border-radius: 10px; padding: 8px 14px; background: rgba(255, 255, 255, .95); font: inherit; font-size: 13px; font-weight: 800; color: var(--text); cursor: pointer } .ctl .red { color: var(--red-d) }
 .lk { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--card); color: var(--blue); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); font-style: normal; flex: none }
-.lk.big { position: absolute; left: 8px; top: 8px; width: 24px; height: 24px }
+.lk.big { position: absolute; left: 10px; top: 10px; width: 26px; height: 26px }
 .cph.zon, .spk2.zon { outline: 3px solid var(--blue); outline-offset: 2px; background: var(--blue-l) }
-.ceov { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 20px; background: rgba(221, 244, 255, .85); color: var(--blue); font-size: 18px; font-weight: 900; pointer-events: none }
+.ceov { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; border-radius: 24px; background: rgba(221, 244, 255, .88); color: var(--blue); font-size: 17px; font-weight: 900; text-align: center; pointer-events: none }
+@media (max-width: 560px) { .side { position: fixed; bottom: 18px; z-index: 2 } .side.l { left: 18px } .side.r { right: 18px } }
+/* Строка списка: вся кликабельна (откроет карточку) */
+tr.crow { cursor: pointer } tr.crow:hover td { background: #f6f9fc }
+.noph { display: block; width: 132px; height: 88px; border-radius: 12px; background: var(--surface) }
+tr.crow td { padding-top: 14px; padding-bottom: 14px } .cell img { border-radius: 12px }
+.two .t1 { font-size: 17px } .two .t2 { font-size: 15px } .two .wvrow { padding: 6px 0 0; max-width: 240px }
+td.c-e .two .t1 { font-size: 15px; font-weight: 700 } td.c-e .two span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
+tr.crow td { vertical-align: top } tr.crow td.n { padding-top: 22px } tr.crow .two { padding-top: 6px; cursor: pointer }
+.ea { margin-left: 6px; font-size: 12px; font-style: normal; opacity: .6 }
+.hid { margin-right: 6px; padding: 2px 8px; border-radius: 6px; background: #fff4d6; color: #8a5b00; font-size: 11px; font-weight: 800 }
+td.act .del { width: 44px; height: 44px; opacity: 0 } tr.crow:hover td.act .del { opacity: 1 }
 .edrow td { padding: 0 10px 12px 44px; background: var(--blue-l) !important; border-bottom: 1px solid var(--border) }
 .ed { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 12px; border-radius: 12px; background: var(--card); box-shadow: 0 4px 16px rgba(0, 0, 0, .08) }
 .ed label { display: grid; gap: 4px } .ed span { font-size: 12px; font-weight: 800; color: var(--hint) } .ed em { color: var(--red); font-style: normal }
@@ -458,7 +496,7 @@ th.pair .hd + .hd { margin-top: 6px } .hd span small { margin-left: 6px; display
 td input:hover { border-color: var(--border) } td input:focus { border-color: var(--blue); background: var(--card) } td input.need { background: #fff1f1 }
 td.dz { text-align: center } td.hot { background: var(--blue-l) !important; box-shadow: inset 0 0 0 2px var(--blue) }
 .cell { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px }
-.cell img { width: 72px; height: 48px; object-fit: cover; border-radius: 10px; cursor: pointer; display: block }
+.cell img { width: 132px; height: 88px; object-fit: cover; border-radius: 10px; cursor: pointer; display: block }
 .pm { position: fixed; z-index: 40; display: grid; min-width: 220px; padding: 6px; border-radius: 12px; background: var(--card); box-shadow: 0 10px 30px rgba(0, 0, 0, .18), 0 0 0 1px var(--border); text-align: left }
 .pm small { padding: 4px 8px 6px; font-size: 11px; font-weight: 800; color: var(--hint); white-space: normal }
 .pm button, .pm a { display: block; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); text-align: left; text-decoration: none; cursor: pointer }

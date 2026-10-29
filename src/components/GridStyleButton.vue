@@ -2,7 +2,7 @@
 // Кнопка с решёткой над таблицей недели: меню (как в iOS) — вид сетки с маленьким превью и фон экрана (точки, как в Figma). См. utils/gridStyle.js.
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { GRID_STYLES, gridStyle, setGridStyle, bgDots, setBgDots } from '../utils/gridStyle'
+import { GRID_STYLES, gridStyle, setGridStyle, bgDots, setBgDots, gridFrame, setGridFrame } from '../utils/gridStyle'
 const open = ref(null)
 function toggle(e) {
   if (open.value) { open.value = null; return }
@@ -27,6 +27,11 @@ onUnmounted(() => removeEventListener('keydown', onKey))
           <span class="gs-tx"><b>{{ s.title }}</b><small>{{ s.sub }}</small></span>
           <span v-if="gridStyle === s.id" class="gs-ok"><AppIcon name="check" :size="16" /></span>
         </button>
+        <label class="gs-r" role="menuitemcheckbox" :aria-checked="gridFrame">
+          <span class="gs-pv frm" :class="{ off: !gridFrame }"><i v-for="n in 6" :key="n" /></span>
+          <span class="gs-tx"><b>Рамка</b><small>обводка вокруг таблицы</small></span>
+          <input type="checkbox" class="sw" :checked="gridFrame" @change="setGridFrame($event.target.checked)" />
+        </label>
         <div class="gs-h sep">Фон</div>
         <label class="gs-r" role="menuitemcheckbox" :aria-checked="bgDots">
           <span class="gs-pv bgd" />
@@ -56,6 +61,7 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .gs-pv.gray i { background: var(--border) }
 .gs-pv.none i { background: transparent }
 .gs-pv.lines { gap: 0 2px } .gs-pv.lines i { border-radius: 0; box-shadow: inset 0 -1px 0 var(--hint-2); height: 9px }
+.gs-pv.frm { box-shadow: 0 0 0 2px var(--hint-2) } .gs-pv.frm.off { box-shadow: none; background: transparent } .gs-pv.frm i { background: var(--border) }
 .gs-h.sep { margin-top: 2px; padding-top: 10px; box-shadow: inset 0 1px 0 var(--border) }
 .gs-pv.bgd { width: 38px; height: 25px; padding: 0; background-color: #f4f4f4; background-image: radial-gradient(circle, #bdbdbd .9px, transparent 1.2px); background-size: 5px 5px }
 /* Переключатель как в Telegram */

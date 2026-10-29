@@ -3,7 +3,7 @@
 import { computed } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
-import { gridStyle } from '../utils/gridStyle'
+import { gridStyle, gridFrame } from '../utils/gridStyle'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney, fmtMoneyK } from '../utils/price'
 import AvatarStack from './AvatarStack.vue'
@@ -51,7 +51,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 </script>
 
 <template>
-  <div class="card wk" :class="`gs-${gridStyle}`">
+  <div class="card wk" :class="[`gs-${gridStyle}`, { noframe: !gridFrame }]">
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
         <span>{{ tzShort(tz) }}</span>
@@ -154,6 +154,7 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 /* На телефоне галочку «проведён» не показываем — кружок крупный, проведённый урок и так зелёный */
 @media (max-width: 719px) { .chip .tick { display: none } }
 /* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
+.wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 .wk.gs-gray .cell { background: var(--surface); box-shadow: none }
 .wk.gs-gray .chip:not(.done):not(.canceled):not(.orphan) { background: var(--card) }      /* на серой ячейке урок — белый, иначе сольётся */
 .wk.gs-none .cell { background: transparent; box-shadow: none }      /* без линий: чистый фон, только уроки */
