@@ -6,21 +6,22 @@
 //  • Фото строго 450×300 (3:2 — как место под фото у ученика): обрезаем по центру, WebP ≤ 40 КБ. Меньше 450×300 — не берём.
 //  • Файлы — в S3 (server/storage.ts, папка колоды); в карточке — ссылка ${API}/media/f/<ключ>, её открывают и ученики.
 //    Без сервера (демо) файлы остаются ссылками в памяти браузера.
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDecksStore } from '../../stores/decks'
 import { useStudentsStore } from '../../stores/students'
 import { srsOf, kindOf } from '../../composables/useSrs'
 import { relDay } from '../../utils/dates'
-import { API, apiRequest, fb, isDemo } from '../../firebase'
-import { imageSrc, audioSrc } from '../../utils/media'
+import { isDemo } from '../../firebase'
+import { audioSrc } from '../../utils/media'
 import { newId } from '../../utils/id'
 import { showToast } from '../../composables/useToast'
 import AppIcon from '../../components/AppIcon.vue'
 import CardImport from '../../components/CardImport.vue'
 import DeckSheet from '../../components/DeckSheet.vue'
 import AudioWave from '../../components/AudioWave.vue'
-import { waveOf } from '../../utils/wave'
+import CardEditModal from '../../components/CardEditModal.vue'
+import { useCardMedia, isImg, isAud, isLink, audSrc, imgSrc, forget, removeCard } from '../../composables/useCardMedia'
 import { fetchSheetCsv } from '../../composables/useSheetImport'
 
 const route = useRoute(), router = useRouter()
@@ -30,7 +31,6 @@ const deck = computed(() => decks.byId(route.query.id) ?? (isDemo ? decks.list[0
 const settings = ref(false)
 const closeSettings = () => { settings.value = false; if (!decks.byId(route.query.id) && !isDemo) back() }
 const cards = computed(() => deck.value?.cards ?? [])
-const online = !isDemo && !!API && !!fb
 const FIELDS = [
   { k: 'front', t: 'Слово', kind: 'text', need: true }, { k: 'back', t: 'Перевод', kind: 'text', need: true },
   { k: 'example', t: 'Пример', kind: 'text' }, { k: 'exampleTr', t: 'Перевод примера', kind: 'text' },
@@ -46,63 +46,8 @@ const filled = (k) => cards.value.filter(c => c[k]).length
 const q = ref('')
 const shown = computed(() => { const k = q.value.trim().toLowerCase(); return cards.value.filter(c => !k || `${c.front} ${c.back}`.toLowerCase().includes(k)) })
 const report = ref(null)            // итог броска пачки файлов
-const info = reactive({})          // id+поле → «было → стало» для фото
-const busy = reactive({})          // id+поле → % загрузки
 
-// ---------- Фото: строго 450×300, WebP ≤ 40 КБ ----------
-const isImg = (f) => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic)$/i.test(f.name)
-const isAud = (f) => /^audio\//.test(f.type) || /\.(mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i.test(f.name)
-const kb = (n) => (n > 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' МБ' : Math.max(1, Math.round(n / 1024)) + ' КБ')
-const PW = 450, PH = 300, GOAL = 40 * 1024
-const enc = (cv, type, qq) => new Promise(ok => cv.toBlob(ok, type, qq))
-async function squeeze(file) {
-  let bmp; try { bmp = await createImageBitmap(file) } catch { throw new Error(`не удалось открыть фото ${file.name}`) }
-  const sw = Math.min(bmp.width, bmp.height * PW / PH), sh = sw * PH / PW            // самый большой кадр 3:2 — по центру
-  if (sw < PW || sh < PH) throw new Error(`${file.name}: фото маленькое (${bmp.width}×${bmp.height}) — нужно хотя бы ${PW}×${PH}`)
-  const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH
-  const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high'
-  g.drawImage(bmp, (bmp.width - sw) / 2, (bmp.height - sh) / 2, sw, sh, 0, 0, PW, PH)
-  let type = 'image/webp', qq = 0.85, blob = await enc(cv, type, qq)
-  if (blob?.type !== type) { type = 'image/jpeg'; blob = await enc(cv, type, qq) }        // Safari старше 14 не умеет WebP
-  while (blob.size > GOAL && qq > 0.5) { qq = Math.round((qq - 0.07) * 100) / 100; blob = await enc(cv, type, qq) }
-  return { blob, note: `${kb(file.size)} → ${kb(blob.size)} · ${PW}×${PH}` }
-}
-const audioType = (f) => f.type || ({ mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', weba: 'audio/webm' })[f.name.split('.').pop().toLowerCase()] || 'audio/mpeg'
-
-// ---------- Загрузка в хранилище ----------
-const MEDIA = `${API}/media/f/`
-const ourKey = (url) => (url?.startsWith(MEDIA) ? decodeURIComponent(url.slice(MEDIA.length)) : null)
-async function send(blob, type, id) {
-  const token = await fb?.currentUser?.getIdToken()
-  return new Promise((ok, no) => {
-    const x = new XMLHttpRequest()
-    x.open('POST', `${API}/media/upload?deckId=${encodeURIComponent(deck.value.id)}`)
-    x.setRequestHeader('Content-Type', type); if (token) x.setRequestHeader('Authorization', `Bearer ${token}`)
-    x.upload.onprogress = (e) => { if (e.lengthComputable) busy[id] = Math.round(e.loaded / e.total * 100) }
-    x.onload = () => { if (x.status < 300) return ok(JSON.parse(x.responseText).key); let m = ''; try { m = JSON.parse(x.responseText).error } catch { /* не JSON */ } no(new Error(`${x.status}${m ? ': ' + m : ''}`)) }
-    x.onerror = () => no(new Error('сервер не отвечает'))
-    x.send(blob)
-  })
-}
-/** Убрать старый файл из хранилища (заменили или удалили) — молча, это не главное */
-const forget = (url) => { const k = ourKey(url); if (k && online) apiRequest('/media/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: k }) }).catch(() => {}) }
-/** Положить файл в поле карточки: фото — ужать, всё — в хранилище, в карточку — ссылку. false — не вышло (причина — во всплывашке) */
-async function attach(c, k, file) {
-  const id = c.id + k
-  if (busy[id] != null) return false
-  busy[id] = 0
-  try {
-    let blob = file, type = audioType(file)
-    if (k === 'image') { const r = await squeeze(file); blob = r.blob; type = blob.type; info[id] = r.note }
-    const old = c[k]
-    if (!online) c[k] = URL.createObjectURL(blob)
-    else { const key = await send(blob, type, id); c[k] = MEDIA + key }
-    if (k !== 'image') { try { c[k + 'Meta'] = await waveOf(blob) } catch { delete c[k + 'Meta'] } }      // волна и длительность — сразу из файла
-    if (old && old !== c[k]) forget(old)
-    return true
-  } catch (e) { showToast(/фото маленькое|не удалось открыть/.test(e.message) ? e.message : `Не удалось загрузить ${file.name} (${e.message})`, null, 'bad'); return false }
-  finally { delete busy[id] }
-}
+const { busy, info, attach, clearField } = useCardMedia(() => deck.value)
 /** Ссылка на чужой сайт (Google Диск, britlex…) — не наш файл в хранилище и не только что выбранный */
 const impOpen = ref(false)
 const menu = ref('')          // у какой карточки открыто меню фото
@@ -115,9 +60,6 @@ function openMenu(e, c) {        // меню у фото: поверх всег�
   menu.value = c.id
 }
 onMounted(() => addEventListener('click', closeMenu)); onUnmounted(() => removeEventListener('click', closeMenu))
-const isLink = (u) => !!u && !u.startsWith('blob:') && !ourKey(u)
-const audSrc = (u) => (u?.startsWith('blob:') ? u : audioSrc(u))
-function clearField(c, k) { forget(c[k]); delete c[k]; delete c[k + 'Meta']; delete info[c.id + k] }
 
 // ---------- Перетаскивание ----------
 const wordOf = (name) => name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+\d+$/, '').trim()
@@ -219,7 +161,7 @@ const limit = ref(300)
 
 let au = null
 const play = (u) => { try { au?.pause(); au = new Audio(u.startsWith('blob:') ? u : audioSrc(u)); au.play().catch(() => showToast('Звук не открылся', null, 'bad')) } catch { /* — */ } }
-const src = (u) => (u?.startsWith('blob:') ? u : imageSrc(u))
+const src = imgSrc
 onUnmounted(() => { au?.pause() })
 
 // ---------- Строки ----------
@@ -228,33 +170,9 @@ onUnmounted(() => { au?.pause() })
 // ‹ › (или ← → вне полей) — соседние карточки, Esc — закрыть
 const edit = ref('')
 const ec = computed(() => cards.value.find(c => c.id === edit.value))
-const eIdx = computed(() => shown.value.findIndex(c => c.id === edit.value))
 function openEdit(c, k = '') { edit.value = c.id; if (k) setTimeout(() => document.querySelector(`.ce [data-k="${k}"]`)?.focus(), 30) }
-const step = (d) => { const n = shown.value[eIdx.value + d]; if (n) edit.value = n.id }
-const ceOver = ref(false), ceZone = ref('')       // над какой частью карточки держат файл: фото / звук слова / звук примера
-async function zoneDrop(e, k) {
-  e.preventDefault(); ceOver.value = false; ceZone.value = ''
-  const f = [...(e.dataTransfer?.files ?? [])].find(x => (k === 'image' ? isImg(x) : isAud(x)))
-  if (f) await attach(ec.value, k, f); else showToast(k === 'image' ? 'Сюда — фото (JPG, PNG, WebP)' : 'Сюда — звук (MP3, M4A, OGG, WAV)', null, 'bad')
-}
-async function ceDrop(e) {
-  e.preventDefault(); ceOver.value = false; ceZone.value = ''
-  for (const f of [...(e.dataTransfer?.files ?? [])].slice(0, 3)) { if (isImg(f)) await attach(ec.value, 'image', f); else if (isAud(f)) await attach(ec.value, ec.value.audio && !ec.value.exampleAudio && ec.value.example ? 'exampleAudio' : 'audio', f) }
-}
-function ceKey(e) {
-  if (!edit.value) return
-  if (e.key === 'Escape') { edit.value = ''; return }
-  if (/INPUT|TEXTAREA/.test(e.target.tagName)) return
-  if (e.key === 'ArrowRight') step(1); else if (e.key === 'ArrowLeft') step(-1)
-}
-onMounted(() => addEventListener('keydown', ceKey)); onUnmounted(() => removeEventListener('keydown', ceKey))
 function addCard() { const n = { id: newId('c'), front: '', back: '' }; deck.value.cards.unshift(n); q.value = ''; openEdit(n, 'front') }
-function delCard(c) {
-  const files = ['image', 'audio', 'exampleAudio'].filter(k => c[k])
-  if ((c.front || files.length) && !confirm(`Удалить карточку «${c.front || 'без слова'}»?${files.length ? ' Её фото и озвучка удалятся из хранилища.' : ''}`)) return
-  files.forEach(k => forget(c[k]))
-  const i = deck.value.cards.findIndex(x => x.id === c.id); if (i >= 0) deck.value.cards.splice(i, 1)
-}
+function delCard(c) { removeCard(deck.value, c) }
 // ---------- Статистика по карточке: кто из учеников её учит и когда повтор ----------
 const studentsStore = useStudentsStore()
 const learners = computed(() => (deck.value?.forAll ? studentsStore.list : studentsStore.list.filter(x => deck.value?.assigned.includes(x.id))))
@@ -356,40 +274,8 @@ const back = () => router.push({ name: 'words' })
         <p v-if="!cards.length" class="empty">Карточек пока нет. Бросьте сюда таблицу Excel, нажмите «+ Карточка» или бросьте фото и аудио — слово возьмётся из имени файла.</p>
       </div>
     </section>
-    <!-- Карточка-редактор: как у ученика, всё правится прямо на ней; фото и звук — перетащить на карточку или нажать.
-         Листать — большие стрелки по бокам или ← →, Esc — закрыть -->
-    <div v-if="ec" class="ce-bg" @click.self="edit = ''">
-      <button class="side l" :disabled="eIdx <= 0" title="Предыдущая (←)" @click="step(-1)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg></button>
-      <div class="ce" :class="{ over: ceOver, off: ec.suspended }" @dragover.prevent="ceOver = true; ceZone = ''" @dragleave="ceOver = false; ceZone = ''" @drop="ceDrop">
-        <div class="ceh"><small>{{ eIdx + 1 }} из {{ shown.length }}</small><span class="sp" />
-          <button class="hb" :class="{ on: ec.suspended }" :title="ec.suspended ? 'Скрыта от учеников — вернуть' : 'Скрыть от учеников'" @click="ec.suspended ? delete ec.suspended : (ec.suspended = true)">
-            <svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /><path v-if="ec.suspended" d="M4 4l16 16" /></svg></button>
-          <button class="hb red" title="Удалить карточку" @click="delCard(ec); edit = ''"><AppIcon name="trash" :size="22" /></button>
-          <button class="hb" title="Закрыть (Esc)" @click="edit = ''"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button></div>
-        <div class="wrow"><input v-model.trim="ec.front" data-k="front" class="cw" placeholder="слово" :class="{ miss: !ec.front }" />
-          <span class="spk2" :class="{ zon: ceZone === 'audio' }" @dragover.prevent.stop="ceZone = 'audio'; ceOver = true" @drop.stop="zoneDrop($event, 'audio')">
-            <span v-if="busy[ec.id + 'audio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'audio'] }" /></span>
-            <template v-else-if="ec.audio"><AudioWave :src="audSrc(ec.audio)" :meta="ec.audioMeta || ''" small @meta="ec.audioMeta = $event" /><i v-if="isLink(ec.audio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'audio')">✕</button></template>
-            <button v-else class="addsnd2" title="Добавить звук — выбрать файл или перетащить сюда" @click="choose(ec, FIELDS[5])"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><b>+</b></button>
-          </span></div>
-        <input v-model.trim="ec.back" data-k="back" class="ct" placeholder="перевод" :class="{ miss: !ec.back }" />
-        <div class="cph" :class="{ empty: !ec.image, zon: ceZone === 'image' }" @dragover.prevent.stop="ceZone = 'image'; ceOver = true" @drop.stop="zoneDrop($event, 'image')" @click="!ec.image && busy[ec.id + 'image'] == null && choose(ec, FIELDS[4])">
-          <span v-if="busy[ec.id + 'image'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'image'] }" />{{ busy[ec.id + 'image'] }}%</span>
-          <template v-else-if="ec.image"><img :src="src(ec.image)" alt="" /><i v-if="isLink(ec.image)" class="lk big" title="Фото по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i>
-            <span class="ctl"><button @click.stop="choose(ec, FIELDS[4])">Заменить</button><button class="red" @click.stop="clearField(ec, 'image')">Убрать</button></span></template>
-          <span v-else class="addph"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="M21 15l-5-5-8 9" /></svg>Перетащите фото или нажмите</span>
-        </div>
-        <div class="wrow"><textarea v-model.trim="ec.example" data-k="example" class="ce1" rows="2" placeholder="пример" />
-          <span class="spk2" :class="{ zon: ceZone === 'exampleAudio' }" @dragover.prevent.stop="ceZone = 'exampleAudio'; ceOver = true" @drop.stop="zoneDrop($event, 'exampleAudio')">
-            <span v-if="busy[ec.id + 'exampleAudio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'exampleAudio'] }" /></span>
-            <template v-else-if="ec.exampleAudio"><AudioWave :src="audSrc(ec.exampleAudio)" :meta="ec.exampleAudioMeta || ''" small @meta="ec.exampleAudioMeta = $event" /><i v-if="isLink(ec.exampleAudio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'exampleAudio')">✕</button></template>
-            <button v-else class="addsnd2" title="Добавить звук — выбрать файл или перетащить сюда" @click="choose(ec, FIELDS[6])"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><b>+</b></button>
-          </span></div>
-        <textarea v-model.trim="ec.exampleTr" data-k="exampleTr" class="ce2" rows="1" placeholder="перевод примера" />
-        <div v-if="ceOver && !ceZone" class="ceov">Отпустите — фото или звук в эту карточку</div>
-      </div>
-      <button class="side r" :disabled="eIdx >= shown.length - 1" title="Следующая (→)" @click="step(1)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg></button>
-    </div>
+    <!-- Окно правки карточки — общий компонент (components/CardEditModal.vue) -->
+    <CardEditModal v-if="edit && deck" v-model="edit" :deck="deck" :list="shown" />
     <CardImport v-if="importFile && deck" :key="importFile.name + importAuto" :deck="deck" :file="importFile" :auto="importAuto" @close="importFile = null" @done="imported" />
     <DeckSheet v-if="settings && deck" :deck="deck" @close="closeSettings" />
   </div>
@@ -447,41 +333,6 @@ td input { margin: 0; padding: 6px 8px; width: 100%; box-sizing: border-box; bor
 .two .t1 { font-size: 15px; font-weight: 800; color: var(--text) } .two .t2 { font-size: 14px; font-weight: 700; color: var(--blue); min-height: 1em } .two .t2.e { color: var(--hint) }
 .two .ph { color: var(--hint-2); font-weight: 600; font-size: 13px } .two .miss { color: var(--red-d) }
 tr.editing td { background: var(--blue-l) }
-/* Карточка для правки */
-.ce-bg { position: fixed; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center; gap: 18px; padding: 16px; background: rgba(17, 24, 39, .45); backdrop-filter: blur(2px) }
-.ce { position: relative; width: min(400px, 100%); max-height: 100%; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 10px 16px 18px; border-radius: 24px; background: var(--card); box-shadow: 0 24px 60px rgba(0, 0, 0, .28) }
-.ce.over { box-shadow: 0 0 0 3px var(--blue), 0 24px 60px rgba(0, 0, 0, .28) } .ce.off { opacity: .85 }
-.side { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .95); color: var(--text); cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, .2); transition: transform .1s, opacity .1s }
-.side svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
-.side:hover:not(:disabled) { transform: scale(1.06); color: var(--blue) } .side:disabled { opacity: 0; pointer-events: none }
-.ceh { display: flex; align-items: center; gap: 4px; margin: 0 -6px 4px 0 } .ceh small { font-size: 13px; font-weight: 800; color: var(--hint-2) }
-.hb { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: none; color: var(--hint); cursor: pointer }
-.hb svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.hb:hover { background: var(--surface); color: var(--text) } .hb.red:hover { background: var(--red-l); color: var(--red-d) } .hb.on { color: var(--orange-d); background: #fff4d6 }
-.ce input, .ce textarea { margin: 0; width: 100%; border: 0; border-radius: 12px; background: none; text-align: center; padding: 4px 8px; resize: none; font-family: inherit; line-height: 1.3; outline: none; transition: background .1s }
-.ce input:hover, .ce textarea:hover { background: var(--surface) } .ce input:focus, .ce textarea:focus { background: var(--blue-l) }
-.ce input::placeholder, .ce textarea::placeholder { color: var(--hint-2); font-weight: 600 }
-.cw { font-size: 28px; font-weight: 900 } .ct { font-size: 19px; font-weight: 800; color: var(--blue) } .ce .miss { background: #fff1f1 }
-.ce1 { font-size: 16px; font-weight: 700 } .ce2 { font-size: 14px; font-weight: 600; color: var(--hint) }
-.wrow { display: flex; align-items: center; gap: 6px } .wrow > :first-child { flex: 1; min-width: 0 }
-.spk2 { position: relative; flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: 150px; border-radius: 12px; padding: 2px }
-.spk2 .aw { width: 116px } .spk2 .lk { position: static }
-.addsnd2 { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 2px dashed var(--border); border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer }
-.addsnd2 b { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--card); font-size: 14px; line-height: 1 }
-.addsnd2:hover { border-color: var(--blue); color: var(--blue) }
-.xx { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--hint-2); font-size: 11px; cursor: pointer; opacity: 0 } .spk2:hover .xx { opacity: 1 } .xx:hover { color: var(--red-d) }
-.cph { position: relative; aspect-ratio: 3 / 2; border-radius: 16px; overflow: hidden; background: var(--surface); display: grid; place-items: center; margin: 8px 0 }
-.cph.empty { border: 2px dashed var(--border); background: none; cursor: pointer } .cph.empty:hover { border-color: var(--blue); background: var(--blue-l) }
-.cph img { width: 100%; height: 100%; object-fit: contain }
-.addph { display: grid; justify-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--hint-2) } .cph.empty:hover .addph { color: var(--blue) }
-.ctl { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 8px; padding: 18px 10px 10px; background: linear-gradient(transparent, rgba(0, 0, 0, .35)); opacity: 0; transition: opacity .15s } .cph:hover .ctl { opacity: 1 }
-@media (hover: none) { .ctl, .xx { opacity: 1 } }
-.ctl button { border: 0; border-radius: 10px; padding: 8px 14px; background: rgba(255, 255, 255, .95); font: inherit; font-size: 13px; font-weight: 800; color: var(--text); cursor: pointer } .ctl .red { color: var(--red-d) }
-.lk { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--card); color: var(--blue); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); font-style: normal; flex: none }
-.lk.big { position: absolute; left: 10px; top: 10px; width: 26px; height: 26px }
-.cph.zon, .spk2.zon { outline: 3px solid var(--blue); outline-offset: 2px; background: var(--blue-l) }
-.ceov { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; border-radius: 24px; background: rgba(221, 244, 255, .88); color: var(--blue); font-size: 17px; font-weight: 900; text-align: center; pointer-events: none }
-@media (max-width: 560px) { .side { position: fixed; bottom: 18px; z-index: 2 } .side.l { left: 18px } .side.r { right: 18px } }
 /* Строка списка: вся кликабельна (откроет карточку) */
 tr.crow { cursor: pointer } tr.crow:hover td { background: #f6f9fc }
 .noph { display: block; width: 132px; height: 88px; border-radius: 12px; background: var(--surface) }

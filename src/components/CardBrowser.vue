@@ -7,7 +7,7 @@ import { newId } from '../utils/id'
 import { srsOf, kindOf, today } from '../composables/useSrs'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
-import CardEditor from './CardEditor.vue'
+import CardEditModal from './CardEditModal.vue'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, canManage: Boolean })
 defineEmits(['back'])
 
@@ -64,7 +64,7 @@ function del(c) {
       </div>
       <p v-if="!rows.length" class="hint" style="text-align:center;margin:8px 0">{{ deck.cards.length ? 'Ничего не найдено' : 'В колоде пока нет карточек' }}</p>
     </div>
-    <CardEditor v-if="edit" :card="edit" deletable @close="edit = null" @delete="del(edit)" />
+    <CardEditModal v-if="edit" :model-value="edit.id" :deck="deck" @update:model-value="(id) => (edit = deck.cards.find(c => c.id === id) || null)" />
   </div>
 </template>
 

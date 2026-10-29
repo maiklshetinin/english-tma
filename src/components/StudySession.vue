@@ -7,7 +7,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { buildQueue, srsOf, kindOf, rate, intervalLabel, nextDueInfo, deckCounts, nextLearnAt } from '../composables/useSrs'
 import { imageSrc, audioSrc } from '../utils/media'
 import AppIcon from './AppIcon.vue'
-import CardEditor from './CardEditor.vue'
+import CardEditModal from './CardEditModal.vue'
 import DeckChart from './DeckChart.vue'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, canEdit: Boolean, embedded: Boolean })
 const emit = defineEmits(['finish', 'exit'])
@@ -124,7 +124,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
         <button class="btn" @click="emit('finish')">{{ embedded ? 'Завершить' : 'Готово' }}</button>
       </div>
     </div>
-    <CardEditor v-if="editing && card" :card="card" @close="editing = false" />
+    <CardEditModal v-if="editing && card" :model-value="card.id" :deck="deck" :list="[card]" @update:model-value="editing = false" />
   </div>
 </template>
 
