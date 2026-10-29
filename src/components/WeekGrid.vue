@@ -96,8 +96,9 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .corner:hover { border-color: var(--blue); color: var(--blue) }
 .corner select { position: absolute; inset: 0; opacity: 0; margin: 0; padding: 0; cursor: pointer; width: 100% }
 /* Линия «сейчас» внутри текущей ячейки: высота = минуты часа */
-.nowline { position: absolute; left: -3px; right: -3px; height: 2px; background: var(--red-d); z-index: 3; pointer-events: none; border-radius: 2px }
-.nowline::before { content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red-d) }
+/* Как в Google Календаре, только зелёным (как «задеплоено» в GitHub): тонкая линия с точкой, без рамок и плашек */
+.nowline { position: absolute; left: -2px; right: -2px; height: 2px; margin-top: -1px; background: var(--green-d); z-index: 6; pointer-events: none; border-radius: 2px }
+.nowline::before { content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--green-d); box-shadow: 0 0 0 2px var(--card) }
 .tm { display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--hint-2) }
 .dh { display: grid; justify-items: center; padding: 4px 0; border-radius: 12px; font-size: 13px; color: var(--hint) }
 .dn { display: grid; justify-items: center }
@@ -109,14 +110,12 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .dh { position: relative }
 .dlost { position: absolute; left: 50%; top: calc(100% - 7px); transform: translateX(-50%); z-index: 2; padding: 0 4px; border-radius: 6px; background: var(--card); font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 14px; white-space: nowrap; pointer-events: none }      /* потеряно из-за отмен — мелко красным под суммой, поверх зазора: шапка не прыгает */
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
-/* «Сейчас» — красным и полупрозрачным (синий занят чипами уроков): день, время и ячейка на пересечении */
-.dh.today { background: rgba(255, 75, 75, .16); box-shadow: inset 0 0 0 1px rgba(255, 75, 75, .55) } .dh.today b, .dh.today small { color: var(--red-d) }
+/* «Сегодня» — просто зелёный текст дня */
+.dh.today b, .dh.today small { color: var(--green-d) }
 .cell { position: relative; height: 38px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); transition: background .1s, box-shadow .1s }      /* белые ячейки с тонкой рамкой */
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
-/* Текущий час: время, день недели (.dh.today) и ячейка на пересечении — один красный полупрозрачный цвет */
-.tm.now { background: rgba(255, 75, 75, .16); color: var(--red-d); border: 1px solid rgba(255, 75, 75, .55); border-radius: 10px; font-weight: 900 }
-/* Текущая ячейка — только красный контур (без заливки), чтобы не путать с пустой подсвеченной ячейкой */
-.cell.now::after { content: ''; position: absolute; inset: -3px; border: 2px solid var(--red); border-radius: 12px; pointer-events: none; z-index: 4 }
+/* Текущее время слева — зелёным текстом */
+.tm.now { color: var(--green-d); font-weight: 900 }
 .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }

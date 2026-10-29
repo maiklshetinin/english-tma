@@ -46,8 +46,8 @@ const audience = (d) => {
 
       <div v-for="d in decks" :key="d.id" class="card deck" title="Учить" @click="open('study', d)">
         <div class="info">
-          <h3>{{ d.title }}</h3>
-          <div class="hint"><b v-if="pile(d).n" class="today">{{ pile(d).n }} {{ word(pile(d).n) }} на сегодня</b><span v-else>на сегодня всё</span> · {{ d.cards.length }} в колоде<template v-if="canManage"> · {{ audience(d) }}</template></div>
+          <h3>{{ d.title }}<sup class="tot" :title="`В колоде ${d.cards.length}`">{{ d.cards.length }}</sup></h3>
+          <div class="hint"><b v-if="pile(d).n" class="today">{{ pile(d).n }} {{ word(pile(d).n) }} на сегодня</b><span v-else>на сегодня всё</span><template v-if="canManage"> · {{ audience(d) }}</template></div>
         </div>
         <!-- Стопка на сегодня: карточки разложены внахлёст слева направо, первая (сверху) — следующее слово.
              Длина ряда = сколько карточек ждёт; больше 30 не рисуем (число — в подписи). -->
@@ -80,16 +80,17 @@ const audience = (d) => {
 .top { display: flex; justify-content: flex-end }
 .add { display: inline-flex; align-items: center; gap: 6px }
 /* Ряд карточек внахлёст в середине строки */
-.row-pile { --w: 66px; --h: 44px; --step: min(22px, (100% - var(--w)) / max(1, var(--n) - 1)); position: relative; flex: 1; min-width: 80px; height: var(--h) }
+.row-pile { --w: 90px; --h: 60px; --step: min(30px, (100% - var(--w)) / max(1, var(--n) - 1)); position: relative; flex: 1; min-width: 80px; height: var(--h) }
 .rc { position: absolute; top: 0; left: calc(var(--i) * var(--step)); width: var(--w); height: var(--h); display: flex; align-items: flex-end; overflow: hidden; border-radius: 6px; border: 1.5px solid var(--card); background: var(--surface) center / cover no-repeat; box-shadow: 0 1px 4px rgba(0, 0, 0, .18) }
 .rc:not(.ph) { align-items: center; justify-content: center; background-color: #eef0f3 }
-.rc b { width: 100%; padding: 0 4px; font-size: 11px; line-height: 1.1; color: var(--text); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.rc b { width: 100%; padding: 0 5px; font-size: 12px; line-height: 1.1; color: var(--text); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .rc.top.ph b { padding: 10px 5px 3px; color: #fff; text-align: left; background: linear-gradient(transparent, rgba(0, 0, 0, .6)) }
 .rc:not(.top) b { visibility: hidden }
 .rc.done { position: static; align-items: center; justify-content: center; color: var(--hint-2); font-size: 18px; background: var(--card); border: 1px dashed var(--border); box-shadow: none }
 .today { color: var(--text) }
+.tot { margin-left: 6px; font-size: 12px; font-weight: 800; color: var(--hint-2); vertical-align: super }
 .n { color: var(--blue) } .l { color: var(--red) } .d { color: var(--green-d) }
-.deck { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; transition: background .12s } .deck:hover { background: var(--surface) } .info { flex: none; width: 260px; min-width: 0 } .info h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.deck { display: flex; align-items: center; gap: 12px; padding: 10px 16px; cursor: pointer; transition: background .12s } .deck:hover { background: var(--surface) } .info { flex: none; width: 260px; min-width: 0 } .info h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .cnt { display: flex; gap: 12px; font-size: 18px } .cnt b { min-width: 18px; text-align: center } .cnt b.z { color: var(--hint-2); font-weight: 700 }
 .acts { display: flex; align-items: center; gap: 6px }
 @media (max-width: 520px) { .deck { flex-wrap: wrap } .info { flex-basis: 100% } .row-pile { flex-basis: 100% }  .cnt { margin-right: auto } }
