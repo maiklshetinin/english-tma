@@ -168,7 +168,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
 .top { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 4px }
 .who { flex: 1; min-width: 0 } .who h2 { margin: 0; font-size: 19px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .sub { font-size: 13px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .sub .on { color: var(--blue) } .sub .wait { color: var(--orange-d) }
-.ib { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: var(--blue); cursor: pointer } .ib:hover, .ib.on { background: var(--blue-l); color: var(--blue) }
+.ib { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 10px; background: none; color: var(--hint); cursor: pointer } .ib:hover { background: var(--surface); color: var(--text) } .ib.on { background: var(--group); color: var(--text) }      /* значки — серые, как во всём приложении */
 .stats { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--border) }
 .stats div { display: grid; justify-items: center; gap: 1px; padding: 8px 2px; min-width: 0 } .stats div + div { border-left: 1px solid var(--border) }
 .stats b { font-size: 16px; font-weight: 900; white-space: nowrap } .stats small { font-size: 11px; font-weight: 700; color: var(--hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100% }
