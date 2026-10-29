@@ -27,6 +27,12 @@ const FIELDS = [
   { k: 'example', t: 'Пример', kind: 'text' }, { k: 'exampleTr', t: 'Перевод примера', kind: 'text' },
   { k: 'image', t: 'Фото', kind: 'image' }, { k: 'audio', t: 'Озвучка слова', kind: 'audio' }, { k: 'exampleAudio', t: 'Озвучка примера', kind: 'audio' },
 ]
+// Слово и перевод — в одной ячейке (сверху слово, снизу перевод), пример и его перевод — во второй; дальше фото и озвучка
+const COLS = [
+  { k: 'w', kind: 'pair', t: 'Слово и перевод', pair: [FIELDS[0], FIELDS[1]] },
+  { k: 'e', kind: 'pair', t: 'Пример и перевод', pair: [FIELDS[2], FIELDS[3]] },
+  ...FIELDS.slice(4),
+]
 const filled = (k) => cards.value.filter(c => c[k]).length
 const q = ref('')
 const shown = computed(() => { const k = q.value.trim().toLowerCase(); return cards.value.filter(c => !k || `${c.front} ${c.back}`.toLowerCase().includes(k)) })
@@ -146,7 +152,7 @@ async function drop(e) {
 // Можно бросить сразу фото и звук. Имя файла тут не важно.
 const overRow = ref('')
 const overRowCard = computed(() => cards.value.find(c => c.id === overRow.value))
-function cellOver(e, c, f) { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); clearTimeout(leaveT); overCell.value = f.kind === 'text' ? '' : c.id + f.k; overRow.value = c.id; over.value = true; overSheet.value = [...(e.dataTransfer?.items ?? [])].some(i => /sheet|excel|csv|tab-separated/.test(i.type)) }
+function cellOver(e, c, f) { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); clearTimeout(leaveT); overCell.value = f.kind === 'text' || f.kind === 'pair' ? '' : c.id + f.k; overRow.value = c.id; over.value = true; overSheet.value = [...(e.dataTransfer?.items ?? [])].some(i => /sheet|excel|csv|tab-separated/.test(i.type)) }
 async function dropCell(e, c, f) {
   e.preventDefault(); e.stopPropagation(); overCell.value = ''; overRow.value = ''; over.value = false
   const files = [...(e.dataTransfer?.files ?? [])]; if (!files.length) return
@@ -154,10 +160,10 @@ async function dropCell(e, c, f) {
   for (const file of files.slice(0, 3)) {
     const k = isImg(file) ? 'image' : isAud(file) ? (f.k === 'exampleAudio' ? 'exampleAudio' : 'audio') : null
     if (!k) continue
-    if (f.kind !== 'text' && (f.kind === 'image') !== (k === 'image')) { showToast(f.kind === 'image' ? 'Сюда — фото (JPG, PNG, WebP)' : 'Сюда — звук (MP3, M4A, OGG, WAV)', null, 'bad'); continue }
+    if (f.kind !== 'text' && f.kind !== 'pair' && (f.kind === 'image') !== (k === 'image')) { showToast(f.kind === 'image' ? 'Сюда — фото (JPG, PNG, WebP)' : 'Сюда — звук (MP3, M4A, OGG, WAV)', null, 'bad'); continue }
     used = true; await attach(c, k, file)
   }
-  if (!used && f.kind === 'text') showToast('Можно бросить фото (JPG, PNG, WebP) или звук (MP3, M4A, OGG, WAV)', null, 'bad')
+  if (!used && (f.kind === 'text' || f.kind === 'pair')) showToast('Можно бросить фото (JPG, PNG, WebP) или звук (MP3, M4A, OGG, WAV)', null, 'bad')
 }
 // Выбрать файл кнопкой
 const pick = ref(null); let pickTo = null
@@ -275,16 +281,19 @@ const back = () => router.push({ name: 'words' })
       <div class="tbl" @scroll.passive="closeMenu">
         <table>
           <thead><tr><th class="n">#</th>
-            <th v-for="f in FIELDS" :key="f.k" :class="f.kind"><div class="hd"><span>{{ f.t }}<em v-if="f.need">*</em></span>
-              <small :class="{ full: cards.length && filled(f.k) === cards.length, empty0: !filled(f.k) }">{{ filled(f.k) }} из {{ cards.length }}</small>
+            <th v-for="col in COLS" :key="col.k" :class="col.kind">
+              <div v-for="f in (col.pair || [col])" :key="f.k" class="hd"><span>{{ f.t }}<em v-if="f.need">*</em> <small :class="{ full: cards.length && filled(f.k) === cards.length, empty0: !filled(f.k) }">{{ filled(f.k) }} из {{ cards.length }}</small></span>
               <i class="fill"><b :style="{ width: (cards.length ? filled(f.k) / cards.length * 100 : 0) + '%' }" /></i></div></th>
             <th class="act" /></tr></thead>
           <tbody>
             <tr v-for="(c, i) in shown.slice(0, limit)" :key="c.id" :class="{ bad: !c.front || !c.back, off: c.suspended, rowhot: overRow === c.id }">
               <td class="n">{{ i + 1 }}</td>
-              <td v-for="f in FIELDS" :key="f.k" :class="[f.kind, { dz: f.kind !== 'text', hot: overCell === c.id + f.k }]"
+              <td v-for="f in COLS" :key="f.k" :class="[f.kind, { dz: f.kind !== 'pair', hot: overCell === c.id + f.k }]"
                 @dragover="cellOver($event, c, f)" @drop="dropCell($event, c, f)">
-                <input v-if="f.kind === 'text'" v-model.trim="c[f.k]" :placeholder="f.need ? 'нужно заполнить' : '—'" :class="{ need: f.need && !c[f.k] }" />
+                <div v-if="f.kind === 'pair'" class="two">
+                  <input v-model.trim="c[f.pair[0].k]" class="t1" :placeholder="f.pair[0].need ? 'слово — нужно заполнить' : 'пример — необязательно'" :class="{ need: f.pair[0].need && !c[f.pair[0].k] }" />
+                  <input v-model.trim="c[f.pair[1].k]" class="t2" :class="[f.k, { need: f.pair[1].need && !c[f.pair[1].k] }]" :placeholder="f.pair[1].need ? 'перевод — нужно заполнить' : 'перевод примера'" />
+                </div>
                 <span v-else-if="busy[c.id + f.k] != null" class="up"><i :style="{ '--p': busy[c.id + f.k] }" />{{ busy[c.id + f.k] }}%</span>
                 <span v-else-if="f.kind === 'image'" class="cell">
                   <template v-if="c.image"><img :src="src(c.image)" alt="" :title="isLink(c.image) ? 'Фото по ссылке (не в нашем хранилище): ' + c.image + ' · нажмите — изменить' : info[c.id + 'image'] ? 'сжато: ' + info[c.id + 'image'] + ' · нажмите — изменить' : 'Нажмите — изменить'" @click.stop="openMenu($event, c)" />
@@ -345,6 +354,9 @@ th.image, th.audio { width: 104px } th.n, td.n { width: 34px; color: var(--hint-
 td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: middle }
 tr:hover td { background: #fafafa } tr.rowhot td { background: var(--blue-l) !important } tr.rowhot td:first-child { box-shadow: inset 3px 0 0 var(--blue) } tr.bad td.n { color: var(--red) }
 td input { margin: 0; padding: 6px 8px; width: 100%; box-sizing: border-box; border: 1px solid transparent; border-radius: 8px; background: none; font-size: 14px }
+.two { display: grid; gap: 1px } .two input { padding: 4px 8px }
+.two .t1 { font-size: 15px; font-weight: 800; color: var(--text) } .two .t2 { font-size: 14px; font-weight: 700; color: var(--blue) } .two .t2.e { color: var(--hint) } .two input::placeholder { color: var(--hint-2); font-weight: 600; font-size: 13px }
+th.pair .hd + .hd { margin-top: 6px } .hd span small { margin-left: 6px; display: inline !important }
 td input:hover { border-color: var(--border) } td input:focus { border-color: var(--blue); background: var(--card) } td input.need { background: #fff1f1 }
 td.dz { text-align: center } td.hot { background: var(--blue-l) !important; box-shadow: inset 0 0 0 2px var(--blue) }
 .cell { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px }
