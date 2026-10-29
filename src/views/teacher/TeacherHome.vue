@@ -134,13 +134,13 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 /* Одна таблица; над ней: переключатель недель, спидометр нагрузки, деньги недели */
 .weeks { display: grid; gap: 14px; max-width: 900px; margin: 0 auto; width: 100% }
 .wk-sw { display: inline-grid; grid-template-columns: 1fr 1fr } .wk-sw button { display: grid; justify-items: start; padding: 5px 12px; line-height: 1.2 }
-.wk-sw button b { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .3px } .wk-sw button small { font-size: 11px; font-weight: 700; color: var(--hint-2) }
+.wk-sw button b { font-size: 13px; font-weight: 800 } .wk-sw button small { font-size: 11px; font-weight: 700; color: var(--hint-2) }
 .wk-sw button.on small { color: var(--blue) }
 @media (max-width: 480px) { .wfull { display: none } }
 .wcol { display: grid; gap: 6px; min-width: 0 }
 .wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh .money { margin-left: auto }
-.wh b { display: block; font-weight: 900; letter-spacing: .5px; text-transform: uppercase; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
+.wh b { display: block; font-weight: 800; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */
   .home { --top-gap: 72px; grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: var(--top-gap) 0 40px; align-items: start }

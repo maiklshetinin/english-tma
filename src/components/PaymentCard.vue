@@ -20,5 +20,5 @@ const st = computed(() => ({ paid: ['Оплачено', 'ok'], due: ['Ожида
 </template>
 <style scoped>
 .bar { height: 14px; border-radius: 9px; background: var(--border); margin: 12px 0; overflow: hidden }
-.bar i { display: block; height: 100%; background: var(--green); border-radius: 9px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.12) }
+.bar i { display: block; height: 100%; background: var(--green); border-radius: 9px}
 </style>

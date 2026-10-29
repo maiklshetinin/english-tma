@@ -187,9 +187,9 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 .panel { position: relative; padding: 0 0 6px; display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: 100%; overflow: hidden }
 /* Верх панели: поиск и «+» в одну строку, без заголовка */
 .ph { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px }
-.addb { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 10px; background: var(--card); color: var(--green-d); cursor: pointer }
+.addb { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--green-d); cursor: pointer }
 .addb:hover { border-color: var(--green); background: var(--green-l) }
-.search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 12px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--hint-2) }
+.search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--hint-2) }
 .search:focus-within { border-color: var(--hint-2); background: var(--card) } .search input { border: 0; background: none; margin: 0; padding: 7px 0; min-width: 0; font-size: 14px }
 .search input:focus-visible { outline: none }      /* рамку при фокусе даёт сам .search — без второй обводки */
 /* Сетка кружков: аватарка 54px — максимум для 4 в ряд и имя под ней, по 4 в ряд; группы — блоками в рамке с подписью, ниже «Индивидуально» */
@@ -217,7 +217,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 
 /* Телефон: панель превращается в полоску учеников, прикреплённую к верху экрана */
 @media (max-width: 1023px) {
-  .panel { height: auto; grid-template-rows: auto; border-bottom-width: 4px }
+  .panel { height: auto; grid-template-rows: auto }
   .ph { display: none }
   .list { display: flex; overflow-x: auto; overflow-y: hidden; padding: 6px 6px 4px; gap: 6px; scrollbar-width: none } .list::-webkit-scrollbar { display: none }
   .tiles { display: flex; gap: 2px } .gi { top: 1px; left: 3px } .grp, .solo { flex: none } .mix { display: contents }
@@ -239,7 +239,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 .gadd { width: 100%; border: 0; background: none; font: inherit; color: var(--blue); cursor: pointer; text-align: left } .gadd b { font-size: 15px } .gadd:disabled { opacity: .4; cursor: default }
 .gadd.red { color: var(--red-d) } .gadd.red .gic { background: var(--red-l); color: var(--red-d) } .gic.big { width: 44px; height: 44px; background: var(--red-l); color: var(--red-d) }
 .gcnt { margin-left: auto; min-width: 20px; padding: 1px 6px; border-radius: 99px; background: var(--green); color: #fff; text-align: center; letter-spacing: 0 }
-.chk { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); color: #fff } .chk.on { background: var(--green); border-color: var(--green) }
+.chk { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border); color: #fff } .chk.on { background: var(--green); border-color: var(--green) }
 .gbt.pad { padding: 8px 10px 6px; margin: 0; box-shadow: inset 0 1px 0 var(--border) }
 /* «Новая группа» — значок группы с плюсом */
 .grpb { position: relative; color: var(--blue) } .grpb i { position: absolute; right: 1px; bottom: -1px; font-style: normal; font-size: 13px; font-weight: 900; line-height: 1; color: var(--green-d) } .grpb:hover { border-color: var(--blue); background: var(--blue-l) }

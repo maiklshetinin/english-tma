@@ -167,8 +167,8 @@ function toggle(l) {
 .cal { padding: 14px 12px 12px; display: grid; gap: 6px }
 .mh { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px }
 .mt { display: flex; align-items: center; gap: 8px } .mt b { font-size: 18px; font-weight: 900 }
-.today { border: 2px solid var(--border); background: var(--card); color: var(--blue); border-radius: 99px; font: inherit; font-size: 12px; font-weight: 800; padding: 2px 10px; cursor: pointer }
-.nav { width: 40px; height: 40px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 12px; background: var(--card); color: var(--text); font: inherit; font-size: 22px; font-weight: 900; line-height: 1; cursor: pointer }
+.today { border: 1px solid var(--border); background: var(--card); color: var(--blue); border-radius: 99px; font: inherit; font-size: 12px; font-weight: 800; padding: 2px 10px; cursor: pointer }
+.nav { width: 40px; height: 40px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; font-size: 22px; font-weight: 900; line-height: 1; cursor: pointer }
 .nav:disabled { opacity: .35; cursor: default }
 .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px }
 .wd span { text-align: center; font-size: 12px; font-weight: 800; color: var(--hint-2) } .wd .we { color: var(--purple-d) }
@@ -180,9 +180,9 @@ function toggle(l) {
 .day.today .n::after { content: ''; display: block; width: 14px; height: 3px; margin: 3px auto 0; border-radius: 2px; background: currentColor }
 .day.today:not(.has) .n { color: var(--blue) } .day.today.plan .n { color: var(--blue) }
 /* День с уроками: проведён — зелёный, запланирован — серый, отменён — красный (как кнопки Duolingo, с нижней гранью) */
-.day.done { background: var(--green); box-shadow: inset 0 -4px 0 var(--green-d) } .day.done .n { color: #fff }
-.day.plan { background: var(--border); box-shadow: inset 0 -4px 0 var(--hint-2) } .day.plan .n { color: var(--text) }
-.day.off { background: var(--red-l); box-shadow: inset 0 -4px 0 var(--red) } .day.off .n { color: var(--red-d); text-decoration: line-through }
+.day.done { background: var(--green)} .day.done .n { color: #fff }
+.day.plan { background: var(--border)} .day.plan .n { color: var(--text) }
+.day.off { background: var(--red-l)} .day.off .n { color: var(--red-d); text-decoration: line-through }
 .day.picked { border-color: var(--blue); outline: 3px solid var(--blue); outline-offset: 1px }
 .day.picked:not(.has) { background: var(--blue-l) }
 .dots { display: flex; gap: 3px; height: 6px } .dots i, .legend i { width: 6px; height: 6px; border-radius: 50% }
@@ -204,7 +204,7 @@ function toggle(l) {
 .mrow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 800; color: var(--hint) }
 .mrow b { font-size: 20px; font-weight: 900; color: var(--text) } .mrow.real b { color: var(--green-d) } .mrow.lost b { font-size: 16px; color: var(--red-d) }
 html[data-theme='dark'] .mrow.real b { color: var(--green) } html[data-theme='dark'] .mrow.lost b { color: var(--red) }
-.mbar { height: 12px; border-radius: 99px; background: var(--border); overflow: hidden } .mbar i { display: block; height: 100%; border-radius: 99px; background: var(--green); box-shadow: inset 0 -3px 0 var(--green-d); transition: width .25s }
+.mbar { height: 12px; border-radius: 99px; background: var(--border); overflow: hidden } .mbar i { display: block; height: 100%; border-radius: 99px; background: var(--green); transition: width .25s }
 .ls .btn { flex: none } .ls { flex-wrap: wrap; row-gap: 8px } .ls .info { flex: 1 1 150px }
 .sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px; text-align: center }
 .sum div { display: grid; gap: 2px } .sum b { font-size: 20px; font-weight: 900 } .sum small { font-size: 12px; font-weight: 800; color: var(--hint); line-height: 1.15 }

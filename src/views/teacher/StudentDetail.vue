@@ -164,7 +164,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
 .avb { flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: zoom-in; transition: transform .08s } .avb:active { transform: scale(.94) }
 /* Одна колонка, ширина как у обычной страницы */
 .sd { max-width: 640px }
-.pcard { background: var(--card); border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 18px; overflow: hidden }
+.pcard { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden }
 .top { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 4px }
 .who { flex: 1; min-width: 0 } .who h2 { margin: 0; font-size: 19px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .sub { font-size: 13px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .sub .on { color: var(--blue) } .sub .wait { color: var(--orange-d) }

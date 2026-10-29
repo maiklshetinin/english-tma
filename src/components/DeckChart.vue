@@ -59,6 +59,22 @@ const bins = computed(() => {
   return out
 })
 const maxN = computed(() => Math.max(1, ...bins.value.map(b => b.items.length)))
+// Стопка карточек: каждое слово — маленькая карточка, лежат друг на друге чуть вразнобой (как настоящая стопка).
+// Чем больше слов в самом высоком столбике, тем тоньше карточки — стопка не вылезает за график.
+const BMAX = computed(() => props.dock ? 110 : 120)
+// «Позже» — копилка, её не учитываем в масштабе (иначе все карточки стали бы тонкими); лишние там просто не рисуем
+const pileMax = computed(() => Math.max(1, ...bins.value.slice(0, -1).map(b => b.items.length)))
+// Карточка — мини-фото слова 3:2 (как на самой карточке). В стопке они наезжают друг на друга: видна полоска каждой
+// и целиком — верхняя. Шаг полоски подбирается так, чтобы самая высокая стопка влезла в график.
+const plotW = ref(0); let ro = null
+onMounted(() => { ro = new ResizeObserver(([e]) => { plotW.value = e.contentRect.width }); plotw.value && ro.observe(plotw.value) }); onUnmounted(() => ro?.disconnect())
+const PH = computed(() => Math.max(8, Math.min(26, Math.round(Math.min(40, (plotW.value || 600) / bins.value.length * 0.84) * 2 / 3))))
+const cardH = computed(() => Math.max(3, Math.min(Math.round(PH.value * .55), Math.floor((BMAX.value - PH.value) / Math.max(1, pileMax.value - 1)))))
+const fits = computed(() => 1 + Math.floor((BMAX.value - PH.value) / cardH.value))
+const KORD = { mature: 0, review: 1, learn: 2 }               // снизу выученные, сверху — что ближе к «пора»
+const pileOf = (b) => [...b.items].sort((a, z) => KORD[a.k] - KORD[z.k]).slice(0, fits.value)
+const tilt = (id) => { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return h }
+const cardStyle = (r, i) => { const h = tilt(r.c.id); return { width: Math.round(PH.value * 1.5) + 'px', height: PH.value + 'px', marginBottom: i ? `${cardH.value - PH.value}px` : 0, transform: `translateX(${(h % 5) - 2}px) rotate(${((h >> 3) % 7) - 3}deg)`, backgroundImage: r.c.image ? `url("${r.c.image}")` : null } }
 const segs = (b) => ['learn', 'review', 'mature'].map(k => ({ k, n: b.items.filter(r => r.k === k).length })).filter(x => x.n)
 
 // Подписи
@@ -197,8 +213,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
         <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, pin: pinned === b.i, later: b.i === sc.n, hot: b.items.some(fresh) }"
           :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="hover = b.i" @click="pin(b.i)">
           <span v-if="b.items.length" class="bn">{{ b.items.length }}</span>
-          <span class="stk" :style="{ height: b.items.length ? `calc(8px + var(--bmax) * ${b.items.length / maxN})` : '3px' }"><i v-for="g in segs(b)" :key="g.k" :class="g.k" :style="{ flexGrow: g.n }" /></span>
-        </button>
+          <span class="pile" :class="{ empty: !b.items.length }"><i v-for="(r, i) in pileOf(b)" :key="r.c.id" class="pc" :class="[r.k, { fresh: fresh(r), ph: r.c.image }]" :style="cardStyle(r, i)"><small v-if="!r.c.image">{{ r.c.front }}</small></i></span>        </button>
       </div>
       <div class="ax" :style="{ '--n': bins.length }"><span v-for="b in bins" :key="b.i" :class="{ now: b.i === 0 }">{{ axis(b.i) }}</span></div>
 
@@ -262,6 +277,15 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .bc:hover, .bc.on { background: var(--blue-l) } .bc.later { border-left: 1px dashed var(--border); border-radius: 0 8px 0 0 }
 .stk { display: flex; flex-direction: column-reverse; gap: 2px; width: 72%; max-width: 26px; border-radius: 5px 5px 2px 2px; overflow: hidden; background: var(--border); transition: height .5s cubic-bezier(.3, 1.4, .5, 1) }
 .stk i { display: block; min-height: 3px } .stk .learn { background: var(--red) } .stk .review { background: var(--green) } .stk .mature { background: var(--green-d) }
+.pile { display: flex; flex-direction: column-reverse; align-items: center; width: 84%; max-width: 40px }
+.pile.empty { height: 3px; border-radius: 2px; background: var(--border) }
+.pc { position: relative; display: block; flex: none; width: 100%;  overflow: hidden; border-radius: 4px; background: var(--c) center / cover no-repeat; border: 1.5px solid var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, .22), inset 0 -3px 0 var(--c); animation: drop .45s cubic-bezier(.3, 1.5, .5, 1) both }
+.pc.ph { box-shadow: 0 1px 3px rgba(0, 0, 0, .22), inset 0 -3px 0 var(--c) }
+.pc small { position: absolute; inset: 0; display: grid; place-items: center; padding: 0 2px; font-size: 8px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden }
+.pc.learn { --c: var(--red) } .pc.review { --c: var(--green) } .pc.mature { --c: var(--green-d) }
+.pc.fresh { animation: drop .6s cubic-bezier(.3, 1.6, .5, 1) both, glow 1.2s ease 2 }
+@keyframes drop { from { opacity: 0; translate: 0 -40px } }
+@keyframes glow { 50% { filter: brightness(1.3); box-shadow: 0 0 0 1px var(--card), 0 0 8px var(--orange) } }
 .bc.hot .stk { animation: hot 1s ease 3; transform-origin: bottom } @keyframes hot { 50% { transform: scaleY(1.1); filter: brightness(1.15) } }
 .bn { font-size: 11px; font-weight: 900; color: var(--text); line-height: 1 }
 .ax { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; height: 14px; border-top: 1px solid var(--border); padding-top: 3px }

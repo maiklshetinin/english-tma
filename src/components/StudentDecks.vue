@@ -28,5 +28,5 @@ function toggle(d) {
   </div>
 </template>
 <style scoped>
-.h { display: flex; gap: 8px; align-items: center } .r { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 2px solid var(--surface) } .in { flex: 1; min-width: 0 }
+.h { display: flex; gap: 8px; align-items: center } .r { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border) } .in { flex: 1; min-width: 0 }
 </style>

@@ -10,7 +10,7 @@ defineProps({ m: { type: Object, required: true } })      // { real, plan, lost 
   </div>
 </template>
 <style scoped>
-.wm { flex: none; display: grid; justify-items: end; padding: 4px 12px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 12px; background: var(--card); line-height: 1.15 }
+.wm { flex: none; display: grid; justify-items: end; padding: 4px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15 }
 .top { display: flex; align-items: baseline; gap: 5px }
 b { font-size: 18px; font-weight: 900; color: var(--green-d) } small { font-size: 13px; font-weight: 800; color: var(--hint) }
 .lost { font-size: 11px; font-weight: 800; color: var(--red-d) }

@@ -71,11 +71,11 @@ function del(c) {
 <style scoped>
 .cb { display: grid; gap: 14px } .dt { font-size: 17px }
 .list { display: grid; gap: 10px }
-.search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--hint-2) }
+.search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--hint-2) }
 .search:focus-within { border-color: var(--hint-2); background: var(--card) } .search input { border: 0; background: none; margin: 0; padding: 9px 0; min-width: 0 }
 .fl { flex-wrap: wrap; justify-self: start }
-.r { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 2px solid var(--surface) } .r.off { opacity: .55 }
+.r { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border) } .r.off { opacity: .55 }
 .tx { flex: 1; min-width: 0; overflow-wrap: anywhere }
 .badge.new { background: var(--blue-l); color: var(--blue-d) }
-.ib { border: 2px solid var(--border); background: var(--card); color: var(--hint); border-radius: 10px; padding: 5px 7px; cursor: pointer; display: grid }
+.ib { border: 1px solid var(--border); background: var(--card); color: var(--hint); border-radius: 10px; padding: 5px 7px; cursor: pointer; display: grid }
 </style>

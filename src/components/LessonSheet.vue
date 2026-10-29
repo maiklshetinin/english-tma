@@ -193,8 +193,8 @@ html[data-theme='dark'] .mi.green { color: var(--green) } html[data-theme='dark'
 .lsn .add { border: 0; border-radius: 0; padding: 8px 12px }
 
 /* Выбор ученика — как «Поделиться» в Telegram: поиск сверху, сетка с прокруткой, действия справа внизу */
-.add { display: grid; gap: 8px; border: 2px solid var(--border); border-radius: 16px; padding: 8px }
-.search { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 2px solid var(--border); color: var(--hint-2) }
+.add { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 16px; padding: 8px }
+.search { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); color: var(--hint-2) }
 .search input { margin: 0; padding: 10px 0; border: 0; background: none; border-radius: 0 }
 .search input:focus { background: none } .search input:focus-visible { outline: none }
 .clr { display: grid; place-items: center; padding: 4px; border: 0; background: none; color: var(--hint-2); cursor: pointer }

@@ -428,7 +428,7 @@ th.stc { width: 150px } td.stc { padding-top: 18px }
 .spark { display: flex; align-items: flex-end; gap: 3px; height: 30px; margin: 6px 0 4px; padding-bottom: 1px; border-bottom: 1.5px solid #9be9a8 }
 .spark i { width: 7px; border-radius: 2px 2px 0 0 } .spark .lrn { background: #ff9b9b } .spark .rev { background: #40c463 } .spark .mature { background: #216e39 }
 table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; table-layout: fixed; font-size: 14px }
-th { position: sticky; top: 0; z-index: 1; background: var(--card); text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--border); vertical-align: top }
+th { position: sticky; top: 0; z-index: 1; background: var(--card); text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top }
 .hd { display: grid; gap: 4px; justify-items: stretch; text-align: left } .hd small { display: block; text-align: left } .hd span { font-weight: 900; font-size: 13px } .hd em { color: var(--red); font-style: normal }
 .hd small { font-size: 11px; font-weight: 700; color: var(--hint-2) } .hd small.miss { color: var(--red-d) }
 .fill { display: block; height: 4px; border-radius: 3px; background: var(--surface); overflow: hidden } .fill b { display: block; height: 100%; background: var(--green) }

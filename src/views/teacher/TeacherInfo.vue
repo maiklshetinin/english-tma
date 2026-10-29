@@ -216,8 +216,8 @@ function demoLessons(from, to) {
 .info { gap: 12px }
 h1 { margin: 6px 0 0; font-size: 30px; font-weight: 900 }
 h2 { margin: 14px 0 0; font-size: 20px; font-weight: 900 }
-.tabs { display: flex; gap: 22px; border-bottom: 2px solid var(--border) }
-.tabs button { padding: 8px 0 10px; margin-bottom: -2px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--hint); cursor: pointer }
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border) }
+.tabs button { padding: 8px 0 10px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--hint); cursor: pointer }
 .tabs button.on { color: var(--blue); border-color: var(--blue) }
 .top { display: flex; align-items: center; gap: 10px }
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface) }

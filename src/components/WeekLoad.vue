@@ -54,7 +54,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
 
 <style scoped>
 .wl { position: relative; flex: none }
-.g { display: flex; align-items: center; gap: 4px; padding: 2px 8px 2px 4px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 12px; background: var(--card); color: var(--text); font: inherit; cursor: pointer }
+.g { display: flex; align-items: center; gap: 4px; padding: 2px 8px 2px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; cursor: pointer }
 .g:hover { border-color: var(--hint-2) }
 .g svg { width: 58px; height: 32px; overflow: visible }
 .track { fill: none; stroke: var(--border); stroke-width: 7 }
@@ -64,9 +64,9 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
 .ok .v b { color: var(--green-d) } .warn .v b { color: var(--orange-d) } .bad .v b { color: var(--red-d) }
 .bad .g { border-color: var(--red) }
 .pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: grid; gap: 8px; padding: 10px 12px; min-width: 210px;
-  background: var(--card); border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 14px; box-shadow: 0 10px 24px rgba(0, 0, 0, .14); font-size: 13px; font-weight: 700; color: var(--hint) }
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 10px 24px rgba(0, 0, 0, .14); font-size: 13px; font-weight: 700; color: var(--hint) }
 .st b { color: var(--text) } .ok .zn { color: var(--green-d) } .warn .zn { color: var(--orange-d) } .bad .zn { color: var(--red-d) }
 .norm { display: flex; align-items: center; gap: 8px; white-space: nowrap }
-.norm button { width: 28px; height: 28px; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 9px; background: var(--card); color: var(--text); font: inherit; font-size: 16px; line-height: 1; cursor: pointer }
+.norm button { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text); font: inherit; font-size: 16px; line-height: 1; cursor: pointer }
 .norm b { color: var(--text); min-width: 40px; text-align: center }
 </style>

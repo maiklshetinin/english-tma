@@ -44,7 +44,7 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 </template>
 
 <style scoped>
-.gsb { display: grid; place-items: center; width: 40px; height: 40px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 12px; background: var(--card); color: var(--hint); cursor: pointer }
+.gsb { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--hint); cursor: pointer }
 .gsb:hover, .gsb.on { color: var(--blue); border-color: var(--blue); background: var(--blue-l) }
 .gs-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .06) }
 .gs-pop { position: fixed; display: grid; padding: 4px 0; border-radius: 16px; background: var(--card); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 0 0 1px rgba(0, 0, 0, .04); overflow: hidden; transform-origin: top center; animation: gsp .16s ease-out }

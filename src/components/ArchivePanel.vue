@@ -60,13 +60,13 @@ async function purge(st) {
 .arch { padding: 6px 8px; display: grid; gap: 4px }
 .head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px; border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; border-radius: 12px }
 .head:hover { background: var(--surface) }
-.cnt { min-width: 22px; padding: 1px 7px; border-radius: 99px; background: var(--surface); border: 2px solid var(--border); font-size: 12px; font-weight: 900; text-align: center; color: var(--hint) }
+.cnt { min-width: 22px; padding: 1px 7px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; font-weight: 900; text-align: center; color: var(--hint) }
 .grow { flex: 1; font-size: 13px } .chev { font-size: 22px; line-height: 1; color: var(--hint-2); transition: transform .15s; transform: rotate(90deg) } .chev.up { transform: rotate(-90deg) }
-.it { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-top: 2px solid var(--border) }
+.it { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-top: 1px solid var(--border) }
 .av { filter: grayscale(1); opacity: .7; display: inline-grid }
 .who { display: grid; flex: 1; min-width: 0 } .who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .who small { font-size: 12px }
 .acts { display: flex; gap: 6px; flex: none }
-.del { color: var(--red) } .del.sure { background: var(--red); color: #fff; border-color: var(--red-d); box-shadow: 0 4px 0 var(--red-d) }
+.del { color: var(--red) } .del.sure { background: var(--red); color: #fff; border-color: var(--red) }
 .back { display: grid; gap: 8px; margin: 4px 0; padding: 10px 12px; border-radius: 14px; background: var(--green-l); font-size: 14px }
 .back input { flex: 1; min-width: 160px; margin: 0; padding: 8px 10px; font-size: 13px }
 .note { margin: 4px 10px 8px; font-size: 12px }

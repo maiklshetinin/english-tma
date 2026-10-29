@@ -97,3 +97,17 @@ export function userStats(userKey: Key, decks: Deck[]) {
   const week = Array.from({ length: 7 }, (_, i) => { const d = inDays(i - 6); return { date: d, n: log[d] ?? 0 } })
   return { total, learned, mature, newToday, today: log[t] ?? 0, week }
 }
+
+/** Прогноз «сколько слов подойдёт к повторению» на days дней вперёд (как Forecast в Anki): [0] — сегодня (с просроченными
+ *  и изучаемыми), дальше по дням. Новые не считаем — их показывает счётчик «Новые». */
+export function deckForecast(deck: Deck, userKey: Key, days = 14): { date: string, n: number }[] {
+  const map = cardsOf(userKey), out = Array.from({ length: days }, (_, i) => ({ date: inDays(i), n: 0 }))
+  const t = today(), last = out[days - 1].date
+  for (const c of deck.cards) {
+    const s = c.suspended ? null : map[c.id]; if (!s) continue
+    const d = kindOf(s) === 'learn' || s.due <= t ? t : s.due
+    if (d > last) continue
+    const i = out.findIndex((x) => x.date === d); if (i >= 0) out[i].n++
+  }
+  return out
+}

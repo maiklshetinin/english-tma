@@ -69,7 +69,7 @@ h3 { margin: 4px 0 0; font-size: 22px; font-weight: 900 }
 .line { margin: 0; min-height: 44px; color: var(--hint); font-size: 15px; font-weight: 700 }
 .en { color: var(--blue); font-weight: 900 }
 .bar { width: 220px; height: 14px; border-radius: 99px; background: var(--border); overflow: hidden }
-.bar i { display: block; height: 100%; border-radius: 99px; background: var(--green); box-shadow: inset 0 -4px 0 var(--green-d), inset 0 4px 0 rgba(255, 255, 255, .25); transition: width .25s ease-out }
+.bar i { display: block; height: 100%; border-radius: 99px; background: var(--green); transition: width .25s ease-out }
 .hint { color: var(--hint-2); font-weight: 800 }
 
 /* Персонаж: дышит во сне, после пробуждения подпрыгивает и моргает */

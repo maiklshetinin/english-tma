@@ -21,7 +21,7 @@ const src = computed(() => avatarSrc(props.s))      // не открылась �
 .avw { position: relative; display: inline-grid; flex: none }
 /* Точка «в сети»: зелёная, с белым кольцом цвета фона — как в Telegram */
 .on { position: absolute; right: 4%; bottom: 4%; width: var(--d); height: var(--d); border-radius: 50%; background: #4fce5d; box-shadow: 0 0 0 2px var(--card); z-index: 1 }      /* как в Telegram: ~20 % аватарки, тонкое белое кольцо */
-.av { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 900; flex: none; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); line-height: 1; overflow: hidden }
+.av { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 900; flex: none;  line-height: 1; overflow: hidden }
 .av.img { box-shadow: none; background: var(--surface) !important }
 .av { position: relative }
 .av.arch { filter: grayscale(1); opacity: .75 }

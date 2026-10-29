@@ -60,7 +60,7 @@ async function remove(c) {
 .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) }
 .cc { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0; cursor: pointer; transition: border-color .1s }
 .cc:hover { border-color: var(--blue) }
-.ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--purple); color: #fff; box-shadow: 0 4px 0 var(--purple-d) }
+.ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--purple); color: #fff }
 .tx { flex: 1; display: grid; min-width: 0 } .tx b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tx small { font-size: 13px; font-weight: 600; color: var(--hint) }
 .del { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer; opacity: 0; transition: opacity .1s }
 .cc:hover .del, .del:focus-visible { opacity: 1 } .del:hover { background: var(--red-l); color: var(--red-d) }
