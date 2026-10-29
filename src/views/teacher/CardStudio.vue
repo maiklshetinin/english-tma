@@ -18,6 +18,7 @@ import { newId } from '../../utils/id'
 import { showToast } from '../../composables/useToast'
 import AppIcon from '../../components/AppIcon.vue'
 import CardImport from '../../components/CardImport.vue'
+import DeckSheet from '../../components/DeckSheet.vue'
 import AudioWave from '../../components/AudioWave.vue'
 import { waveOf } from '../../utils/wave'
 import { fetchSheetCsv } from '../../composables/useSheetImport'
@@ -25,6 +26,9 @@ import { fetchSheetCsv } from '../../composables/useSheetImport'
 const route = useRoute(), router = useRouter()
 const decks = useDecksStore()
 const deck = computed(() => decks.byId(route.query.id) ?? (isDemo ? decks.list[0] : undefined))
+// Настройки колоды (название, кому назначена, новых в день, удаление) — та же шторка, что была в списке колод
+const settings = ref(false)
+const closeSettings = () => { settings.value = false; if (!decks.byId(route.query.id) && !isDemo) back() }
 const cards = computed(() => deck.value?.cards ?? [])
 const online = !isDemo && !!API && !!fb
 const FIELDS = [
@@ -282,6 +286,7 @@ const back = () => router.push({ name: 'words' })
       <span v-if="deck" class="imx"><button class="ghostb" :disabled="gBusy" @click.stop="impOpen = !impOpen">{{ gBusy ? 'Загружаю…' : 'Импорт' }} ▾</button>
         <span v-if="impOpen" class="pm down" @click.stop><button @click="impOpen = false; chooseSheet()">Файл Excel или CSV</button><button @click="impOpen = false; fromGoogle()">Google Таблица по ссылке</button>
           <small>Или просто перетащите файл на таблицу</small></span></span>
+      <button v-if="deck" class="icon-btn" aria-label="Настройки колоды" title="Настройки: название, кому назначена, новых в день" @click="settings = true"><AppIcon name="sliders" :size="18" /></button>
       <button v-if="deck" class="btn sm" @click="addCard"><AppIcon name="plus" :size="16" /> Карточка</button>
       <input ref="sheetPick" type="file" hidden accept=".xlsx,.xls,.csv,.tsv" @change="$event.target.files[0] && startImport($event.target.files[0])" />
     </header>
@@ -386,6 +391,7 @@ const back = () => router.push({ name: 'words' })
       <button class="side r" :disabled="eIdx >= shown.length - 1" title="Следующая (→)" @click="step(1)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg></button>
     </div>
     <CardImport v-if="importFile && deck" :key="importFile.name + importAuto" :deck="deck" :file="importFile" :auto="importAuto" @close="importFile = null" @done="imported" />
+    <DeckSheet v-if="settings && deck" :deck="deck" @close="closeSettings" />
   </div>
 </template>
 

@@ -58,6 +58,14 @@ html.dragging, html.dragging * { user-select: none !important; -webkit-user-sele
 .btn.sm { padding: 8px 12px; font-size: 13px; border-radius: 12px; }
 .btn.ghost.sm { padding: 6px 10px; }
 
+/* Кнопка-значок — одна на весь проект: поменять вид всех значков можно здесь (размер, рамка, цвет).
+   <button class="icon-btn" aria-label="…"><AppIcon name="pencil" :size="18" /></button>; .danger — красная при наведении (удаление). */
+.icon-btn { --ib: 36px; flex: none; display: inline-grid; place-items: center; width: var(--ib); height: var(--ib); padding: 0; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--card); color: var(--hint); font: inherit; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
+.icon-btn:hover { background: var(--surface); color: var(--text); }
+.icon-btn.danger:hover { background: var(--red-l); border-color: var(--red); color: var(--red-d); }
+.icon-btn:disabled { opacity: .4; cursor: default; }
+
 input, textarea, select { width: 100%; font: inherit; font-weight: 700; color: var(--text); background: var(--surface);
   border: 1px solid var(--border); border-radius: 12px; padding: 11px 14px; margin-bottom: 10px; outline: none; transition: border-color .12s; }
 input:focus, textarea:focus, select:focus { border-color: var(--hint-2); background: var(--card); }      /* фокус в поле — чуть темнее рамка, без синего */
