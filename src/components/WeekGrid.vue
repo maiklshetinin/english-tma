@@ -36,7 +36,7 @@ function dropState(d, h) {                       // подсветка ячей�
 // Ученики урока, которые есть в списке. Ученика могли удалить из базы или архивировать — его id остаётся в уроке, но показывать некого.
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)
 const isGroup = (l) => group(l).length > 1
-const ringOf = (l) => (allOff(l) ? 'var(--group)' : l.done ? 'var(--group)' : 'var(--card)')        // кольцо стопки — цвета фона карточки
+const ringOf = () => 'var(--card)'                 // кольцо стопки аватарок — цвет фона под уроком
 const orphan = (l) => !group(l).length                                      // урок, в котором не осталось известных учеников: показываем серым «?», чтобы его можно было убрать
 // «Отменил ученик»: все отменили — карточка красная и зачёркнутая; в группе часть — красный значок «✕N»
 const offCount = (l) => group(l).filter(s => l.canceled?.[s.id]).length
@@ -102,7 +102,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 .tm { display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--hint-2) }
 .dh { display: grid; justify-items: center; padding: 4px 0; border-radius: 12px; font-size: 13px; color: var(--hint) }
 .dn { display: grid; justify-items: center }
-.dh small { font-weight: 800; font-size: 12px; color: var(--hint-2) } .dh.we b { color: var(--purple-d) }
+.dh small { font-weight: 800; font-size: 12px; color: var(--hint-2) }      /* дни без цвета — не спорят с суммой под датой */
 /* Деньги дня — одна цифра под датой: сумма уроков дня; зелёная, когда все проведены */
 .dsum { margin-top: 2px; line-height: 1.25; font-size: 12px; font-weight: 900; color: var(--hint-2); white-space: nowrap } .dsum.ok { color: var(--green-d) }
 html[data-theme='dark'] .dsum.ok { color: var(--green) }
@@ -110,19 +110,18 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .dh { position: relative }
 .dlost { position: absolute; left: 50%; top: calc(100% - 7px); transform: translateX(-50%); z-index: 2; padding: 0 4px; border-radius: 6px; background: var(--card); font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 14px; white-space: nowrap; pointer-events: none }      /* потеряно из-за отмен — мелко красным под суммой, поверх зазора: шапка не прыгает */
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
-/* «Сегодня» — просто зелёный текст дня */
-.dh.today b, .dh.today small { color: var(--green-d) }
+/* «Сегодня» и текущее время — серой подложкой, текст обычный */
+.dh.today { background: var(--group) } .dh.today b, .dh.today small { color: var(--text) }
 .cell { position: relative; height: 38px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); transition: background .1s, box-shadow .1s }      /* белые ячейки с тонкой рамкой */
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
-/* Текущее время слева — зелёным текстом */
-.tm.now { color: var(--green-d); font-weight: 900 }
+.tm.now { background: var(--group); border-radius: 10px; color: var(--text); font-weight: 900 }
 .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
 .chip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 4px; min-width: 0;
   border: 0; border-radius: 10px; background: var(--surface); color: var(--text);      /* запланированный — серая плашка-тег, без обводки и тени */
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
-.chip.done { box-shadow: none; background: var(--group); color: var(--hint); cursor: pointer }      /* проведённый — серый, только зелёная галочка */ .chip .tick { font-weight: 900 }
+.chip.done { box-shadow: none; background: transparent; color: var(--hint); cursor: pointer }      /* проведённый — серый, только зелёная галочка */ .chip .tick { font-weight: 900 }
 /* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
 /* Группа: аватарки внахлёст без подписи — на телефоне две (вторая может быть «+N»), на широком экране до четырёх */
 .chip .st-lg { display: none } .chip .st-sm { display: inline-flex }
@@ -132,7 +131,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .chip.orphan { border: 2px dashed var(--hint-2); background: var(--surface); color: var(--hint); cursor: pointer }
 .chip .q { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--hint-2); color: #fff; font-weight: 900; font-size: 12px; flex: none }
 /* Отменил ученик (без оплаты): красная карточка, имя зачёркнуто; значок ✕ — в углу слева */
-.chip.canceled { box-shadow: none; background: var(--group); color: var(--hint) }      /* отменён — серый, зачёркнут, красный кружок с крестиком (как упавшая сборка в GitHub) */
+.chip.canceled { box-shadow: none; background: transparent; color: var(--hint) }      /* отменён — серый, зачёркнут, красный кружок с крестиком (как упавшая сборка в GitHub) */
 .chip.canceled .nm { text-decoration: line-through } .chip.canceled :deep(.av), .chip.canceled :deep(.stack) { opacity: .45 }
 .off { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
 /* Начало внутри часа — бирка «:30» в правом нижнем углу; заметка — жёлтая точка в правом верхнем */
