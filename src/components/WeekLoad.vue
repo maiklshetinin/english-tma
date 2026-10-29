@@ -62,7 +62,6 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
 .needle { transform-origin: 40px 38px; transition: transform .9s cubic-bezier(.3, 1.5, .5, 1) } .needle path, .needle circle { fill: var(--text) }
 .v { font-size: 12px; font-weight: 800; color: var(--hint); white-space: nowrap } .v b { font-size: 18px; font-weight: 900 }
 .ok .v b { color: var(--green-d) } .warn .v b { color: var(--orange-d) } .bad .v b { color: var(--red-d) }
-.bad .g { border-color: var(--red) }
 .pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: grid; gap: 8px; padding: 10px 12px; min-width: 210px;
   background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 10px 24px rgba(0, 0, 0, .14); font-size: 13px; font-weight: 700; color: var(--hint) }
 .st b { color: var(--text) } .ok .zn { color: var(--green-d) } .warn .zn { color: var(--orange-d) } .bad .zn { color: var(--red-d) }

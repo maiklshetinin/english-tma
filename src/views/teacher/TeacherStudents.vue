@@ -78,10 +78,10 @@ button.tr:hover { background: var(--surface) } .th { padding-top: 8px; padding-b
 @media (max-width: 767px) { .tx .sub:not(.ui) { display: none } .prog { font-size: 11px; margin-top: -4px } .bar { height: 5px } }
 @media (min-width: 768px) { .tr { grid-template-columns: 1.4fr 1.4fr 1fr 1.2fr } .uc { display: block } .ui { display: none } .tr > :nth-child(4) { grid-column: auto; padding-left: 0 } .th > :nth-child(4) { display: block } }
 /* Группы: заголовок и строки учеников на серой подложке с цветной полосой слева; между группами — отступ */
-.gh { display: flex; align-items: center; gap: 6px; margin: 10px 10px 0; padding: 8px 12px 4px; border-radius: 14px 14px 0 0; background: var(--surface); box-shadow: inset 4px 0 0 var(--gc);
+.gh { display: flex; align-items: center; gap: 6px; margin: 10px 10px 0; padding: 8px 12px 4px; border-radius: 14px 14px 0 0; background: var(--group); box-shadow: inset 4px 0 0 var(--gc);
   font-size: 12px; font-weight: 900; color: var(--gc); text-transform: uppercase; letter-spacing: .3px }
 .gh.first { margin-top: 4px } .gh span { margin-left: auto; color: var(--hint); font-weight: 700; text-transform: none; letter-spacing: 0 }
-.tr.ing { width: calc(100% - 20px); margin: 0 10px; background: var(--surface); box-shadow: inset 4px 0 0 var(--gc) }
+.tr.ing { width: calc(100% - 20px); margin: 0 10px; background: var(--group); box-shadow: inset 4px 0 0 var(--gc) }
 .tr.ing.last { border-radius: 0 0 14px 14px; margin-bottom: 4px }
 button.tr.ing:hover { background: var(--border) }
 .sl { margin: 12px 14px 2px; font-size: 12px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }

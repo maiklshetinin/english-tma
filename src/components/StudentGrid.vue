@@ -77,7 +77,7 @@ button.st { cursor: pointer } button.st:hover:not(:disabled) { background: var(-
 .st.on .nm, .grp .st:has(.ok) .nm { color: var(--green-d) }
 /* Группа — серая подложка (чуть уже блока, соседние не сливаются), подсвечивается целиком */
 .grp { position: relative; grid-column: span var(--n); min-width: 0; padding: 0; border: 0; background: none; font: inherit; color: var(--text); cursor: pointer }
-.grp::before { content: ''; position: absolute; inset: 0 2px; border-radius: 14px; background: var(--surface); transition: background .1s }
+.grp::before { content: ''; position: absolute; inset: 0 2px; border-radius: 14px; background: var(--group); transition: background .1s }
 .grp:hover:not(:disabled)::before { background: var(--blue-l) } .grp.on::before { background: var(--green-l) } .grp:active:not(:disabled) .ava { transform: scale(.94) }
 .grp .tiles { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)) }
 .gi { position: absolute; top: 3px; left: 5px; z-index: 2; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--card); color: var(--hint); font-style: normal; box-shadow: 0 0 0 1.5px var(--surface) }

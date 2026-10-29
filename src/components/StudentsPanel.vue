@@ -202,7 +202,7 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 /* Группа — только серая подложка под кружками (без подписи и рамки, клетки того же размера — сетка ровная); день и время — во всплывающей подсказке.
    Подложка чуть уже блока (::before) — соседние группы не сливаются, а сетка не сдвигается */
 .grp { position: relative; grid-column: span var(--n); min-width: 0; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none } .grp:active { cursor: grabbing }
-.grp::before { content: ''; position: absolute; inset: 0 2px; border-radius: 14px; background: var(--surface); z-index: 0; transition: background .1s } .grp .tiles { position: relative }
+.grp::before { content: ''; position: absolute; inset: 0 2px; border-radius: 14px; background: var(--group); z-index: 0; transition: background .1s } .grp .tiles { position: relative }
 .grp:hover::before, .grp:focus-visible::before { background: var(--blue-l) } .grp .st { cursor: inherit } .grp .st:hover { background: none } .grp:active .ava { transform: scale(.94) }      /* подсвечивается вся группа */
 .grp .tiles { grid-template-columns: repeat(var(--n), minmax(0, 1fr)) }
 .st { display: grid; justify-items: center; align-content: start; gap: 3px; padding: 4px 0; border-radius: 14px; min-width: 0;
