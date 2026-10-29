@@ -67,7 +67,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
-          <button class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l) }" :title="label(l)" :aria-label="label(l)"
+          <button class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
@@ -136,7 +136,9 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .chip.done .nm, .chip.canceled .nm { color: var(--hint-2); opacity: 1 }      /* имя у прошедших — тоже бледное */      /* прошедший урок — бледнее, как отменённый (статус видно по кружку) */
 .off { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
 /* Начало внутри часа — бирка «:30» в правом нижнем углу; заметка — жёлтая точка в правом верхнем */
-.min { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); font-style: normal; font-size: 11px; font-weight: 900; line-height: 1.3; padding: 0 5px; border-radius: 99px; background: var(--blue); color: #fff; box-shadow: 0 0 0 2px var(--card); z-index: 2 }
+@media (min-width: 720px) { .chip.hasmin { padding-right: 36px } }      /* имя не заезжает под «:30» */
+/* Начало не с ровного часа («:30») — справа по центру урока: сразу видно, что урок с середины часа */
+.min { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 11px; font-weight: 900; line-height: 1.3; padding: 0 5px; border-radius: 99px; background: var(--blue); color: #fff; box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .note { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 /* Кружок ученика — почти во всю высоту карточки, как аватарка в списке чатов Telegram */
@@ -194,4 +196,5 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk.gs-lines .cell.swap, .wk.gs-gray .cell.swap, .wk.gs-none .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .wk.gs-lines .cell.bad, .wk.gs-gray .cell.bad, .wk.gs-none .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
 .wk.gs-lines .cell.join, .wk.gs-gray .cell.join, .wk.gs-none .cell.join { box-shadow: inset 0 0 0 2px var(--green) }
+@media (max-width: 719px) { .min { top: auto; bottom: -5px; right: -4px; transform: none; font-size: 10px; padding: 0 3px } }      /* на телефоне — в правом нижнем углу, чтобы не закрывать кружок */
 </style>
