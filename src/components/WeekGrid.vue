@@ -36,7 +36,7 @@ function dropState(d, h) {                       // подсветка ячей�
 // Ученики урока, которые есть в списке. Ученика могли удалить из базы или архивировать — его id остаётся в уроке, но показывать некого.
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)
 const isGroup = (l) => group(l).length > 1
-const ringOf = (l) => (allOff(l) ? 'var(--red-l)' : l.done ? 'var(--green-l)' : 'var(--card)')        // кольцо стопки — цвета фона карточки
+const ringOf = (l) => (allOff(l) ? 'var(--red-l)' : l.done ? 'var(--group)' : 'var(--card)')        // кольцо стопки — цвета фона карточки
 const orphan = (l) => !group(l).length                                      // урок, в котором не осталось известных учеников: показываем серым «?», чтобы его можно было убрать
 // «Отменил ученик»: все отменили — карточка красная и зачёркнутая; в группе часть — красный значок «✕N»
 const offCount = (l) => group(l).filter(s => l.canceled?.[s.id]).length
@@ -122,7 +122,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .chip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 4px; min-width: 0;
   border: 0; border-radius: 10px; background: var(--surface); color: var(--text);      /* запланированный — серая плашка-тег, без обводки и тени */
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
-.chip.done { box-shadow: none; background: var(--green-l); color: var(--green-d); cursor: pointer } .chip .tick { font-weight: 900 }
+.chip.done { box-shadow: none; background: var(--group); color: var(--hint); cursor: pointer }      /* проведённый — серый, только зелёная галочка */ .chip .tick { font-weight: 900 }
 /* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
 /* Группа: аватарки внахлёст без подписи — на телефоне две (вторая может быть «+N»), на широком экране до четырёх */
 .chip .st-lg { display: none } .chip .st-sm { display: inline-flex }

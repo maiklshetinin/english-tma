@@ -44,17 +44,19 @@ html.dragging, html.dragging * { user-select: none !important; -webkit-user-sele
 .row2 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .lab { display: block; font-size: 13px; font-weight: 800; color: var(--hint); margin: 2px 0 4px; }
 
-/* Кнопки: плоские, как в Telegram/GitHub — без объёма и заглавных */
+/* Кнопки — как в Telegram: спокойная серая по умолчанию. Выделить главное действие — .primary (синяя заливка);
+   удаление — .danger; рамка без заливки — .ghost. Цвета всех кнопок меняются здесь. */
 .btn { border: 0; border-radius: 12px; padding: 12px 20px; font: inherit; font-size: 15px; font-weight: 700;
-  background: var(--green); color: #fff; cursor: pointer; transition: filter .12s, background .12s; }
-.btn:hover:not(:disabled) { filter: brightness(.95) }
-.btn:active:not(:disabled) { filter: brightness(.9) }
+  background: var(--group); color: var(--text); cursor: pointer; transition: filter .12s, background .12s; }
+.btn:hover:not(:disabled) { filter: brightness(.96) }
+.btn:active:not(:disabled) { filter: brightness(.92) }
+.btn.primary { background: var(--blue); color: #fff; }
 .btn:disabled { background: var(--border); color: var(--hint-2); box-shadow: none; cursor: not-allowed; }
 .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 11px 18px; }
 .btn.ghost:hover:not(:disabled) { filter: none; background: var(--surface) }
 .btn.ghost:active:not(:disabled) { filter: none; background: var(--border) }
 .btn.ghost:disabled { color: var(--hint-2); background: var(--surface); }
-.btn.danger { background: var(--red); }
+.btn.danger { background: var(--red); color: #fff; }
 .btn.sm { padding: 8px 12px; font-size: 13px; border-radius: 12px; }
 .btn.ghost.sm { padding: 6px 10px; }
 

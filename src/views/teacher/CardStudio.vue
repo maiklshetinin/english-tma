@@ -348,7 +348,7 @@ const back = () => router.push({ name: 'words' })
                   <span class="spark"><i v-for="b in st.bars" :key="b.id" :class="b.cls" :style="{ height: b.h + '%' }" :title="b.title" /></span>
                   <span class="sx">{{ st.next }}</span></template>
               </template></td>
-              <td class="act"><span v-if="c.suspended" class="hid" title="Скрыта от учеников">скрыта</span><button class="del" title="Удалить карточку" @click.stop="delCard(c)"><AppIcon name="trash" :size="22" /></button></td>
+              <td class="act"><span v-if="c.suspended" class="hid" title="Скрыта от учеников">скрыта</span><button class="icon-btn danger" title="Удалить карточку" aria-label="Удалить карточку" @click.stop="delCard(c)"><AppIcon name="trash" :size="18" /></button></td>
             </tr>
           </tbody>
         </table>
@@ -488,7 +488,7 @@ tr.crow { cursor: pointer } tr.crow:hover td { background: #f6f9fc }
 tr.crow td { padding-top: 14px; padding-bottom: 14px } .cell img { border-radius: 12px }
 .two .t1 { font-size: 17px } .two .t2 { font-size: 15px } .two .wvrow { padding: 6px 0 0; max-width: 240px }
 td.c-e .two .t1 { font-size: 15px; font-weight: 700 } td.c-e .two span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
-tr.crow td { vertical-align: top } tr.crow td.n { padding-top: 22px } tr.crow .two { padding-top: 6px; cursor: pointer }
+tr.crow td { vertical-align: top } tr.crow td.act { vertical-align: middle }      /* корзина — всегда видна, по центру строки */ tr.crow td.n { padding-top: 22px } tr.crow .two { padding-top: 6px; cursor: pointer }
 .ea { margin-left: 6px; font-size: 12px; font-style: normal; opacity: .6 }
 .hid { margin-right: 6px; padding: 2px 8px; border-radius: 6px; background: #fff4d6; color: #8a5b00; font-size: 11px; font-weight: 800 }
 td.act .del { width: 44px; height: 44px; opacity: 0 } tr.crow:hover td.act .del { opacity: 1 }
