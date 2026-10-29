@@ -71,10 +71,10 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="38" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
-              <span v-if="l.done" class="tick">✓</span>
+              <span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span>
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
-            <template v-else><Avatar :s="first(l)" :size="38" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick">✓</span></template>
+            <template v-else><Avatar :s="first(l)" :size="38" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
             <i v-if="allOff(l)" class="off" aria-hidden="true">✕</i><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
@@ -145,7 +145,8 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 @media (max-width: 719px) { .chip :deep(.av) { width: 31px !important; height: 31px !important; font-size: 13px !important } }
 @media (max-width: 420px) { .chip :deep(.av) { width: 29px !important; height: 29px !important } }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
-.chip.done .tick { color: var(--green-d) }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
+/* Галочка «проведён» — как в GitHub: белая галочка в зелёном кружке */
+.chip .tick { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #1f883d } .chip .tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
 @media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px; font-size: 13px } .cell { height: 46px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
 @media (max-width: 420px) { .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 36px } }
