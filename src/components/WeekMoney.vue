@@ -1,12 +1,12 @@
 <script setup>
 // Деньги недели — две цифры: факт (проведённые уроки) и план (все уроки недели); под ними мелко красным — сколько потеряно из-за отмен учеников.
-import { fmtMoney, fmtMoneyShort } from '../utils/price'
+import { fmtMoney } from '../utils/price'
 defineProps({ m: { type: Object, required: true } })      // { real, plan, lost }
 </script>
 <template>
   <div v-if="m.plan || m.lost" class="wm" :title="`Факт ${fmtMoney(m.real)} из ${fmtMoney(m.plan)}${m.lost ? `, потеряно ${fmtMoney(m.lost)}` : ''}`">
-    <span class="top"><b>{{ fmtMoneyShort(m.real) }}</b><small>из {{ fmtMoneyShort(m.plan) }}</small></span>
-    <span v-if="m.lost" class="lost">−{{ fmtMoneyShort(m.lost) }} отмены</span>
+    <span class="top"><b>{{ fmtMoney(m.real) }}</b><small>из {{ fmtMoney(m.plan) }}</small></span>
+    <span v-if="m.lost" class="lost">−{{ fmtMoney(m.lost) }} отмены</span>
   </div>
 </template>
 <style scoped>

@@ -5,7 +5,7 @@ import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES
 import { dnd, pressStart } from '../composables/useDnd'
 import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
 import Avatar from './Avatar.vue'
-import { sumMoney, fmtMoney, fmtMoneyK } from '../utils/price'
+import { sumMoney, fmtMoney } from '../utils/price'
 import AvatarStack from './AvatarStack.vue'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore } from '../stores/schedule'
@@ -58,8 +58,8 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
         <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
       </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
-        <span class="dsum" :class="{ ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'">{{ money(d).plan ? fmtMoneyK(money(d).plan) : 0 }}</span>
-        <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−{{ fmtMoneyK(money(d).lost) }}</span></span>
+        <span class="dsum" :class="{ ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'">{{ money(d).plan ? fmtMoney(money(d).plan) : 0 }}</span>
+        <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−{{ fmtMoney(money(d).lost) }}</span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
       <span class="tm" :class="{ now: rowNow(h) }">{{ rowNow(h) ? hh(h, now.minute) : hh(h) }}</span>
@@ -148,7 +148,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .chip .tick { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #1f883d } .chip .tick.x { background: #cf222e } .chip .tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
 @media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px; font-size: 13px } .cell { height: 46px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
-@media (max-width: 420px) { .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 36px } }
+@media (max-width: 420px) { .dsum, .dlost { font-size: 10px; letter-spacing: -.2px } .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 36px } }
 
 /* На телефоне галочку «проведён» не показываем — кружок крупный, проведённый урок и так зелёный */
 /* Статус — в левом верхнем углу урока (на аватарке), на всех экранах */
