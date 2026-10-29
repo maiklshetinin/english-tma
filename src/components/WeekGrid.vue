@@ -70,11 +70,11 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
           <button class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
-              <AvatarStack class="st-lg" :students="group(l)" :size="38" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
+              <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
               <span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span>
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
-            <template v-else><Avatar :s="first(l)" :size="38" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
+            <template v-else><Avatar :s="first(l)" :size="39" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
             <span v-if="allOff(l)" class="tick x" title="Отменён"><svg viewBox="0 0 16 16"><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" /></svg></span><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
@@ -133,7 +133,6 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 /* Отменил ученик (без оплаты): красная карточка, имя зачёркнуто; значок ✕ — в углу слева */
 .chip.canceled { box-shadow: none; background: transparent; color: var(--hint) }      /* отменён — серый, зачёркнут, красный кружок с крестиком (как упавшая сборка в GitHub) */
 .chip.canceled .nm { text-decoration: line-through } .chip.canceled :deep(.av), .chip.canceled :deep(.stack) { opacity: .45 }
-.chip.done :deep(.av), .chip.done :deep(.stack) { opacity: .55 }
 .chip.done .nm, .chip.canceled .nm { color: var(--hint-2); opacity: 1 }      /* имя у прошедших — тоже бледное */      /* прошедший урок — бледнее, как отменённый (статус видно по кружку) */
 .off { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
 /* Начало внутри часа — бирка «:30» в правом нижнем углу; заметка — жёлтая точка в правом верхнем */
@@ -141,7 +140,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .note { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .chip:active { cursor: grabbing } .chip.lifted { opacity: .3 }
 /* Кружок ученика — почти во всю высоту карточки, как аватарка в списке чатов Telegram */
-.chip :deep(.av) { width: 47px !important; height: 47px !important; font-size: 17px !important }      /* во всю высоту ячейки (46px) */
+.chip :deep(.av) { width: 39px !important; height: 39px !important; font-size: 17px !important }      /* на компьютере — 39px, влезает в ячейку таблицы */
 @media (max-width: 719px) { .chip :deep(.av) { width: 31px !important; height: 31px !important; font-size: 13px !important } }
 @media (max-width: 420px) { .chip :deep(.av) { width: 29px !important; height: 29px !important } }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
@@ -167,7 +166,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (min-width: 720px) { .wk.gs-cells .tm { margin-right: 6px } }
 .wk.gs-cells .chip { inset: 3px; border-radius: 7px }
 @media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } }
-@media (max-width: 719px) { .wk.gs-cells .chip { inset: 2px } .wk.gs-cells .chip :deep(.av) { transform: scale(.88) } }
+@media (max-width: 719px) { .wk.gs-cells .chip { inset: 2px } }
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 .wk.gs-gray .cell { background: var(--surface); box-shadow: none }
 .wk.gs-gray .chip:not(.done):not(.canceled):not(.orphan) { background: var(--card) }      /* на серой ячейке урок — белый, иначе сольётся */
