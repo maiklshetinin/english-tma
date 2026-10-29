@@ -47,6 +47,8 @@ export function nowIn(zone = tz.value, at = Date.now()): { date: string; hour: n
     .formatToParts(new Date(at)).map((x) => [x.type, x.value]))
   return { date: `${p.year}-${p.month}-${p.day}`, hour: Number(p.hour), minute: Number(p.minute) }
 }
+/** Час уже прошёл (раньше текущего часа) — в такой слот урок не переносим. */
+export const slotPast = (date: string, hour: number, n = nowIn()): boolean => date < n.date || (date === n.date && hour < n.hour)
 /** Сегодня ('YYYY-MM-DD') в поясе расписания. */
 export const todayYmd = (): string => nowIn().date
 const addDaysYmd = (s: string, n: number): string => { const d = new Date(s + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }

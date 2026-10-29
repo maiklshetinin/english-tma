@@ -12,6 +12,7 @@ import { srsOf, kindOf, today, LEARNED_DAYS, resetDeck, buildQueue, deckCounts }
 import { showToast } from '../composables/useToast'
 import { dueMs, recallNow, fmtSpan, memoryOf } from '../utils/fsrs'
 import AppIcon from './AppIcon.vue'
+import { imageSrc } from '../utils/media'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, dock: Boolean, currentId: { type: String, default: null } })
 const emit = defineEmits(['back', 'reset'])
 
@@ -75,7 +76,7 @@ const fits = computed(() => 1 + Math.floor((BMAX.value - PH.value) / cardH.value
 const KORD = { mature: 0, review: 1, learn: 2 }               // снизу выученные, сверху — что ближе к «пора»
 const pileOf = (b) => [...b.items].sort((a, z) => KORD[a.k] - KORD[z.k]).slice(0, fits.value)
 const tilt = (id) => { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return h }
-const cardStyle = (r, i) => { const h = tilt(r.c.id); return { width: Math.round(PH.value * 1.5) + 'px', height: PH.value + 'px', marginBottom: i ? `${cardH.value - PH.value}px` : 0, transform: `translateX(${(h % 5) - 2}px) rotate(${((h >> 3) % 7) - 3}deg)`, backgroundImage: r.c.image ? `url("${r.c.image}")` : null } }
+const cardStyle = (r, i) => { const h = tilt(r.c.id); return { width: Math.round(PH.value * 1.5) + 'px', height: PH.value + 'px', marginBottom: i ? `${cardH.value - PH.value}px` : 0, transform: `translateX(${(h % 5) - 2}px) rotate(${((h >> 3) % 7) - 3}deg)`, backgroundImage: r.c.image ? `url("${imageSrc(r.c.image)}")` : null } }
 const segs = (b) => ['learn', 'review', 'mature'].map(k => ({ k, n: b.items.filter(r => r.k === k).length })).filter(x => x.n)
 
 // Подписи

@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 import { deckCounts, buildQueue } from '../composables/useSrs'
 import AppIcon from './AppIcon.vue'
 import { showToast } from '../composables/useToast'
+import { imageSrc } from '../utils/media'
 import StudySession from './StudySession.vue'
 import CardBrowser from './CardBrowser.vue'
 import DeckChart from './DeckChart.vue'
@@ -52,7 +53,7 @@ const audience = (d) => {
         <!-- Стопка на сегодня: карточки разложены внахлёст слева направо, первая (сверху) — следующее слово.
              Длина ряда = сколько карточек ждёт; больше 30 не рисуем (число — в подписи). -->
         <div v-for="p in [pile(d)]" :key="'p'" class="row-pile" :style="{ '--n': p.cards.length }">
-          <span v-for="(c, i) in p.cards" :key="c.id" class="rc" :class="{ top: !i, ph: c.image }" :style="{ '--i': i, zIndex: p.cards.length - i, backgroundImage: c.image ? `url(&quot;${c.image}&quot;)` : null }">
+          <span v-for="(c, i) in p.cards" :key="c.id" class="rc" :class="{ top: !i, ph: c.image }" :style="{ '--i': i, zIndex: p.cards.length - i, backgroundImage: c.image ? `url(&quot;${imageSrc(c.image)}&quot;)` : null }">
             <b v-if="!i || !c.image">{{ c.front }}</b></span>
           <span v-if="!p.n" class="rc done">✓</span>
         </div>

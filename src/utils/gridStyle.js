@@ -18,6 +18,22 @@ const FRAME = 'tma.gridFrame'
 export const gridFrame = ref((() => { try { return localStorage.getItem(FRAME) !== '0' } catch { return true } })())
 export function setGridFrame(on) { gridFrame.value = !!on; try { localStorage.setItem(FRAME, on ? '1' : '0') } catch { /* приватный режим */ } }
 
+// Как выглядит будущий урок: плашка / хвостик (кружок слева, подложка от его середины) / жёлтый стикер / голубая капсула
+export const LESSON_STYLES = [
+  { id: 'plain', title: 'Плашка', sub: 'серая с рамкой' },
+  { id: 'tail', title: 'Хвостик', sub: 'кружок и подпись' },
+  { id: 'sticker', title: 'Стикер', sub: 'жёлтый, с уголком' },
+  { id: 'blue', title: 'Голубой', sub: 'капсула' },
+]
+const LS = 'tma.lessonStyle'
+export const lessonStyle = ref((() => { try { const v = localStorage.getItem(LS); return LESSON_STYLES.some((s) => s.id === v) ? v : 'plain' } catch { return 'plain' } })())
+export function setLessonStyle(id) { lessonStyle.value = id; try { localStorage.setItem(LS, id) } catch { /* приватный режим */ } }
+
+// Закрашивать прошедшее время: прошлые часы серые, текущий час заполняется по минутам (в реальном времени)
+const PAST = 'tma.pastShade'
+export const pastShade = ref((() => { try { return localStorage.getItem(PAST) === '1' } catch { return false } })())
+export function setPastShade(on) { pastShade.value = !!on; try { localStorage.setItem(PAST, on ? '1' : '0') } catch { /* приватный режим */ } }
+
 // Фон экрана в точку (как холст в Figma)
 const DOTS = 'tma.bgDots'
 export const bgDots = ref((() => { try { return localStorage.getItem(DOTS) === '1' } catch { return false } })())

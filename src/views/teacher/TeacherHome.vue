@@ -2,7 +2,7 @@
 // Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок (сохраняется на сервере).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { nowTick, weekDates, weekRange, slotKey, fmtSlot, hh } from '../../store/app'
+import { nowTick, weekDates, weekRange, slotKey, fmtSlot, hh, slotPast } from '../../store/app'
 import { goUp } from '../../router'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
@@ -70,6 +70,7 @@ function onDrop(p, t) {
   const a = p.lesson
   if (occ?.id === a.id) return
   if (a.done || occ?.done) return showToast('Проведённый урок нельзя переносить — сначала снимите отметку', null, 'bad')
+  if (slotPast(t.date, t.hour)) return showToast('Это время уже прошло — урок туда не перенести', null, 'bad')
   const from = { date: a.date, hour: a.hour }
   if (occ) {                                         // занято — меняем уроки местами
     scheduleStore.swap(a, occ); haptic('light')

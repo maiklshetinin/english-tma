@@ -1,9 +1,9 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
 import { computed } from 'vue'
-import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES } from '../store/app'
+import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
-import { gridStyle, gridFrame } from '../utils/gridStyle'
+import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney, fmtMoneyK } from '../utils/price'
 import AvatarStack from './AvatarStack.vue'
@@ -29,7 +29,7 @@ function dropState(d, h) {                       // подсветка ячей�
   const o = dnd.over
   if (!dnd.active || o?.kind !== 'cell' || o.date !== d || o.hour !== h) return ''
   const occ = at(d, h)[0], p = dnd.payload
-  if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : occ ? 'swap' : 'ok'
+  if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : slotPast(d, h, now.value) ? 'bad' : occ ? 'swap' : 'ok'      // в прошлое не переносим
   if (!occ) return 'ok'
   return 'bad'      // ученик / группа — только на свободную ячейку: из урока группу не собираем
 }
@@ -51,7 +51,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
 </script>
 
 <template>
-  <div class="card wk" :class="[`gs-${gridStyle}`, { noframe: !gridFrame }]">
+  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade }]">
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
         <span>{{ tzShort(tz) }}</span>
@@ -63,11 +63,11 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
       <span class="tm" :class="{ now: rowNow(h) }">{{ rowNow(h) ? hh(h, now.minute) : hh(h) }}</span>
-      <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h) }]"
+      <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h), past: slotPast(d, h, now) }]" :style="cellNow(d, h) ? { '--fill': (now.minute / 60 * 100) + '%' } : null"
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
-          <button class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l) }" :title="label(l)" :aria-label="label(l)"
+          <button class="chip" :class="{ lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l) }" :title="label(l)" :aria-label="label(l)"
             @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
@@ -154,9 +154,23 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 /* Статус — в левом верхнем углу урока (на аватарке), на всех экранах */
 .chip .tick { position: absolute; top: -5px; left: -4px; z-index: 2; box-shadow: 0 0 0 2px var(--card) }
 @media (max-width: 719px) { .chip .tick { width: 14px; height: 14px } .chip .tick svg { width: 10px; height: 10px } }
+/* Прошедшее время (настройка): прошлые часы — серые, текущий час закрашивается сверху по минутам */
+.wk.shade .cell.past:not(.ok):not(.bad):not(.swap) { background: var(--surface) }
+.wk.shade .cell.now:not(.ok):not(.bad):not(.swap) { background: linear-gradient(var(--surface) var(--fill), var(--card) var(--fill)) }
+/* Вид будущего урока (настройка «Урок»): только у запланированных — у прошедших подложки нет */
+.wk .chip.up { isolation: isolate }
+@media (min-width: 720px) {
+  .wk.ls-tail .chip.up { background: transparent; box-shadow: none }
+  .wk.ls-tail .chip.up::before { content: ''; position: absolute; z-index: -1; left: 20px; right: 0; top: 0; bottom: 0; border-radius: 0 10px 10px 0; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
+  .wk.ls-sticker .chip.up { padding-left: 0; border-radius: 999px 8px 8px 999px; background: #fff6c7; box-shadow: 0 2px 5px rgba(0, 0, 0, .13) }
+  .wk.ls-sticker .chip.up::after { content: ''; position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; border-radius: 0 0 8px 0; background: linear-gradient(135deg, transparent 50%, #e9dca0 50%); box-shadow: -1px -1px 2px rgba(0, 0, 0, .08) }
+  .wk.ls-blue .chip.up { padding-left: 0; border-radius: 999px; background: var(--blue-l); box-shadow: 0 2px 5px rgba(28, 120, 200, .18) }
+  .wk.ls-blue .chip.up .nm { color: #1a5b8a }
+}
+.wk.ls-sticker .chip.up { background: #fff6c7 } .wk.ls-blue .chip.up { background: var(--blue-l) }
 /* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
 /* «Клетки» — простая таблица: прямые ячейки без промежутков, тонкие линии 1px; скруглены только внешние углы таблицы */
-.wk.gs-cells { gap: 0 } .wk.gs-cells .g { gap: 0 } .wk.gs-cells .g.head { margin-bottom: 6px } .wk.gs-cells .dh { margin: 0 2px }
+.wk.gs-cells { gap: 0 } .wk.gs-cells .g { gap: 0 } .wk.gs-cells .g.head { margin-bottom: 0 } .wk.gs-cells .dh { margin: 0 2px }
 .wk.gs-cells .cell { border-radius: 0; box-shadow: inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g > .cell:nth-child(2) { box-shadow: inset 1px 0 0 var(--border), inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g.head + .g > .cell { box-shadow: inset 0 1px 0 var(--border), inset -1px -1px 0 var(--border) }
