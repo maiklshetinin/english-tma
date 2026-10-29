@@ -3,6 +3,7 @@
 //  преподаватель (canManage) создаёт колоды (по ссылке на Google Таблицу), правит карточки, назначает колоды ученикам;
 //  ученик только учит назначенные ему колоды. Прогресс у каждого свой (stores/srs.ts).
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { deckCounts, userStats } from '../composables/useSrs'
 import AppIcon from './AppIcon.vue'
 import StudySession from './StudySession.vue'
@@ -12,6 +13,7 @@ import DeckSheet from './DeckSheet.vue'
 import { useStudentsStore } from '../stores/students'
 import { useDecksStore } from '../stores/decks'
 const deckStore = useDecksStore()
+const router = useRouter()
 const studentStore = useStudentsStore()
 const props = defineProps({ userKey: { type: [String, Number], required: true }, canManage: Boolean })
 
@@ -66,7 +68,7 @@ const audience = (d) => {
         <div class="acts">
           <button class="btn sm" @click="open('study', d)">Учить</button>
           <button class="ib" aria-label="График колоды" title="График: когда повторять каждое слово" @click="open('chart', d)"><AppIcon name="chart" :size="18" /></button>
-          <button class="ib" aria-label="Карточки колоды" title="Карточки" @click="open('browse', d)"><AppIcon name="list" :size="18" /></button>
+          <button class="ib" aria-label="Карточки колоды" title="Карточки" @click="canManage ? router.push({ name: 'cards-studio', query: { id: d.id } }) : open('browse', d)"><AppIcon name="list" :size="18" /></button>
           <button v-if="canManage" class="ib" aria-label="Настройки колоды" title="Настройки" @click="sheet = { deck: d }"><AppIcon name="sliders" :size="18" /></button>
         </div>
       </div>

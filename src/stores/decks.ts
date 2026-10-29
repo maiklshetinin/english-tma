@@ -15,7 +15,8 @@ export const useDecksStore = defineStore('decks', () => {
   async function reload() { apply((await fetchContent()).decks) }
 
   const sync = createDocSync<Deck>({ what: 'Колоды', snapshot: byIdRecord, enabled: () => session.canEdit && !isDemo, reload,
-    save: (id, d) => put(`/decks/${enc(id)}`, { title: d.title, forAll: d.forAll, assigned: d.assigned, newPerDay: d.newPerDay, source: d.source, cards: d.cards }, 'Не удалось сохранить колоду'),
+    // Карточка без слова или перевода (только что добавленная в таблице) — пока не отправляем: сервер такую не примет и не сохранит всю колоду
+    save: (id, d) => put(`/decks/${enc(id)}`, { title: d.title, forAll: d.forAll, assigned: d.assigned, newPerDay: d.newPerDay, source: d.source, cards: d.cards.filter((c) => c.front?.trim() && c.back?.trim()) }, 'Не удалось сохранить колоду'),
     remove: (id) => del(`/decks/${enc(id)}`, 'Не удалось удалить колоду') })
   watch(list, sync.touch, { deep: true })
   onHide(sync.flushNow)

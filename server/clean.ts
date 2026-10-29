@@ -81,7 +81,7 @@ function cleanCard(x: unknown, seen: Set<string>): Card {
   const c: Card = { id: cardId, front: str(x.front, 'card word', 300, true), back: str(x.back, 'card translation', 300, true) }
   const example = str(x.example, 'card example', 600); if (example) c.example = example
   const exampleTr = str(x.exampleTr, 'card example translation', 600); if (exampleTr) c.exampleTr = exampleTr
-  for (const k of ['image', 'audio'] as const) {
+  for (const k of ['image', 'audio', 'exampleAudio'] as const) {
     const url = str(x[k], `card ${k}`, 400)
     if (url && !isMediaUrl(url)) throw fail(400, `card ${k}: must be an https link`)
     if (url) c[k] = url
