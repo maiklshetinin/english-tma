@@ -119,7 +119,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
 .chip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 4px; min-width: 0;
-  border: 0; border-radius: 10px; background: var(--surface); color: var(--text);      /* запланированный — серая плашка-тег, без обводки и тени */
+  border: 0; border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px #d0d7de;      /* предстоящий — серая плашка с серой окантовкой */
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
 .chip.done { box-shadow: none; background: transparent; color: var(--hint); cursor: pointer }      /* проведённый — серый, только зелёная галочка */ .chip .tick { font-weight: 900 }
 /* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
@@ -133,7 +133,8 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 /* Отменил ученик (без оплаты): красная карточка, имя зачёркнуто; значок ✕ — в углу слева */
 .chip.canceled { box-shadow: none; background: transparent; color: var(--hint) }      /* отменён — серый, зачёркнут, красный кружок с крестиком (как упавшая сборка в GitHub) */
 .chip.canceled .nm { text-decoration: line-through } .chip.canceled :deep(.av), .chip.canceled :deep(.stack) { opacity: .45 }
-.chip.done :deep(.av), .chip.done :deep(.stack) { opacity: .55 }      /* прошедший урок — бледнее, как отменённый (статус видно по кружку) */
+.chip.done :deep(.av), .chip.done :deep(.stack) { opacity: .55 }
+.chip.done .nm, .chip.canceled .nm { color: var(--hint-2); opacity: 1 }      /* имя у прошедших — тоже бледное */      /* прошедший урок — бледнее, как отменённый (статус видно по кружку) */
 .off { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
 /* Начало внутри часа — бирка «:30» в правом нижнем углу; заметка — жёлтая точка в правом верхнем */
 .min { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); font-style: normal; font-size: 11px; font-weight: 900; line-height: 1.3; padding: 0 5px; border-radius: 99px; background: var(--blue); color: #fff; box-shadow: 0 0 0 2px var(--card); z-index: 2 }
