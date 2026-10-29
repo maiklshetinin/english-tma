@@ -61,15 +61,16 @@ const bins = computed(() => {
 const maxN = computed(() => Math.max(1, ...bins.value.map(b => b.items.length)))
 // Стопка карточек: каждое слово — маленькая карточка, лежат друг на друге чуть вразнобой (как настоящая стопка).
 // Чем больше слов в самом высоком столбике, тем тоньше карточки — стопка не вылезает за график.
-const BMAX = computed(() => props.dock ? 110 : 120)
+const BMAX = computed(() => wide.value ? 210 : props.dock ? 110 : 120)
 // «Позже» — копилка, её не учитываем в масштабе (иначе все карточки стали бы тонкими); лишние там просто не рисуем
 const pileMax = computed(() => Math.max(1, ...bins.value.slice(0, -1).map(b => b.items.length)))
 // Карточка — мини-фото слова 3:2 (как на самой карточке). В стопке они наезжают друг на друга: видна полоска каждой
 // и целиком — верхняя. Шаг полоски подбирается так, чтобы самая высокая стопка влезла в график.
+const wide = ref(typeof matchMedia !== 'undefined' && matchMedia('(min-width: 720px)').matches)
 const plotW = ref(0); let ro = null
 onMounted(() => { ro = new ResizeObserver(([e]) => { plotW.value = e.contentRect.width }); plotw.value && ro.observe(plotw.value) }); onUnmounted(() => ro?.disconnect())
-const PH = computed(() => Math.max(8, Math.min(26, Math.round(Math.min(40, (plotW.value || 600) / bins.value.length * 0.84) * 2 / 3))))
-const cardH = computed(() => Math.max(3, Math.min(Math.round(PH.value * .55), Math.floor((BMAX.value - PH.value) / Math.max(1, pileMax.value - 1)))))
+const PH = computed(() => Math.max(8, Math.min(wide.value ? 40 : 26, Math.round(Math.min(wide.value ? 60 : 40, (plotW.value || 600) / bins.value.length * 0.84) * 2 / 3))))
+const cardH = computed(() => Math.max(3, Math.min(Math.round(PH.value * .8), Math.floor((BMAX.value - PH.value) / Math.max(1, pileMax.value - 1)))))
 const fits = computed(() => 1 + Math.floor((BMAX.value - PH.value) / cardH.value))
 const KORD = { mature: 0, review: 1, learn: 2 }               // снизу выученные, сверху — что ближе к «пора»
 const pileOf = (b) => [...b.items].sort((a, z) => KORD[a.k] - KORD[z.k]).slice(0, fits.value)
@@ -192,8 +193,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 
     <section class="card ch">
       <div class="top">
-        <div class="ttl"><b>Где слова</b>
-          <span class="cnt"><i class="new" />{{ counts.new }} новых <i class="learn" />{{ counts.learn }} изучаю <i class="review" />{{ counts.review }} повтор. <i class="mature" />{{ counts.mature }} выучено</span></div>
+        <div class="ttl"><span class="cnt">{{ counts.new }} новых · {{ counts.learn }} изучаю · {{ counts.review }} повтор. · {{ counts.mature }} выучено</span></div>
         <div class="seg scl" role="radiogroup" aria-label="Масштаб">
           <button v-for="s in SCALES" :key="s.id" role="radio" :aria-checked="scale === s.id" :class="{ on: scale === s.id }" @click="scale = s.id">{{ s.t }}</button>
         </div>
@@ -219,7 +219,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 
       <!-- Подсказка столбика -->
       <Transition name="tipf">
-        <div v-if="active" class="tip" :class="{ pinned: pinned === active.i }" :style="{ '--x': tipLeft + '%', '--b': tipPos.bottom + 'px', '--mh': tipPos.maxH + 'px' }">
+        <div v-if="active && active.items.length" class="tip" :class="{ pinned: pinned === active.i }" :style="{ '--x': tipLeft + '%', '--b': tipPos.bottom + 'px', '--mh': tipPos.maxH + 'px' }">
           <div class="th"><b>{{ title(active.i) }}</b><span>{{ active.items.length ? `${active.items.length} ${word(active.items.length)}` : 'слов нет' }}</span></div>
           <div v-if="active.items.length" class="tl">
             <template v-for="(r, idx) in tipItems.slice(0, open ? 99 : MAXW)" :key="r.c.id">
@@ -260,8 +260,8 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .dc.docked .plot { height: 150px }
 /* Шапка: заголовок, счётчики, масштаб */
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px }
-.ttl { flex: 1; min-width: 180px; display: grid; gap: 2px } .ttl > b { font-size: 16px }
-.cnt { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; font-size: 11px; font-weight: 700; color: var(--hint) }
+.ttl { flex: 1; min-width: 180px; display: grid; gap: 2px }
+.cnt { font-size: 12px; font-weight: 700; color: var(--hint) }
 .cnt i { width: 8px; height: 8px; border-radius: 2px; margin-left: 6px } .cnt i:first-child { margin-left: 0 }
 .cnt .new { background: var(--blue) } .cnt .learn { background: var(--red) } .cnt .review { background: var(--green) } .cnt .mature { background: var(--green-d) }
 .scl { flex: none; padding: 2px } .scl button { padding: 4px 9px; font-size: 12px }
@@ -274,15 +274,15 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .plot { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; align-items: end; height: 165px; padding-top: 14px }
 .grid { position: absolute; inset: 14px 0 0; display: grid; grid-template-rows: repeat(3, 1fr); pointer-events: none } .grid i { border-top: 1px dashed var(--border) }
 .bc { position: relative; display: grid; justify-items: center; align-content: end; gap: 2px; height: 100%; padding: 0 0 1px; border: 0; border-radius: 8px 8px 0 0; background: none; cursor: pointer; min-width: 0; font: inherit; z-index: 1 }
-.bc:hover, .bc.on { background: var(--blue-l) } .bc.later { border-left: 1px dashed var(--border); border-radius: 0 8px 0 0 }
+.bc.later { border-left: 1px dashed var(--border); border-radius: 0 8px 0 0 }
 .stk { display: flex; flex-direction: column-reverse; gap: 2px; width: 72%; max-width: 26px; border-radius: 5px 5px 2px 2px; overflow: hidden; background: var(--border); transition: height .5s cubic-bezier(.3, 1.4, .5, 1) }
 .stk i { display: block; min-height: 3px } .stk .learn { background: var(--red) } .stk .review { background: var(--green) } .stk .mature { background: var(--green-d) }
-.pile { display: flex; flex-direction: column-reverse; align-items: center; width: 84%; max-width: 40px }
+.pile { display: flex; flex-direction: column-reverse; align-items: center; width: 84%; max-width: 64px }
 .pile.empty { height: 3px; border-radius: 2px; background: var(--border) }
-.pc { position: relative; display: block; flex: none; width: 100%;  overflow: hidden; border-radius: 4px; background: var(--c) center / cover no-repeat; border: 1.5px solid var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, .22), inset 0 -3px 0 var(--c); animation: drop .45s cubic-bezier(.3, 1.5, .5, 1) both }
-.pc.ph { box-shadow: 0 1px 3px rgba(0, 0, 0, .22), inset 0 -3px 0 var(--c) }
+.pc { position: relative; display: block; flex: none; width: 100%;  overflow: hidden; border-radius: 4px; background: var(--c) center / cover no-repeat; border: 1.5px solid var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, .22); animation: drop .45s cubic-bezier(.3, 1.5, .5, 1) both }
+.pc.ph { background-color: var(--surface) }
 .pc small { position: absolute; inset: 0; display: grid; place-items: center; padding: 0 2px; font-size: 8px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden }
-.pc.learn { --c: var(--red) } .pc.review { --c: var(--green) } .pc.mature { --c: var(--green-d) }
+.pc { --c: #e3e7ec } .pc small { color: var(--text) !important }
 .pc.fresh { animation: drop .6s cubic-bezier(.3, 1.6, .5, 1) both, glow 1.2s ease 2 }
 @keyframes drop { from { opacity: 0; translate: 0 -40px } }
 @keyframes glow { 50% { filter: brightness(1.3); box-shadow: 0 0 0 1px var(--card), 0 0 8px var(--orange) } }
@@ -302,12 +302,11 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .tl { display: grid; gap: 1px }
 .tw { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 5px 6px; border: 0; border-radius: 8px; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer }
 .tw:disabled { cursor: default; color: var(--text); opacity: 1 } .tw:not(:disabled):hover, .tw.on { background: var(--surface) }
-.tw .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c) } .tw.learn { --c: var(--red) } .tw.review { --c: var(--green) } .tw.mature { --c: var(--green-d) }
+.tw .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--hint-2) } .tw.learn { --c: var(--red) } .tw.review { --c: var(--green) } .tw.mature { --c: var(--green-d) }
 .tw b { flex: none; max-width: 45%; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tw small { flex: 1; min-width: 0; font-size: 11px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .tw .cd { flex: none; font-size: 12px; font-weight: 800; color: var(--hint); font-variant-numeric: tabular-nums } .tw.learn .cd { color: var(--red-d) }
 .tw.fresh { background: #fff3d6; box-shadow: inset 0 0 0 2px var(--orange) } html[data-theme='dark'] .tw.fresh { background: var(--surface) }
 .more, .hint2 { padding: 0 6px; font-size: 11px; font-weight: 700; color: var(--hint) } .hint2 { color: var(--hint-2) }
-.bc.pin { box-shadow: inset 0 0 0 2px var(--blue) }
 /* Номер в очереди: синий кружок; 1 — карточка на экране (заливка) */
 .qn { flex: none; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue-l); color: var(--blue); font-style: normal; font-size: 11px; font-weight: 900; font-variant-numeric: tabular-nums }
 .qn.first { background: var(--blue); color: #fff } .tw .cd.wait { color: var(--orange-d) }
@@ -334,4 +333,6 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
   .dc.docked .plot { height: 76px; padding-top: 12px } .dc.docked .grid { inset: 12px 0 0 }
   .dc.docked .ri.sure { position: absolute; right: 8px; top: 30px; z-index: 5 }
 }
+/* На компьютере график выше — фото в стопках видно лучше */
+@media (min-width: 720px) { .dc, .dc.docked { --bmax: 210px } .plot, .dc.docked .plot { height: 250px } }
 </style>
