@@ -62,12 +62,16 @@ const bins = computed(() => {
 const maxN = computed(() => Math.max(1, ...bins.value.map(b => b.items.length)))
 // Стопка карточек: каждое слово — маленькая карточка, лежат друг на друге чуть вразнобой (как настоящая стопка).
 // Чем больше слов в самом высоком столбике, тем тоньше карточки — стопка не вылезает за график.
-const BMAX = computed(() => wide.value ? 210 : props.dock ? 110 : 120)
+// Высота самой высокой стопки — та же, что --bmax в стилях (компьютер / обычный / в колоде на телефоне)
+const BMAX = computed(() => wide.value ? 210 : props.dock && narrow.value ? 52 : props.dock ? 110 : 120)
 // «Позже» — копилка, её не учитываем в масштабе (иначе все карточки стали бы тонкими); лишние там просто не рисуем
 const pileMax = computed(() => Math.max(1, ...bins.value.slice(0, -1).map(b => b.items.length)))
 // Карточка — мини-фото слова 3:2 (как на самой карточке). В стопке они наезжают друг на друга: видна полоска каждой
 // и целиком — верхняя. Шаг полоски подбирается так, чтобы самая высокая стопка влезла в график.
-const wide = ref(typeof matchMedia !== 'undefined' && matchMedia('(min-width: 720px)').matches)
+const mq = (q) => typeof matchMedia !== 'undefined' && matchMedia(q).matches
+const wide = ref(mq('(min-width: 720px)')), narrow = ref(mq('(max-width: 520px)'))
+const onSize = () => { wide.value = mq('(min-width: 720px)'); narrow.value = mq('(max-width: 520px)') }
+onMounted(() => addEventListener('resize', onSize)); onUnmounted(() => removeEventListener('resize', onSize))
 const plotW = ref(0); let ro = null
 onMounted(() => { ro = new ResizeObserver(([e]) => { plotW.value = e.contentRect.width }); plotw.value && ro.observe(plotw.value) }); onUnmounted(() => ro?.disconnect())
 const PH = computed(() => Math.max(8, Math.min(wide.value ? 40 : 26, Math.round(Math.min(wide.value ? 60 : 40, (plotW.value || 600) / bins.value.length * 0.84) * 2 / 3))))
