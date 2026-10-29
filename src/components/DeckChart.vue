@@ -170,6 +170,53 @@ watch(lastKey, (v, was) => {
 onUnmounted(() => clearTimeout(jumpTimer))
 const fresh = (r) => jump.value?.id === r.c.id
 
+// ── Физика стопок: провёл курсором (пальцем) по стопке — карточки подпрыгивают. Чем резче движение, тем выше;
+// потом падают обратно под «гравитацией», чуть отскакивают и успокаиваются (как инерция у прокрутки).
+// Двигаем прямо DOM (свойства translate / rotate), без Vue — так плавно даже при 60 кадрах.
+const phys = new Map()                                      // id → { el, y, vy, x, vx, r, vr }
+let last = null, raf = 0, prevT = 0, stirUntil = 0
+// Пока ворошим стопки резкими движениями, подсказка со словами не выскакивает — появится, когда курсор успокоится
+const enter = (i) => { if (performance.now() > stirUntil && hover.value !== i) hover.value = i }
+const calm = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+function stir(e) {
+  const t = performance.now()
+  if (!last || t - last.t > 120) { last = { x: e.clientX, y: e.clientY, t }; return }
+  const dt = Math.max(8, t - last.t), dx = e.clientX - last.x, dy = e.clientY - last.y
+  last = { x: e.clientX, y: e.clientY, t }
+  const speed = Math.min(4, Math.hypot(dx, dy) / dt)         // px/мс: 0.3 — спокойно, 3+ — резко
+  if (speed > .6) { stirUntil = t + 350; hover.value = null }
+  if (calm || speed < 0.15) return
+  for (const el of e.currentTarget.querySelectorAll('.pc')) {
+    const b = el.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2
+    const hx = Math.abs(e.clientX - cx) - b.width / 2, hy = Math.abs(e.clientY - cy)
+    if (hx > 14 || hy > 70) continue
+    const near = 1 - Math.max(0, hx) / 14 * .5 - hy / 70 * .6, k = speed * near * (.7 + Math.random() * .6)
+    let p = phys.get(el.dataset.id); if (!p || p.el !== el) { p = { el, y: 0, vy: 0, x: 0, vx: 0, r: 0, vr: 0 }; phys.set(el.dataset.id, p) }
+    p.vy = Math.min(p.vy, -Math.min(900, 260 * k))             // толчок вверх: не копится, берём самый сильный
+    p.vx = Math.max(-160, Math.min(160, p.vx + Math.sign(dx || 1) * 60 * k))
+    p.vr = Math.max(-300, Math.min(300, p.vr + (Math.random() < .5 ? -1 : 1) * 120 * k))
+  }
+  if (!raf) { prevT = t; raf = requestAnimationFrame(step) }
+}
+function step(t) {
+  const dt = Math.max(0, Math.min(.033, (t - prevT) / 1000)); prevT = t
+  let moving = false
+  for (const [id, p] of phys) {
+    if (!p.el.isConnected) { phys.delete(id); continue }
+    p.vy += 3000 * dt; p.y += p.vy * dt                       // гравитация вниз, пол — своё место в стопке
+    if (p.y > 0) { p.y = 0; p.vy = Math.abs(p.vy) < 90 ? 0 : -p.vy * .35 }
+    p.vx += (-140 * p.x - 9 * p.vx) * dt; p.x += p.vx * dt    // вбок и поворот — пружинка обратно
+    p.vr += (-160 * p.r - 10 * p.vr) * dt; p.r += p.vr * dt
+    const still = !p.y && !p.vy && Math.abs(p.x) < .3 && Math.abs(p.vx) < 3 && Math.abs(p.r) < .2 && Math.abs(p.vr) < 3
+    if (still) { p.el.style.translate = ''; p.el.style.rotate = ''; phys.delete(id); continue }
+    moving = true
+    p.el.style.translate = `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`; p.el.style.rotate = `${p.r.toFixed(1)}deg`
+    p.el.style.zIndex = p.y < -4 ? 2 : ''
+  }
+  raf = moving ? requestAnimationFrame(step) : 0
+}
+onUnmounted(() => cancelAnimationFrame(raf))
+
 // «Сбросить колоду»: два нажатия — второе подтверждает; все слова снова новые (только у этого пользователя)
 const sure = ref(false)
 function reset() {
@@ -206,14 +253,14 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 
       <!-- Столбики; подсказка со словами всплывает поверх — ничего не сдвигается -->
       <div ref="plotw" class="plotw">
-      <div class="plot" :style="{ '--n': bins.length }" @mouseleave="hover = null">
+      <div class="plot" :style="{ '--n': bins.length }" @mouseleave="hover = null" @pointermove="stir">
         <div class="grid"><i /><i /><i /></div>
         <!-- Всплывашка над столбиками: слово только что ушло -->
         <Transition name="jmp"><div v-if="false" class="jump" :class="'jq' + jump.q"><b>{{ jump.word }}</b> · {{ GRADE[jump.q] }} → <b class="to">{{ jump.to }}</b></div></Transition>
         <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, pin: pinned === b.i, later: b.i === sc.n, hot: b.items.some(fresh) }"
-          :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="hover = b.i" @click="pin(b.i)">
+          :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="enter(b.i)" @mousemove="enter(b.i)" @click="pin(b.i)">
           <span v-if="b.items.length" class="bn">{{ b.items.length }}</span>
-          <span class="pile" :class="{ empty: !b.items.length }"><i v-for="(r, i) in pileOf(b)" :key="r.c.id" class="pc" :class="[r.k, { fresh: fresh(r), ph: r.c.image }]" :style="cardStyle(r, i)"><small v-if="!r.c.image">{{ r.c.front }}</small></i></span>        </button>
+          <span class="pile" :class="{ empty: !b.items.length }"><i v-for="(r, i) in pileOf(b)" :key="r.c.id" class="pc" :data-id="r.c.id" :class="[r.k, { fresh: fresh(r), ph: r.c.image }]" :style="cardStyle(r, i)"><small v-if="!r.c.image">{{ r.c.front }}</small></i></span>        </button>
       </div>
       <div class="ax" :style="{ '--n': bins.length }"><span v-for="b in bins" :key="b.i" :class="{ now: b.i === 0 }">{{ axis(b.i) }}</span></div>
 
@@ -279,11 +326,11 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .stk i { display: block; min-height: 3px } .stk .learn { background: var(--red) } .stk .review { background: var(--green) } .stk .mature { background: var(--green-d) }
 .pile { display: flex; flex-direction: column-reverse; align-items: center; width: 84%; max-width: 64px }
 .pile.empty { height: 3px; border-radius: 2px; background: var(--border) }
-.pc { position: relative; display: block; flex: none; width: 100%;  overflow: hidden; border-radius: 4px; background: var(--c) center / cover no-repeat; border: 1.5px solid var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, .22); animation: drop .45s cubic-bezier(.3, 1.5, .5, 1) both }
+.pc { position: relative; display: block; flex: none; width: 100%;  overflow: hidden; border-radius: 4px; background: var(--c) center / cover no-repeat; border: 1.5px solid var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, .22); animation: drop .45s cubic-bezier(.3, 1.5, .5, 1) backwards }
 .pc.ph { background-color: var(--surface) }
 .pc small { position: absolute; inset: 0; display: grid; place-items: center; padding: 0 2px; font-size: 8px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden }
 .pc { --c: #e3e7ec } .pc small { color: var(--text) !important }
-.pc.fresh { animation: drop .6s cubic-bezier(.3, 1.6, .5, 1) both, glow 1.2s ease 2 }
+.pc.fresh { animation: drop .6s cubic-bezier(.3, 1.6, .5, 1) backwards, glow 1.2s ease 2 }
 @keyframes drop { from { opacity: 0; translate: 0 -40px } }
 @keyframes glow { 50% { filter: brightness(1.3); box-shadow: 0 0 0 1px var(--card), 0 0 8px var(--orange) } }
 .bc.hot .stk { animation: hot 1s ease 3; transform-origin: bottom } @keyframes hot { 50% { transform: scaleY(1.1); filter: brightness(1.15) } }
