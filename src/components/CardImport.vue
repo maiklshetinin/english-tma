@@ -126,7 +126,11 @@ const pick = ref(0)
 const previewCard = computed(() => { const c = parsed.value.cards[Math.min(pick.value, parsed.value.cards.length - 1)]; return c && { id: 'preview-' + c.row, ...c } })
 const previewDeck = computed(() => previewCard.value && { id: 'import-preview', title: props.deck.title, cards: [previewCard.value], newPerDay: 99 })
 const pickRow = (rowIndex) => { const n = rowIndex + from.value; const j = parsed.value.cards.findIndex(c => c.row === n); if (j >= 0) pick.value = j }
-const shown = computed(() => dataRows.value.slice(Math.max(0, from.value - 1), Math.max(0, from.value - 1) + 8))
+// Все выбранные строки прокручиваются в одном списке; рисуем порциями по 200 (5000 строк сразу — тормозит), подгружаем при прокрутке
+const count = ref(200)
+const shown = computed(() => dataRows.value.slice(Math.max(0, from.value - 1), Math.min(last.value, Math.max(0, from.value - 1) + count.value)))
+const more = (e) => { const el = e.target; if (el.scrollTop + el.clientHeight > el.scrollHeight - 400) count.value += 200 }
+watch([sheetI, from, to], () => { count.value = 200 })
 const firstRow = computed(() => (head.value ? sheet.value?.rows[0] : null))
 const thumb = (v) => { const m = v.match(IMG); const u = m ? m[1] : v; return isImgUrl(v) ? imageSrc(u) : '' }
 
@@ -173,7 +177,7 @@ function apply() {
             <span class="rng">Строки с <input v-model.number="from" type="number" min="1" :max="total" /> по <input v-model.number="to" type="number" min="0" :max="total" :placeholder="String(total)" /> из {{ total }}</span>
           </div>
           <p class="hint tip">Над каждым столбцом выберите, что в нём. Ненужные — «не брать». Нажмите на строку — справа её карточка.</p>
-          <div class="grid">
+          <div class="grid" @scroll.passive="more">
             <table>
               <thead>
                 <tr><th v-for="i in width" :key="i" :style="map[i - 1] ? { '--c': FT[map[i - 1]].c } : null" :class="{ off: !map[i - 1] }">
@@ -185,7 +189,7 @@ function apply() {
               </thead>
               <tbody>
                 <tr v-for="(r, n) in shown" :key="n" :class="{ sel: previewCard && previewCard.row === n + from }" @click="pickRow(n)">
-                  <td v-for="i in width" :key="i" :class="{ off: !map[i - 1] }"><img v-if="map[i - 1] === 'image' && thumb(r[i - 1] || '')" :src="thumb(r[i - 1])" alt="" @error="$event.target.style.visibility = 'hidden'" /><span v-else>{{ r[i - 1] }}</span></td>
+                  <td v-for="i in width" :key="i" :class="{ off: !map[i - 1] }"><img v-if="map[i - 1] === 'image' && thumb(r[i - 1] || '')" :src="thumb(r[i - 1])" alt="" loading="lazy" @error="$event.target.style.visibility = 'hidden'" /><span v-else>{{ r[i - 1] }}</span></td>
                 </tr>
               </tbody>
             </table>
@@ -220,13 +224,13 @@ function apply() {
 </template>
 
 <style scoped>
-.bg { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
-.dlg { width: min(1240px, 100%); height: min(860px, 100%); display: grid; grid-template-rows: auto 1fr auto; border-radius: 20px; background: var(--card); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); overflow: hidden }
+.bg { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 12px; background: rgba(0, 0, 0, .45) }
+.dlg { width: 100%; height: 100%; display: grid; grid-template-rows: auto 1fr auto; border-radius: 20px; background: var(--card); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); overflow: hidden }
 .hd { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); color: var(--green-d) } .hd b { color: var(--text); font-size: 17px } .sp { flex: 1 }
 .x { border: 0; background: none; font-size: 16px; color: var(--hint); cursor: pointer }
 .err { margin: 24px; color: var(--red-d); font-weight: 700 } .load { margin: 24px }
-.body { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0 }
-.left { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; min-height: 0; overflow: auto }
+.body { display: grid; grid-template-columns: minmax(0, 1fr) 420px; min-height: 0 }
+.left { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; min-height: 0; overflow: hidden }
 .right { display: flex; flex-direction: column; gap: 12px; padding: 14px 18px; border-left: 1px solid var(--border); background: #fafafa; overflow: auto }
 .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px } .lb { font-size: 13px; font-weight: 800; color: var(--hint) }
 .tabs button { border: 0; border-radius: 9px; padding: 6px 10px; background: var(--surface); font: inherit; font-size: 13px; font-weight: 800; color: var(--hint); cursor: pointer } .tabs button.on { background: var(--blue-l); color: var(--blue) }
@@ -235,7 +239,7 @@ function apply() {
 .ck { display: flex; align-items: center; gap: 6px; cursor: pointer } .ck input { margin: 0; width: 16px; height: 16px }
 .rng input { width: 74px; margin: 0 4px; padding: 5px 8px; font-size: 13px; border-width: 1px; border-radius: 8px; display: inline-block }
 .tip { margin: 0; font-size: 13px }
-.grid { overflow: auto; border-radius: 12px; box-shadow: 0 0 0 1px var(--border); max-height: 360px; flex: none }
+.grid { flex: 1; min-height: 160px; overflow: auto; border-radius: 12px; box-shadow: 0 0 0 1px var(--border) }
 table { border-collapse: separate; border-spacing: 0; font-size: 13px; min-width: 100% }
 th { position: sticky; top: 0; z-index: 1; padding: 8px 6px; background: var(--card); border-bottom: 3px solid var(--c, var(--border)); text-align: left; vertical-align: top; min-width: 110px }
 th select { width: 100%; margin: 0; padding: 6px 8px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--c, #999) 16%, white); color: var(--c, var(--hint)); font: inherit; font-size: 13px; font-weight: 900; cursor: pointer }
