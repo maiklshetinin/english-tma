@@ -162,12 +162,14 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (min-width: 720px) {
   .wk.ls-tail .chip.up { background: transparent; box-shadow: none }
   .wk.ls-tail .chip.up::before { content: ''; position: absolute; z-index: -1; left: 20px; right: 0; top: 0; bottom: 0; border-radius: 0 10px 10px 0; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
-  .wk.ls-sticker .chip.up { padding-left: 0; border-radius: 999px 8px 8px 999px; background: #fff6c7; box-shadow: 0 2px 5px rgba(0, 0, 0, .13) }
-  .wk.ls-sticker .chip.up::after { content: ''; position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; border-radius: 0 0 8px 0; background: linear-gradient(135deg, transparent 50%, #e9dca0 50%); box-shadow: -1px -1px 2px rgba(0, 0, 0, .08) }
+  /* Стикер-закладка: левый край приклеен, правый чуть приподнят — светлее и отбрасывает мягкую тень вниз-вправо */
+  .wk.ls-sticker .chip.up { padding-left: 0; border-radius: 999px 3px 3px 999px; background: transparent; box-shadow: none }
+  .wk.ls-sticker .chip.up::before { content: ''; position: absolute; z-index: -1; inset: 0; border-radius: inherit; background: linear-gradient(90deg, #ffef9e 0%, #fff4b8 60%, #fffbe2 100%); box-shadow: 0 1px 1px rgba(0, 0, 0, .07) }
+  .wk.ls-sticker .chip.up::after { content: ''; position: absolute; z-index: -2; right: 4px; bottom: 2px; width: 50%; height: 50%; border-radius: 50%; background: rgba(0, 0, 0, .3); filter: blur(4px); transform: translate(3px, 4px) rotate(4deg) }
   .wk.ls-blue .chip.up { padding-left: 0; border-radius: 999px; background: var(--blue-l); box-shadow: 0 2px 5px rgba(28, 120, 200, .18) }
   .wk.ls-blue .chip.up .nm { color: #1a5b8a }
 }
-.wk.ls-sticker .chip.up { background: #fff6c7 } .wk.ls-blue .chip.up { background: var(--blue-l) }
+.wk.ls-sticker .chip.up { background: #fff4b8 } .wk.ls-blue .chip.up { background: var(--blue-l) }
 /* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
 /* «Клетки» — простая таблица: прямые ячейки без промежутков, тонкие линии 1px; скруглены только внешние углы таблицы */
 .wk.gs-cells { gap: 0 } .wk.gs-cells .g { gap: 0 } .wk.gs-cells .g.head { margin-bottom: 0 } .wk.gs-cells .dh { margin: 0 2px }
