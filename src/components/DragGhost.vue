@@ -5,6 +5,7 @@
 //  • Урок из таблицы: копия карточки того же размера поверх оригинала, едет за курсором.
 // Над призраком — подсказка, что будет, если отпустить сейчас (те же правила, что у броска в TeacherHome):
 // зелёная — назначить / перенести, оранжевая — поменять местами, красная — нельзя и почему (или «снять урок» над панелью).
+import { lessonStyle } from '../utils/gridStyle'
 import { computed, ref, watch, nextTick } from 'vue'
 import { dnd } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
@@ -77,7 +78,7 @@ const hintPos = computed(() => {
 </script>
 <template>
   <div v-if="dnd.active && people.length" class="gw" :style="{ transform: `translate(${dnd.x}px, ${dnd.y}px)` }">
-    <div class="ghost" :class="{ lesson, small: small || lesson, one }" :style="box">
+    <div class="ghost" :class="[{ lesson, small: small || lesson, one }, lesson ? `ls-${lessonStyle}` : '']" :style="box">
       <template v-if="lesson">
         <AvatarStack v-if="!one" :students="people" :size="47" :max="3" ring="var(--surface)" />
         <template v-else><Avatar :s="people[0]" :size="47" /><span class="nm">{{ people[0].name }}</span></template>
@@ -108,8 +109,18 @@ const hintPos = computed(() => {
 .ghost.lesson { gap: 5px; justify-content: center; padding: 0; border: 0; border-radius: 10px; background: var(--surface); color: var(--text); opacity: .97; transition: none; box-shadow: 0 8px 20px rgba(0, 0, 0, .2); overflow: visible }
 .ghost.lesson :deep(.av) { width: 31px !important; height: 31px !important; font-size: 13px !important }
 .ghost.lesson .nm { display: none; margin: 0; font-size: 13px; font-weight: 700; opacity: .85 }
-@media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px } .ghost.lesson :deep(.av) { width: 47px !important; height: 47px !important; font-size: 17px !important } }
+@media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px } .ghost.lesson :deep(.av) { width: 39px !important; height: 39px !important; font-size: 17px !important } }
 @media (max-width: 420px) { .ghost.lesson :deep(.av) { width: 29px !important; height: 29px !important } }
+/* Урок в руке выглядит так же, как в таблице (настройка «Урок»: плашка / хвостик / стикер / голубой) */
+.ghost.lesson { isolation: isolate }
+.ghost.lesson.ls-plain { box-shadow: inset 0 0 0 1px #d0d7de, 0 8px 20px rgba(0, 0, 0, .2) }
+@media (min-width: 720px) {
+  .ghost.lesson.ls-tail { background: transparent; box-shadow: none; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .2)) }
+  .ghost.lesson.ls-tail::before { content: ''; position: absolute; z-index: -1; left: 20px; right: 0; top: 0; bottom: 0; border-radius: 0 10px 10px 0; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
+  .ghost.lesson.ls-sticker { padding-left: 0; border-radius: 999px 3px 3px 999px }
+  .ghost.lesson.ls-blue { padding-left: 0; border-radius: 999px } .ghost.lesson.ls-blue .nm { color: #1a5b8a }
+}
+.ghost.lesson.ls-sticker { background: #fff4b8 } .ghost.lesson.ls-blue { background: var(--blue-l) }
 .dhint { position: absolute; transform: translate(-50%, -100%); width: max-content; max-width: 260px; padding: 5px 10px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 800; line-height: 1.3; text-align: center;
   white-space: normal; box-shadow: 0 6px 16px rgba(0, 0, 0, .18); background: var(--green-d) }
 .dhint.swap { background: var(--orange-d) } .dhint.bad { background: var(--red) }
