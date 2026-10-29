@@ -4,7 +4,8 @@ import { computed, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { useTelegram } from '../composables/useTelegram'
 import { fmtMoney } from '../utils/price'
-import { monthTitle, lineDate, receiptTotal, receiptCount, receiptText, receiptPng, receiptPdf, receiptFile } from '../utils/receipt'
+import { monthTitle, lineDate, receiptTotal, receiptCount, receiptText, receiptPng, receiptPdf, receiptFile, calCells } from '../utils/receipt'
+const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const props = defineProps({ receipt: { type: Object, required: true } })
 const emit = defineEmits(['close'])
 const { shareText, saveFile, haptic, notify } = useTelegram()
@@ -28,6 +29,11 @@ const send = () => { haptic('light'); shareText(receiptText(r.value)) }
         <button class="x" aria-label="Закрыть" @click="emit('close')"><AppIcon name="x" :size="18" /></button>
       </div>
       <div class="paper">
+        <!-- Календарь месяца — как в карточке ученика -->
+        <div v-if="r.days" class="cal">
+          <span v-for="d in WD" :key="d" class="wd">{{ d }}</span>
+          <span v-for="(d, i) in calCells(r.month)" :key="i" class="cd" :class="d && r.days[d]">{{ d ? +d.slice(8) : '' }}</span>
+        </div>
         <div v-for="(l, i) in r.lines" :key="i" class="ln"><span>{{ lineDate(l) }}</span><i /><b>{{ fmtMoney(l.price) }}</b></div>
         <div class="tot"><span>К оплате</span><b>{{ fmtMoney(receiptTotal(r)) }}</b></div>
       </div>
@@ -45,7 +51,7 @@ const send = () => { haptic('light'); shareText(receiptText(r.value)) }
 <style scoped>
 .sheet-box.rs { max-width: 400px; padding: 0; gap: 0; display: block }
 .hd { display: flex; align-items: center; gap: 12px; padding: 14px 10px 12px 16px; border-bottom: 1px solid var(--border) }
-.ri { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--green); color: #fff }
+.ri { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--surface); color: var(--hint) }
 .tt { flex: 1; display: grid; min-width: 0 } .tt b { font-size: 17px } .tt small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .x { flex: none; align-self: flex-start; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--hint); cursor: pointer } .x:hover { background: var(--surface) }
 /* Счёт «на бумаге»: строки с точками до цены, итог крупно */
@@ -53,7 +59,13 @@ const send = () => { haptic('light'); shareText(receiptText(r.value)) }
 .ln { display: flex; align-items: baseline; gap: 6px; padding: 4px 0; font-size: 14px; font-weight: 700 }
 .ln span { flex: none; color: var(--text) } .ln i { flex: 1; min-width: 8px; border-bottom: 2px dotted var(--border) } .ln b { flex: none; font-weight: 800 }
 .tot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--hint-2); font-size: 16px; font-weight: 900 }
-.tot b { font-size: 22px; color: var(--green-d) }
+.tot b { font-size: 22px; color: var(--text) }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px dashed var(--hint-2); text-align: center }
+.wd { font-size: 11px; font-weight: 800; color: var(--hint-2) }
+.cd { position: relative; display: grid; place-items: center; height: 28px; border-radius: 7px; font-size: 13px; font-weight: 800; color: var(--hint-2) }
+.cd.done, .cd.plan { color: var(--text) } .cd.plan { background: var(--card); box-shadow: inset 0 0 0 1px #d0d7de } .cd.off { text-decoration: line-through }
+.cd.done::after, .cd.off::after { content: ''; position: absolute; top: -2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: #1f883d center / 9px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
+.cd.off::after { background-color: #cf222e; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") }
 .ft { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 14px calc(14px + var(--safe-b, 0px)) }
 .act { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border: 0; border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
 .act:hover { filter: brightness(.97) } .act:disabled { opacity: .5; cursor: default }

@@ -85,6 +85,7 @@ const receipt = computed(() => ({
   month: month.value, student: studentStore.findAny(props.studentId)?.name ?? '', teacher: auth.user?.first_name || '',      // имя преподавателя — из его Telegram
   lines: all.value.filter(l => l.date.startsWith(month.value) && statusOf(l) === 'done').sort((a, b) => (a.date + hh(a.hour, a.minute)).localeCompare(b.date + hh(b.hour, b.minute)))
     .map(l => ({ date: l.date, hour: l.hour, minute: l.minute ?? 0, price: priceOf(l) })),
+  days: Object.fromEntries(Object.keys(byDate.value).filter(d => d.startsWith(month.value)).map(d => [d, dayStatus(d)])),      // календарь месяца в счёте
 }))
 const STATUS = computed(() => ({ done: 'Проведён', plan: 'Запланирован', off: props.teacher ? 'Отменил ученик' : 'Отменён вами' }))
 // Преподаватель: «Проведён» / «Отменить» прямо в календаре (отменённый учеником урок не отмечаем)
@@ -171,23 +172,26 @@ function toggle(l) {
 .nav { width: 40px; height: 40px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; font-size: 22px; font-weight: 900; line-height: 1; cursor: pointer }
 .nav:disabled { opacity: .35; cursor: default }
 .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px }
-.wd span { text-align: center; font-size: 12px; font-weight: 800; color: var(--hint-2) } .wd .we { color: var(--purple-d) }
-.day { position: relative; aspect-ratio: 1 / 1; max-height: 56px; display: grid; place-content: center; justify-items: center; gap: 3px; border: 2px solid transparent; border-radius: 12px; background: var(--surface);
+.wd span { text-align: center; font-size: 12px; font-weight: 800; color: var(--hint-2) }
+.day { position: relative; aspect-ratio: 1 / 1; max-height: 56px; display: grid; place-content: center; justify-items: center; gap: 3px; border: 0; border-radius: 10px; background: none;
   font: inherit; color: var(--text); cursor: pointer; padding: 0 }
 .day.empty { background: none; cursor: default }
 .day .n { font-size: 14px; font-weight: 800; line-height: 1 } .day.past:not(.has) .n { color: var(--hint-2) }
 /* Сегодня — синим (красный — это «отменён»): синее число и черта под ним; у дня с уроком цвет числа — как у урока, черта остаётся */
-.day.today .n::after { content: ''; display: block; width: 14px; height: 3px; margin: 3px auto 0; border-radius: 2px; background: currentColor }
-.day.today:not(.has) .n { color: var(--blue) } .day.today.plan .n { color: var(--blue) }
-/* День с уроками: проведён — зелёный, запланирован — серый, отменён — красный (как кнопки Duolingo, с нижней гранью) */
-.day.done { background: var(--green)} .day.done .n { color: #fff }
-.day.plan { background: var(--border)} .day.plan .n { color: var(--text) }
-.day.off { background: var(--red-l)} .day.off .n { color: var(--red-d); text-decoration: line-through }
-.day.picked { border-color: var(--blue); outline: 3px solid var(--blue); outline-offset: 1px }
-.day.picked:not(.has) { background: var(--blue-l) }
+/* Сегодня — серой подложкой, как в расписании */
+.day.today { background: var(--group) } .day.today .n { font-weight: 900 }
+
+/* Статусы как в расписании (сборки в GitHub): кружок в углу дня. Проведён — зелёная галочка, отменён — красный крестик, впереди — серая плашка с рамкой */
+.day.done::after, .day.off::after { content: ''; position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--c) center / 10px no-repeat }
+.day.done::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
+.day.off::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") }
+.day.plan { background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de } .day.plan .n { color: var(--text) }
+.day.off .n { color: var(--hint-2); text-decoration: line-through }
+.day.picked { outline: 2px solid var(--text); outline-offset: 1px }
+.day.picked:not(.has) { background: var(--surface) }
 .dots { display: flex; gap: 3px; height: 6px } .dots i, .legend i { width: 6px; height: 6px; border-radius: 50% }
-.day.done .dots i { box-shadow: 0 0 0 1.5px #fff } .legend i { width: 12px; height: 12px; border-radius: 4px }
-.done { --c: var(--green) } .plan { --c: var(--hint-2) } .off { --c: var(--red) }
+ .legend i { width: 10px; height: 10px; border-radius: 50% }
+.done { --c: #1f883d } .plan { --c: #afb8c1 } .off { --c: #cf222e }
 .dots i, .legend i { background: var(--c) }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--hint) }
 .legend span { display: inline-flex; align-items: center; gap: 5px } .legend i { display: inline-block }
@@ -198,17 +202,17 @@ function toggle(l) {
 .ls .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--c) }
 .ls .info { flex: 1; min-width: 0 } .ls .tm { font-size: 17px }
 .ls.off .tm { text-decoration: line-through; color: var(--hint) }
-.ls.done { background: var(--green-l); border-color: var(--green) }
+
 
 .money { display: grid; gap: 8px; padding: 14px 16px }
 .mrow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 800; color: var(--hint) }
-.mrow b { font-size: 20px; font-weight: 900; color: var(--text) } .mrow.real b { color: var(--green-d) } .mrow.lost b { font-size: 16px; color: var(--red-d) }
-html[data-theme='dark'] .mrow.real b { color: var(--green) } html[data-theme='dark'] .mrow.lost b { color: var(--red) }
-.mbar { height: 12px; border-radius: 99px; background: var(--border); overflow: hidden } .mbar i { display: block; height: 100%; border-radius: 99px; background: var(--green); transition: width .25s }
+.mrow b { font-size: 20px; font-weight: 900; color: var(--text) } .mrow.real b { color: var(--text) } .mrow.lost b { font-size: 16px; color: var(--red-d) }
+html[data-theme='dark'] .mrow.lost b { color: var(--red) }
+.mbar { height: 12px; border-radius: 99px; background: var(--border); overflow: hidden } .mbar i { display: block; height: 100%; border-radius: 99px; background: #1f883d; transition: width .25s }
 .ls .btn { flex: none } .ls { flex-wrap: wrap; row-gap: 8px } .ls .info { flex: 1 1 150px }
 .sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px; text-align: center }
 .sum div { display: grid; gap: 2px } .sum b { font-size: 20px; font-weight: 900 } .sum small { font-size: 12px; font-weight: 800; color: var(--hint); line-height: 1.15 }
-.sum .g { color: var(--green-d) } .sum .r { color: var(--red-d) }
+.sum .g { color: #1f883d } .sum .r { color: var(--red-d) }
 @media (max-width: 480px) { .sum { grid-template-columns: repeat(2, 1fr); row-gap: 12px } }
 .sum.t { grid-template-columns: repeat(3, 1fr) }
 html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] .sum .r { color: var(--red) }
@@ -217,10 +221,10 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .cl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; padding: 8px 10px; border-radius: 12px; background: var(--surface); font-size: 14px }
 .cl .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c) } .cl .cs { flex: 1; color: var(--hint); font-weight: 600 } .cl.off b { text-decoration: line-through; color: var(--hint) }
 .cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
-.cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { width: 10px; height: 10px; border-radius: 3px; background: var(--c) } .cnt b { color: var(--text); font-weight: 900 }
+.cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { width: 10px; height: 10px; border-radius: 50%; background: var(--c) } .cnt b { color: var(--text); font-weight: 900 }
 .cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
 .cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
 .cmr { gap: 10px } .cmr > span { flex: 1 }
 .rcp { flex: none; align-self: center; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 0; border-radius: 99px; background: var(--surface); color: var(--blue); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .rcp:hover { background: var(--blue-l) }
-.cmr .g { color: var(--green-d) } .cmr .r { color: var(--red-d); font-size: 15px } .cm .mbar { height: 8px }
+.cmr .g { color: var(--text) } .cmr .r { color: var(--red-d); font-size: 15px } .cm .mbar { height: 6px }
 </style>

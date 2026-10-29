@@ -4,7 +4,9 @@
 import { fmtMoney } from './price'
 
 export interface ReceiptLine { date: string; hour: number; minute?: number; price: number }
-export interface Receipt { month: string; student: string; teacher?: string; lines: ReceiptLine[] }
+export type DayStatus = 'done' | 'off' | 'plan'
+/** days — календарь месяца в счёте: дата → статус дня (как в карточке ученика). */
+export interface Receipt { month: string; student: string; teacher?: string; lines: ReceiptLine[]; days?: Record<string, DayStatus> }
 
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
 const MON = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
@@ -39,10 +41,20 @@ export function receiptText(r: Receipt): string {
   ].join('\n')
 }
 
+const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+/** Клетки календаря месяца с понедельника: дата или null (пусто до 1-го и после последнего). */
+export function calCells(month: string): (string | null)[] {
+  const [y, m] = month.split('-').map(Number), lead = (new Date(y, m - 1, 1).getDay() + 6) % 7, n = new Date(y, m, 0).getDate()
+  const out: (string | null)[] = Array.from({ length: lead }, () => null)
+  for (let d = 1; d <= n; d++) out.push(`${month}-${String(d).padStart(2, '0')}`)
+  while (out.length % 7) out.push(null)
+  return out
+}
 /** Счёт на холсте, как бумажный: заголовок, строки с точками до цены, сумма к оплате. */
 function draw(r: Receipt, font: string): HTMLCanvasElement {
   const W = 360, S = 3, PAD = 24, ROW = 26
-  const H = PAD + 30 + 20 + (r.teacher ? 20 : 0) + 22 + r.lines.length * ROW + 22 + 26 + 34 + PAD
+  const cal = r.days ? calCells(r.month) : null, CR = 34
+  const H = PAD + 30 + 20 + (r.teacher ? 20 : 0) + 22 + (cal ? 22 + (cal.length / 7) * CR + 12 : 0) + r.lines.length * ROW + 22 + 26 + 34 + PAD
   const c = document.createElement('canvas'); c.width = W * S; c.height = H * S
   const g = c.getContext('2d'); if (!g) throw new Error('canvas')
   g.scale(S, S)
@@ -56,6 +68,25 @@ function draw(r: Receipt, font: string): HTMLCanvasElement {
   y += 22; text(`Ученик: ${r.student}`, PAD, y, 13, 700, '#777777')
   if (r.teacher) { y += 20; text(`Преподаватель: ${r.teacher}`, PAD, y, 13, 700, '#777777') }
   y += 14; dash(y); y += 8
+  if (cal && r.days) {        // календарь месяца — как в карточке ученика: проведён — зелёный кружок с галочкой, отменён — красный с крестиком, впереди — серая плашка
+    const cw = (W - 2 * PAD) / 7
+    y += 16; WD.forEach((d, i) => text(d, PAD + cw * i + cw / 2, y, 11, 800, '#9aa0a6', 'center')); y += 6
+    cal.forEach((d, i) => {
+      if (!d) return
+      const cx = PAD + cw * (i % 7) + cw / 2, cy = y + Math.floor(i / 7) * CR + CR / 2, st = r.days![d], n = String(+d.slice(8))
+      if (st === 'plan') { g.fillStyle = '#f7f7f7'; g.strokeStyle = '#d0d7de'; g.lineWidth = 1; g.beginPath(); g.roundRect(cx - 14, cy - 13, 28, 26, 7); g.fill(); g.stroke() }
+      text(n, cx, cy + 5, 13, 800, st === 'off' ? '#b0b0b0' : st ? '#3c3c3c' : '#b8b8b8', 'center')
+      if (st === 'off') { g.fillStyle = '#b0b0b0'; const w = g.measureText(n).width; g.fillRect(cx - w / 2 - 1, cy, w + 2, 1.5) }
+      if (st === 'done' || st === 'off') {
+        const bx = cx + 11, by = cy - 10
+        g.fillStyle = st === 'done' ? '#1f883d' : '#cf222e'; g.beginPath(); g.arc(bx, by, 6, 0, Math.PI * 2); g.fill()
+        g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.lineCap = 'round'; g.beginPath()
+        if (st === 'done') { g.moveTo(bx - 2.8, by + 0.1); g.lineTo(bx - 0.8, by + 2); g.lineTo(bx + 2.9, by - 1.9) } else { g.moveTo(bx - 2.2, by - 2.2); g.lineTo(bx + 2.2, by + 2.2); g.moveTo(bx + 2.2, by - 2.2); g.lineTo(bx - 2.2, by + 2.2) }
+        g.stroke(); g.lineCap = 'butt'
+      }
+    })
+    y += (cal.length / 7) * CR + 4; dash(y); y += 8
+  }
   for (const l of r.lines) {
     y += ROW
     const left = lineDate(l), price = fmtMoney(l.price)
@@ -65,7 +96,7 @@ function draw(r: Receipt, font: string): HTMLCanvasElement {
   }
   y += 8; dash(y)
   y += 22; text('Проведено', PAD, y, 13, 700, '#777777'); text(receiptCount(r), W - PAD, y, 13, 800, '#777777', 'right')
-  y += 30; text('К оплате', PAD, y, 18, 900, '#3c3c3c'); text(fmtMoney(receiptTotal(r)), W - PAD, y, 22, 900, '#58a700', 'right')
+  y += 30; text('К оплате', PAD, y, 18, 900, '#3c3c3c'); text(fmtMoney(receiptTotal(r)), W - PAD, y, 22, 900, '#3c3c3c', 'right')
   return c
 }
 const blobOf = (c: HTMLCanvasElement, type: string, q?: number) => new Promise<Blob>((ok, bad) => c.toBlob((b) => (b ? ok(b) : bad(new Error(type))), type, q))
