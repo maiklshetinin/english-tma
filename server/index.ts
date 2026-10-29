@@ -45,6 +45,7 @@ const LIVE_SKIP = new Set(['courses', 'media', 'me', 'ping', 'auth'])        // 
 app.use((req, res, next) => {
   res.on('finish', () => {
     const what = req.path.split('/')[1] || ''
+    if (req.method !== 'GET' && res.statusCode < 400 && (what === 'lessons' || what === 'schedule' || what === 'students')) schedule.dropEarnings()      // уроки или цены поменялись — доход пересчитать
     if (req.method !== 'GET' && res.statusCode < 400 && req.user?.role === 'teacher' && !LIVE_SKIP.has(what)) live.changed(what, String(req.headers['x-live-cid'] || ''))
   })
   next()
@@ -134,6 +135,7 @@ app.post('/students/:id/archive', requireUser, requireTeacher, wrap(async (req, 
 app.get('/schedule', requireUser, wrap(async (req, res) => res.json(await schedule.list(req.user))))      // преподаватель — всё, ученик — только свои уроки
 app.get('/schedule/weeks', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await schedule.weeksList())))   // недели, которые есть в базе (с уроками)
 app.get('/schedule/week', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.week(req.query.start))))   // ?start=понедельник → { weekStart, lessons }
+app.get('/lessons/earnings', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await schedule.earnings())))   // доход по ученикам по месяцам
 app.get('/lessons/range', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.range(req.query.from, req.query.to))))   // ?from&to — все уроки за период («Информация»)
 app.get('/lessons/history', requireUser, wrap(async (req, res) => res.json(await schedule.history(req.user, req.query.studentId))))   // все уроки ученика (календарь): ученик — свои, преподаватель — ?studentId
 app.post('/lessons', requireUser, requireTeacher, wrap(async (req, res) => res.json(await schedule.create(req.body, req.user.uid))))   // { studentId | studentIds, date, hour }

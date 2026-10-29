@@ -46,7 +46,7 @@ html.dragging, html.dragging * { user-select: none !important; -webkit-user-sele
 
 /* Кнопки — как в Telegram: спокойная серая по умолчанию. Выделить главное действие — .primary (синяя заливка);
    удаление — .danger; рамка без заливки — .ghost. Цвета всех кнопок меняются здесь. */
-.btn { border: 0; border-radius: 12px; padding: 12px 20px; font: inherit; font-size: 15px; font-weight: 700;
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 12px; padding: 12px 20px; font: inherit; font-size: 15px; font-weight: 700;
   background: var(--group); color: var(--text); cursor: pointer; transition: filter .12s, background .12s; }
 .btn:hover:not(:disabled) { filter: brightness(.96) }
 .btn:active:not(:disabled) { filter: brightness(.92) }

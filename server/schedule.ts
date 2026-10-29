@@ -51,6 +51,8 @@ export interface ScheduleDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serv
 
 export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () => new Date() }: ScheduleDeps) {
   const lessons = () => db.collection('lessons'), weeks = () => db.collection('schedule'), students = () => db.collection('students')
+  let earn: { at: number; by: Record<string, Record<string, number>> } | null = null      // запас для earnings()
+  const EARN_MS = 30 * 60_000
   const liveWeeks = () => { const w = weekStartOf(todayIn(tz, now())); return [w, addDays(w, 7)] }   // [текущая, следующая]
 
   // Недели читаем и пишем целиком внутри транзакции: сначала все чтения, потом save() — одним махом
@@ -164,6 +166,24 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
       const all = (await lessons().where('studentIds', 'array-contains', sid).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc)).sort(byTime).slice(-HISTORY_MAX)
       return asStudent ? all.map((l) => forStudent(l, sid!)) : all
     },
+
+    // Доход по ученикам (раздел «Ученики»: «за месяц» и «за всё время») — только проведённые уроки, по цене, зафиксированной при отметке;
+    // кто отменил — не считаем. Ответ: { id ученика: { 'YYYY-MM': сумма } }. Все проведённые уроки читаем один раз и держим в памяти
+    // (EARN_MS), любая правка уроков сбрасывает запас (dropEarnings) — так раздел «Ученики» не тратит лимит чтений базы.
+    async earnings(): Promise<Record<string, Record<string, number>>> {
+      if (earn && Date.now() - earn.at < EARN_MS) return earn.by
+      const by: Record<string, Record<string, number>> = {}
+      for (const d of (await lessons().where('done', '==', true).get()).docs) {
+        const x = d.data() as LessonDoc, m = x.date.slice(0, 7)
+        for (const [sid, p] of Object.entries(x.prices ?? {})) {
+          if (x.canceled?.[sid] || !(p > 0)) continue
+          const s = (by[sid] ??= {}); s[m] = (s[m] ?? 0) + p
+        }
+      }
+      earn = { at: Date.now(), by }
+      return by
+    },
+    dropEarnings() { earn = null },
 
     // Все уроки за период (раздел «Информация»: доходы по месяцам и неделям) — только преподавателю.
     // Даты включительно, период — не больше 400 дней. Индекс не нужен: диапазон по одному полю date.

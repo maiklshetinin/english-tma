@@ -13,12 +13,37 @@ import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
 import { usePathStore } from '../../stores/path'
 import { useContentStore } from '../../stores/content'
+import { useScheduleStore } from '../../stores/schedule'
+import { apiRequest, isDemo } from '../../firebase'
+import { fmtMoney } from '../../utils/price'
+import { refreshOnReturn } from '../../composables/useActive'
 const pathStore = usePathStore()
 const contentStore = useContentStore()
 const studentStore = useStudentsStore()
 const adding = ref(false)
 const route = useRoute(), router = useRouter()
-onMounted(() => { studentStore.load().catch(() => {}); contentStore.load().catch(() => {}) })      // подтянуть новых учеников, статусы «В приложении» и отметки учеников в пути
+// Доход по ученикам, как в Patreon: «за месяц» и «за всё время» (GET /lessons/earnings — сервер держит готовый подсчёт в памяти).
+// В демо — из уроков, что есть в приложении.
+const earn = ref({}), scheduleStore = useScheduleStore()
+const month = new Date().toISOString().slice(0, 7)
+async function loadEarn() {
+  if (isDemo) {
+    const by = {}
+    for (const l of scheduleStore.lessons) if (l.done) for (const [id, p] of Object.entries(l.prices ?? {})) if (!l.canceled?.[id]) { const m = l.date.slice(0, 7); (by[id] ??= {})[m] = (by[id][m] ?? 0) + p }
+    earn.value = by; return
+  }
+  try { const r = await apiRequest('/lessons/earnings'); if (r.ok) earn.value = await r.json() } catch { /* нет связи — колонки пустые */ }
+}
+const inMonth = (id) => earn.value[id]?.[month] ?? 0
+const allTime = (id) => Object.values(earn.value[id] ?? {}).reduce((a, b) => a + b, 0)
+const money = (n) => (n ? fmtMoney(n) : '—')
+const totals = computed(() => studentStore.list.reduce((t, s) => ({ m: t.m + inMonth(s.id), a: t.a + allTime(s.id) }), { m: 0, a: 0 }))
+// Сортировка по нажатию на заголовок «За месяц» / «За всё время»: по убыванию → по возрастанию → как было (с группами)
+const sort = ref(null)        // { k: 'm' | 'a', dir: -1 | 1 }
+function sortBy(k) { const s0 = sort.value; sort.value = !s0 || s0.k !== k ? { k, dir: -1 } : s0.dir === -1 ? { k, dir: 1 } : null }
+const arrow = (k) => (sort.value?.k === k ? (sort.value.dir === -1 ? '↓' : '↑') : '⇅')
+onMounted(() => { studentStore.load().catch(() => {}); contentStore.load().catch(() => {}); loadEarn() })
+refreshOnReturn(loadEarn)      // подтянуть новых учеников, статусы «В приложении» и отметки учеников в пути
 // Группы — сверху, каждая своим блоком с цветной полосой слева (цвета чередуются, чтобы соседние группы не сливались); ниже — «Индивидуально».
 // Ученик из нескольких групп показан в каждой. Группы — отдельная сущность (stores/groups), состав меняется в панели на «Главной».
 const groups = useGroups()
@@ -27,6 +52,10 @@ const solo = computed(() => { const inG = new Set(groups.value.flatMap(g => g.me
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'ученика' : 'учеников')
 const rows = computed(() => {
   const out = []
+  if (sort.value) {           // отсортировано — один список без групп
+    const f = sort.value.k === 'm' ? inMonth : allTime
+    return [...studentStore.list].sort((a, b) => (f(a.id) - f(b.id)) * sort.value.dir).map(s => ({ t: 'row', key: 's/' + s.id, s }))
+  }
   groups.value.forEach((g, gi) => {
     const c = GCOL[gi % GCOL.length]
     out.push({ t: 'gh', key: 'gh' + g.key, g, c, first: gi === 0 })
@@ -46,7 +75,7 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
     <AddStudent v-if="adding" @close="adding = false" />
     <div v-if="!studentStore.list.length && !adding" class="card" style="text-align:center"><b>Пока никого нет</b><p class="hint" style="margin:6px 0 0">Нажмите «Добавить ученика», введите имя и отправьте ему ссылку-приглашение.</p></div>
     <div v-else class="card tbl">
-      <div class="tr th"><span>Ученик</span><span class="uc">Юнит</span><span>Оплата</span><span>Прогресс</span></div>
+      <div class="tr th"><span>Ученик</span><span class="uc">Юнит</span><span>Оплата</span><span>Прогресс</span><button class="mo sh" :class="{ on: sort?.k === 'm' }" @click="sortBy('m')">За месяц <i>{{ arrow('m') }}</i></button><button class="mo sh" :class="{ on: sort?.k === 'a' }" @click="sortBy('a')">За всё время <i>{{ arrow('a') }}</i></button></div>
       <!-- Один список: заголовок группы → её ученики (цветная полоса слева, серая подложка) → … → «Индивидуально» → остальные -->
       <template v-for="it in rows" :key="it.key">
         <div v-if="it.t === 'gh'" class="gh" :class="{ first: it.first }" :style="{ '--gc': it.c }"><AppIcon name="users" :size="15" /> Группа · {{ it.g.label }}<span>{{ it.g.members.length }} {{ word(it.g.members.length) }}</span></div>
@@ -56,8 +85,11 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
           <span class="hint uc">{{ unitOf(pathStore.of(it.s.id)) }}</span>
           <span><span class="badge" :class="PAY[it.s.payment.status][1]">{{ PAY[it.s.payment.status][0] }}</span></span>
           <span class="prog"><span class="bar"><i :style="{ width: pctOf(pathStore.of(it.s.id)) + '%' }" /></span>{{ pctOf(pathStore.of(it.s.id)) }}%</span>
+          <span class="mo">{{ money(inMonth(it.s.id)) }}</span><span class="mo">{{ money(allTime(it.s.id)) }}</span>
         </button>
       </template>
+      <!-- Итого — как в Patreon: общий доход внизу -->
+      <div class="tr tot"><span>Итого</span><span class="uc" /><span /><span /><span class="mo">{{ money(totals.m) }}</span><span class="mo">{{ money(totals.a) }}</span></div>
     </div>
     <ArchivePanel />
   </div>
@@ -76,7 +108,7 @@ button.tr:hover { background: var(--surface) } .th { padding-top: 8px; padding-b
 /* Телефон: имя и юнит слева, оплата справа, прогресс — тонкой полосой под текстом */
 .tr { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0 } .tr > :nth-child(4) { grid-column: 1 / -1; padding-left: 68px } .th > :nth-child(4) { display: none }
 @media (max-width: 767px) { .tx .sub:not(.ui) { display: none } .prog { font-size: 11px; margin-top: -4px } .bar { height: 5px } }
-@media (min-width: 768px) { .tr { grid-template-columns: 1.4fr 1.4fr 1fr 1.2fr } .uc { display: block } .ui { display: none } .tr > :nth-child(4) { grid-column: auto; padding-left: 0 } .th > :nth-child(4) { display: block } }
+@media (min-width: 768px) { .tr { grid-template-columns: 1.4fr 1.2fr 1fr 1.1fr .8fr .9fr } .uc { display: block } .ui { display: none } .tr > :nth-child(4) { grid-column: auto; padding-left: 0 } .th > :nth-child(4) { display: block } }
 /* Группы: заголовок и строки учеников на серой подложке с цветной полосой слева; между группами — отступ */
 .gh { display: flex; align-items: center; gap: 6px; margin: 10px 10px 0; padding: 8px 12px 4px; border-radius: 14px 14px 0 0; background: var(--group); box-shadow: inset 4px 0 0 var(--gc);
   font-size: 12px; font-weight: 900; color: var(--gc); text-transform: uppercase; letter-spacing: .3px }
@@ -85,4 +117,10 @@ button.tr:hover { background: var(--surface) } .th { padding-top: 8px; padding-b
 .tr.ing.last { border-radius: 0 0 14px 14px; margin-bottom: 4px }
 button.tr.ing:hover { background: var(--border) }
 .sl { margin: 12px 14px 2px; font-size: 12px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
+.mo { display: none } .tot { display: none }
+@media (min-width: 768px) {
+  .mo { display: block; text-align: right; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap }
+  .tot { display: grid; margin-top: 4px; padding-top: 12px; padding-bottom: 10px; border-top: 1px solid var(--border); font-weight: 800; cursor: default } .tot .mo { font-weight: 900 }
+}
+.sh { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .3px; cursor: pointer } .sh i { font-style: normal; opacity: .6 } .sh.on, .sh:hover { color: var(--text) }
 </style>
