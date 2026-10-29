@@ -12,11 +12,9 @@ import StudySession from './StudySession.vue'
 import CardBrowser from './CardBrowser.vue'
 import DeckChart from './DeckChart.vue'
 import DeckSheet from './DeckSheet.vue'
-import { useStudentsStore } from '../stores/students'
 import { useDecksStore } from '../stores/decks'
 const deckStore = useDecksStore()
 const router = useRouter()
-const studentStore = useStudentsStore()
 const props = defineProps({ userKey: { type: [String, Number], required: true }, canManage: Boolean })
 
 const screen = ref('list'), deckId = ref(null), sheet = ref(null)
@@ -30,11 +28,6 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3
 // Удаление — сразу, с «Отменить» в уведомлении (как в Telegram), без лишнего окна подтверждения
 function removeDeck(d) { const gone = deckStore.remove(d); if (gone) showToast(`Колода удалена: ${d.title}`, () => deckStore.restore(gone)) }
 const back = () => { screen.value = 'list'; deckId.value = null }
-const audience = (d) => {
-  if (d.forAll) return 'всем ученикам'
-  const n = d.assigned.map(id => studentStore.list.find(s => s.id === id)?.name).filter(Boolean)
-  return !n.length ? 'никому не назначена' : n.length <= 2 ? n.join(', ') : `${n[0]} и ещё ${n.length - 1}`
-}
 </script>
 
 <template>
@@ -48,7 +41,7 @@ const audience = (d) => {
       <div v-for="d in decks" :key="d.id" class="card deck" title="Учить" @click="open('study', d)">
         <div class="info">
           <h3>{{ d.title }}<sup class="tot" :title="`В колоде ${d.cards.length}`">{{ d.cards.length }}</sup></h3>
-          <div class="hint"><b v-if="pile(d).n" class="today">{{ pile(d).n }} {{ word(pile(d).n) }} на сегодня</b><span v-else>на сегодня всё</span><template v-if="canManage"> · {{ audience(d) }}</template></div>
+          <div class="hint"><b v-if="pile(d).n" class="today">{{ pile(d).n }} {{ word(pile(d).n) }} на сегодня</b><span v-else>на сегодня всё</span></div>
         </div>
         <!-- Стопка на сегодня: карточки разложены внахлёст слева направо, первая (сверху) — следующее слово.
              Длина ряда = сколько карточек ждёт; больше 30 не рисуем (число — в подписи). -->
