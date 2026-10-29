@@ -221,7 +221,7 @@ export interface PresetInput { name: string; units: PathUnit[] }
 // ───────────────────────── Колода слов · коллекция decks ─────────────────────────
 /** Карточка слова. Колонки Google Таблицы: A — слово (front), B — перевод (back), C — пример (example), D — перевод примера (exampleTr),
  *  E — ссылка на фото (image, рекомендуем 450×300), F — ссылка на озвучку слова (audio). Фото и озвучка — любые https-ссылки (server/media.ts); ссылки Google Диска на экране превращаются в прямые. */
-export interface Card { id: string; front: string; back: string; example?: string; exampleTr?: string; image?: string; audio?: string; exampleAudio?: string; suspended?: boolean }
+export interface Card { id: string; front: string; back: string; example?: string; exampleTr?: string; image?: string; audio?: string; exampleAudio?: string; audioMeta?: string; exampleAudioMeta?: string; suspended?: boolean }
 export interface DeckSource { url: string; lastSync: string | null }     // ссылка на Google Таблицу и время последней синхронизации (ISO)
 export interface Deck {
   id: string

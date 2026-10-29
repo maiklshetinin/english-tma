@@ -156,6 +156,7 @@ watch([sheetI, from, to], () => { count.value = 200 })
 const firstRow = computed(() => (head.value ? sheet.value?.rows[0] : null))
 const thumb = (v) => { const m = v.match(IMG); const u = m ? m[1] : v; return isImgUrl(v) ? imageSrc(u) : '' }
 
+const L = (i) => String.fromCharCode(65 + (i % 26)).repeat(Math.floor(i / 26) + 1)      // буква столбца, как в Excel: A, B, … Z, AA
 // ---------- Готово ----------
 const KEYS = ['example', 'exampleTr', 'image', 'audio', 'exampleAudio']
 function apply() {
@@ -180,9 +181,9 @@ function apply() {
     }
   }
   if (mode.value === 'replace') props.deck.cards.splice(0, props.deck.cards.length, ...next)
-  const L = (i) => String.fromCharCode(65 + (i % 26)).repeat(Math.floor(i / 26) + 1)      // A, B, … Z, AA
   const cols = map.value.map((k, i) => k && `${FT[k].t} ← ${L(i)}`).filter(Boolean)
-  emit('done', { added, updated, removed, cols, auto: !shownDlg.value, file: props.file.name, skipped: parsed.value.noPair })
+  const letters = Object.fromEntries(map.value.map((k, i) => k && [k, L(i)]).filter(Boolean))
+  emit('done', { added, updated, removed, cols, letters, auto: !shownDlg.value, file: props.file.name, skipped: parsed.value.noPair })
 }
 </script>
 
@@ -202,10 +203,11 @@ function apply() {
           </div>
           <p class="hint tip">Над каждым столбцом выберите, что в нём. Ненужные — «не брать». Нажмите на строку — справа её карточка.</p>
           <div ref="gridEl" class="grid" :style="{ '--gh': gridH + 'px' }" @scroll.passive="more" @pointerenter="gridH = gridEl.clientHeight">
-            <table :style="{ width: colW.reduce((a, b) => a + b, 0) + 'px' }">
-              <colgroup><col v-for="i in width" :key="i" :style="{ width: (colW[i - 1] || 160) + 'px' }" /></colgroup>
+            <table :style="{ width: 44 + colW.reduce((a, b) => a + b, 0) + 'px' }">
+              <colgroup><col style="width: 44px" /><col v-for="i in width" :key="i" :style="{ width: (colW[i - 1] || 160) + 'px' }" /></colgroup>
               <thead>
-                <tr><th v-for="i in width" :key="i" :style="map[i - 1] ? { '--c': FT[map[i - 1]].c } : null" :class="{ off: !map[i - 1], rzon: rz?.i === i - 1 }">
+                <tr><th class="rn"><span class="xl">&nbsp;</span></th><th v-for="i in width" :key="i" :style="map[i - 1] ? { '--c': FT[map[i - 1]].c } : null" :class="{ off: !map[i - 1], rzon: rz?.i === i - 1 }">
+                  <span class="xl" :title="`Столбец ${L(i - 1)} в файле`">{{ L(i - 1) }}</span>
                   <select :value="map[i - 1] || ''" @change="setField(i - 1, $event.target.value)">
                     <option value="">— не брать</option><option v-for="f in FIELDS" :key="f.k" :value="f.k">{{ f.t }}</option>
                   </select>
@@ -216,6 +218,7 @@ function apply() {
               </thead>
               <tbody>
                 <tr v-for="(r, n) in shown" :key="n" :class="{ sel: previewCard && previewCard.row === n + from }" @click="pickRow(n)">
+                  <td class="rn" :title="`Строка ${n + from + (head ? 1 : 0)} в файле`">{{ n + from + (head ? 1 : 0) }}</td>
                   <td v-for="i in width" :key="i" :class="{ off: !map[i - 1] }"><span v-if="map[i - 1] === 'image' && thumb(r[i - 1] || '')" class="th" title="Фото по ссылке — останется ссылкой (не копируется в наше хранилище)"><img :src="thumb(r[i - 1])" alt="" loading="lazy" @error="$event.target.style.visibility = 'hidden'" /><i class="lnk"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i></span><span v-else>{{ r[i - 1] }}</span></td>
                 </tr>
               </tbody>
@@ -278,6 +281,9 @@ th.off select { background: var(--surface); color: var(--hint-2); font-weight: 7
 th small { display: block; margin-top: 4px; font-size: 11px; color: var(--hint); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 th select { text-overflow: ellipsis }
 td { padding: 6px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer }
+.xl { display: block; margin: -8px -6px 6px; padding: 2px 0; background: #f3f4f6; border-bottom: 1px solid var(--border); color: #6b7280; font-size: 11px; font-weight: 800; text-align: center; letter-spacing: .5px }
+th.rn, td.rn { position: sticky; left: 0; z-index: 2; background: #f3f4f6; color: #6b7280; font-size: 11px; font-weight: 800; text-align: center; padding-left: 0; padding-right: 0; border-right: 1px solid var(--border) }
+th.rn { z-index: 4 } tr.sel td.rn { background: var(--blue); color: #fff }
 td.off { color: var(--hint-2); background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(0, 0, 0, .025) 6px 12px) }
 td img { width: 54px; height: 36px; object-fit: cover; border-radius: 6px; display: block }
 .th { position: relative; display: inline-block; vertical-align: middle; margin: 2px 0 2px 6px }

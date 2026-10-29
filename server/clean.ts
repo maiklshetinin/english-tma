@@ -86,6 +86,11 @@ function cleanCard(x: unknown, seen: Set<string>): Card {
     if (url && !isMediaUrl(url)) throw fail(400, `card ${k}: must be an https link`)
     if (url) c[k] = url
   }
+  // Волна и длительность звука для таблицы карточек («1.84|abc…», см. src/utils/wave.js) — кривое просто не сохраняем
+  for (const k of ['audioMeta', 'exampleAudioMeta'] as const) {
+    const v = x[k]
+    if (typeof v === 'string' && /^\d{1,4}(\.\d{1,2})?\|[a-p]{0,64}$/.test(v)) c[k] = v
+  }
   if (x.suspended === true) c.suspended = true
   return c
 }

@@ -54,5 +54,7 @@ ok('интервал не число → 400', code(() => cleanSrsState(st({ int
 ok('плохая дата в состоянии → 400', code(() => cleanSrsState(st({ due: 'завтра' }))) === 400)
 ok('ответ: state может быть null (отмена)', cleanRate({ cardId: 'c1', state: null, date: '2026-10-26', delta: -1 }).state === null)
 ok('ответ: delta только 1 или −1', code(() => cleanRate({ cardId: 'c1', state: null, date: '2026-10-26', delta: 5 })) === 400)
+const wd = (m: unknown) => cleanDeck({ title: 'T', cards: [{ id: 'c1', front: 'a', back: 'б', audio: 'https://x.ru/a.mp3', audioMeta: m }] }).cards[0].audioMeta
+ok('волна звука: правильная сохраняется, кривая — просто не сохраняется', wd('1.84|abcp') === '1.84|abcp' && wd('<script>') === undefined && wd(5) === undefined)
 
 process.exit(bad ? 1 : 0)
