@@ -70,6 +70,8 @@ function onDrop(p, t) {
   const a = p.lesson
   if (occ?.id === a.id) return
   if (a.done || occ?.done) return showToast('Проведённый урок нельзя переносить — сначала снимите отметку', null, 'bad')
+  const off = (l) => l.studentIds.length > 0 && l.studentIds.every(id => l.canceled?.[id])       // все отменили
+  if (off(a) || (occ && off(occ))) return showToast('Отменённый урок нельзя переносить — сначала верните ученика в урок', null, 'bad')
   if (slotPast(t.date, t.hour)) return showToast('Это время уже прошло — урок туда не перенести', null, 'bad')
   const from = { date: a.date, hour: a.hour }
   if (occ) {                                         // занято — меняем уроки местами

@@ -60,6 +60,7 @@ const hint = computed(() => {
   if (occ?.id === a.id) return null
   if (a.done) return { k: 'bad', t: 'Урок проведён — сначала снимите отметку' }
   if (occ?.done) return { k: 'bad', t: 'Здесь проведённый урок — не меняется' }
+  if (occ && occ.studentIds.length && occ.studentIds.every(id => occ.canceled?.[id])) return { k: 'bad', t: 'Здесь отменённый урок — не меняется' }
   if (slotPast(o.date, o.hour)) return { k: 'bad', t: 'Это время уже прошло' }
   if (occ) return { k: 'swap', t: `Поменять местами: ${who(occ)}` }
   return { k: 'ok', t: `Перенести · ${at}` }

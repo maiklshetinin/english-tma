@@ -29,7 +29,7 @@ function dropState(d, h) {                       // подсветка ячей�
   const o = dnd.over
   if (!dnd.active || o?.kind !== 'cell' || o.date !== d || o.hour !== h) return ''
   const occ = at(d, h)[0], p = dnd.payload
-  if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : slotPast(d, h, now.value) ? 'bad' : occ ? 'swap' : 'ok'      // в прошлое не переносим
+  if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : slotPast(d, h, now.value) || occ?.done || (occ && allOff(occ)) ? 'bad' : occ ? 'swap' : 'ok'      // в прошлое не переносим
   if (!occ) return 'ok'
   return 'bad'      // ученик / группа — только на свободную ячейку: из урока группу не собираем
 }
@@ -43,7 +43,7 @@ const offCount = (l) => group(l).filter(s => l.canceled?.[s.id]).length
 const allOff = (l) => !orphan(l) && offCount(l) === group(l).length
 const goneName = (l) => Object.values(l.names ?? {})[0] ?? ''             // имя удалённого навсегда (у проведённых уроков)
 const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payload.lesson.id === l.id
-const down = (e, l) => { if (!l.done && !orphan(l)) pressStart(e, { kind: 'lesson', lesson: l }) }      // проведённый (и «пустой») урок не перетаскиваем
+const down = (e, l) => { if (!l.done && !allOff(l) && !orphan(l)) pressStart(e, { kind: 'lesson', lesson: l }) }      // проведённый, отменённый (и «пустой») урок не перетаскиваем
 // Подпись урока: ученик или участники группы; у «пустого» урока — подсказка, что его ученика больше нет
 const first = (l) => group(l)[0]
 const label = (l) => allOff(l) ? `Отменил ученик: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour, l.minute)} — без оплаты` : orphan(l) ? (goneName(l) ? `${goneName(l)} (удалён), ${hh(l.hour, l.minute)}` : `Урок без ученика (удалён или в архиве), ${hh(l.hour, l.minute)} — нажмите, чтобы убрать`) : isGroup(l) ? `Группа: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour, l.minute)}` : `${first(l).name}, ${hh(l.hour, l.minute)}`
