@@ -80,13 +80,13 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
     <header class="bar">
       <button class="btn ghost sm" @click="emit('exit')"><AppIcon name="back" :size="18" /> {{ embedded ? 'Закрыть' : 'Колоды' }}</button>
       <b class="dt">{{ deck.title }}</b>
-      <!-- Общая панель инструментов: график колоды и правка текущей карточки -->
+      <span class="cnt" aria-label="Новые, изучаю, к повторению">
+        <b class="n" :class="{ on: cur === 'new' }">{{ counts.new }}</b><b class="l" :class="{ on: cur === 'learn' }">{{ counts.learn }}</b><b class="d" :class="{ on: cur === 'due' }">{{ counts.due }}</b>
+      </span>
+      <!-- Общая панель инструментов (в правом углу): график колоды и правка текущей карточки -->
       <span class="tb">
         <button class="ib" :class="{ on: chartOpen }" :aria-pressed="chartOpen" aria-label="График колоды" title="График: когда повторять каждое слово" @click="chartOpen = !chartOpen"><AppIcon name="chart" :size="18" /></button>
         <button v-if="canEdit && card" class="ib" aria-label="Править карточку" title="Править карточку" @click="editing = true"><AppIcon name="pencil" :size="17" /></button>
-      </span>
-      <span class="cnt" aria-label="Новые, изучаю, к повторению">
-        <b class="n" :class="{ on: cur === 'new' }">{{ counts.new }}</b><b class="l" :class="{ on: cur === 'learn' }">{{ counts.learn }}</b><b class="d" :class="{ on: cur === 'due' }">{{ counts.due }}</b>
       </span>
     </header>
     <!-- График колоды — сверху, над карточкой (как статистика в списке колод): ответили — видно, куда ушло слово -->
@@ -154,9 +154,9 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
 .tools button { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--border); background: var(--card); color: var(--hint); font: inherit; font-weight: 800; font-size: 13px; border-radius: 12px; padding: 6px 10px; cursor: pointer }
 .tools button:disabled { opacity: .45; cursor: default } .keys { margin-left: auto; font-size: 12px; white-space: nowrap }
 .done { text-align: center; display: grid; gap: 6px } .done p { margin: 0 } .wl { color: var(--blue); font-variant-numeric: tabular-nums }
-.tb { flex: none; display: inline-flex; border: 2px solid var(--border); border-bottom-width: 3px; border-radius: 12px; background: var(--card); overflow: hidden }      /* кнопки-значки одной плашкой */
-.ib { display: grid; place-items: center; width: 34px; height: 31px; border: 0; background: none; color: var(--blue); cursor: pointer } .ib + .ib { border-left: 1px solid var(--border) }
-.ib:hover { background: var(--surface) } .ib.on { background: var(--blue-l) }
+.tb { flex: none; display: inline-flex; gap: 2px }      /* кнопки-значки: серые, без обводки — как во всём приложении */
+.ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--hint); cursor: pointer }
+.ib:hover { background: var(--surface); color: var(--text) } .ib.on { background: var(--group); color: var(--text) }
 /* Телефон с открытым графиком: фото ниже (по высоте экрана), чтобы карточка и кнопки влезали без прокрутки */
 @media (max-width: 600px) { .ss.wc { gap: 8px } .ss.wc .face { padding: 2px 4px } .ss.wc .media { width: auto; max-width: 100%; height: clamp(96px, 22vh, 233px) } }
 @media (max-width: 600px) { .keys { display: none } .tools.only { display: none } .q { font-size: 28px } .a { font-size: 24px } }
