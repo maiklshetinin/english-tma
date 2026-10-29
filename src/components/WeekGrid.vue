@@ -36,7 +36,7 @@ function dropState(d, h) {                       // подсветка ячей�
 // Ученики урока, которые есть в списке. Ученика могли удалить из базы или архивировать — его id остаётся в уроке, но показывать некого.
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)
 const isGroup = (l) => group(l).length > 1
-const ringOf = (l) => (allOff(l) ? 'var(--red-l)' : l.done ? 'var(--group)' : 'var(--card)')        // кольцо стопки — цвета фона карточки
+const ringOf = (l) => (allOff(l) ? 'var(--group)' : l.done ? 'var(--group)' : 'var(--card)')        // кольцо стопки — цвета фона карточки
 const orphan = (l) => !group(l).length                                      // урок, в котором не осталось известных учеников: показываем серым «?», чтобы его можно было убрать
 // «Отменил ученик»: все отменили — карточка красная и зачёркнутая; в группе часть — красный значок «✕N»
 const offCount = (l) => group(l).filter(s => l.canceled?.[s.id]).length
@@ -75,7 +75,7 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
             <template v-else><Avatar :s="first(l)" :size="38" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
-            <i v-if="allOff(l)" class="off" aria-hidden="true">✕</i><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
+            <span v-if="allOff(l)" class="tick x" title="Отменён"><svg viewBox="0 0 16 16"><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" /></svg></span><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
             <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
@@ -132,10 +132,9 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .chip.orphan { border: 2px dashed var(--hint-2); background: var(--surface); color: var(--hint); cursor: pointer }
 .chip .q { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--hint-2); color: #fff; font-weight: 900; font-size: 12px; flex: none }
 /* Отменил ученик (без оплаты): красная карточка, имя зачёркнуто; значок ✕ — в углу слева */
-.chip.canceled { box-shadow: none; background: var(--red-l); color: var(--red-d) }
+.chip.canceled { box-shadow: none; background: var(--group); color: var(--hint) }      /* отменён — серый, зачёркнут, красный кружок с крестиком (как упавшая сборка в GitHub) */
 .chip.canceled .nm { text-decoration: line-through } .chip.canceled :deep(.av), .chip.canceled :deep(.stack) { opacity: .45 }
-html[data-theme='dark'] .chip.canceled { color: var(--red) }
-.off { position: absolute; top: -6px; left: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
+.off { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
 /* Начало внутри часа — бирка «:30» в правом нижнем углу; заметка — жёлтая точка в правом верхнем */
 .min { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); font-style: normal; font-size: 11px; font-weight: 900; line-height: 1.3; padding: 0 5px; border-radius: 99px; background: var(--blue); color: #fff; box-shadow: 0 0 0 2px var(--card); z-index: 2 }
 .note { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 2px var(--card); z-index: 2 }
@@ -146,13 +145,15 @@ html[data-theme='dark'] .chip.canceled { color: var(--red) }
 @media (max-width: 420px) { .chip :deep(.av) { width: 29px !important; height: 29px !important } }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
 /* Галочка «проведён» — как в GitHub: белая галочка в зелёном кружке */
-.chip .tick { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #1f883d } .chip .tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
+.chip .tick { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #1f883d } .chip .tick.x { background: #cf222e } .chip .tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
 @media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px; font-size: 13px } .cell { height: 46px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
 @media (max-width: 420px) { .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 36px } }
 
 /* На телефоне галочку «проведён» не показываем — кружок крупный, проведённый урок и так зелёный */
-@media (max-width: 719px) { .chip .tick { display: none } }
+/* Статус — в левом верхнем углу урока (на аватарке), на всех экранах */
+.chip .tick { position: absolute; top: -5px; left: -4px; z-index: 2; box-shadow: 0 0 0 2px var(--card) }
+@media (max-width: 719px) { .chip .tick { width: 14px; height: 14px } .chip .tick svg { width: 10px; height: 10px } }
 /* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 .wk.gs-gray .cell { background: var(--surface); box-shadow: none }
