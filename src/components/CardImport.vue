@@ -13,7 +13,10 @@ import { parseCsv } from '../composables/useSheetImport'
 import StudySession from './StudySession.vue'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps({ deck: { type: Object, required: true }, file: { type: Object, required: true } })
+// auto — сразу добавить в колоду без окна, если всё однозначно (один лист, слово и перевод нашлись, влезает в колоду);
+// иначе — показать окно. Что взяли из каких столбцов — уходит в done (колода показывает это полосой с «Отменить»).
+const props = defineProps({ deck: { type: Object, required: true }, file: { type: Object, required: true }, auto: Boolean })
+const shownDlg = ref(!props.auto)
 const emit = defineEmits(['close', 'done'])
 
 const FIELDS = [
@@ -39,7 +42,13 @@ async function read() {
     sheetI.value = Math.max(0, sheets.value.findIndex(s => s.rows[0]?.length >= 2))
   } catch (e) { err.value = e.message || 'Не удалось прочитать файл' }
 }
-read()
+read().then(() => {
+  if (!props.auto || !sheets.value) { shownDlg.value = true; return }
+  guess()
+  const one = sheets.value.filter(x => x.rows[0]?.length >= 2).length === 1
+  if (one && !need.value && !tooBig.value && parsed.value.cards.length) apply()
+  else shownDlg.value = true
+})
 
 // ---------- Что в какой колонке ----------
 const sheet = computed(() => sheets.value?.[sheetI.value])
@@ -171,12 +180,14 @@ function apply() {
     }
   }
   if (mode.value === 'replace') props.deck.cards.splice(0, props.deck.cards.length, ...next)
-  emit('done', { added, updated, removed })
+  const L = (i) => String.fromCharCode(65 + (i % 26)).repeat(Math.floor(i / 26) + 1)      // A, B, … Z, AA
+  const cols = map.value.map((k, i) => k && `${FT[k].t} ← ${L(i)}`).filter(Boolean)
+  emit('done', { added, updated, removed, cols, auto: !shownDlg.value, file: props.file.name, skipped: parsed.value.noPair })
 }
 </script>
 
 <template>
-  <div class="bg" @click.self="emit('close')">
+  <div v-if="shownDlg" class="bg" @click.self="emit('close')">
     <div class="dlg" role="dialog" aria-label="Импорт карточек">
       <header class="hd"><AppIcon name="sheet" :size="22" /><b>Импорт: {{ file.name }}</b><span class="sp" /><button class="x" title="Закрыть" @click="emit('close')">✕</button></header>
       <p v-if="err" class="err">{{ err }}</p>
@@ -205,7 +216,7 @@ function apply() {
               </thead>
               <tbody>
                 <tr v-for="(r, n) in shown" :key="n" :class="{ sel: previewCard && previewCard.row === n + from }" @click="pickRow(n)">
-                  <td v-for="i in width" :key="i" :class="{ off: !map[i - 1] }"><img v-if="map[i - 1] === 'image' && thumb(r[i - 1] || '')" :src="thumb(r[i - 1])" alt="" loading="lazy" @error="$event.target.style.visibility = 'hidden'" /><span v-else>{{ r[i - 1] }}</span></td>
+                  <td v-for="i in width" :key="i" :class="{ off: !map[i - 1] }"><span v-if="map[i - 1] === 'image' && thumb(r[i - 1] || '')" class="th" title="Фото по ссылке — останется ссылкой (не копируется в наше хранилище)"><img :src="thumb(r[i - 1])" alt="" loading="lazy" @error="$event.target.style.visibility = 'hidden'" /><i class="lnk"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i></span><span v-else>{{ r[i - 1] }}</span></td>
                 </tr>
               </tbody>
             </table>
@@ -260,7 +271,7 @@ table { border-collapse: separate; border-spacing: 0; font-size: 13px; table-lay
 th { position: sticky; top: 0; z-index: 2; padding: 8px 6px; background: var(--card); border-bottom: 3px solid var(--c, var(--border)); text-align: left; vertical-align: top }
 /* Ручка ширины: тонкая зона на правой границе; линия — во всю высоту таблицы, синяя при наведении и пока тянем */
 .rz { position: absolute; top: 0; right: 0; width: 9px; height: var(--gh, 400px); z-index: 3; cursor: var(--rzc) }
-.rz::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: transparent }
+.rz::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: transparent }
 .rz:hover::after, th.rzon .rz::after { background: #0d99ff }
 th select { width: 100%; margin: 0; padding: 6px 8px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--c, #999) 16%, white); color: var(--c, var(--hint)); font: inherit; font-size: 13px; font-weight: 900; cursor: pointer }
 th.off select { background: var(--surface); color: var(--hint-2); font-weight: 700 }
@@ -269,6 +280,8 @@ th select { text-overflow: ellipsis }
 td { padding: 6px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer }
 td.off { color: var(--hint-2); background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(0, 0, 0, .025) 6px 12px) }
 td img { width: 54px; height: 36px; object-fit: cover; border-radius: 6px; display: block }
+.th { position: relative; display: inline-block; vertical-align: middle; margin: 2px 0 2px 6px }
+.lnk { position: absolute; left: -6px; bottom: -4px; display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: var(--card); color: var(--blue); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); font-style: normal }
 tr:hover td { background: #f6f9fc } tr.sel td { background: var(--blue-l) }
 .sum { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; font-weight: 700 }
 .ok { color: var(--green-d) } .mid { color: var(--hint) } .warn { color: #b26b00 }

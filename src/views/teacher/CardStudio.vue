@@ -6,7 +6,7 @@
 //  • Фото строго 450×300 (3:2 — как место под фото у ученика): обрезаем по центру, WebP ≤ 40 КБ. Меньше 450×300 — не берём.
 //  • Файлы — в S3 (server/storage.ts, папка колоды); в карточке — ссылка ${API}/media/f/<ключ>, её открывают и ученики.
 //    Без сервера (демо) файлы остаются ссылками в памяти браузера.
-import { ref, reactive, computed, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDecksStore } from '../../stores/decks'
 import { API, apiRequest, fb, isDemo } from '../../firebase'
@@ -87,6 +87,18 @@ async function attach(c, k, file) {
   } catch (e) { showToast(/фото маленькое|не удалось открыть/.test(e.message) ? e.message : `Не удалось загрузить ${file.name} (${e.message})`, null, 'bad'); return false }
   finally { delete busy[id] }
 }
+/** Ссылка на чужой сайт (Google Диск, britlex…) — не наш файл в хранилище и не только что выбранный */
+const menu = ref('')          // у какой карточки открыто меню фото
+const closeMenu = () => { menu.value = '' }
+const menuPos = ref({})
+function openMenu(e, c) {        // меню у фото: поверх всего (fixed), у нижнего края экрана — вверх
+  if (menu.value === c.id) return closeMenu()
+  const r = e.currentTarget.getBoundingClientRect(), up = innerHeight - r.bottom < 230
+  menuPos.value = { left: Math.min(r.left, innerWidth - 240) + 'px', ...(up ? { bottom: innerHeight - r.top + 6 + 'px' } : { top: r.bottom + 6 + 'px' }) }
+  menu.value = c.id
+}
+onMounted(() => addEventListener('click', closeMenu)); onUnmounted(() => removeEventListener('click', closeMenu))
+const isLink = (u) => !!u && !u.startsWith('blob:') && !ourKey(u)
 function clearField(c, k) { forget(c[k]); delete c[k]; delete info[c.id + k] }
 
 // ---------- Перетаскивание ----------
@@ -127,7 +139,7 @@ function dragLeave() { clearTimeout(leaveT); leaveT = setTimeout(() => { over.va
 async function drop(e) {
   e.preventDefault(); over.value = false
   const fs = [...(e.dataTransfer?.files ?? [])], sheet = fs.find(isSheet)
-  if (sheet) return void (importFile.value = sheet)                  // таблица Excel / CSV — окно импорта
+  if (sheet) return void startImport(sheet)                          // таблица Excel / CSV — сразу в колоду
   await dropOnTable(fs)
 }
 // Файл на строку: на ячейку фото / звука — в неё; на слово, перевод и т.п. — в эту карточку: фото → «Фото», звук → «Озвучка слова».
@@ -154,13 +166,19 @@ async function picked(e) { const file = e.target.files?.[0]; if (file && pickTo)
 
 // ---------- Импорт из Excel / CSV (окно CardImport) ----------
 const isSheet = (f) => /\.(xlsx|xls|csv|tsv)$/i.test(f.name)
-const importFile = ref(null), sheetPick = ref(null)
+// Бросили таблицу — сразу в колоду (столбцы угадываются сами), сверху полоса: что откуда взяли, «Отменить», «Поменять столбцы».
+// Окно с выбором столбцов — только если не всё однозначно (несколько листов, не нашлись слово/перевод, не влезает в колоду) или по «Поменять столбцы».
+const importFile = ref(null), importAuto = ref(true), sheetPick = ref(null), lastImport = ref(null)
+let snapshot = null
+const startImport = (f, auto = true) => { snapshot = JSON.parse(JSON.stringify(deck.value.cards)); importAuto.value = auto; lastImport.value = null; importFile.value = f }
 function chooseSheet() { sheetPick.value.value = ''; sheetPick.value.click() }
-function imported({ added, updated, removed }) {
-  importFile.value = null
-  for (const c of removed) for (const k of ['image', 'audio', 'exampleAudio']) forget(c[k])     // замена колоды: файлы удалённых карточек — из хранилища
-  showToast(`Импорт: добавлено ${added}, обновлено ${updated}${removed.length ? `, удалено ${removed.length}` : ''}`)
+function imported(r) {
+  const file = importFile.value; importFile.value = null
+  for (const c of r.removed) for (const k of ['image', 'audio', 'exampleAudio']) forget(c[k])     // замена колоды: файлы удалённых карточек — из хранилища
+  lastImport.value = { ...r, fileObj: file, snapshot }
 }
+function undoImport() { const s = lastImport.value?.snapshot; if (s) deck.value.cards.splice(0, deck.value.cards.length, ...s); lastImport.value = null }
+function remapImport() { const f = lastImport.value?.fileObj; undoImport(); if (f) startImport(f, false) }
 // Google Таблица по ссылке: сервер забирает её как CSV (GET /sheets/csv; у таблицы должен быть доступ «Все, у кого есть ссылка»),
 // дальше — то же окно импорта. Берётся лист из ссылки (#gid=…), без него — первый.
 const gBusy = ref(false)
@@ -168,13 +186,13 @@ async function fromGoogle() {
   const url = prompt('Ссылка на Google Таблицу (лист — тот, что открыт по ссылке)', '')?.trim(); if (!url) return
   if (!/docs\.google\.com\/spreadsheets\/d\//.test(url)) return showToast('Это не похоже на ссылку Google Таблицы', null, 'bad')
   gBusy.value = true
-  try { importFile.value = new File([await fetchSheetCsv(url)], 'Google Таблица.csv', { type: 'text/csv' }) }
+  try { startImport(new File([await fetchSheetCsv(url)], 'Google Таблица.csv', { type: 'text/csv' })) }
   catch (e) { showToast(e.message, null, 'bad') }
   finally { gBusy.value = false }
 }
 // Фото по ссылке (если файла нет под рукой): любая https-ссылка, как из Google Диска
 function linkPhoto(c) {
-  const u = prompt('Ссылка на фото (https://…)', '')?.trim(); if (!u) return
+  const u = prompt('Ссылка на фото (https://…)', isLink(c.image) ? c.image : '')?.trim(); if (!u) return
   if (!/^https:\/\//i.test(u)) return showToast('Нужна ссылка, которая начинается с https://', null, 'bad')
   const old = c.image; c.image = u; if (old) forget(old)
 }
@@ -225,19 +243,25 @@ const back = () => router.push({ name: 'words' })
       <button v-if="deck" class="btn ghost sm" title="Excel (.xlsx) или CSV — столбцы в любом порядке" @click="chooseSheet"><AppIcon name="sheet" :size="16" /> Из Excel</button>
       <button v-if="deck" class="btn ghost sm" :disabled="gBusy" title="Вставьте ссылку на Google Таблицу" @click="fromGoogle"><AppIcon name="link" :size="16" /> {{ gBusy ? 'Загружаю…' : 'Из Google Таблицы' }}</button>
       <button v-if="deck" class="btn sm" @click="addCard"><AppIcon name="plus" :size="16" /> Карточка</button>
-      <input ref="sheetPick" type="file" hidden accept=".xlsx,.xls,.csv,.tsv" @change="$event.target.files[0] && (importFile = $event.target.files[0])" />
+      <input ref="sheetPick" type="file" hidden accept=".xlsx,.xls,.csv,.tsv" @change="$event.target.files[0] && startImport($event.target.files[0])" />
     </header>
 
     <div v-if="!deck" class="none"><b>Колода не найдена</b><button class="btn sm" @click="back">К колодам</button></div>
     <section v-else class="wrap" :class="{ over }" @dragover="dragOver" @drop="drop">
       <!-- Тащат файлы над таблицей — подсвечиваем всю область и говорим, что будет -->
       <div v-if="over" class="dropov"><div class="pill"><AppIcon name="download" :size="22" />
-        <span v-if="overSheet"><b>Отпустите — откроется импорт таблицы</b>дальше выберете, какой столбец чему соответствует</span>
+        <span v-if="overSheet"><b>Отпустите — карточки добавятся в колоду</b>столбцы угадаю сам, если что — «Поменять столбцы»</span>
         <span v-else-if="overRowCard"><b>Отпустите — к слову «{{ overRowCard.front || 'без слова' }}»</b>фото → «Фото», звук → «Озвучка{{ overCell.endsWith('exampleAudio') ? ' примера' : ' слова' }}»</span>
         <span v-else><b>Отпустите — файлы разойдутся по строкам</b>по имени: apple.jpg → фото, apple.mp3 → озвучка. Или наведите на строку слова</span></div></div>
-      <div class="tip"><AppIcon name="download" :size="18" /><span><b>Бросьте сюда таблицу Excel</b> — откроется импорт со сменой столбцов. <b>Или пачку фото и аудио</b> — разойдутся по строкам по имени файла:
+      <div class="tip"><AppIcon name="download" :size="18" /><span><b>Бросьте сюда таблицу Excel</b> — карточки сразу добавятся (столбцы можно поменять). <b>Или пачку фото и аудио</b> — разойдутся по строкам по имени файла:
         <i>apple.jpg</i> → фото, <i>apple.mp3</i> → озвучка слова, <i>apple_ex.mp3</i> → озвучка примера. Или бросьте фото / звук прямо на строку нужного слова.
         Фото — от 450×300: обрежутся по центру до 450×300 и ужмутся до ~40 КБ.</span></div>
+      <div v-if="lastImport" class="rep imp">
+        <span>Из «{{ lastImport.file }}»: добавлено <b>{{ lastImport.added }}</b><template v-if="lastImport.updated">, обновлено <b>{{ lastImport.updated }}</b></template><template v-if="lastImport.skipped"> · пропущено строк без перевода: {{ lastImport.skipped }}</template></span>
+        <span class="cols">{{ lastImport.cols.join(' · ') }}</span>
+        <button class="mini" @click="remapImport">Поменять столбцы</button><button class="mini" @click="undoImport">Отменить</button>
+        <button class="x" title="Скрыть" @click="lastImport = null">✕</button>
+      </div>
       <div v-if="report" class="rep" :class="{ warn: report.miss?.length || report.fail }">
         <span v-if="report.busy">Загружаю…</span>
         <template v-else>
@@ -248,7 +272,7 @@ const back = () => router.push({ name: 'words' })
           <button class="x" @click="report = null">✕</button>
         </template>
       </div>
-      <div class="tbl">
+      <div class="tbl" @scroll.passive="closeMenu">
         <table>
           <thead><tr><th class="n">#</th>
             <th v-for="f in FIELDS" :key="f.k" :class="f.kind"><div class="hd"><span>{{ f.t }}<em v-if="f.need">*</em></span>
@@ -263,12 +287,21 @@ const back = () => router.push({ name: 'words' })
                 <input v-if="f.kind === 'text'" v-model.trim="c[f.k]" :placeholder="f.need ? 'нужно заполнить' : '—'" :class="{ need: f.need && !c[f.k] }" />
                 <span v-else-if="busy[c.id + f.k] != null" class="up"><i :style="{ '--p': busy[c.id + f.k] }" />{{ busy[c.id + f.k] }}%</span>
                 <span v-else-if="f.kind === 'image'" class="cell">
-                  <template v-if="c.image"><img :src="src(c.image)" alt="" :title="info[c.id + 'image'] ? 'сжато: ' + info[c.id + 'image'] + ' · нажмите — заменить' : 'Нажмите — заменить'" @click="choose(c, f)" />
-                    <button class="rm" title="Убрать фото" @click="clearField(c, 'image')">✕</button></template>
+                  <template v-if="c.image"><img :src="src(c.image)" alt="" :title="isLink(c.image) ? 'Фото по ссылке (не в нашем хранилище): ' + c.image + ' · нажмите — изменить' : info[c.id + 'image'] ? 'сжато: ' + info[c.id + 'image'] + ' · нажмите — изменить' : 'Нажмите — изменить'" @click.stop="openMenu($event, c)" />
+                    <i v-if="isLink(c.image)" class="lnk"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i>
+                    <button class="rm" title="Убрать фото" @click="clearField(c, 'image')">✕</button>
+                    <!-- Нажали на фото — что с ним сделать -->
+                    <span v-if="menu === c.id" class="pm" :style="menuPos" @click.stop>
+                      <small>{{ isLink(c.image) ? 'Фото по ссылке' : 'Фото в хранилище' }}<template v-if="info[c.id + 'image']"> · {{ info[c.id + 'image'] }}</template></small>
+                      <button @click="menu = ''; choose(c, f)">Заменить своим файлом</button>
+                      <button @click="menu = ''; linkPhoto(c)">{{ isLink(c.image) ? 'Изменить ссылку' : 'Заменить ссылкой' }}</button>
+                      <a :href="src(c.image)" target="_blank" rel="noopener" @click="menu = ''">Открыть в новой вкладке</a>
+                      <button class="red" @click="menu = ''; clearField(c, 'image')">{{ isLink(c.image) ? 'Убрать ссылку' : 'Удалить фото' }}</button>
+                    </span></template>
                   <template v-else><button class="slot" @click="choose(c, f)">+ фото</button><button class="mic" title="Вставить ссылку на фото" @click="linkPhoto(c)">🔗</button></template>
                 </span>
                 <span v-else class="cell au">
-                  <template v-if="c[f.k]"><button class="play" title="Послушать" @click="play(c[f.k])">▶</button><button class="rm" title="Убрать озвучку" @click="clearField(c, f.k)">✕</button></template>
+                  <template v-if="c[f.k]"><button class="play" :title="isLink(c[f.k]) ? 'Звук по ссылке (не в нашем хранилище) — послушать' : 'Послушать'" @click="play(c[f.k])">▶<i v-if="isLink(c[f.k])" class="lnk"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i></button><button class="rm" title="Убрать озвучку" @click="clearField(c, f.k)">✕</button></template>
                   <template v-else-if="rec.id === c.id + f.k"><button class="recb" title="Остановить" @click="record(c, f.k)">■ {{ rec.t }} с</button></template>
                   <template v-else><button class="slot" title="Выбрать файл" @click="choose(c, f)">+ звук</button><button class="mic" title="Записать с микрофона" @click="record(c, f.k)">🎙</button></template>
                 </span>
@@ -281,7 +314,7 @@ const back = () => router.push({ name: 'words' })
         <p v-if="!cards.length" class="empty">Карточек пока нет. Бросьте сюда таблицу Excel, нажмите «+ Карточка» или бросьте фото и аудио — слово возьмётся из имени файла.</p>
       </div>
     </section>
-    <CardImport v-if="importFile && deck" :deck="deck" :file="importFile" @close="importFile = null" @done="imported" />
+    <CardImport v-if="importFile && deck" :key="importFile.name + importAuto" :deck="deck" :file="importFile" :auto="importAuto" @close="importFile = null" @done="imported" />
   </div>
 </template>
 
@@ -300,6 +333,7 @@ const back = () => router.push({ name: 'words' })
 .tip { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border: 2px dashed var(--border); border-radius: 14px; background: var(--card); color: var(--hint); font-size: 13px }
 .tip b { color: var(--text) } .tip i, .rep i { font-style: normal; color: var(--blue); font-weight: 700; margin-right: 4px }
 .rep { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 14px; border-radius: 12px; background: var(--green-l); color: var(--green-d); font-size: 13px; font-weight: 600 }
+.rep.imp { background: var(--blue-l); color: #136d99 } .rep .cols { font-weight: 800; color: var(--blue) }
 .rep.warn { background: #fff4d6; color: #8a5b00 } .rep .x { margin-left: auto; border: 0; background: none; cursor: pointer; color: inherit; font-weight: 900 }
 .tbl { flex: 1; overflow: auto; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 1px var(--border) }
 table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1060px; font-size: 14px }
@@ -315,6 +349,10 @@ td input:hover { border-color: var(--border) } td input:focus { border-color: va
 td.dz { text-align: center } td.hot { background: var(--blue-l) !important; box-shadow: inset 0 0 0 2px var(--blue) }
 .cell { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px }
 .cell img { width: 63px; height: 42px; object-fit: cover; border-radius: 8px; cursor: pointer; display: block }
+.pm { position: fixed; z-index: 40; display: grid; min-width: 220px; padding: 6px; border-radius: 12px; background: var(--card); box-shadow: 0 10px 30px rgba(0, 0, 0, .18), 0 0 0 1px var(--border); text-align: left }
+.pm small { padding: 4px 8px 6px; font-size: 11px; font-weight: 800; color: var(--hint); white-space: normal }
+.pm button, .pm a { display: block; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); text-align: left; text-decoration: none; cursor: pointer }
+.pm button:hover, .pm a:hover { background: var(--surface) } .pm .red { color: var(--red-d) }
 .rm { position: absolute; right: -8px; top: -8px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--card); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); color: var(--hint); font-size: 10px; font-weight: 900; cursor: pointer; opacity: 0; transition: opacity .1s }
 .cell.au .rm { position: static; opacity: 0 } td:hover .rm, .rm:focus-visible { opacity: 1 } .rm:hover { color: var(--red-d) }
 @media (hover: none) { .rm { opacity: 1 } }
@@ -322,7 +360,8 @@ td.dz { text-align: center } td.hot { background: var(--blue-l) !important; box-
 .cell.au .slot { width: 56px } .slot:hover { border-color: var(--blue); color: var(--blue) }
 .mic { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; font-size: 14px; cursor: pointer; opacity: .55 } .mic:hover { opacity: 1; background: var(--surface) }
 .recb { height: 34px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--red); color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer }
-.play { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--blue-l); color: var(--blue); font-size: 13px; cursor: pointer }
+.lnk { position: absolute; left: -6px; bottom: -6px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--card); color: var(--blue); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); pointer-events: none; font-style: normal }
+.play { position: relative; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--blue-l); color: var(--blue); font-size: 13px; cursor: pointer }
 .up { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: var(--blue) }
 .up i { width: 22px; height: 22px; border-radius: 50%; background: conic-gradient(var(--blue) calc(var(--p) * 1%), var(--surface) 0) }
 .del { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer; opacity: 0 }
