@@ -16,9 +16,15 @@ export const setDropHandler = (fn) => { onDrop = fn }
 let s = null, raf = 0, swallow = false
 const LONG_PRESS = 220, MOVE_MOUSE = 5, MOVE_TOUCH = 8, EDGE = 48
 
+// Урок вытащили за таблицу (с запасом OUT_PAD вокруг, чтобы не снять случайно, промахнувшись мимо крайней ячейки) — «снять урок»
+const OUT_PAD = 28
+const outOfTable = (x, y) => {
+  const r = document.querySelector('.wk')?.getBoundingClientRect(); if (!r) return false
+  return x < r.left - OUT_PAD || x > r.right + OUT_PAD || y < r.top - OUT_PAD || y > r.bottom + OUT_PAD
+}
 const targetAt = (x, y) => {
   const el = document.elementFromPoint(x, y)?.closest('[data-drop]')
-  if (!el) return null
+  if (!el) return dnd.payload?.kind === 'lesson' && outOfTable(x, y) ? { kind: 'out' } : null
   return el.dataset.drop === 'cell' ? { kind: 'cell', date: el.dataset.date, hour: +el.dataset.hour } : { kind: el.dataset.drop }
 }
 const same = (a, b) => a === b || (a && b && a.kind === b.kind && a.date === b.date && a.hour === b.hour)

@@ -50,7 +50,7 @@ const who = (l) => (l.studentIds.length > 1 ? `группа (${l.studentIds.leng
 const hint = computed(() => {
   const o = dnd.over, pl = p.value
   if (!pl || !o) return null
-  if (o.kind === 'panel') return lesson.value ? { k: 'bad', t: 'Отпустите — урок снимется' } : null
+  if (o.kind === 'panel' || o.kind === 'out') return lesson.value ? { k: 'bad', t: 'Отпустите — урок снимется' } : null
   if (o.kind !== 'cell') return null
   const occ = scheduleStore.lessonMap.get(slotKey(o.date, o.hour))?.[0], at = fmtSlot(o.date, o.hour)
   if (!lesson.value) {
@@ -78,7 +78,7 @@ const hintPos = computed(() => {
 </script>
 <template>
   <div v-if="dnd.active && people.length" class="gw" :style="{ transform: `translate(${dnd.x}px, ${dnd.y}px)` }">
-    <div class="ghost" :class="[{ lesson, small: small || lesson, one }, lesson ? `ls-${lessonStyle}` : '']" :style="box">
+    <div class="ghost" :class="[{ lesson, small: small || lesson, one, gone: lesson && (dnd.over?.kind === 'out' || dnd.over?.kind === 'panel') }, lesson ? `ls-${lessonStyle}` : '']" :style="box">
       <template v-if="lesson">
         <AvatarStack v-if="!one" :students="people" :size="47" :max="3" ring="var(--surface)" />
         <template v-else><Avatar :s="people[0]" :size="47" /><span class="nm">{{ people[0].name }}</span></template>
@@ -123,6 +123,8 @@ const hintPos = computed(() => {
 .ghost.lesson.ls-sticker { background: #fff4b8 } .ghost.lesson.ls-blue { background: var(--blue-l) }
 .dhint { position: absolute; transform: translate(-50%, -100%); width: max-content; max-width: 260px; padding: 5px 10px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 800; line-height: 1.3; text-align: center;
   white-space: normal; box-shadow: 0 6px 16px rgba(0, 0, 0, .18); background: var(--green-d) }
+/* Урок вытащили за таблицу — снимется: бледнеет и краснеет рамка */
+.ghost.lesson.gone { opacity: .55; box-shadow: 0 0 0 2px var(--red), 0 8px 20px rgba(0, 0, 0, .2) !important }
 .dhint.swap { background: var(--orange-d) } .dhint.bad { background: var(--red) }
 .hint-enter-active { transition: opacity .12s } .hint-enter-from { opacity: 0 }
 </style>

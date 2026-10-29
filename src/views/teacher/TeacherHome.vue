@@ -91,7 +91,7 @@ function setStudents(lesson, ids) {
   showToast(msg, () => scheduleStore.setStudents(lesson, was))
 }
 function onDrop(p, t) {
-  if (t.kind === 'panel') return p.kind === 'lesson' ? unassign(p.lesson) : undefined
+  if (t.kind === 'panel' || t.kind === 'out') return p.kind === 'lesson' ? unassign(p.lesson) : undefined      // на панель учеников или просто за таблицу — урок снят
   if (t.kind !== 'cell') return
   const occ = occupant(t.date, t.hour)
   if (p.kind === 'student') {                         // ученик или группа из панели (ids): только на свободную ячейку
