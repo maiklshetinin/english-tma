@@ -6,7 +6,7 @@
 //  • Справа — карточка так, как её увидит ученик (настоящий StudySession), по нажатию на строку — она.
 //  • Фото и озвучка по ссылке остаются ссылками (как Google Диск сейчас); свои файлы можно бросить потом в таблицу — они уйдут в хранилище колоды.
 //  • Добавить к колоде (совпадающее слово обновляется, прогресс учеников сохраняется) или заменить все карточки.
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { newId } from '../utils/id'
 import { isMediaUrl, imageSrc } from '../utils/media'
 import { parseCsv } from '../composables/useSheetImport'
@@ -201,8 +201,10 @@ function apply() {
         <aside class="right">
           <div class="pvh">Так увидит ученик <small v-if="parsed.cards.length">· карточка {{ Math.min(pick, parsed.cards.length - 1) + 1 }} из {{ parsed.cards.length }}</small>
             <span class="nav"><button :disabled="pick <= 0" @click="pick--">‹</button><button :disabled="pick >= parsed.cards.length - 1" @click="pick++">›</button></span></div>
-          <div v-if="previewDeck" class="pv"><StudySession :key="previewCard.id + JSON.stringify(previewCard)" :deck="previewDeck" user-key="import-preview" embedded @exit="emit('close')" @finish="pick++" /></div>
-          <p v-else class="hint">{{ need || 'Нет строк со словом и переводом' }}</p>
+          <div class="pv">
+            <StudySession v-if="previewDeck" :key="previewCard.id + JSON.stringify(previewCard)" :deck="previewDeck" user-key="import-preview" @exit="emit('close')" @finish="pick++" />
+            <p v-else class="hint">{{ need || 'Нет строк со словом и переводом' }}</p>
+          </div>
         </aside>
       </div>
       <footer v-if="sheets" class="ft">
@@ -225,7 +227,7 @@ function apply() {
 .err { margin: 24px; color: var(--red-d); font-weight: 700 } .load { margin: 24px }
 .body { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0 }
 .left { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; min-height: 0; overflow: auto }
-.right { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; border-left: 1px solid var(--border); background: #fafafa; overflow: auto }
+.right { display: flex; flex-direction: column; gap: 12px; padding: 14px 18px; border-left: 1px solid var(--border); background: #fafafa; overflow: auto }
 .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px } .lb { font-size: 13px; font-weight: 800; color: var(--hint) }
 .tabs button { border: 0; border-radius: 9px; padding: 6px 10px; background: var(--surface); font: inherit; font-size: 13px; font-weight: 800; color: var(--hint); cursor: pointer } .tabs button.on { background: var(--blue-l); color: var(--blue) }
 .tabs small { opacity: .7 }
@@ -247,8 +249,8 @@ tr:hover td { background: #f6f9fc } tr.sel td { background: var(--blue-l) }
 .ok { color: var(--green-d) } .mid { color: var(--hint) } .warn { color: #b26b00 }
 .pvh { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px } .pvh small { text-transform: none; letter-spacing: 0; font-weight: 700 }
 .nav { margin-left: auto; display: flex; gap: 4px } .nav button { width: 30px; height: 30px; border: 0; border-radius: 50%; background: var(--surface); font-size: 18px; font-weight: 900; color: var(--text); cursor: pointer } .nav button:disabled { opacity: .35; cursor: default }
-.pv { padding: 12px; border-radius: 16px; background: var(--bg, #f5f5f5) }
-.pv :deep(.bar) { display: none }
+.pv { padding: 14px; border-radius: 16px; background: var(--card); box-shadow: 0 0 0 1px var(--border) }
+.pv :deep(.bar), .pv :deep(.dc) { display: none }      /* как у ученика, но без шапки и графика колоды */
 .ft { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--border) }
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface) }
 .seg button { border: 0; border-radius: 9px; padding: 6px 12px; background: none; font: inherit; font-size: 13px; font-weight: 800; color: var(--hint); cursor: pointer } .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }

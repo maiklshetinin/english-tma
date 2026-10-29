@@ -118,7 +118,11 @@ async function createMissing() {
 const over = ref(false), overCell = ref('')
 let leaveT = 0
 const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
-function dragOver(e) { if (!hasFiles(e)) return; e.preventDefault(); clearTimeout(leaveT); over.value = true; overRow.value = ''; overCell.value = '' }
+const overSheet = ref(false)           // тащат таблицу (Excel / CSV), а не фото и звук — другая подсказка
+function dragOver(e) {
+  if (!hasFiles(e)) return; e.preventDefault(); clearTimeout(leaveT); over.value = true; overRow.value = ''; overCell.value = ''
+  overSheet.value = [...(e.dataTransfer?.items ?? [])].some(i => /sheet|excel|csv|tab-separated/.test(i.type))
+}
 function dragLeave() { clearTimeout(leaveT); leaveT = setTimeout(() => { over.value = false; overCell.value = ''; overRow.value = '' }, 80) }
 async function drop(e) {
   e.preventDefault(); over.value = false
@@ -129,7 +133,8 @@ async function drop(e) {
 // Файл на строку: на ячейку фото / звука — в неё; на слово, перевод и т.п. — в эту карточку: фото → «Фото», звук → «Озвучка слова».
 // Можно бросить сразу фото и звук. Имя файла тут не важно.
 const overRow = ref('')
-function cellOver(e, c, f) { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); clearTimeout(leaveT); overCell.value = f.kind === 'text' ? '' : c.id + f.k; overRow.value = c.id; over.value = false }
+const overRowCard = computed(() => cards.value.find(c => c.id === overRow.value))
+function cellOver(e, c, f) { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); clearTimeout(leaveT); overCell.value = f.kind === 'text' ? '' : c.id + f.k; overRow.value = c.id; over.value = true; overSheet.value = [...(e.dataTransfer?.items ?? [])].some(i => /sheet|excel|csv|tab-separated/.test(i.type)) }
 async function dropCell(e, c, f) {
   e.preventDefault(); e.stopPropagation(); overCell.value = ''; overRow.value = ''; over.value = false
   const files = [...(e.dataTransfer?.files ?? [])]; if (!files.length) return
@@ -225,6 +230,11 @@ const back = () => router.push({ name: 'words' })
 
     <div v-if="!deck" class="none"><b>Колода не найдена</b><button class="btn sm" @click="back">К колодам</button></div>
     <section v-else class="wrap" :class="{ over }" @dragover="dragOver" @drop="drop">
+      <!-- Тащат файлы над таблицей — подсвечиваем всю область и говорим, что будет -->
+      <div v-if="over" class="dropov"><div class="pill"><AppIcon name="download" :size="22" />
+        <span v-if="overSheet"><b>Отпустите — откроется импорт таблицы</b>дальше выберете, какой столбец чему соответствует</span>
+        <span v-else-if="overRowCard"><b>Отпустите — к слову «{{ overRowCard.front || 'без слова' }}»</b>фото → «Фото», звук → «Озвучка{{ overCell.endsWith('exampleAudio') ? ' примера' : ' слова' }}»</span>
+        <span v-else><b>Отпустите — файлы разойдутся по строкам</b>по имени: apple.jpg → фото, apple.mp3 → озвучка. Или наведите на строку слова</span></div></div>
       <div class="tip"><AppIcon name="download" :size="18" /><span><b>Бросьте сюда таблицу Excel</b> — откроется импорт со сменой столбцов. <b>Или пачку фото и аудио</b> — разойдутся по строкам по имени файла:
         <i>apple.jpg</i> → фото, <i>apple.mp3</i> → озвучка слова, <i>apple_ex.mp3</i> → озвучка примера. Или бросьте фото / звук прямо на строку нужного слова.
         Фото — от 450×300: обрежутся по центру до 450×300 и ужмутся до ~40 КБ.</span></div>
@@ -242,7 +252,7 @@ const back = () => router.push({ name: 'words' })
         <table>
           <thead><tr><th class="n">#</th>
             <th v-for="f in FIELDS" :key="f.k" :class="f.kind"><div class="hd"><span>{{ f.t }}<em v-if="f.need">*</em></span>
-              <small :class="{ full: cards.length && filled(f.k) === cards.length, none: !filled(f.k) }">{{ filled(f.k) }} из {{ cards.length }}</small>
+              <small :class="{ full: cards.length && filled(f.k) === cards.length, empty0: !filled(f.k) }">{{ filled(f.k) }} из {{ cards.length }}</small>
               <i class="fill"><b :style="{ width: (cards.length ? filled(f.k) / cards.length * 100 : 0) + '%' }" /></i></div></th>
             <th class="act" /></tr></thead>
           <tbody>
@@ -283,7 +293,10 @@ const back = () => router.push({ name: 'words' })
 .search { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; background: var(--surface); color: var(--hint); width: 200px } .search input { margin: 0; border: 0; background: none; padding: 8px 0; font-size: 14px; min-width: 0 }
 .none { display: grid; justify-items: center; align-content: center; gap: 12px }
 .wrap { display: flex; flex-direction: column; gap: 10px; padding: 14px; min-height: 0; transition: background .12s }
-.wrap.over { background: var(--blue-l); box-shadow: inset 0 0 0 3px var(--blue) }
+.wrap { position: relative }
+.dropov { position: absolute; inset: 6px; z-index: 5; border: 3px dashed var(--blue); border-radius: 18px; background: rgba(28, 176, 246, .07); pointer-events: none }
+.pill { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 16px; background: var(--blue); color: #fff; box-shadow: 0 10px 30px rgba(28, 176, 246, .35); white-space: nowrap }
+.pill span { display: grid; font-size: 13px; font-weight: 700; opacity: .95 } .pill b { font-size: 16px; font-weight: 900 }
 .tip { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border: 2px dashed var(--border); border-radius: 14px; background: var(--card); color: var(--hint); font-size: 13px }
 .tip b { color: var(--text) } .tip i, .rep i { font-style: normal; color: var(--blue); font-weight: 700; margin-right: 4px }
 .rep { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 14px; border-radius: 12px; background: var(--green-l); color: var(--green-d); font-size: 13px; font-weight: 600 }
@@ -291,8 +304,8 @@ const back = () => router.push({ name: 'words' })
 .tbl { flex: 1; overflow: auto; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 1px var(--border) }
 table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1060px; font-size: 14px }
 th { position: sticky; top: 0; z-index: 1; background: var(--card); text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--border); vertical-align: top }
-.hd { display: grid; gap: 4px; justify-items: stretch; text-align: left } .hd small { text-align: left } .hd span { font-weight: 900; font-size: 13px } .hd em { color: var(--red); font-style: normal }
-.hd small { font-size: 11px; font-weight: 800; color: var(--orange-d) } .hd small.full { color: var(--green-d) } .hd small.none { color: var(--hint-2) }
+.hd { display: grid; gap: 4px; justify-items: stretch; text-align: left } .hd small { display: block; text-align: left } .hd span { font-weight: 900; font-size: 13px } .hd em { color: var(--red); font-style: normal }
+.hd small { font-size: 11px; font-weight: 800; color: var(--orange-d) } .hd small.full { color: var(--green-d) } .hd small.empty0 { color: var(--hint-2) }
 .fill { display: block; height: 4px; border-radius: 3px; background: var(--surface); overflow: hidden } .fill b { display: block; height: 100%; background: var(--green) }
 th.image, th.audio { width: 104px } th.n, td.n { width: 34px; color: var(--hint-2); text-align: center; font-size: 12px } th.act { width: 104px } td.act { white-space: nowrap; text-align: right }
 td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: middle }
