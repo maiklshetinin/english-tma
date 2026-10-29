@@ -137,7 +137,7 @@ function rzStart(e, i) {
   rz.value = { i, x: e.clientX, w: colW.value[i] || 160 }
   const move = (ev) => { colW.value[i] = Math.max(60, Math.round(rz.value.w + ev.clientX - rz.value.x)) }
   const up = () => { rz.value = null; removeEventListener('pointermove', move); removeEventListener('pointerup', up); document.body.style.cursor = '' }
-  addEventListener('pointermove', move); addEventListener('pointerup', up); document.body.style.cursor = 'col-resize'
+  addEventListener('pointermove', move); addEventListener('pointerup', up); document.body.style.cursor = getComputedStyle(e.currentTarget).cursor
 }
 // Все выбранные строки прокручиваются в одном списке; рисуем порциями по 200 (5000 строк сразу — тормозит), подгружаем при прокрутке
 const count = ref(200)
@@ -200,7 +200,7 @@ function apply() {
                   </select>
                   <small v-if="firstRow">{{ firstRow[i - 1] }}</small>
                   <!-- Граница столбца: навели — синяя линия во всю высоту (как во Figma), тянем — меняем ширину; двойной щелчок — обычная ширина -->
-                  <i class="rz" title="Потяните, чтобы изменить ширину" @pointerdown="rzStart($event, i - 1)" @dblclick="colW[i - 1] = defW(map[i - 1])" />
+                  <i class="rz" @pointerdown="rzStart($event, i - 1)" @dblclick="colW[i - 1] = defW(map[i - 1])" />
                 </th></tr>
               </thead>
               <tbody>
@@ -255,14 +255,13 @@ function apply() {
 .ck { display: flex; align-items: center; gap: 6px; cursor: pointer } .ck input { margin: 0; width: 16px; height: 16px }
 .rng input { width: 74px; margin: 0 4px; padding: 5px 8px; font-size: 13px; border-width: 1px; border-radius: 8px; display: inline-block }
 .tip { margin: 0; font-size: 13px }
-.grid { flex: 1; min-height: 160px; overflow: auto; border-radius: 12px; box-shadow: 0 0 0 1px var(--border) }
+.grid { --rzc: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M4.5 16l6-5.5V14h11v-3.5l6 5.5-6 5.5V18h-11v3.5z' fill='%23fff' stroke='%23000' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E") 16 16, col-resize; flex: 1; min-height: 160px; overflow: auto; border-radius: 12px; box-shadow: 0 0 0 1px var(--border) }
 table { border-collapse: separate; border-spacing: 0; font-size: 13px; table-layout: fixed }
 th { position: sticky; top: 0; z-index: 2; padding: 8px 6px; background: var(--card); border-bottom: 3px solid var(--c, var(--border)); text-align: left; vertical-align: top }
 /* Ручка ширины: тонкая зона на правой границе; линия — во всю высоту таблицы, синяя при наведении и пока тянем */
-.rz { position: absolute; top: 0; right: 0; width: 9px; height: var(--gh, 400px); z-index: 3; cursor: col-resize }
-.rz::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: transparent; transition: background .1s }
+.rz { position: absolute; top: 0; right: 0; width: 9px; height: var(--gh, 400px); z-index: 3; cursor: var(--rzc) }
+.rz::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: transparent }
 .rz:hover::after, th.rzon .rz::after { background: #0d99ff }
-.rz:hover::before, th.rzon .rz::before { content: ''; position: absolute; right: -2px; top: 16px; width: 6px; height: 22px; border-radius: 3px; background: #0d99ff }
 th select { width: 100%; margin: 0; padding: 6px 8px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--c, #999) 16%, white); color: var(--c, var(--hint)); font: inherit; font-size: 13px; font-weight: 900; cursor: pointer }
 th.off select { background: var(--surface); color: var(--hint-2); font-weight: 700 }
 th small { display: block; margin-top: 4px; font-size: 11px; color: var(--hint); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
