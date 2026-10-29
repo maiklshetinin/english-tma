@@ -8,7 +8,7 @@ import type { Firestore, FieldValue as FV, QueryDocumentSnapshot } from 'firebas
 import { fail } from './login.js'
 import { makeAccess } from './access.js'
 import { cleanDeck, cleanPreset, cleanUnits, id } from './clean.js'
-import type { CompleteResponse, ContentResponse, Deck, DeckDoc, PathUnit, Preset, PresetDoc, TokenUser } from './types.js'
+import type { Card, CompleteResponse, ContentResponse, Deck, DeckDoc, PathUnit, Preset, PresetDoc, TokenUser } from './types.js'
 
 export interface ContentDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; now?: () => number }
 
@@ -93,6 +93,12 @@ export function makeContent({ db, FieldValue, now = Date.now }: ContentDeps) {
       const ref = decks().doc(did), cur = await ref.get()
       await ref.set({ ...data, createdBy: cur.get('createdBy') ?? by, createdMs: cur.get('createdMs') ?? now(), updatedAt: FieldValue.serverTimestamp() })
     },
-    async removeDeck(deckId: string): Promise<void> { await decks().doc(id(deckId, 'deck id')).delete() },
+    /** Удалить колоду. Возвращает ссылки на фото и озвучку её карточек — сервер уберёт из хранилища свои файлы (index.ts) */
+    async removeDeck(deckId: string): Promise<string[]> {
+      const ref = decks().doc(id(deckId, 'deck id')), d = await ref.get()
+      const urls = ((d.get('cards') as Card[] | undefined) ?? []).flatMap((c) => [c.image, c.audio, c.exampleAudio]).filter((u): u is string => !!u)
+      await ref.delete()
+      return urls
+    },
   }
 }

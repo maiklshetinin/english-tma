@@ -14,6 +14,8 @@ import { imageSrc, audioSrc } from '../../utils/media'
 import { newId } from '../../utils/id'
 import { showToast } from '../../composables/useToast'
 import AppIcon from '../../components/AppIcon.vue'
+import CardImport from '../../components/CardImport.vue'
+import { fetchSheetCsv } from '../../composables/useSheetImport'
 
 const route = useRoute(), router = useRouter()
 const decks = useDecksStore()
@@ -118,7 +120,12 @@ let leaveT = 0
 const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
 function dragOver(e) { if (!hasFiles(e)) return; e.preventDefault(); clearTimeout(leaveT); over.value = true; overRow.value = ''; overCell.value = '' }
 function dragLeave() { clearTimeout(leaveT); leaveT = setTimeout(() => { over.value = false; overCell.value = ''; overRow.value = '' }, 80) }
-async function drop(e) { e.preventDefault(); over.value = false; await dropOnTable([...(e.dataTransfer?.files ?? [])]) }
+async function drop(e) {
+  e.preventDefault(); over.value = false
+  const fs = [...(e.dataTransfer?.files ?? [])], sheet = fs.find(isSheet)
+  if (sheet) return void (importFile.value = sheet)                  // таблица Excel / CSV — окно импорта
+  await dropOnTable(fs)
+}
 // Файл на строку: на ячейку фото / звука — в неё; на слово, перевод и т.п. — в эту карточку: фото → «Фото», звук → «Озвучка слова».
 // Можно бросить сразу фото и звук. Имя файла тут не важно.
 const overRow = ref('')
@@ -139,6 +146,35 @@ async function dropCell(e, c, f) {
 const pick = ref(null); let pickTo = null
 function choose(c, f) { pickTo = { c, k: f.k }; pick.value.accept = f.kind === 'image' ? 'image/*' : 'audio/*'; pick.value.value = ''; pick.value.click() }
 async function picked(e) { const file = e.target.files?.[0]; if (file && pickTo) await attach(pickTo.c, pickTo.k, file) }
+
+// ---------- Импорт из Excel / CSV (окно CardImport) ----------
+const isSheet = (f) => /\.(xlsx|xls|csv|tsv)$/i.test(f.name)
+const importFile = ref(null), sheetPick = ref(null)
+function chooseSheet() { sheetPick.value.value = ''; sheetPick.value.click() }
+function imported({ added, updated, removed }) {
+  importFile.value = null
+  for (const c of removed) for (const k of ['image', 'audio', 'exampleAudio']) forget(c[k])     // замена колоды: файлы удалённых карточек — из хранилища
+  showToast(`Импорт: добавлено ${added}, обновлено ${updated}${removed.length ? `, удалено ${removed.length}` : ''}`)
+}
+// Google Таблица по ссылке: сервер забирает её как CSV (GET /sheets/csv; у таблицы должен быть доступ «Все, у кого есть ссылка»),
+// дальше — то же окно импорта. Берётся лист из ссылки (#gid=…), без него — первый.
+const gBusy = ref(false)
+async function fromGoogle() {
+  const url = prompt('Ссылка на Google Таблицу (лист — тот, что открыт по ссылке)', '')?.trim(); if (!url) return
+  if (!/docs\.google\.com\/spreadsheets\/d\//.test(url)) return showToast('Это не похоже на ссылку Google Таблицы', null, 'bad')
+  gBusy.value = true
+  try { importFile.value = new File([await fetchSheetCsv(url)], 'Google Таблица.csv', { type: 'text/csv' }) }
+  catch (e) { showToast(e.message, null, 'bad') }
+  finally { gBusy.value = false }
+}
+// Фото по ссылке (если файла нет под рукой): любая https-ссылка, как из Google Диска
+function linkPhoto(c) {
+  const u = prompt('Ссылка на фото (https://…)', '')?.trim(); if (!u) return
+  if (!/^https:\/\//i.test(u)) return showToast('Нужна ссылка, которая начинается с https://', null, 'bad')
+  const old = c.image; c.image = u; if (old) forget(old)
+}
+// Большие колоды: показываем строки порциями, чтобы таблица не тормозила
+const limit = ref(300)
 
 // ---------- Запись с микрофона (до 30 с) ----------
 const rec = reactive({ id: '', t: 0 }); let mr = null, timer = 0
@@ -181,12 +217,15 @@ const back = () => router.push({ name: 'words' })
       <template v-if="deck"><i class="vs" /><b class="dt">{{ deck.title }}</b><span class="cnt">{{ cards.length }} {{ word(cards.length) }}</span></template>
       <span class="sp" />
       <label v-if="deck" class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Поиск…" /></label>
+      <button v-if="deck" class="btn ghost sm" title="Excel (.xlsx) или CSV — столбцы в любом порядке" @click="chooseSheet"><AppIcon name="sheet" :size="16" /> Из Excel</button>
+      <button v-if="deck" class="btn ghost sm" :disabled="gBusy" title="Вставьте ссылку на Google Таблицу" @click="fromGoogle"><AppIcon name="link" :size="16" /> {{ gBusy ? 'Загружаю…' : 'Из Google Таблицы' }}</button>
       <button v-if="deck" class="btn sm" @click="addCard"><AppIcon name="plus" :size="16" /> Карточка</button>
+      <input ref="sheetPick" type="file" hidden accept=".xlsx,.xls,.csv,.tsv" @change="$event.target.files[0] && (importFile = $event.target.files[0])" />
     </header>
 
     <div v-if="!deck" class="none"><b>Колода не найдена</b><button class="btn sm" @click="back">К колодам</button></div>
     <section v-else class="wrap" :class="{ over }" @dragover="dragOver" @drop="drop">
-      <div class="tip"><AppIcon name="download" :size="18" /><span><b>Бросьте сюда пачку фото и аудио</b> — разойдутся по строкам по имени файла:
+      <div class="tip"><AppIcon name="download" :size="18" /><span><b>Бросьте сюда таблицу Excel</b> — откроется импорт со сменой столбцов. <b>Или пачку фото и аудио</b> — разойдутся по строкам по имени файла:
         <i>apple.jpg</i> → фото, <i>apple.mp3</i> → озвучка слова, <i>apple_ex.mp3</i> → озвучка примера. Или бросьте фото / звук прямо на строку нужного слова.
         Фото — от 450×300: обрежутся по центру до 450×300 и ужмутся до ~40 КБ.</span></div>
       <div v-if="report" class="rep" :class="{ warn: report.miss?.length || report.fail }">
@@ -207,7 +246,7 @@ const back = () => router.push({ name: 'words' })
               <i class="fill"><b :style="{ width: (cards.length ? filled(f.k) / cards.length * 100 : 0) + '%' }" /></i></div></th>
             <th class="act" /></tr></thead>
           <tbody>
-            <tr v-for="(c, i) in shown" :key="c.id" :class="{ bad: !c.front || !c.back, off: c.suspended, rowhot: overRow === c.id }">
+            <tr v-for="(c, i) in shown.slice(0, limit)" :key="c.id" :class="{ bad: !c.front || !c.back, off: c.suspended, rowhot: overRow === c.id }">
               <td class="n">{{ i + 1 }}</td>
               <td v-for="f in FIELDS" :key="f.k" :class="[f.kind, { dz: f.kind !== 'text', hot: overCell === c.id + f.k }]"
                 @dragover="cellOver($event, c, f)" @drop="dropCell($event, c, f)">
@@ -216,7 +255,7 @@ const back = () => router.push({ name: 'words' })
                 <span v-else-if="f.kind === 'image'" class="cell">
                   <template v-if="c.image"><img :src="src(c.image)" alt="" :title="info[c.id + 'image'] ? 'сжато: ' + info[c.id + 'image'] + ' · нажмите — заменить' : 'Нажмите — заменить'" @click="choose(c, f)" />
                     <button class="rm" title="Убрать фото" @click="clearField(c, 'image')">✕</button></template>
-                  <button v-else class="slot" @click="choose(c, f)">+ фото</button>
+                  <template v-else><button class="slot" @click="choose(c, f)">+ фото</button><button class="mic" title="Вставить ссылку на фото" @click="linkPhoto(c)">🔗</button></template>
                 </span>
                 <span v-else class="cell au">
                   <template v-if="c[f.k]"><button class="play" title="Послушать" @click="play(c[f.k])">▶</button><button class="rm" title="Убрать озвучку" @click="clearField(c, f.k)">✕</button></template>
@@ -228,9 +267,11 @@ const back = () => router.push({ name: 'words' })
             </tr>
           </tbody>
         </table>
-        <p v-if="!cards.length" class="empty">Карточек пока нет. Нажмите «+ Карточка» или бросьте сюда фото и аудио — слово возьмётся из имени файла.</p>
+        <button v-if="shown.length > limit" class="more" @click="limit += 300">Показать ещё {{ Math.min(300, shown.length - limit) }} из {{ shown.length - limit }}</button>
+        <p v-if="!cards.length" class="empty">Карточек пока нет. Бросьте сюда таблицу Excel, нажмите «+ Карточка» или бросьте фото и аудио — слово возьмётся из имени файла.</p>
       </div>
     </section>
+    <CardImport v-if="importFile && deck" :deck="deck" :file="importFile" @close="importFile = null" @done="imported" />
   </div>
 </template>
 
@@ -250,7 +291,7 @@ const back = () => router.push({ name: 'words' })
 .tbl { flex: 1; overflow: auto; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 1px var(--border) }
 table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1060px; font-size: 14px }
 th { position: sticky; top: 0; z-index: 1; background: var(--card); text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--border); vertical-align: top }
-.hd { display: grid; gap: 4px } .hd span { font-weight: 900; font-size: 13px } .hd em { color: var(--red); font-style: normal }
+.hd { display: grid; gap: 4px; justify-items: stretch; text-align: left } .hd small { text-align: left } .hd span { font-weight: 900; font-size: 13px } .hd em { color: var(--red); font-style: normal }
 .hd small { font-size: 11px; font-weight: 800; color: var(--orange-d) } .hd small.full { color: var(--green-d) } .hd small.none { color: var(--hint-2) }
 .fill { display: block; height: 4px; border-radius: 3px; background: var(--surface); overflow: hidden } .fill b { display: block; height: 100%; background: var(--green) }
 th.image, th.audio { width: 104px } th.n, td.n { width: 34px; color: var(--hint-2); text-align: center; font-size: 12px } th.act { width: 104px } td.act { white-space: nowrap; text-align: right }
@@ -280,6 +321,7 @@ tr:hover .del, .del:focus-visible { opacity: 1 } .del:hover { background: var(--
 .del { display: inline-grid; vertical-align: middle }
 tr.off td:not(.act) { opacity: .45 }
 .mini { border: 0; border-radius: 8px; padding: 5px 9px; background: rgba(0, 0, 0, .06); font: inherit; font-size: 12px; font-weight: 800; color: inherit; cursor: pointer } .mini:hover { background: rgba(0, 0, 0, .1) }
+.more { display: block; margin: 10px auto; border: 0; border-radius: 10px; padding: 8px 14px; background: var(--surface); font: inherit; font-size: 13px; font-weight: 800; color: var(--blue); cursor: pointer }
 .empty { padding: 30px; text-align: center; color: var(--hint) }
 @media (max-width: 700px) { .tip { display: none } .search { width: 120px } .cnt { display: none } }
 </style>

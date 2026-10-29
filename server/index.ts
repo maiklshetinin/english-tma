@@ -15,7 +15,7 @@ import { makeSchedule } from './schedule.js'
 import { makeContent } from './content.js'
 import { makeSrs } from './srs.js'
 import { makeCourses } from './courses.js'
-import { makeStorage } from './storage.js'
+import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
@@ -152,7 +152,12 @@ app.post('/paths/:studentId/complete', requireUser, wrap(async (req, res) => res
 app.put('/presets/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.putPreset(req.params.id, req.body, req.user.uid); res.json({ ok: true }) }))
 app.delete('/presets/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.removePreset(req.params.id); res.json({ ok: true }) }))
 app.put('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.putDeck(req.params.id, req.body, req.user.uid); res.json({ ok: true }) }))
-app.delete('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => { await content.removeDeck(req.params.id); res.json({ ok: true }) }))
+app.delete('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => {
+  const urls = await content.removeDeck(req.params.id)
+  // фото и озвучка колоды из нашего хранилища (ссылка …/media/f/<ключ>) — тоже удаляем; чужие ссылки (Диск и т.п.) не трогаем
+  for (const u of urls) { const k = decodeURIComponent(u.split('/media/f/')[1] ?? ''); if (k && isDeckKey(k)) storage.remove(req.user.uid, k).catch(() => {}) }
+  res.json({ ok: true })
+}))
 // Группы учеников — отдельная сущность (создаются и меняются только преподавателем, из панели учеников)
 // Курсы (редактор «рельс») — только преподаватели; пространство общее (все видят все курсы)
 app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(), storage: storage.ready })))
@@ -207,7 +212,9 @@ app.get('/sheets/csv', requireUser, requireTeacher, wrap(async (req, res) => {
   const m = String(req.query.url || '').match(/\/spreadsheets\/d\/([\w-]+)/)
   if (!m) throw fail(400, 'not a sheet url')
   const gid = (String(req.query.url).match(/[#&?]gid=(\d+)/) || [])[1]
-  const r = await fetch(`https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv${gid ? `&gid=${gid}` : ''}`)
+  // Сначала «Файл → Скачать → CSV» (export): отдаёт ячейки как есть. gviz — запасной: он угадывает типы столбцов и может потерять текст в «числовом»
+  let r = await fetch(`https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv${gid ? `&gid=${gid}` : ''}`)
+  if (!r.ok || !/text\/csv/.test(r.headers.get('content-type') || '')) r = await fetch(`https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv${gid ? `&gid=${gid}` : ''}`)
   if (!r.ok) throw fail(r.status === 404 ? 404 : 403, 'sheet unavailable')
   res.type('text/csv').send(await r.text())
 }))
