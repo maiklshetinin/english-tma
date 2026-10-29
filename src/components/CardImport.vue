@@ -126,6 +126,19 @@ const pick = ref(0)
 const previewCard = computed(() => { const c = parsed.value.cards[Math.min(pick.value, parsed.value.cards.length - 1)]; return c && { id: 'preview-' + c.row, ...c } })
 const previewDeck = computed(() => previewCard.value && { id: 'import-preview', title: props.deck.title, cards: [previewCard.value], newPerDay: 99 })
 const pickRow = (rowIndex) => { const n = rowIndex + from.value; const j = parsed.value.cards.findIndex(c => c.row === n); if (j >= 0) pick.value = j }
+// Ширина столбцов: своя у каждого, меняется перетаскиванием границы
+const defW = (k) => ({ front: 190, back: 230, example: 340, exampleTr: 340, image: 100, audio: 150, exampleAudio: 150 })[k] ?? 120
+const colW = ref([])
+watch([width, sheetI], () => { colW.value = Array.from({ length: width.value }, (_, i) => defW(map.value[i])) })
+watch(map, (m, old) => { m.forEach((k, i) => { if (old && old[i] !== k) colW.value[i] = defW(k) }) })     // сменили поле — подходящая ширина
+const rz = ref(null), gridEl = ref(null), gridH = ref(600)       // высота видимой таблицы — на неё рисуем линию границы
+function rzStart(e, i) {
+  e.preventDefault(); e.stopPropagation()
+  rz.value = { i, x: e.clientX, w: colW.value[i] || 160 }
+  const move = (ev) => { colW.value[i] = Math.max(60, Math.round(rz.value.w + ev.clientX - rz.value.x)) }
+  const up = () => { rz.value = null; removeEventListener('pointermove', move); removeEventListener('pointerup', up); document.body.style.cursor = '' }
+  addEventListener('pointermove', move); addEventListener('pointerup', up); document.body.style.cursor = 'col-resize'
+}
 // Все выбранные строки прокручиваются в одном списке; рисуем порциями по 200 (5000 строк сразу — тормозит), подгружаем при прокрутке
 const count = ref(200)
 const shown = computed(() => dataRows.value.slice(Math.max(0, from.value - 1), Math.min(last.value, Math.max(0, from.value - 1) + count.value)))
@@ -177,14 +190,17 @@ function apply() {
             <span class="rng">Строки с <input v-model.number="from" type="number" min="1" :max="total" /> по <input v-model.number="to" type="number" min="0" :max="total" :placeholder="String(total)" /> из {{ total }}</span>
           </div>
           <p class="hint tip">Над каждым столбцом выберите, что в нём. Ненужные — «не брать». Нажмите на строку — справа её карточка.</p>
-          <div class="grid" @scroll.passive="more">
-            <table>
+          <div ref="gridEl" class="grid" :style="{ '--gh': gridH + 'px' }" @scroll.passive="more" @pointerenter="gridH = gridEl.clientHeight">
+            <table :style="{ width: colW.reduce((a, b) => a + b, 0) + 'px' }">
+              <colgroup><col v-for="i in width" :key="i" :style="{ width: (colW[i - 1] || 160) + 'px' }" /></colgroup>
               <thead>
-                <tr><th v-for="i in width" :key="i" :style="map[i - 1] ? { '--c': FT[map[i - 1]].c } : null" :class="{ off: !map[i - 1] }">
+                <tr><th v-for="i in width" :key="i" :style="map[i - 1] ? { '--c': FT[map[i - 1]].c } : null" :class="{ off: !map[i - 1], rzon: rz?.i === i - 1 }">
                   <select :value="map[i - 1] || ''" @change="setField(i - 1, $event.target.value)">
                     <option value="">— не брать</option><option v-for="f in FIELDS" :key="f.k" :value="f.k">{{ f.t }}</option>
                   </select>
                   <small v-if="firstRow">{{ firstRow[i - 1] }}</small>
+                  <!-- Граница столбца: навели — синяя линия во всю высоту (как во Figma), тянем — меняем ширину; двойной щелчок — обычная ширина -->
+                  <i class="rz" title="Потяните, чтобы изменить ширину" @pointerdown="rzStart($event, i - 1)" @dblclick="colW[i - 1] = defW(map[i - 1])" />
                 </th></tr>
               </thead>
               <tbody>
@@ -240,12 +256,18 @@ function apply() {
 .rng input { width: 74px; margin: 0 4px; padding: 5px 8px; font-size: 13px; border-width: 1px; border-radius: 8px; display: inline-block }
 .tip { margin: 0; font-size: 13px }
 .grid { flex: 1; min-height: 160px; overflow: auto; border-radius: 12px; box-shadow: 0 0 0 1px var(--border) }
-table { border-collapse: separate; border-spacing: 0; font-size: 13px; min-width: 100% }
-th { position: sticky; top: 0; z-index: 1; padding: 8px 6px; background: var(--card); border-bottom: 3px solid var(--c, var(--border)); text-align: left; vertical-align: top; min-width: 110px }
+table { border-collapse: separate; border-spacing: 0; font-size: 13px; table-layout: fixed }
+th { position: sticky; top: 0; z-index: 2; padding: 8px 6px; background: var(--card); border-bottom: 3px solid var(--c, var(--border)); text-align: left; vertical-align: top }
+/* Ручка ширины: тонкая зона на правой границе; линия — во всю высоту таблицы, синяя при наведении и пока тянем */
+.rz { position: absolute; top: 0; right: 0; width: 9px; height: var(--gh, 400px); z-index: 3; cursor: col-resize }
+.rz::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: transparent; transition: background .1s }
+.rz:hover::after, th.rzon .rz::after { background: #0d99ff }
+.rz:hover::before, th.rzon .rz::before { content: ''; position: absolute; right: -2px; top: 16px; width: 6px; height: 22px; border-radius: 3px; background: #0d99ff }
 th select { width: 100%; margin: 0; padding: 6px 8px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--c, #999) 16%, white); color: var(--c, var(--hint)); font: inherit; font-size: 13px; font-weight: 900; cursor: pointer }
 th.off select { background: var(--surface); color: var(--hint-2); font-weight: 700 }
-th small { display: block; margin-top: 4px; font-size: 11px; color: var(--hint); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px }
-td { padding: 6px 8px; border-bottom: 1px solid var(--border); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer }
+th small { display: block; margin-top: 4px; font-size: 11px; color: var(--hint); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+th select { text-overflow: ellipsis }
+td { padding: 6px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer }
 td.off { color: var(--hint-2); background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(0, 0, 0, .025) 6px 12px) }
 td img { width: 54px; height: 36px; object-fit: cover; border-radius: 6px; display: block }
 tr:hover td { background: #f6f9fc } tr.sel td { background: var(--blue-l) }
