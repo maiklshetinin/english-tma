@@ -29,6 +29,38 @@ const weekMoney = (dates) => sumMoney(scheduleStore.lessons.filter(l => dates.in
 const m1 = computed(() => weekMoney(w1.value)), m2 = computed(() => weekMoney(w2.value))
 // Одна таблица: «Эта неделя» или «Следующая» (переключатель над таблицей)
 const week = ref(0)
+// «Призраки» следующей недели: уроки этой недели в те же дни и часы, пока на следующей там пусто. В базе их нет —
+// нажал на призрака → урок создан; «Подтвердить все» → вся неделя; × → эту подсказку больше не показываем (запоминается на устройстве).
+const skipKey = computed(() => `tma.ghostSkip.${w2.value[0]}`)
+const readSkip = () => { try { return new Set(JSON.parse(localStorage.getItem(skipKey.value) || '[]')) } catch { return new Set() } }
+const skipped = ref(readSkip()); watch(skipKey, () => { skipped.value = readSkip() })
+const plus7 = (d) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + 7); return x.toISOString().slice(0, 10) }
+const ghosts = computed(() => {
+  const out = []
+  for (const l of scheduleStore.lessons) {
+    if (!w1.value.includes(l.date)) continue
+    const ids = known(l); if (!ids.length) continue
+    const date = plus7(l.date), key = `${date}_${l.hour}`
+    if (skipped.value.has(key) || occupant(date, l.hour)) continue
+    out.push({ key, date, hour: l.hour, minute: l.minute || 0, studentIds: ids })
+  }
+  return out
+})
+function confirmGhost(g, quiet = false) {
+  const lesson = scheduleStore.create(g.studentIds, g.date, g.hour)
+  if (g.minute) scheduleStore.setDetails(lesson, { minute: g.minute })
+  if (!quiet) { haptic('light'); showToast(`Урок поставлен: ${g.studentIds.map(name).join(', ')} · ${fmtSlot(g.date, g.hour)}`, () => scheduleStore.remove(lesson)) }
+  return lesson
+}
+function confirmAll() {
+  const made = ghosts.value.map(g => confirmGhost(g, true)); haptic('light')
+  showToast(`Поставлено уроков: ${made.length}`, () => made.forEach(l => scheduleStore.remove(l)))
+}
+function skipGhost(g) {
+  const s = new Set(skipped.value); s.add(g.key); skipped.value = s
+  try { localStorage.setItem(skipKey.value, JSON.stringify([...s])) } catch { /* приватный режим */ }
+  showToast('Подсказка убрана', () => { const t = new Set(skipped.value); t.delete(g.key); skipped.value = t; try { localStorage.setItem(skipKey.value, JSON.stringify([...t])) } catch { /* — */ } })
+}
 // Урок состоится, если не все его ученики отменили (для спидометра нагрузки)
 const activeOf = (l) => !l.studentIds.length || !l.studentIds.every(id => l.canceled?.[id])
 const sheet = ref(null)                             // { lesson } | { slot }
@@ -120,9 +152,10 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
             </div>
             <WeekLoad :lessons="scheduleStore.lessons" :dates="week ? w2 : w1" :active-of="activeOf" />
             <GridStyleButton />
+            <button v-if="week && ghosts.length" class="btn sm gall" title="Поставить все уроки, как на этой неделе" @click="confirmAll">Как на этой неделе · {{ ghosts.length }}</button>
             <WeekMoney class="money" :m="week ? m2 : m1" />
           </div>
-          <WeekGrid :dates="week ? w2 : w1" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" />
+          <WeekGrid :dates="week ? w2 : w1" :ghosts="week ? ghosts : []" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" />
         </div>
       </div>
     </section>

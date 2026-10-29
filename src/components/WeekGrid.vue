@@ -11,8 +11,12 @@ import { useStudentsStore } from '../stores/students'
 import { useScheduleStore } from '../stores/schedule'
 const studentStore = useStudentsStore()
 const scheduleStore = useScheduleStore()
-const props = defineProps({ dates: { type: Array, required: true } })
-const emit = defineEmits(['cell', 'lesson'])
+const props = defineProps({ dates: { type: Array, required: true }, ghosts: { type: Array, default: () => [] } })
+const emit = defineEmits(['cell', 'lesson', 'ghost', 'ghost-skip'])
+// «Призраки» на следующей неделе — уроки этой недели в тех же днях и часах, пока не подтверждены (в базе их нет)
+const ghostMap = computed(() => new Map(props.ghosts.map(g => [slotKey(g.date, g.hour), g])))
+const ghostAt = (d, h) => (at(d, h).length ? null : ghostMap.value.get(slotKey(d, h)))
+const ghostStu = (g) => g.studentIds.map(stu).filter(Boolean)
 // «Сейчас»: сегодняшний день и текущий час (обновляется раз в минуту). Подсвечивается только в той таблице, где есть сегодняшний день.
 // «Сейчас» — по выбранному поясу (уголок таблицы), а не по часам компьютера; минуты идут в метке текущего часа и линией в ячейке
 const now = computed(() => nowIn(tz.value, nowTick.value))
@@ -81,6 +85,13 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
             <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
           </button>
         </template>
+        <!-- Призрак: бледный урок с прошлой недели. Нажать — урок создан; × — убрать подсказку -->
+        <button v-for="g in [ghostAt(d, h)].filter(Boolean)" :key="g.key" class="chip ghost" :class="{ hasmin: g.minute }" :title="`Как на этой неделе: ${ghostStu(g).map(s => s.name).join(', ')} — нажмите, чтобы поставить урок`" @click.stop="emit('ghost', g)">
+          <AvatarStack v-if="ghostStu(g).length > 1" class="st-lg" :students="ghostStu(g)" :size="39" :max="3" ring="var(--card)" /><AvatarStack v-if="ghostStu(g).length > 1" class="st-sm" :students="ghostStu(g)" :size="26" :max="2" ring="var(--card)" />
+          <template v-else><Avatar :s="ghostStu(g)[0]" :size="39" /><span class="nm">{{ ghostStu(g)[0].name }}</span></template>
+          <i v-if="g.minute" class="min">:{{ String(g.minute).padStart(2, '0') }}</i>
+          <span class="gx" title="Убрать — урока на этой неделе не будет" @click.stop="emit('ghost-skip', g)">×</span>
+        </button>
       </div>
     </div>
   </div>
@@ -159,6 +170,13 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 /* Прошедшее время (настройка): прошлые часы — серые, текущий час закрашивается сверху по минутам */
 .wk.shade .cell.past:not(.ok):not(.bad):not(.swap) { background: var(--surface) }
 .wk.shade .cell.now:not(.ok):not(.bad):not(.swap) { background: linear-gradient(var(--surface) var(--fill), var(--card) var(--fill)) }
+/* Призрак урока (следующая неделя, не подтверждён): бледный, пунктирная рамка; при наведении — ярче и крестик «убрать» */
+.chip.ghost { background: transparent !important; box-shadow: inset 0 0 0 1.5px #d0d7de !important; border-radius: 10px; opacity: .45; cursor: pointer; transition: opacity .12s }
+.chip.ghost { outline: 1.5px dashed #b6bec7; outline-offset: -1.5px; box-shadow: none !important }
+.chip.ghost:hover { opacity: .9 } .chip.ghost::before, .chip.ghost::after { display: none }
+.gx { position: absolute; top: -6px; right: -6px; z-index: 3; display: none; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--card); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); color: var(--hint); font-size: 13px; font-weight: 900; line-height: 1 }
+.chip.ghost:hover .gx { display: grid } .gx:hover { color: var(--red-d) }
+@media (hover: none) { .gx { display: grid } }
 /* Вид будущего урока (настройка «Урок»): только у запланированных — у прошедших подложки нет */
 .wk .chip.up { isolation: isolate }
 @media (min-width: 720px) {
