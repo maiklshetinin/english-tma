@@ -156,6 +156,18 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .chip .tick { position: absolute; top: -5px; left: -4px; z-index: 2; box-shadow: 0 0 0 2px var(--card) }
 @media (max-width: 719px) { .chip .tick { width: 14px; height: 14px } .chip .tick svg { width: 10px; height: 10px } }
 /* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
+/* «Клетки» — простая таблица: прямые ячейки без промежутков, тонкие линии 1px; скруглены только внешние углы таблицы */
+.wk.gs-cells { gap: 0 } .wk.gs-cells .g { gap: 0 } .wk.gs-cells .g.head { margin-bottom: 6px } .wk.gs-cells .dh { margin: 0 2px }
+.wk.gs-cells .cell { border-radius: 0; box-shadow: inset -1px -1px 0 var(--border) }
+.wk.gs-cells .g > .cell:nth-child(2) { box-shadow: inset 1px 0 0 var(--border), inset -1px -1px 0 var(--border) }
+.wk.gs-cells .g.head + .g > .cell { box-shadow: inset 0 1px 0 var(--border), inset -1px -1px 0 var(--border) }
+.wk.gs-cells .g.head + .g > .cell:nth-child(2) { box-shadow: inset 1px 1px 0 var(--border), inset -1px -1px 0 var(--border); border-top-left-radius: 10px }
+.wk.gs-cells .g.head + .g > .cell:last-child { border-top-right-radius: 10px }
+.wk.gs-cells .g:last-child > .cell:nth-child(2) { border-bottom-left-radius: 10px } .wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
+@media (min-width: 720px) { .wk.gs-cells .tm { margin-right: 6px } }
+.wk.gs-cells .chip { inset: 3px; border-radius: 7px }
+@media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } }
+@media (max-width: 719px) { .wk.gs-cells .chip { inset: 2px } .wk.gs-cells .chip :deep(.av) { transform: scale(.88) } }
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 .wk.gs-gray .cell { background: var(--surface); box-shadow: none }
 .wk.gs-gray .chip:not(.done):not(.canceled):not(.orphan) { background: var(--card) }      /* на серой ячейке урок — белый, иначе сольётся */
