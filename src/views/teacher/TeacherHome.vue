@@ -14,6 +14,7 @@ import LessonSheet from '../../components/LessonSheet.vue'
 import WeekMoney from '../../components/WeekMoney.vue'
 import WeekLoad from '../../components/WeekLoad.vue'
 import { sumMoney } from '../../utils/price'
+import AppIcon from '../../components/AppIcon.vue'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
 import { useScheduleStore } from '../../stores/schedule'
@@ -27,8 +28,13 @@ const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (n
 // Деньги недели: факт (проведённые) и план (все уроки) — utils/price.ts; меняются сразу при отметке «проведён»
 const weekMoney = (dates) => sumMoney(scheduleStore.lessons.filter(l => dates.includes(l.date)), studentStore.byId)
 const m1 = computed(() => weekMoney(w1.value)), m2 = computed(() => weekMoney(w2.value))
-// Одна таблица: «Эта неделя» или «Следующая» (переключатель над таблицей)
+// Одна таблица: «Эта неделя», «Следующая» или прошлые — кнопкой «‹» слева от переключателя (week < 0, по неделе назад за нажатие).
+// Уроки прошлых недель подгружаются с сервера (scheduleStore.loadWeek); «Эта неделя» возвращает к текущей.
 const week = ref(0)
+const dates = computed(() => week.value === 0 ? w1.value : week.value === 1 ? w2.value : (nowTick.value, weekDates(week.value)))
+const money = computed(() => week.value === 0 ? m1.value : week.value === 1 ? m2.value : weekMoney(dates.value))
+const pastTitle = computed(() => week.value === -1 ? 'Прошлая' : `${-week.value} нед. назад`)
+watch(() => dates.value[0], () => { if (week.value < 0) scheduleStore.loadWeek(dates.value[0]).catch(() => {}) })
 // «Призраки» следующей недели: уроки этой недели в те же дни и часы, пока на следующей там пусто. В базе их нет —
 // нажал на призрака → урок создан; «Подтвердить все» → вся неделя; × → эту подсказку больше не показываем (запоминается на устройстве).
 const skipKey = computed(() => `tma.ghostSkip.${w2.value[0]}`)
@@ -147,15 +153,17 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
       <div class="weeks">
         <div class="wcol">
           <div class="wh">
+            <button class="icon-btn wk-back" title="Предыдущая неделя" aria-label="Предыдущая неделя" @click="week--"><AppIcon name="chevronLeft" :size="20" /></button>
             <div class="seg wk-sw" role="tablist" aria-label="Неделя">
+              <button v-if="week < 0" role="tab" aria-selected="true" class="on"><b>{{ pastTitle }}<span v-if="week === -1" class="wfull"> неделя</span></b><small>{{ weekRange(dates) }}</small></button>
               <button v-for="o in [0, 1]" :key="o" role="tab" :aria-selected="week === o" :class="{ on: week === o }" @click="week = o"><b>{{ o ? 'Следующая' : 'Эта' }}<span class="wfull"> неделя</span></b><small>{{ weekRange(o ? w2 : w1) }}</small></button>
             </div>
-            <WeekLoad :lessons="scheduleStore.lessons" :dates="week ? w2 : w1" :active-of="activeOf" />
+            <WeekLoad :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <GridStyleButton />
-            <button v-if="week && ghosts.length" class="btn sm gall" title="Поставить все уроки, как на этой неделе" @click="confirmAll">Как на этой неделе · {{ ghosts.length }}</button>
-            <WeekMoney class="money" :m="week ? m2 : m1" />
+            <button v-if="week === 1 && ghosts.length" class="btn sm gall" title="Поставить все уроки, как на этой неделе" @click="confirmAll">Как на этой неделе · {{ ghosts.length }}</button>
+            <WeekMoney class="money" :m="money" />
           </div>
-          <WeekGrid :dates="week ? w2 : w1" :ghosts="week ? ghosts : []" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" />
+          <WeekGrid :dates="dates" :ghosts="week === 1 ? ghosts : []" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" />
         </div>
       </div>
     </section>
@@ -169,7 +177,8 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 .main { grid-area: main; min-width: 0 }
 /* Одна таблица; над ней: переключатель недель, спидометр нагрузки, деньги недели */
 .weeks { display: grid; gap: 14px; max-width: 900px; margin: 0 auto; width: 100% }
-.wk-sw { display: inline-grid; grid-template-columns: 1fr 1fr } .wk-sw button { display: grid; justify-items: start; padding: 5px 12px; line-height: 1.2 }
+.wk-sw { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr }
+.wk-back { border-color: var(--border); margin-right: -4px } .wk-sw button { display: grid; justify-items: start; padding: 5px 12px; line-height: 1.2 }
 .wk-sw button b { font-size: 13px; font-weight: 800 } .wk-sw button small { font-size: 11px; font-weight: 700; color: var(--hint-2) }
 .wk-sw button.on small { color: var(--blue) }
 @media (max-width: 480px) { .wfull { display: none } }

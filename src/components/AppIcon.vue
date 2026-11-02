@@ -4,6 +4,7 @@ defineProps({ name: { type: String, required: true }, size: { type: Number, defa
 const P = {
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.8"/><path d="M8.3 10.5V7.8a3.7 3.7 0 0 1 7.4 0v2.7"/>',
   check: '<path d="M5.5 12.5l4 4L18.5 7.5"/>',
+  chevronLeft: '<path d="M14.5 5.5L8 12l6.5 6.5"/>',
   book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
   cards: '<rect x="3" y="6" width="14" height="14" rx="3"/><path d="M7 3h11a3 3 0 0 1 3 3v11"/>',
   pencil: '<path d="M14.6 6.1l3.3 3.3"/><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z"/>',
