@@ -29,6 +29,7 @@ const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (n
 const weekMoney = (dates) => sumMoney(scheduleStore.lessons.filter(l => dates.includes(l.date)), studentStore.byId)
 const m1 = computed(() => weekMoney(w1.value)), m2 = computed(() => weekMoney(w2.value))
 // Одна таблица: «Эта неделя», «Следующая» или прошлые — кнопкой «‹» слева от переключателя (week < 0, по неделе назад за нажатие).
+// На прошлой неделе «Следующая» прячется: в переключателе всегда две кнопки, и шапка не прыгает.
 // Уроки прошлых недель подгружаются с сервера (scheduleStore.loadWeek); «Эта неделя» возвращает к текущей.
 const week = ref(0)
 const dates = computed(() => week.value === 0 ? w1.value : week.value === 1 ? w2.value : (nowTick.value, weekDates(week.value)))
@@ -156,7 +157,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
             <button class="icon-btn wk-back" title="Предыдущая неделя" aria-label="Предыдущая неделя" @click="week--"><AppIcon name="chevronLeft" :size="20" /></button>
             <div class="seg wk-sw" role="tablist" aria-label="Неделя">
               <button v-if="week < 0" role="tab" aria-selected="true" class="on"><b>{{ pastTitle }}<span v-if="week === -1" class="wfull"> неделя</span></b><small>{{ weekRange(dates) }}</small></button>
-              <button v-for="o in [0, 1]" :key="o" role="tab" :aria-selected="week === o" :class="{ on: week === o }" @click="week = o"><b>{{ o ? 'Следующая' : 'Эта' }}<span class="wfull"> неделя</span></b><small>{{ weekRange(o ? w2 : w1) }}</small></button>
+              <button v-for="o in (week < 0 ? [0] : [0, 1])" :key="o" role="tab" :aria-selected="week === o" :class="{ on: week === o }" @click="week = o"><b>{{ o ? 'Следующая' : 'Эта' }}<span class="wfull"> неделя</span></b><small>{{ weekRange(o ? w2 : w1) }}</small></button>
             </div>
             <WeekLoad :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <GridStyleButton />
