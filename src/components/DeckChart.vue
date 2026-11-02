@@ -12,6 +12,7 @@ import { srsOf, kindOf, today, LEARNED_DAYS, resetDeck, buildQueue, deckCounts }
 import { showToast } from '../composables/useToast'
 import { dueMs, recallNow, fmtSpan, memoryOf } from '../utils/fsrs'
 import AppIcon from './AppIcon.vue'
+import BackButton from './BackButton.vue'
 import { imageSrc } from '../utils/media'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, dock: Boolean, currentId: { type: String, default: null } })
 const emit = defineEmits(['back', 'reset'])
@@ -239,7 +240,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 <template>
   <div ref="root" class="dc" :class="{ docked: dock }">
     <header v-if="!dock" class="bar">
-      <button class="btn ghost sm" @click="emit('back')"><AppIcon name="back" :size="18" /> Колоды</button>
+      <BackButton to="Колоды" @click="emit('back')" />
       <b class="dt">{{ deck.title }}</b>
     </header>
 

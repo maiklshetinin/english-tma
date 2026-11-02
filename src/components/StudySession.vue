@@ -7,6 +7,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { buildQueue, srsOf, kindOf, rate, intervalLabel, nextDueInfo, deckCounts, nextLearnAt } from '../composables/useSrs'
 import { imageSrc, audioSrc } from '../utils/media'
 import AppIcon from './AppIcon.vue'
+import BackButton from './BackButton.vue'
 import CardEditModal from './CardEditModal.vue'
 import DeckChart from './DeckChart.vue'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, canEdit: Boolean, embedded: Boolean })
@@ -78,7 +79,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
 <template>
   <div class="ss" :class="{ wc: chartOpen }">
     <header class="bar">
-      <button class="btn ghost sm" @click="emit('exit')"><AppIcon name="back" :size="18" /> {{ embedded ? 'Закрыть' : 'Колоды' }}</button>
+      <BackButton :to="embedded ? 'Закрыть' : 'Колоды'" @click="emit('exit')" />
       <b class="dt">{{ deck.title }}</b>
       <span class="cnt" aria-label="Новые, изучаю, к повторению">
         <b class="n" :class="{ on: cur === 'new' }">{{ counts.new }}</b><b class="l" :class="{ on: cur === 'learn' }">{{ counts.learn }}</b><b class="d" :class="{ on: cur === 'due' }">{{ counts.due }}</b>

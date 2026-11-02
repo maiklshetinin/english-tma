@@ -69,6 +69,8 @@ html.dragging, html.dragging * { user-select: none !important; -webkit-user-sele
 .icon-btn:hover { background: var(--surface); color: var(--text); }
 .icon-btn.danger:hover { background: var(--red-l); color: var(--red-d); }
 .icon-btn:disabled { opacity: .4; cursor: default; }
+/* Кнопка «назад» (components/BackButton.vue) — значок «‹» в рамке, одна на всё приложение */
+.icon-btn.back-btn { border-color: var(--border); }
 
 input, textarea, select { width: 100%; font: inherit; font-weight: 700; color: var(--text); background: var(--surface);
   border: 1px solid var(--border); border-radius: 12px; padding: 11px 14px; margin-bottom: 10px; outline: none; transition: border-color .12s; }

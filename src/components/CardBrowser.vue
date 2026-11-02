@@ -7,6 +7,7 @@ import { newId } from '../utils/id'
 import { srsOf, kindOf, today } from '../composables/useSrs'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
+import BackButton from './BackButton.vue'
 import CardEditModal from './CardEditModal.vue'
 const props = defineProps({ deck: { type: Object, required: true }, userKey: { type: [String, Number], required: true }, canManage: Boolean })
 defineEmits(['back'])
@@ -42,7 +43,7 @@ function del(c) {
 <template>
   <div class="cb">
     <div class="row">
-      <button class="btn ghost sm" @click="$emit('back')"><AppIcon name="back" :size="18" /> Колоды</button>
+      <BackButton to="Колоды" @click="$emit('back')" />
       <b class="dt">{{ deck.title }} · {{ deck.cards.length }}</b>
     </div>
     <div v-if="canManage" class="card">

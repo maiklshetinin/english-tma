@@ -14,6 +14,7 @@ import { audioSrc } from '../../utils/media'
 import { newId } from '../../utils/id'
 import { showToast } from '../../composables/useToast'
 import AppIcon from '../../components/AppIcon.vue'
+import BackButton from '../../components/BackButton.vue'
 import CardImport from '../../components/CardImport.vue'
 import DeckSheet from '../../components/DeckSheet.vue'
 import AudioWave from '../../components/AudioWave.vue'
@@ -178,7 +179,7 @@ const back = () => router.push({ name: 'words' })
   <div class="page wide st" @dragleave="dragLeave">
     <input ref="pick" type="file" hidden @change="picked" />
     <header class="bar">
-      <button class="bk" @click="back"><AppIcon name="back" :size="20" /> Колоды</button>
+      <BackButton to="Колоды" @click="back" />
       <template v-if="deck"><i class="vs" /><b class="dt">{{ deck.title }}</b><span class="cnt">{{ cards.length }} {{ word(cards.length) }}</span></template>
       <span class="sp" />
       <label v-if="deck && cards.length > 15" class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Найти слово" /></label>
@@ -260,7 +261,6 @@ const back = () => router.push({ name: 'words' })
 .st { gap: 12px }
 .bar { display: flex; align-items: center; gap: 10px }
 @media (min-width: 720px) { .bar { padding-right: max(0px, calc(150px - (100vw - 920px) / 2)) } }      /* не уезжать под кружки «кто здесь» справа сверху */
-.bk { display: flex; align-items: center; gap: 2px; border: 0; background: none; font: inherit; font-weight: 800; color: var(--text); cursor: pointer; padding: 6px 8px; border-radius: 10px } .bk:hover { background: var(--surface) }
 .vs { width: 1px; height: 22px; background: var(--border) } .dt { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .cnt { color: var(--hint); font-size: 13px; font-weight: 700; white-space: nowrap } .sp { flex: 1 }
 .search { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; background: var(--surface); color: var(--hint); width: 200px } .search input { margin: 0; border: 0; background: none; padding: 8px 0; font-size: 14px; min-width: 0 }
 .none { display: grid; justify-items: center; align-content: center; gap: 12px }

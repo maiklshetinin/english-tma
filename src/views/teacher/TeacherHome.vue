@@ -14,7 +14,7 @@ import LessonSheet from '../../components/LessonSheet.vue'
 import WeekMoney from '../../components/WeekMoney.vue'
 import WeekLoad from '../../components/WeekLoad.vue'
 import { sumMoney } from '../../utils/price'
-import AppIcon from '../../components/AppIcon.vue'
+import BackButton from '../../components/BackButton.vue'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
 import { useScheduleStore, needsStatus } from '../../stores/schedule'
@@ -162,7 +162,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
       <div class="weeks">
         <div class="wcol">
           <div class="wh">
-            <button class="icon-btn wk-back" title="Предыдущая неделя" aria-label="Предыдущая неделя" @click="week--"><AppIcon name="chevronLeft" :size="20" /></button>
+            <BackButton class="wk-back" to="Предыдущая неделя" @click="week--" />
             <div class="seg wk-sw" role="tablist" aria-label="Неделя">
               <button v-if="week < 0" role="tab" aria-selected="true" class="on"><b>{{ pastTitle }}<span v-if="week === -1" class="wfull"> неделя</span></b><small>{{ weekRange(dates) }}</small></button>
               <button v-for="o in (week < 0 ? [0] : [0, 1])" :key="o" role="tab" :aria-selected="week === o" :class="{ on: week === o }" @click="week = o"><b>{{ o ? 'Следующая' : 'Эта' }}<span class="wfull"> неделя</span></b><small>{{ weekRange(o ? w2 : w1) }}</small></button>

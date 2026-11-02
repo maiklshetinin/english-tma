@@ -9,6 +9,7 @@ import { useTelegram } from '../../composables/useTelegram'
 import Avatar from '../../components/Avatar.vue'
 import PhotoZoom from '../../components/PhotoZoom.vue'
 import AppIcon from '../../components/AppIcon.vue'
+import BackButton from '../../components/BackButton.vue'
 import PathEditor from '../../components/PathEditor.vue'
 import StudentDecks from '../../components/StudentDecks.vue'
 import LessonCalendar from '../../components/LessonCalendar.vue'
@@ -98,7 +99,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
   <div v-if="s" class="page sd">
     <div class="pcard hd">
       <div class="top">
-        <button class="ib" :aria-label="`Назад: ${backLabel}`" :title="backLabel" @click="$emit('back')"><AppIcon name="back" :size="24" /></button>
+        <BackButton :to="backLabel" @click="$emit('back')" />
         <button class="avb" :aria-label="`Фото: ${s.name}`" title="Открыть фото" @click="zoom = true"><Avatar :s="s" :size="56" :online="isOnline(s)" /></button>
         <div class="who"><h2>{{ s.name }}</h2>
           <div class="sub">{{ s.level }} · <span :class="s.status !== 'active' ? 'wait' : isOnline(s) ? 'on' : ''">{{ s.status !== 'active' ? 'ждёт приглашения' : seenLabel(s) || 'в приложении' }}</span><template v-if="s.username"> · @{{ s.username }}</template></div></div>
@@ -155,7 +156,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
     <PhotoZoom v-if="zoom" :s="s" @close="zoom = false" />
   </div>
   <div v-else class="page wide">      <!-- старая ссылка или ученик в архиве -->
-    <button class="btn ghost" style="justify-self:start" @click="$emit('back')"><AppIcon name="back" :size="18" /> {{ backLabel }}</button>
+    <BackButton :to="backLabel" style="justify-self:start" @click="$emit('back')" />
     <div class="card" style="text-align:center"><b>Ученик не найден</b><p class="hint" style="margin:6px 0 0">Возможно, он в архиве.</p></div>
   </div>
 </template>
