@@ -1,6 +1,6 @@
 <script setup>
 // «Слова» = мини-Anki. Одинаковый для преподавателя и ученика; разница в правах:
-//  преподаватель (canManage) создаёт колоды (по ссылке на Google Таблицу), правит карточки, назначает колоды ученикам;
+//  преподаватель (canManage) создаёт колоды и правит карточки — это его база колод; назначают колоду ученику в карточке ученика (StudentDecks.vue);
 //  ученик только учит назначенные ему колоды. Прогресс у каждого свой (stores/srs.ts).
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -11,13 +11,12 @@ import { imageSrc } from '../utils/media'
 import StudySession from './StudySession.vue'
 import CardBrowser from './CardBrowser.vue'
 import DeckChart from './DeckChart.vue'
-import DeckSheet from './DeckSheet.vue'
 import { useDecksStore } from '../stores/decks'
 const deckStore = useDecksStore()
 const router = useRouter()
 const props = defineProps({ userKey: { type: [String, Number], required: true }, canManage: Boolean })
 
-const screen = ref('list'), deckId = ref(null), sheet = ref(null)
+const screen = ref('list'), deckId = ref(null)
 const decks = computed(() => deckStore.forUser(props.userKey))
 const deck = computed(() => deckStore.byId(deckId.value))
 const open = (s, d) => { deckId.value = d.id; screen.value = s }
@@ -28,6 +27,8 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3
 // Удаление — сразу, с «Отменить» в уведомлении (как в Telegram), без лишнего окна подтверждения
 function removeDeck(d) { const gone = deckStore.remove(d); if (gone) showToast(`Колода удалена: ${d.title}`, () => deckStore.restore(gone)) }
 const back = () => { screen.value = 'list'; deckId.value = null }
+// «+ Добавить» — сразу пустая колода и её редактор (название правится там же, сверху; new=1 — поле названия в фокусе)
+function addDeck() { const d = deckStore.add('Новая колода'); router.push({ name: 'cards-studio', query: { id: d.id, new: '1' } }) }
 </script>
 
 <template>
@@ -36,7 +37,7 @@ const back = () => { screen.value = 'list'; deckId.value = null }
     <DeckChart v-else-if="screen === 'chart' && deck" :deck="deck" :user-key="userKey" @back="back" />
     <CardBrowser v-else-if="screen === 'browse' && deck" :deck="deck" :user-key="userKey" :can-manage="canManage" @back="back" />
     <template v-else>
-      <div v-if="canManage" class="top"><button class="btn sm add" @click="sheet = { create: true }"><AppIcon name="plus" :size="16" /> Добавить</button></div>
+      <div v-if="canManage" class="top"><button class="btn sm add" @click="addDeck"><AppIcon name="plus" :size="16" /> Добавить</button></div>
 
       <div v-for="d in decks" :key="d.id" class="card deck" title="Учить" @click="open('study', d)">
         <div class="info">
@@ -63,10 +64,9 @@ const back = () => { screen.value = 'list'; deckId.value = null }
         </div>
       </div>
       <div v-if="!decks.length" class="card hint" style="text-align:center">
-        {{ canManage ? 'Колод пока нет. Нажмите «+ Добавить» и вставьте ссылку на Google Таблицу.' : 'Преподаватель пока не добавил вам колоды.' }}
+        {{ canManage ? 'Колод пока нет. Нажмите «+ Добавить» — откроется новая колода: впишите слова или бросьте таблицу Excel.' : 'Преподаватель пока не добавил вам колоды.' }}
       </div>
     </template>
-    <DeckSheet v-if="sheet" :deck="sheet.deck" :create="!!sheet.create" @close="sheet = null" />
   </div>
 </template>
 

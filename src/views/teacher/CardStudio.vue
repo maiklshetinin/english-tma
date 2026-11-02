@@ -58,6 +58,9 @@ function openMenu(e, c) {        // меню у фото: поверх всег�
   menu.value = c.id
 }
 onMounted(() => addEventListener('click', closeMenu)); onUnmounted(() => removeEventListener('click', closeMenu))
+// Новая колода (из «+ Добавить» в «Словах», ?new=1): название сразу в фокусе и выделено — просто начать печатать
+const titleEl = ref(null)
+onMounted(() => { if (route.query.new) { titleEl.value?.focus(); titleEl.value?.select(); router.replace({ query: { id: route.query.id } }) } })
 
 // ---------- Перетаскивание ----------
 const wordOf = (name) => name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+\d+$/, '').trim()
@@ -172,7 +175,9 @@ function openEdit(c, k = '') { edit.value = c.id; if (k) setTimeout(() => docume
 function addCard() { const n = { id: newId('c'), front: '', back: '' }; deck.value.cards.unshift(n); q.value = ''; openEdit(n, 'front') }
 function delCard(c) { removeCard(deck.value, c) }
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'карточки' : 'карточек')
-const back = () => router.push({ name: 'words' })
+// Вышли из только что созданной колоды, ничего не вписав (нет карточек, название не меняли) — пустую «Новую колоду» не оставляем
+const fresh = !!route.query.new
+const back = () => { const d = deck.value; if (fresh && d && !d.cards.length && d.title === 'Новая колода' && !d.source?.url) decks.remove(d); router.push({ name: 'words' }) }
 </script>
 
 <template>
@@ -180,13 +185,13 @@ const back = () => router.push({ name: 'words' })
     <input ref="pick" type="file" hidden @change="picked" />
     <header class="bar">
       <BackButton to="Колоды" @click="back" />
-      <template v-if="deck"><i class="vs" /><b class="dt">{{ deck.title }}</b><span class="cnt">{{ cards.length }} {{ word(cards.length) }}</span></template>
+      <template v-if="deck"><i class="vs" /><input ref="titleEl" v-model="deck.title" class="dt ttl" aria-label="Название колоды" title="Название колоды — нажмите, чтобы изменить" @keyup.enter="$event.target.blur()" /><span class="cnt">{{ cards.length }} {{ word(cards.length) }}</span></template>
       <span class="sp" />
       <label v-if="deck && cards.length > 15" class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Найти слово" /></label>
       <span v-if="deck" class="imx"><button class="ghostb" :disabled="gBusy" @click.stop="impOpen = !impOpen">{{ gBusy ? 'Загружаю…' : 'Импорт' }} ▾</button>
         <span v-if="impOpen" class="pm down" @click.stop><button @click="impOpen = false; chooseSheet()">Файл Excel или CSV</button><button @click="impOpen = false; fromGoogle()">Google Таблица по ссылке</button>
           <small>Или просто перетащите файл на таблицу</small></span></span>
-      <button v-if="deck" class="icon-btn" aria-label="Настройки колоды" title="Настройки: название, кому назначена, новых в день" @click="settings = true"><AppIcon name="sliders" :size="18" /></button>
+      <button v-if="deck" class="icon-btn" aria-label="Настройки колоды" title="Настройки: новых в день, Google Таблица, удаление" @click="settings = true"><AppIcon name="sliders" :size="18" /></button>
       <button v-if="deck" class="btn sm" @click="addCard"><AppIcon name="plus" :size="16" /> Карточка</button>
       <input ref="sheetPick" type="file" hidden accept=".xlsx,.xls,.csv,.tsv" @change="$event.target.files[0] && startImport($event.target.files[0])" />
     </header>
@@ -261,7 +266,10 @@ const back = () => router.push({ name: 'words' })
 .st { gap: 12px }
 .bar { display: flex; align-items: center; gap: 10px }
 @media (min-width: 720px) { .bar { padding-right: max(0px, calc(150px - (100vw - 920px) / 2)) } }      /* не уезжать под кружки «кто здесь» справа сверху */
-.vs { width: 1px; height: 22px; background: var(--border) } .dt { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .cnt { color: var(--hint); font-size: 13px; font-weight: 700; white-space: nowrap } .sp { flex: 1 }
+.vs { width: 1px; height: 22px; background: var(--border) }
+/* Название колоды — правится прямо в шапке, выглядит как текст */
+.ttl { width: auto; min-width: 60px; field-sizing: content; max-width: 320px; margin: 0; padding: 4px 6px; border: 1px solid transparent; border-radius: 8px; background: none; font-weight: 800; color: var(--text) }
+.ttl:hover { border-color: var(--border) } .ttl:focus { border-color: var(--hint-2); background: var(--card) } .dt { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .cnt { color: var(--hint); font-size: 13px; font-weight: 700; white-space: nowrap } .sp { flex: 1 }
 .search { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; background: var(--surface); color: var(--hint); width: 200px } .search input { margin: 0; border: 0; background: none; padding: 8px 0; font-size: 14px; min-width: 0 }
 .none { display: grid; justify-items: center; align-content: center; gap: 12px }
 .wrap { display: flex; flex-direction: column; gap: 10px; min-height: 300px; transition: background .12s }
