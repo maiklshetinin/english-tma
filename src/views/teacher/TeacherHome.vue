@@ -14,6 +14,7 @@ import LessonSheet from '../../components/LessonSheet.vue'
 import WeekMoney from '../../components/WeekMoney.vue'
 import WeekLoad from '../../components/WeekLoad.vue'
 import { sumMoney } from '../../utils/price'
+import AppIcon from '../../components/AppIcon.vue'
 import BackButton from '../../components/BackButton.vue'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
@@ -169,7 +170,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
             </div>
             <WeekLoad :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <GridStyleButton />
-            <button v-if="week === 1 && ghosts.length" class="btn sm gall" title="Поставить все уроки, как на этой неделе" @click="confirmAll">Как на этой неделе · {{ ghosts.length }}</button>
+            <button v-if="week === 1 && ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i>Укажите статус · {{ noStatus.length }}</button>
             <WeekMoney class="money" :m="money" />
           </div>
@@ -196,6 +197,9 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 .wcol { display: grid; gap: 6px; min-width: 0 }
 .wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh .money { margin-left: auto }
+@media (min-width: 1024px) { .wh { flex-wrap: nowrap } .wh > * { flex: none } }      /* на компьютере шапка всегда в одну строку — таблица не съезжает */
+/* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
+.gall { position: relative; border-color: var(--border); color: var(--blue) } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .ask { display: inline-flex; align-items: center; gap: 6px; background: var(--orange-l); color: var(--orange-d) } .ask i { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: #fff; font-style: normal; font-size: 11px; font-weight: 900 }
 .wh b { display: block; font-weight: 800; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
 @media (min-width: 1024px) {
