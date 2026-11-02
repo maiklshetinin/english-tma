@@ -38,8 +38,10 @@ const inMonth = (id) => earn.value[id]?.[month] ?? 0
 const allTime = (id) => Object.values(earn.value[id] ?? {}).reduce((a, b) => a + b, 0)
 const money = (n) => (n ? fmtMoney(n) : '—')
 const totals = computed(() => studentStore.list.reduce((t, s) => ({ m: t.m + inMonth(s.id), a: t.a + allTime(s.id) }), { m: 0, a: 0 }))
-// Сортировка по нажатию на заголовок «За месяц» / «За всё время»: по убыванию → по возрастанию → как было (с группами)
-const sort = ref(null)        // { k: 'm' | 'a', dir: -1 | 1 }
+// Ставка — цена часа (урок длится час, поэтому это текущая цена урока ученика, Student.price; 0 — не указана)
+const rate = (s) => s.price || 0
+// Сортировка по нажатию на заголовок «Ставка» / «За месяц» / «За всё время»: по убыванию → по возрастанию → как было (с группами)
+const sort = ref(null)        // { k: 'r' | 'm' | 'a', dir: -1 | 1 }
 function sortBy(k) { const s0 = sort.value; sort.value = !s0 || s0.k !== k ? { k, dir: -1 } : s0.dir === -1 ? { k, dir: 1 } : null }
 const arrow = (k) => (sort.value?.k === k ? (sort.value.dir === -1 ? '↓' : '↑') : '⇅')
 onMounted(() => { studentStore.load().catch(() => {}); contentStore.load().catch(() => {}); loadEarn() })
@@ -53,8 +55,8 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4]
 const rows = computed(() => {
   const out = []
   if (sort.value) {           // отсортировано — один список без групп
-    const f = sort.value.k === 'm' ? inMonth : allTime
-    return [...studentStore.list].sort((a, b) => (f(a.id) - f(b.id)) * sort.value.dir).map(s => ({ t: 'row', key: 's/' + s.id, s }))
+    const k = sort.value.k, f = (s) => (k === 'r' ? rate(s) : k === 'm' ? inMonth(s.id) : allTime(s.id))
+    return [...studentStore.list].sort((a, b) => (f(a) - f(b)) * sort.value.dir).map(s => ({ t: 'row', key: 's/' + s.id, s }))
   }
   groups.value.forEach((g, gi) => {
     const c = GCOL[gi % GCOL.length]
@@ -75,21 +77,21 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
     <AddStudent v-if="adding" @close="adding = false" />
     <div v-if="!studentStore.list.length && !adding" class="card" style="text-align:center"><b>Пока никого нет</b><p class="hint" style="margin:6px 0 0">Нажмите «Добавить ученика», введите имя и отправьте ему ссылку-приглашение.</p></div>
     <div v-else class="card tbl">
-      <div class="tr th"><span>Ученик</span><span class="uc">Юнит</span><span>Оплата</span><span>Прогресс</span><button class="mo sh" :class="{ on: sort?.k === 'm' }" @click="sortBy('m')">За месяц <i>{{ arrow('m') }}</i></button><button class="mo sh" :class="{ on: sort?.k === 'a' }" @click="sortBy('a')">За всё время <i>{{ arrow('a') }}</i></button></div>
+      <div class="tr th"><span>Ученик</span><span class="pc">Прогресс</span><span>Оплата</span><button class="rt sh" :class="{ on: sort?.k === 'r' }" title="Цена часа занятия" @click="sortBy('r')">Ставка <i>{{ arrow('r') }}</i></button><button class="mo sh" :class="{ on: sort?.k === 'm' }" @click="sortBy('m')">За месяц <i>{{ arrow('m') }}</i></button><button class="mo sh" :class="{ on: sort?.k === 'a' }" @click="sortBy('a')">За всё время <i>{{ arrow('a') }}</i></button></div>
       <!-- Один список: заголовок группы → её ученики (цветная полоса слева, серая подложка) → … → «Индивидуально» → остальные -->
       <template v-for="it in rows" :key="it.key">
         <div v-if="it.t === 'gh'" class="gh" :class="{ first: it.first }" :style="{ '--gc': it.c }"><AppIcon name="users" :size="15" /> Группа · {{ it.g.label }}<span>{{ it.g.members.length }} {{ word(it.g.members.length) }}</span></div>
         <div v-else-if="it.t === 'sl'" class="sl">Индивидуально</div>
         <button v-else class="tr" :class="{ ing: it.c, last: it.last }" :style="it.c ? { '--gc': it.c } : null" @click="open(it.s.id)">
-          <span class="who"><Avatar :s="it.s" :size="56" :online="isOnline(it.s)" /><span class="tx"><b>{{ it.s.name }}</b><small v-if="it.s.status === 'invited'" class="inv">ждёт приглашения</small><small v-else-if="isOnline(it.s)" class="onl">в сети</small><small v-else class="sub">{{ seenLabel(it.s) || (it.s.username ? '@' + it.s.username : '') }}</small><small class="sub ui">{{ unitOf(pathStore.of(it.s.id)) }}</small></span></span>
-          <span class="hint uc">{{ unitOf(pathStore.of(it.s.id)) }}</span>
+          <span class="who"><Avatar :s="it.s" :size="56" :online="isOnline(it.s)" /><span class="tx"><b>{{ it.s.name }}</b><small v-if="it.s.status === 'invited'" class="inv">ждёт приглашения</small><small v-else-if="isOnline(it.s)" class="onl">в сети</small><small v-else class="sub">{{ seenLabel(it.s) || (it.s.username ? '@' + it.s.username : '') }}</small></span></span>
+          <span class="prog" :title="unitOf(pathStore.of(it.s.id))"><span class="bar"><i :style="{ width: pctOf(pathStore.of(it.s.id)) + '%' }" /></span>{{ pctOf(pathStore.of(it.s.id)) }}%</span>
           <span><span class="badge" :class="PAY[it.s.payment.status][1]">{{ PAY[it.s.payment.status][0] }}</span></span>
-          <span class="prog"><span class="bar"><i :style="{ width: pctOf(pathStore.of(it.s.id)) + '%' }" /></span>{{ pctOf(pathStore.of(it.s.id)) }}%</span>
+          <span class="rt">{{ money(rate(it.s)) }}</span>
           <span class="mo">{{ money(inMonth(it.s.id)) }}</span><span class="mo">{{ money(allTime(it.s.id)) }}</span>
         </button>
       </template>
       <!-- Итого — как в Patreon: общий доход внизу -->
-      <div class="tr tot"><span>Итого</span><span class="uc" /><span /><span /><span class="mo">{{ money(totals.m) }}</span><span class="mo">{{ money(totals.a) }}</span></div>
+      <div class="tr tot"><span>Итого</span><span /><span /><span class="rt" /><span class="mo">{{ money(totals.m) }}</span><span class="mo">{{ money(totals.a) }}</span></div>
     </div>
     <ArchivePanel />
   </div>
@@ -101,14 +103,16 @@ button.tr:hover { background: var(--surface) } .th { padding-top: 8px; padding-b
 .who { display: flex; align-items: center; gap: 12px; min-width: 0 } .tx { display: grid; min-width: 0; line-height: 1.25 } .tx b { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .sub { font-size: 14px; font-weight: 500; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .inv { font-size: 14px; font-weight: 700; color: var(--orange-d, var(--orange)) }
 .onl { font-size: 14px; font-weight: 600; color: var(--blue) }
-.ui { display: block } .uc { display: none } .uc.hint { font-size: 13px }
 .tr .badge { font-size: 12px; padding: 2px 8px }
 .prog { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700 } .bar { flex: 1; height: 8px; border-radius: 9px; background: var(--border); overflow: hidden; min-width: 40px } .bar i { display: block; height: 100%; background: var(--green); border-radius: 9px }
 .tr .badge { white-space: nowrap }
-/* Телефон: имя и юнит слева, оплата справа, прогресс — тонкой полосой под текстом */
-.tr { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0 } .tr > :nth-child(4) { grid-column: 1 / -1; padding-left: 68px } .th > :nth-child(4) { display: none }
+/* Телефон: имя слева, оплата справа, прогресс — тонкой полосой под текстом; ставка и доход — только на широком экране */
+.tr { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0 } .tr > .prog { grid-row: 2; grid-column: 1 / -1; padding-left: 68px } .th > .pc { display: none }
+.rt { display: none }
 @media (max-width: 767px) { .tx .sub:not(.ui) { display: none } .prog { font-size: 11px; margin-top: -4px } .bar { height: 5px } }
-@media (min-width: 768px) { .tr { grid-template-columns: 1.4fr 1.2fr 1fr 1.1fr .8fr .9fr } .uc { display: block } .ui { display: none } .tr > :nth-child(4) { grid-column: auto; padding-left: 0 } .th > :nth-child(4) { display: block } }
+/* Колонки: ученик · прогресс · оплата · ставка · за месяц · за всё время */
+@media (min-width: 768px) { .tr { grid-template-columns: 1.5fr 1.2fr 1fr .7fr .8fr .9fr } .tr > .prog { grid-row: auto; grid-column: auto; padding-left: 0 } .th > .pc { display: block }
+  .rt { display: block; text-align: right; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap } }
 /* Группы: заголовок и строки учеников на серой подложке с цветной полосой слева; между группами — отступ */
 .gh { display: flex; align-items: center; gap: 6px; margin: 10px 10px 0; padding: 8px 12px 4px; border-radius: 14px 14px 0 0; background: var(--group); box-shadow: inset 4px 0 0 var(--gc);
   font-size: 12px; font-weight: 900; color: var(--gc); text-transform: uppercase; letter-spacing: .3px }
