@@ -609,15 +609,18 @@ function remove() {
   sel.value = null; setProgress(doc.progress)
 }
 function toRailEnd() { const x = selItem.value; doc.loose.splice(doc.loose.findIndex(v => v.id === x.id), 1); delete x.x; delete x.y; doc.items.push(x); setProgress(doc.progress); nextTick(showRailEnd) }
-const popStyle = computed(() => {
-  const x = selItem.value; if (!x) return null
-  const i = order.value.findIndex(v => v.id === x.id), p = i >= 0 ? pos(i) : { x: x.x, y: x.y, side: 'r' }
-  const s = toScreen(p), w = 260, r = 36 * view.z
-  const want = p.side === 'r' ? s.x - w - r - 16 : s.x + r + 16
-  return { left: Math.min(Math.max(8, want), W.value - w - 8) + 'px', top: Math.min(Math.max(70, s.y - 60), H.value - 380) + 'px', width: w + 'px' }
-})
+// Переименование прямо на холсте, как в Figma: двойной клик по заданию / Enter у выделенного. Кружок и фото — двойной клик: другой файл.
+const renaming = ref(null)
+function rename(x) {
+  if (!x) return
+  if (MEDIA.includes(x.type)) return pickFile(x)
+  renaming.value = x.id; editing.value = true
+  nextTick(() => { const el = document.querySelector(`[data-ren="${x.id}"]`); el?.focus(); el?.select?.() })
+}
+function renameDone() { renaming.value = null; editing.value = false; save() }
 const onKey = (e) => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) { if (e.key === 'Escape') e.target.blur(); return }
+  if (e.key === 'Enter' && sel.value && !run.value) { e.preventDefault(); return rename(selItem.value) }
   if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null } }
   if (run.value || !(e.key === 'Delete' || e.key === 'Backspace')) return
   if (noteSel.value) delNote(noteSel.value)
@@ -651,9 +654,10 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
         <!-- Рельс -->
         <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id, rsel: !!selColor[x.id] }]"
-          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'">
-            <div class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
+            <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Юнит" @keydown.enter="renameDone" @keydown.esc="renameDone" @input="save" /><input v-model="x.sub" class="rin" placeholder="тема юнита" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></div>
+            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
             <div class="ubar"><i :style="{ width: (chapterOf(i)?.pct ?? 0) + '%' }" /><em>{{ chapterOf(i)?.pct ?? 0 }}%</em></div>
           </template>
           <template v-else>
@@ -662,19 +666,19 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <svg v-if="!MEDIA.includes(x.type) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <svg v-if="stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
-            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></em>
+            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><input v-if="renaming === x.id" v-model="x.title" :data-ren="x.id" class="rin" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="renameDone" @input="save" /><template v-else>{{ x.title }}</template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></em>
           </template>
         </div>
         <!-- Черновики на холсте: ещё не на рельсе -->
         <div v-for="x in looseShown" :key="x.id" class="bead loose" :class="[x.type, { on: sel === x.id, rsel: !!selColor[x.id] }]" :style="beadStyle(x, x, colorOf(x))"
-          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
             <img v-else-if="x.type === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" alt="" draggable="false" />
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
-            <em class="cap">{{ x.title }}<small>не на рельсе</small></em>
+            <em class="cap"><input v-if="renaming === x.id" v-model="x.title" :data-ren="x.id" class="rin" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="renameDone" @input="save" /><template v-else>{{ x.title }}</template><small>не на рельсе</small></em>
           </template>
         </div>
         <!-- Стикеры, как в FigJam -->
@@ -697,26 +701,6 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
       <b v-else-if="drag.item.type === 'unit'" class="no">+</b><svg v-else viewBox="0 0 24 24" class="ic" v-html="T[drag.item.type].ic" />
     </div>
 
-    <!-- Карточка выбранного -->
-    <div v-if="selItem && !drag.on" class="pop" :style="popStyle" @pointerdown.stop>
-      <div class="ph">{{ T[selItem.type].t }}<span v-if="selLoose" class="lz">на холсте</span></div>
-      <input v-model="selItem.title" class="in" :placeholder="T[selItem.type].t" @focus="editing = true" @blur="editing = false" @input="save" />
-      <input v-if="selItem.type === 'unit'" v-model="selItem.sub" class="in sub" placeholder="Тема юнита" @focus="editing = true" @blur="editing = false" @input="save" />
-      <template v-if="selItem.type === 'video'">
-        <video v-if="mediaUrl(selItem)" :src="mediaUrl(selItem)" class="vbig" controls playsinline />
-        <button class="btn-v" @click="pickFile(selItem)">{{ mediaUrl(selItem) ? 'Заменить видео' : 'Выбрать видео' }}</button>
-      </template>
-      <template v-else-if="selItem.type === 'photo'">
-        <a v-if="mediaUrl(selItem)" :href="mediaUrl(selItem)" target="_blank" rel="noopener" title="Открыть крупно"><img :src="mediaUrl(selItem)" class="pbig" alt="" /></a>
-        <button class="btn-v" @click="pickFile(selItem)">{{ mediaUrl(selItem) ? 'Заменить фото' : 'Выбрать фото' }}</button>
-      </template>
-      <div v-else-if="selItem.type !== 'unit'" class="types">
-        <button v-for="k in TASKS" :key="k" class="tt" :class="{ on: selItem.type === k }" :style="{ '--c': T[k].c }" :title="T[k].t" @click="selItem.type = k; save()"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></button>
-      </div>
-      <p v-if="INTERACTIVE.includes(selItem.type) && !selLoose" class="hint-l">Экраны урока — на рельсе справа. Добавить: «Интерактив» внизу.</p>
-      <button v-if="selLoose" class="btn-r" @click="toRailEnd">На рельс — в конец</button>
-      <button class="del" @click="remove">{{ selLoose ? 'Удалить' : 'Убрать с рельса' }}</button>
-    </div>
 
     <!-- «Пройти урок» — как ученик, во весь экран (как «Презентация» в Figma) -->
     <div v-if="runLesson" class="runov" @pointerdown.self="run = null"><div class="runbox"><LessonPlayer :steps="runLesson.steps ?? []" :resolve="resolveRef" closable @close="run = null" /></div></div>
@@ -973,4 +957,6 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 @media (max-width: 719px) {
   .tools { left: 8px; right: 8px; transform: none; height: 72px; justify-content: center } .tb { width: 64px } .tb svg { width: 26px; height: 26px } .tb small { font-size: 11px } .sticky { width: 72px } .sk { left: 10px; width: 52px; height: 60px } .tray { bottom: 92px } .tsep { display: none }
 }
+.rin { pointer-events: auto; width: 100%; margin: 0; padding: 2px 6px; border: 2px solid #0d99ff; border-radius: 6px; background: #fff; font: inherit; font-size: 15px; font-weight: 800; color: #252a31; outline: none; user-select: text }
+.uh.ren { display: grid; gap: 4px } .rin.big { font-size: 20px; font-weight: 900 }
 </style>
