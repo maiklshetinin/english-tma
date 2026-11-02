@@ -22,7 +22,7 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import LessonPlayer from '../../components/LessonPlayer.vue'
-import { INTERACTIVE, KINDS, KIND_LIST, STEPS_MAX, newStep, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, KIND_LIST, STEPS_MAX, RAIL_H, newStep, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -284,13 +284,15 @@ const GROUPS = [
   { k: 'inter', t: 'Интерактив', ic: KINDS.choice.ic, c: 'var(--purple)' },
   { k: 'note', t: 'Стикер', ic: '<path d="M5 4.5h14v10l-4.5 4.5H5z"/><path d="M14.5 19v-4.5H19"/>', c: '#f5b400' },
 ]
-const NOTE_COLORS = ['#fff1a8', '#c9f2c7', '#cfe8ff', '#ffd6e7', '#e6d9ff']
+const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6']
+const noteColor = ref('#ffe99a'), noteTool = ref(false)            // как в FigJam: выбрали стикер — нажатие по холсту ставит его
 
 // ---------- Стикеры, как в FigJam ----------
 const noteSel = ref(null), noteEdit = ref(null)
-function addNote(color) {
-  const r = board.value.getBoundingClientRect(), w = toWorld(r.left + r.width / 2, r.top + r.height / 2)
-  const n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), x: Math.round(w.x - 90 + (Math.random() - .5) * 40), y: Math.round(w.y - 90), text: '', color }
+function addNote(color, at) {
+  const r = board.value.getBoundingClientRect(), w = at ?? toWorld(r.left + r.width / 2, r.top + r.height / 2)
+  const n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), x: Math.round(w.x - 95), y: Math.round(w.y - 95), text: '', color }
+  noteTool.value = false
   ;(doc.notes ??= []).push(n); tray.value = null; noteSel.value = n.id; save()
   nextTick(() => editNote(n.id))
 }
@@ -359,10 +361,11 @@ const mode = computed({ get: () => doc.mode ?? 'wave', set: (v) => { doc.mode = 
 const G = { step: 116, unitGap: 160, amp: 84 }
 const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
 const drag = reactive({ on: false, item: null, from: null, over: false, to: 0, x: 0, y: 0 })
+const hasRail = (x) => INTERACTIVE.includes(x?.type) && !!x.steps?.length
 const layoutOf = (list) => {
   let y = 0
   return list.map((x, i) => {
-    if (i) y += x.type === 'unit' ? G.unitGap : G.step
+    if (i) y += (x.type === 'unit' ? G.unitGap : G.step) + (hasRail(list[i - 1]) ? RAIL_H : 0)      // под урок с экранами — место для карточек
     const off = mode.value === 'wave' ? K[i % 8] * G.amp : 0
     return { x: off, y, side: off > 0 ? 'l' : 'r' }
   })
@@ -501,6 +504,7 @@ function boardMove(e) {
 }
 function boardUp(e) {
   touches.delete(e.pointerId); if (touches.size < 2) pinch = null
+  if (pan && !pan.moved && noteTool.value) { addNote(noteColor.value, toWorld(e.clientX, e.clientY)); pan = null; return }
   if (pan && !pan.moved) { sel.value = null; selectStep(null, null); noteSel.value = noteEdit.value = null; tray.value = null }
   pan = null
 }
@@ -608,7 +612,7 @@ const popStyle = computed(() => {
 })
 const onKey = (e) => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) { if (e.key === 'Escape') e.target.blur(); return }
-  if (e.key === 'Escape') { if (run.value) run.value = null; else { sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null } }
+  if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null } }
   if (run.value || !(e.key === 'Delete' || e.key === 'Backspace')) return
   if (noteSel.value) delNote(noteSel.value)
   else if (pick.step && pick.step !== 'final') removeStepKey()
@@ -625,7 +629,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 <template>
   <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
     <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
-    <div ref="board" class="board" :style="dots" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @wheel="onWheel">
+    <div ref="board" class="board" :class="{ placing: noteTool }" :style="dots" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @wheel="onWheel">
       <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
         <!-- Сводка, как увидит ученик -->
         <div class="sum" @pointerdown.stop>
@@ -634,7 +638,6 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
           <div class="bar"><i :style="{ width: pct + '%' }" /></div>
           <div class="sf"><span>Пройдено: <b>{{ doc.progress }} из {{ tasksCount }}</b></span><span>Осталось {{ tasksCount - doc.progress }}</span></div>
         </div>
-        <div v-for="c in chapters" :key="'ch' + c.id" class="chap" :class="{ full: c.tasks && c.done === c.tasks }" :style="c.style" />
         <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
@@ -670,7 +673,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
         </div>
         <!-- Стикеры, как в FigJam -->
         <div v-for="n in doc.notes" :key="n.id" class="note" :data-note="n.id" :class="{ on: noteSel === n.id, edit: noteEdit === n.id }" :style="{ left: n.x + 'px', top: n.y + 'px', background: n.color }"
-          @pointerdown.stop="noteDown($event, n)" @dblclick.stop="editNote(n.id)" @wheel.stop="noteEdit === n.id || $event.stopPropagation()">
+          @pointerdown.stop="noteDown($event, n)" @dblclick.stop="editNote(n.id)" @wheel="noteEdit === n.id && !$event.ctrlKey && !$event.metaKey && $event.stopPropagation()">
           <textarea v-model="n.text" placeholder="Заметка…" :readonly="noteEdit !== n.id" @input="save" @blur="noteEdit = null" />
           <div v-if="noteSel === n.id" class="nbar" @pointerdown.stop><button v-for="c in NOTE_COLORS" :key="c" :style="{ background: c }" :class="{ on: n.color === c }" @click="n.color = c; save()" /><button class="nd" title="Удалить" @click="delNote(n.id)">✕</button></div>
         </div>
@@ -736,11 +739,16 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
         <span class="tt2">{{ activeLesson ? 'В урок «' + (findAny(activeLesson)?.title || 'Урок') + '»' : 'Новый урок в конце' }}</span>
         <button v-for="k in KIND_LIST" :key="k" class="ti wide" :title="KINDS[k].d" :style="{ '--c': KINDS[k].c }" @click="addScreen(k)"><span class="tc"><svg viewBox="0 0 24 24" v-html="KINDS[k].ic" /></span><small>{{ KINDS[k].t }}</small></button>
       </template>
-      <template v-else-if="tray === 'note'"><button v-for="c in NOTE_COLORS" :key="c" class="sw" :style="{ background: c }" title="Новый стикер" @click="addNote(c)" /></template>
+      <template v-else-if="tray === 'note'"><button v-for="c in NOTE_COLORS" :key="c" class="sw" :class="{ on: noteColor === c }" :style="{ background: c }" title="Цвет стикера — потом нажмите на холст" @click="noteColor = c; noteTool = true" /></template>
     </div>
     <div class="fl tools" role="toolbar">
       <button class="tb" :title="'Юнит — тяните на рельс или нажмите'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Юнит</small></button>
-      <button v-for="g in GROUPS" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
+      <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
+      <i class="tsep" />
+      <!-- Стикер, как в FigJam: выезжает при наведении, выбран — стоит выше -->
+      <button class="sticky" :class="{ on: noteTool || tray === 'note' }" title="Стикер — выберите цвет и нажмите на холст" @click="tray = tray === 'note' ? null : 'note'; noteTool = tray === 'note'">
+        <span class="sk" :style="{ background: noteColor }"><i /></span>
+      </button>
     </div>
   </div>
 </template>
@@ -847,7 +855,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .pv { min-width: 52px; text-align: center; font-size: 14px; color: var(--green-d) }
 .vs { width: 1px; height: 24px; margin: 0 6px; background: var(--border) }
 .pill { border: 0; border-radius: 9px; padding: 7px 12px; background: var(--blue); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .pill.grey { background: var(--surface); color: var(--hint) }
-.zoom { right: 14px; bottom: 112px; display: flex; align-items: center; padding: 4px } .zoom button { min-width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 18px; font-weight: 700; cursor: pointer } .zoom button:hover { background: var(--surface) }
+.zoom { right: 14px; bottom: 124px; display: flex; align-items: center; padding: 4px } .zoom button { min-width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 18px; font-weight: 700; cursor: pointer } .zoom button:hover { background: var(--surface) }
 .zoom b { min-width: 46px; text-align: center; font-size: 13px; cursor: pointer } .zoom .all { padding: 0 10px; font-size: 13px; font-weight: 800 } .zoom .vs { margin: 0 2px }
 .tools { left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; height: 74px; padding: 0 12px; border-radius: 18px; box-shadow: 0 2px 6px rgba(0, 0, 0, .06), 0 6px 22px rgba(0, 0, 0, .1) }
 .tl { display: grid; font-size: 13px; font-weight: 800; line-height: 1.2; padding: 0 4px; white-space: nowrap } .tl small { font-size: 11px; color: var(--hint); font-weight: 600 }
@@ -907,22 +915,30 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .nbar { position: absolute; left: 0; top: -46px; display: flex; gap: 4px; padding: 5px; border-radius: 10px; background: #2c2c2c; box-shadow: 0 4px 12px rgba(0, 0, 0, .2) }
 .nbar button { width: 22px; height: 22px; border: 2px solid transparent; border-radius: 50%; cursor: pointer; padding: 0 } .nbar button.on { border-color: #fff }
 .nbar .nd { background: none; color: #fff; font-size: 12px }
-/* Нижняя панель как в FigJam */
-.tools { height: 64px; padding: 0 8px; gap: 2px; border-radius: 16px }
-.tb { display: grid; justify-items: center; gap: 2px; width: 74px; padding: 7px 0 5px; border: 0; border-radius: 12px; background: none; font: inherit; color: #2c2c2c; cursor: pointer; touch-action: none }
+/* Нижняя панель как в FigJam — крупно */
+.tools { height: 84px; padding: 0 10px; gap: 4px; border-radius: 20px; overflow: hidden }
+.tb { display: grid; justify-items: center; gap: 4px; width: 92px; padding: 10px 0 8px; border: 0; border-radius: 14px; background: none; font: inherit; color: #2c2c2c; cursor: pointer; touch-action: none }
 .tb:hover { background: #f2f2f2 } .tb.on { background: #e5f4ff; color: #0d99ff }
-.tb svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
-.tb small { font-size: 11px; font-weight: 700 }
-.tray { left: 50%; bottom: 94px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 6px 8px; border-radius: 14px; animation: tray .14s ease-out; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none }
+.tb svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
+.tb small { font-size: 13px; font-weight: 800 }
+.tsep { width: 1px; height: 50px; margin: 0 6px; background: #e6e6e6 }
+/* стикер на панели: торчит снизу, при наведении выезжает */
+.sticky { position: relative; align-self: stretch; width: 96px; border: 0; background: none; padding: 0; cursor: pointer }
+.sk { position: absolute; left: 14px; top: 22px; width: 66px; height: 74px; border-radius: 3px; box-shadow: 0 2px 6px rgba(0, 0, 0, .16); transform: rotate(-4deg); transition: top .18s ease, transform .18s ease }
+.sk i { position: absolute; right: 0; top: 0; width: 18px; height: 18px; background: linear-gradient(225deg, #f5f5f5 50%, rgba(0, 0, 0, .1) 50%) }
+.sticky:hover .sk { top: 12px; transform: rotate(-2deg) } .sticky.on .sk { top: 8px; transform: rotate(0) }
+.board.placing { cursor: crosshair }
+.tray { left: 50%; bottom: 116px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 18px; animation: tray .14s ease-out; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none }
 @keyframes tray { from { opacity: 0; transform: translate(-50%, 6px) } }
-.ti { display: grid; justify-items: center; gap: 3px; width: 70px; padding: 6px 0 4px; border: 0; border-radius: 10px; background: none; font: inherit; cursor: pointer; touch-action: none; flex: none }
-.ti.wide { width: 92px } .ti:hover { background: #f2f2f2 }
-.tc { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: #fff; background: var(--c) }
-.tc svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
-.ti small { font-size: 11px; font-weight: 700; color: #2c2c2c; white-space: nowrap }
-.tt2 { padding: 0 8px; font-size: 11px; font-weight: 800; color: var(--hint); max-width: 150px; line-height: 1.2 }
-.sw { flex: none; width: 34px; height: 34px; margin: 4px; border: 1px solid rgba(0, 0, 0, .08); border-radius: 6px; cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) } .sw:hover { transform: translateY(-2px) }
+.ti { display: grid; justify-items: center; gap: 5px; width: 92px; padding: 8px 0 6px; border: 0; border-radius: 12px; background: none; font: inherit; cursor: pointer; touch-action: none; flex: none }
+.ti.wide { width: 116px } .ti:hover { background: #f2f2f2 }
+.tc { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #fff; background: var(--c) }
+.tc svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round }
+.ti small { font-size: 13px; font-weight: 800; color: #2c2c2c; white-space: nowrap }
+.tt2 { padding: 0 10px; font-size: 12px; font-weight: 800; color: var(--hint); max-width: 170px; line-height: 1.25 }
+.sw { flex: none; width: 30px; height: 30px; margin: 4px; border: 1px solid rgba(0, 0, 0, .12); border-radius: 50%; cursor: pointer; padding: 0 } .sw:hover { transform: scale(1.1) }
+.sw.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #7b61ff }
 @media (max-width: 719px) {
-  .tools { left: 50%; right: auto; transform: translateX(-50%); overflow: visible } .tb { width: 62px } .tray { bottom: 82px }
+  .tools { left: 8px; right: 8px; transform: none; height: 72px; justify-content: center } .tb { width: 64px } .tb svg { width: 26px; height: 26px } .tb small { font-size: 11px } .sticky { width: 72px } .sk { left: 10px; width: 52px; height: 60px } .tray { bottom: 92px } .tsep { display: none }
 }
 </style>

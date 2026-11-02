@@ -23,7 +23,7 @@ export interface Step { id: string; kind: string; [k: string]: unknown }
 export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; x?: number; y?: number; steps?: Step[] }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; updatedAt?: number }
-export const NOTE_COLORS = ['#fff1a8', '#c9f2c7', '#cfe8ff', '#ffd6e7', '#e6d9ff'], NOTES_MAX = 200
+export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 
 export function makeCourses({ db, FieldValue }: CoursesDeps) {
   const col = () => db.collection('courses')
@@ -94,7 +94,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       const notes = (Array.isArray(b.notes) ? b.notes : []).slice(0, NOTES_MAX).map((raw) => {
         const r = (raw ?? {}) as Record<string, unknown>
         if (!ID.test(String(r.id))) throw fail(400, 'bad note')
-        return { id: String(r.id), x: num(r.x), y: num(r.y), text: str(r.text, 1000), color: NOTE_COLORS.includes(String(r.color)) ? String(r.color) : NOTE_COLORS[0] }
+        return { id: String(r.id), x: num(r.x), y: num(r.y), text: str(r.text, 1000), color: NOTE_COLORS.includes(String(r.color)) ? String(r.color) : '#ffe99a' }
       })
       const ref = col().doc(id), s = await ref.get()
       if (!s.exists && (await col().get()).size >= COURSES_MAX) throw fail(413, 'too many courses')

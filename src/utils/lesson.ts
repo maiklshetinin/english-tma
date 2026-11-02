@@ -20,6 +20,8 @@ export interface Step {
 /** Задания курса, в которые можно собрать экраны */
 export const INTERACTIVE = ['lesson', 'words', 'hw', 'test']
 export const STEPS_MAX = 40, OPTS_MAX = 4, PAIRS_MAX = 6
+/** Сколько места по вертикали занимает горизонтальный рельс урока с карточками экранов (редактор курса раздвигает рельс) */
+export const RAIL_H = 420
 
 export const KINDS: Record<StepKind, { t: string; d: string; c: string; dk: string; ic: string; head: string }> = {
   intro: { t: 'Новое слово', d: 'Видео, фото или аудио и слово с примером — знакомим с новой лексикой', c: 'var(--blue)', dk: 'var(--blue-d)', head: 'Смотрите, новое слово!',
