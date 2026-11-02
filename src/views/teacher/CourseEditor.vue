@@ -6,6 +6,8 @@
 //  • Задание можно просто положить на холст рядом (черновики), потом перетащить на рельс — встанет в ближайший промежуток,
 //    соседи расступятся. С рельса — оттащить на холст. С панели — тянуть куда угодно или нажать (в конец рельса).
 //  • Кружки из Telegram: перетащить видео на холст / рельс (или «Кружок» на панели — выбрать файл).
+//  • Интерактивный урок (как в Busuu): двойной клик по уроку или «Собрать урок» — свой рельс экранов (LessonBuilder),
+//    в конце всегда «Итог урока». Экраны — в item.steps; их файлы — в S3 рядом с кружками (до загрузки — в IndexedDB).
 // Только для преподавателя. Хранение: на сервере (Firestore, курс целиком; кружки — в S3 через сервер), а в браузере —
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
@@ -15,6 +17,9 @@ import { API, apiRequest, fb, isDemo } from '../../firebase'
 import { showToast } from '../../composables/useToast'
 import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
+import LessonBuilder from '../../components/LessonBuilder.vue'
+import { INTERACTIVE, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
+import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
 const goBack = () => router.push({ name: 'path' })            // назад — в «Курсы»
@@ -71,7 +76,7 @@ function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t:
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
-  const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}) })
+  const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   remote = true
   Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), dirty: false })
   nextTick(() => { remote = false })
@@ -99,7 +104,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(INTERACTIVE.includes(x.type) && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -127,7 +132,7 @@ const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toStrin
   items: [it('unit', 'Юнит 1', { sub: 'Тема юнита' })], loose: [], dirty: false })
 const fromServer = (c) => {
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
-  const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}) })
+  const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), dirty: false })
   localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'
 }
@@ -163,23 +168,37 @@ async function uploadLocal() {
     const b = await mediaOp('readonly', s => s.get(x.media)).catch(() => null)
     if (b) await upload(x, b instanceof File ? b : new File([b], x.type === 'photo' ? 'photo.jpg' : 'kruzhok.mp4', { type: b.type || (x.type === 'photo' ? 'image/jpeg' : 'video/mp4') }))
   }
+  for (const x of [...doc.items, ...doc.loose]) for (const s of x.steps ?? []) {          // файлы экранов уроков
+    const slots = [...['image', 'audio', 'video'].map(f => [f, null]), ...(s.opts ?? []).flatMap((_, k) => [['image', k], ['audio', k]])]
+    for (const [f, k] of slots) {
+      const v = (k == null ? s : s.opts[k])?.[f]; if (!v?.startsWith('idb:')) continue
+      const b = await mediaOp('readonly', st => st.get(v.slice(4))).catch(() => null)
+      if (b) await uploadStepFile(s.id, f, k, b instanceof File ? b : new File([b], 'file', { type: b.type }), v.slice(4))
+    }
+  }
 }
 // Загрузка в S3 через сервер, с процентом (XHR — у fetch нет прогресса отправки)
 const upPct = reactive({})       // id задания → 0…100, пока грузится
-async function upload(item, file) {
+const AUDIO_EXT = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', weba: 'audio/webm' }
+async function sendFile(file, pk) {
   const token = await fb?.currentUser?.getIdToken()
-  const type = file.type || (/\.webm$/i.test(file.name) ? 'video/webm' : /\.mov$/i.test(file.name) ? 'video/quicktime' : /\.png$/i.test(file.name) ? 'image/png' : /\.(jpe?g)$/i.test(file.name) ? 'image/jpeg' : 'video/mp4')
-  upPct[item.id] = 0
+  const type = file.type || AUDIO_EXT[file.name.split('.').pop().toLowerCase()] || (/\.webm$/i.test(file.name) ? 'video/webm' : /\.mov$/i.test(file.name) ? 'video/quicktime' : /\.png$/i.test(file.name) ? 'image/png' : /\.(jpe?g)$/i.test(file.name) ? 'image/jpeg' : 'video/mp4')
+  upPct[pk] = 0
   try {
-    const key = await new Promise((ok, no) => {
+    return await new Promise((ok, no) => {
       const x = new XMLHttpRequest()
       x.open('POST', `${API}/media/upload?courseId=${encodeURIComponent(doc.id)}`)
       x.setRequestHeader('Content-Type', type); if (token) x.setRequestHeader('Authorization', `Bearer ${token}`)
-      x.upload.onprogress = (e) => { if (e.lengthComputable) upPct[item.id] = Math.round(e.loaded / e.total * 100) }
+      x.upload.onprogress = (e) => { if (e.lengthComputable) upPct[pk] = Math.round(e.loaded / e.total * 100) }
       x.onload = () => { if (x.status < 300) return ok(JSON.parse(x.responseText).key); let m = ''; try { m = JSON.parse(x.responseText).error } catch { /* не JSON */ } no(new Error(`${x.status}${m ? ': ' + m : ''}`)) }
       x.onerror = () => no(new Error('network'))
       x.send(file)
     })
+  } finally { delete upPct[pk] }
+}
+async function upload(item, file) {
+  try {
+    const key = await sendFile(file, item.id)
     const it2 = findAny(item.id); if (!it2) return
     urls[key] = urls[it2.media] || URL.createObjectURL(file)
     it2.file = key
@@ -187,8 +206,55 @@ async function upload(item, file) {
     save()
   } catch (e) {        // файл остался в браузере — догрузим при следующем открытии; причину показываем
     showToast(`Не удалось загрузить ${item.type === 'photo' ? 'фото' : 'кружок'} в хранилище (${e.message}). Он сохранён в браузере, попробую снова при следующем открытии.`, null, 'bad')
-  } finally { delete upPct[item.id] }
+  }
 }
+
+// ---------- Файлы экранов интерактивного урока ----------
+// Поле экрана (или варианта ответа): сначала «idb:<id>» — файл в этом браузере, после загрузки — ключ в S3.
+const findStep = (sid) => { for (const x of [...doc.items, ...doc.loose]) { const s = x.steps?.find(v => v.id === sid); if (s) return s } return null }
+const slotOf = (sid, opt) => { const s = findStep(sid); return opt == null ? s : s?.opts?.[opt] }
+async function putStepFile(sid, field, file, opt = null) {
+  const obj = slotOf(sid, opt); if (!obj) return
+  const id = `m${sid}_${field}${opt ?? ''}_${Date.now().toString(36)}`
+  try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return alert('Не удалось сохранить файл в браузере (мало места?).') }
+  const old = obj[field]
+  urls[id] = URL.createObjectURL(file); obj[field] = 'idb:' + id; save()
+  if (old) dropRefs([old])
+  if (storageOn.value) uploadStepFile(sid, field, opt, file, id)
+}
+async function uploadStepFile(sid, field, opt, file, id) {
+  let key
+  try { key = await sendFile(file, `${sid}:${field}:${opt ?? ''}`) } catch (e) {
+    return showToast(`Не удалось загрузить файл экрана в хранилище (${e.message}). Он сохранён в браузере, попробую снова при следующем открытии.`, null, 'bad')
+  }
+  const obj = slotOf(sid, opt)
+  if (!obj || obj[field] !== 'idb:' + id) return dropRefs([key])            // пока грузилось — заменили или удалили
+  urls[key] = urls[id]; obj[field] = key; save()
+  mediaOp('readwrite', s => s.delete(id)).catch(() => {})
+}
+// Убрать файлы экранов: свои — из браузера и хранилища; ссылки карточек не трогаем (это файлы колоды)
+function dropRefs(refs) {
+  for (const v of refs) {
+    if (v?.startsWith('idb:')) mediaOp('readwrite', s => s.delete(v.slice(4))).catch(() => {})
+    else if (v && /^t\//.test(v) && online) apiRequest('/media/delete', { method: 'POST', body: JSON.stringify({ key: v }) }).catch(() => {})
+  }
+}
+function resolveRef(v, kind) {
+  if (!v) return ''
+  if (v.startsWith('idb:')) return mediaUrl({ media: v.slice(4) })
+  if (/^t\//.test(v)) return mediaUrl({ file: v })
+  return kind === 'audio' ? audSrc(v) : kind === 'image' ? imgSrc(v) : v
+}
+// Открытый конструктор урока (id задания); в адресе — ?lesson=<id>, чтобы после обновления страницы вернуться туда же
+const lessonId = ref(String(route.query.lesson || '') || null)
+const lesson = computed(() => (lessonId.value ? findAny(lessonId.value) : null))
+function openLesson(x) {
+  if (!x || !INTERACTIVE.includes(x.type)) return
+  if (!Array.isArray(x.steps)) x.steps = []
+  sel.value = null; lessonId.value = x.id; router.replace({ query: { ...route.query, lesson: x.id } })
+}
+function closeLesson() { lessonId.value = null; const q = { ...route.query }; delete q.lesson; router.replace({ query: q }) }
+const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'экрана' : 'экранов'}`
 
 // ---------- Холст: сдвиг и масштаб ----------
 const board = ref(null), W = ref(innerWidth), H = ref(innerHeight)
@@ -425,6 +491,7 @@ async function onPicked(e) {
 // Файл тащат из Telegram / проводника: на рельс — с местом вставки, мимо — на холст
 const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
 function fileOver(e) {
+  if (lessonId.value) { e.preventDefault(); return }           // в конструкторе урока файлы — через его кнопки
   if (!hasFiles(e)) return
   e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
   if (!drag.on) {        // тип видно по первому файлу ещё до броска (картинка → «Фото», иначе — кружок)
@@ -436,6 +503,7 @@ function fileOver(e) {
 }
 function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.from === 'file') Object.assign(drag, { on: false, item: null }) }
 async function fileDrop(e) {
+  if (lessonId.value) { e.preventDefault(); return }
   if (!hasFiles(e)) return
   e.preventDefault()
   const files = [...e.dataTransfer.files].filter(kindOf), first = drag.item, w = toWorld(e.clientX, e.clientY), onRail = drag.over
@@ -461,6 +529,8 @@ const selLoose = computed(() => !!doc.loose.find(v => v.id === sel.value))
 function remove() {
   const x = selItem.value; if (!x) return
   if (x.file && !confirm(`Удалить ${x.type === 'photo' ? 'фото' : 'кружок'}? Файл удалится и из хранилища.`)) return
+  if (x.steps?.length && !confirm(`Удалить «${x.title}» вместе с интерактивным уроком (${screens(x.steps.length)})?`)) return
+  dropRefs((x.steps ?? []).flatMap(stepRefs))
   const a = doc.items.findIndex(v => v.id === x.id); if (a >= 0) doc.items.splice(a, 1)
   const b = doc.loose.findIndex(v => v.id === x.id); if (b >= 0) doc.loose.splice(b, 1)
   if (x.media) mediaOp('readwrite', s => s.delete(x.media)).catch(() => {})
@@ -476,7 +546,7 @@ const popStyle = computed(() => {
   return { left: Math.min(Math.max(8, want), W.value - w - 8) + 'px', top: Math.min(Math.max(70, s.y - 60), H.value - 380) + 'px', width: w + 'px' }
 })
 const onKey = (e) => {
-  if (/INPUT|TEXTAREA/.test(e.target?.tagName)) return
+  if (/INPUT|TEXTAREA/.test(e.target?.tagName) || lessonId.value) return
   if (e.key === 'Escape') sel.value = null
   if ((e.key === 'Delete' || e.key === 'Backspace') && sel.value) remove()
 }
@@ -503,19 +573,20 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
         <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
         <!-- Рельс -->
         <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id, rsel: !!selColor[x.id] }]"
-          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick="openLesson(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'"><b class="no">{{ unitNo(i) }}</b><div class="sign"><b>{{ x.title }}</b><span>{{ x.sub }}</span></div></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
             <img v-else-if="x.type === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" alt="" draggable="false" />
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <svg v-if="!MEDIA.includes(x.type) || !mediaUrl(x) || stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ic" :class="{ badge: MEDIA.includes(x.type) && mediaUrl(x) }" v-html="stateOf(x, i) === 'done' ? CHECK : T[x.type].ic" />
-            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small v-if="x.title !== T[x.type].t">{{ T[x.type].t }}</small></em>
+            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small v-if="x.title !== T[x.type].t || x.steps?.length">{{ [x.title !== T[x.type].t ? T[x.type].t : '', x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></em>
+            <i v-if="x.steps?.length" class="ilb" title="Интерактивный урок">{{ x.steps.length }}</i>
           </template>
         </div>
         <!-- Черновики на холсте: ещё не на рельсе -->
         <div v-for="x in looseShown" :key="x.id" class="bead loose" :class="[x.type, { on: sel === x.id, rsel: !!selColor[x.id] }]" :style="beadStyle(x, x, colorOf(x))"
-          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @dblclick="openLesson(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
@@ -555,9 +626,13 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
       <div v-else-if="selItem.type !== 'unit'" class="types">
         <button v-for="k in TASKS" :key="k" class="tt" :class="{ on: selItem.type === k }" :style="{ '--c': T[k].c }" :title="T[k].t" @click="selItem.type = k; save()"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></button>
       </div>
+      <button v-if="INTERACTIVE.includes(selItem.type)" class="btn-l" @click="openLesson(selItem)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2" /><rect x="13" y="4" width="7" height="7" rx="2" /><rect x="4" y="13" width="7" height="7" rx="2" /><path d="M13.8 16.6l2.1 2.1 3.6-4.2" /></svg>{{ selItem.steps?.length ? 'Открыть урок · ' + screens(selItem.steps.length) : 'Собрать интерактивный урок' }}</button>
       <button v-if="selLoose" class="btn-r" @click="toRailEnd">На рельс — в конец</button>
       <button class="del" @click="remove">{{ selLoose ? 'Удалить' : 'Убрать с рельса' }}</button>
     </div>
+
+    <!-- Конструктор интерактивного урока — поверх курса -->
+    <LessonBuilder v-if="lesson" :key="lesson.id" :item="lesson" :type-name="T[lesson.type].t" :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" @change="save" @close="closeLesson" />
 
     <!-- Сверху -->
     <div class="fl tl-panel">
@@ -648,6 +723,10 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .pop { position: fixed; z-index: 20; display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04); cursor: default; animation: pop .14s ease-out }
 @keyframes pop { from { opacity: 0; transform: translateY(-4px) } }
 .lz { margin-left: 8px; padding: 1px 6px; border-radius: 5px; background: #fff4d6; color: #b07800; text-transform: none; letter-spacing: 0 }
+.btn-l { display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 9px; padding: 8px; background: var(--blue-l); color: var(--blue-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
+.btn-l svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round }
+.ilb { position: absolute; right: -6px; top: -6px; min-width: 22px; height: 22px; padding: 0 5px; box-sizing: border-box; border-radius: 11px; background: var(--blue); box-shadow: 0 0 0 2px #fff; color: #fff; font-size: 12px; font-weight: 900; font-style: normal; display: grid; place-items: center; pointer-events: none }
+.bead.todo .ilb { background: #b9b9b9 }
 .btn-r { border: 0; border-radius: 9px; padding: 8px; background: var(--green-l); color: var(--green-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
 /* Черновик на холсте: цветной, с пунктирным кольцом — «ещё не на рельсе» */
 .bead.loose { box-shadow: 0 6px 0 var(--d), 0 0 0 5px #f5f5f5, 0 0 0 7px color-mix(in srgb, var(--c) 45%, transparent); transition: transform .12s }
