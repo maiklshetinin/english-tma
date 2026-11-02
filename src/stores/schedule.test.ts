@@ -136,3 +136,18 @@ describe('schedule store', () => {
     expect(s.lessons.map((l) => l.id)).toEqual(['a', 'b'])
   })
 })
+
+describe('needsStatus — урок прошёл, а статуса нет', () => {
+  it('считает конец урока (час + минута начала), проведённые и отменённые всеми — не просит', async () => {
+    const { needsStatus } = await import('./schedule')
+    const n = { date: '2026-11-02', hour: 18, minute: 10 }
+    const l = (o: object) => ({ date: '2026-11-02', hour: 17, studentIds: ['a'], ...o })
+    expect(needsStatus(l({}), n)).toBe(true)                                    // 17:00–18:00 — закончился
+    expect(needsStatus(l({ minute: 30 }), n)).toBe(false)                       // 17:30–18:30 — ещё идёт
+    expect(needsStatus(l({ date: '2026-11-01', hour: 22 }), n)).toBe(true)      // вчера
+    expect(needsStatus(l({ date: '2026-11-03' }), n)).toBe(false)               // завтра
+    expect(needsStatus(l({ done: true }), n)).toBe(false)
+    expect(needsStatus(l({ canceled: { a: 'x' } }), n)).toBe(false)
+    expect(needsStatus(l({ studentIds: ['a', 'b'], canceled: { a: 'x' } }), n)).toBe(true)   // в группе отменил не каждый
+  })
+})

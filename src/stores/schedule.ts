@@ -9,10 +9,19 @@ import { computed, ref } from 'vue'
 import type { Lesson, ScheduleResponse } from '../../server/types'
 import { apiRequest, isDemo } from '../firebase'
 import { showToast } from '../composables/useToast'
+import { nowIn } from '../utils/dates'
 
 const TMP = 'tmp-'                                          // временный id урока, пока сервер не вернул настоящий
 const isTmp = (id: string) => id.startsWith(TMP)
 let tmpSeq = 0
+
+/** Урок уже закончился (длится час, с учётом минуты начала), а статуса нет: не отмечен «проведён» и не все ученики отменили.
+ *  Такой урок в таблице — с оранжевым «?», над таблицей — «Укажите статус · N». */
+export function needsStatus(l: Pick<Lesson, 'date' | 'hour' | 'minute' | 'done' | 'studentIds' | 'canceled'>, n = nowIn()): boolean {
+  if (l.done || !l.studentIds.length || l.studentIds.every((id) => l.canceled?.[id])) return false
+  if (l.date !== n.date) return l.date < n.date
+  return l.hour * 60 + (l.minute || 0) + 60 <= n.hour * 60 + n.minute
+}
 
 /** Ключ ячейки таблицы на экране: «дата|час» (у сервера свой формат ключа слота — «дата_час»). */
 export const slotKey = (date: string, hour: number) => `${date}|${hour}`

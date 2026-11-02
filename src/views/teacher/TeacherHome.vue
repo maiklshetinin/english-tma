@@ -2,7 +2,7 @@
 // Главная преподавателя: две недели расписания + список учеников справа. Ученика тянем в ячейку — создаётся урок (сохраняется на сервере).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { nowTick, weekDates, weekRange, slotKey, fmtSlot, hh, slotPast } from '../../store/app'
+import { nowTick, weekDates, weekRange, slotKey, fmtSlot, hh, slotPast, nowIn, tz } from '../../store/app'
 import { goUp } from '../../router'
 import { setDropHandler } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
@@ -17,7 +17,7 @@ import { sumMoney } from '../../utils/price'
 import AppIcon from '../../components/AppIcon.vue'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
-import { useScheduleStore } from '../../stores/schedule'
+import { useScheduleStore, needsStatus } from '../../stores/schedule'
 const studentStore = useStudentsStore()
 const route = useRoute(), router = useRouter()
 const scheduleStore = useScheduleStore()
@@ -138,6 +138,14 @@ function toggleDone(lesson) {
   scheduleStore.setDone(lesson, !was); sheet.value = null; haptic('light')
   showToast(was ? 'Отметка «проведён» снята' : `Урок проведён: ${names(lesson)}`, () => scheduleStore.setDone(lesson, was))
 }
+// Уроки, которые прошли, а статуса нет (не «проведён» и не отменён): над таблицей — «Укажите статус · N».
+// Нажатие — открыть самый ранний (если он на другой неделе — перейти на неё).
+const noStatus = computed(() => { const n = nowIn(tz.value, nowTick.value); return scheduleStore.lessons.filter(l => known(l).length && needsStatus(l, n)).sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour) })
+function askStatus() {
+  const l = noStatus.value[0]; if (!l) return
+  if (!dates.value.includes(l.date)) week.value = Math.floor((Date.parse(l.date) - Date.parse(w1.value[0])) / (7 * 864e5))      // w1[0] — понедельник этой недели
+  sheet.value = { lesson: l }
+}
 const pick = (sid) => { const { date, hour } = sheet.value.slot; sheet.value = null; if (!occupant(date, hour)) assign(sid, date, hour) }      // sid — id ученика или список (группа)
 const openStudent = (id) => { sheet.value = null; router.push({ name: 'home', params: { id } }) }
 
@@ -162,6 +170,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
             <WeekLoad :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <GridStyleButton />
             <button v-if="week === 1 && ghosts.length" class="btn sm gall" title="Поставить все уроки, как на этой неделе" @click="confirmAll">Как на этой неделе · {{ ghosts.length }}</button>
+            <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i>Укажите статус · {{ noStatus.length }}</button>
             <WeekMoney class="money" :m="money" />
           </div>
           <WeekGrid :dates="dates" :ghosts="week === 1 ? ghosts : []" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" />
@@ -186,6 +195,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 .wcol { display: grid; gap: 6px; min-width: 0 }
 .wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh .money { margin-left: auto }
+.ask { display: inline-flex; align-items: center; gap: 6px; background: var(--orange-l); color: var(--orange-d) } .ask i { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: #fff; font-style: normal; font-size: 11px; font-weight: 900 }
 .wh b { display: block; font-weight: 800; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */

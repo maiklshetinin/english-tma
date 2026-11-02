@@ -1,6 +1,6 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
@@ -8,7 +8,7 @@ import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney } from '../utils/price'
 import AvatarStack from './AvatarStack.vue'
 import { useStudentsStore } from '../stores/students'
-import { useScheduleStore } from '../stores/schedule'
+import { useScheduleStore, needsStatus } from '../stores/schedule'
 const studentStore = useStudentsStore()
 const scheduleStore = useScheduleStore()
 const props = defineProps({ dates: { type: Array, required: true }, ghosts: { type: Array, default: () => [] } })
@@ -51,7 +51,26 @@ const down = (e, l) => { if (!l.done && !allOff(l) && !orphan(l)) pressStart(e, 
 // Подпись урока: ученик или участники группы; у «пустого» урока — подсказка, что его ученика больше нет
 const first = (l) => group(l)[0]
 const label = (l) => allOff(l) ? `Отменил ученик: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour, l.minute)} — без оплаты` : orphan(l) ? (goneName(l) ? `${goneName(l)} (удалён), ${hh(l.hour, l.minute)}` : `Урок без ученика (удалён или в архиве), ${hh(l.hour, l.minute)} — нажмите, чтобы убрать`) : isGroup(l) ? `Группа: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour, l.minute)}` : `${first(l).name}, ${hh(l.hour, l.minute)}`
-const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
+const clickCell = (d, h) => { sel.value = null; if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
+// Урок закончился, а статуса нет — оранжевый «?» в углу (stores/schedule → needsStatus)
+const unknown = (l) => !orphan(l) && needsStatus(l, now.value)
+// Как в Figma: одно нажатие — выделить урок (синяя рамка), двойное — открыть карточку урока. Enter — открыть выделенный, Esc / нажатие мимо — снять.
+const sel = ref(null)
+let last = { id: null, t: 0 }
+function tapLesson(l) {
+  if (orphan(l)) { emit('lesson', l); return }      // «пустой» урок — сразу открыть, чтобы убрать
+  const t = Date.now()
+  if (last.id === l.id && t - last.t < 450) { last = { id: null, t: 0 }; emit('lesson', l); return }
+  last = { id: l.id, t }; sel.value = l.id
+}
+const offChip = (e) => { if (sel.value && !e.target.closest?.('.chip')) sel.value = null }
+const onKey = (e) => {
+  if (!sel.value) return
+  if (e.key === 'Escape') sel.value = null
+  else if (e.key === 'Enter' && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { const l = scheduleStore.lessons.find(x => x.id === sel.value); if (l) { e.preventDefault(); emit('lesson', l) } }
+}
+onMounted(() => { addEventListener('pointerdown', offChip, true); addEventListener('keydown', onKey) })
+onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEventListener('keydown', onKey) })
 </script>
 
 <template>
@@ -71,14 +90,15 @@ const clickCell = (d, h) => { if (!at(d, h).length) emit('cell', { date: d, hour
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
-          <button class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l) }" :title="label(l)" :aria-label="label(l)"
-            @pointerdown="down($event, l)" @click.stop="emit('lesson', l)" @dragstart.prevent>
+          <button class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
+            @pointerdown="down($event, l)" @click.stop="tapLesson(l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
               <span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span>
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
             <template v-else><Avatar :s="first(l)" :size="39" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
+            <span v-if="unknown(l)" class="tick q" title="Урок прошёл — укажите статус: проведён или отменён">?</span>
             <span v-if="allOff(l)" class="tick x" title="Отменён"><svg viewBox="0 0 16 16"><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" /></svg></span><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
@@ -132,6 +152,8 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .chip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 4px; min-width: 0;
   border: 0; border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px #d0d7de;      /* предстоящий — серая плашка с серой окантовкой */
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
+/* Выделенный урок (одно нажатие) — синяя рамка, как выделение в Figma */
+.chip.sel { outline: 2px solid var(--blue); outline-offset: 1px; z-index: 3 }
 .chip.done { box-shadow: none; background: transparent; color: var(--hint); cursor: pointer }      /* проведённый — серый, только зелёная галочка */ .chip .tick { font-weight: 900 }
 /* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
 /* Группа: аватарки внахлёст без подписи — на телефоне две (вторая может быть «+N»), на широком экране до четырёх */
@@ -158,7 +180,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (max-width: 420px) { .chip :deep(.av) { width: 29px !important; height: 29px !important } }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
 /* Галочка «проведён» — как в GitHub: белая галочка в зелёном кружке */
-.chip .tick { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #1f883d } .chip .tick.x { background: #cf222e } .chip .tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
+.chip .tick { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #1f883d } .chip .tick.x { background: #cf222e } .chip .tick.q { background: var(--orange); color: #fff; font-size: 11px; font-weight: 900; line-height: 1 } .chip .tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
 @media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px; font-size: 13px } .cell { height: 46px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
 @media (max-width: 420px) { .dsum, .dlost { font-size: 10px; letter-spacing: -.2px } .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 36px } }
@@ -189,6 +211,12 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
   .wk.ls-blue .chip.up .nm { color: #1a5b8a }
 }
 .wk.ls-sticker .chip.up { background: #fff4b8 } .wk.ls-blue .chip.up { background: var(--blue-l) }
+/* Группа — жёлтая плашка (как в панели учеников и в «Информации»); у прошедших подложки нет */
+.wk .chip.up.group { background: var(--grp); box-shadow: inset 0 0 0 1px var(--grp-line) }
+@media (min-width: 720px) {
+  .wk.ls-tail .chip.up.group { background: transparent; box-shadow: none } .wk.ls-tail .chip.up.group::before { background: var(--grp); box-shadow: inset 0 0 0 1px var(--grp-line) }
+  .wk.ls-sticker .chip.up.group::before { background: var(--grp-hover) } .wk.ls-blue .chip.up.group { background: var(--grp); box-shadow: none }
+}
 /* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
 /* «Клетки» — простая таблица: прямые ячейки без промежутков, тонкие линии 1px; скруглены только внешние углы таблицы */
 .wk.gs-cells { gap: 0 } .wk.gs-cells .g { gap: 0 } .wk.gs-cells .g.head { margin-bottom: 0 } .wk.gs-cells .dh { margin: 0 2px }
@@ -205,6 +233,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 .wk.gs-gray .cell { background: var(--surface); box-shadow: none }
 .wk.gs-gray .chip:not(.done):not(.canceled):not(.orphan) { background: var(--card) }      /* на серой ячейке урок — белый, иначе сольётся */
+.wk.gs-gray .chip.up.group:not(.orphan) { background: var(--grp) }      /* группа и тут жёлтая */
 .wk.gs-none .cell { background: transparent; box-shadow: none }      /* без линий: чистый фон, только уроки */
 .wk.gs-lines { gap: 0 } .wk.gs-lines .g.head { margin-bottom: 4px }
 .wk.gs-lines .g:not(.head) { box-shadow: inset 0 -1px 0 var(--border); padding: 2px 0 }      /* линия под каждым часом во всю ширину */

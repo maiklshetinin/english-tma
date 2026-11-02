@@ -79,6 +79,21 @@ describe('урок с учеником, которого больше нет (у
     await chips[0].trigger('click')
     expect(w.emitted('lesson')![0][0]).toMatchObject({ id: 'o' })           // по нему можно нажать и убрать
   })
+
+  it('сетка: одно нажатие выделяет урок, двойное — открывает; прошедший без статуса — с «?»', async () => {
+    const { default: WeekGrid } = await import('./WeekGrid.vue')
+    const { useScheduleStore } = await import('../stores/schedule')
+    useScheduleStore().set([{ id: 'p', date: '2020-01-06', hour: 11, studentIds: ['a'] }, { id: 'd', date: '2020-01-06', hour: 12, studentIds: ['a'], done: true }])
+    const w = mount(WeekGrid, { props: { dates: ['2020-01-06'] } })
+    const chip = () => w.findAll('.chip')[0]
+    await chip().trigger('click')
+    expect(chip().classes()).toContain('sel')
+    expect(w.emitted('lesson')).toBeUndefined()
+    await chip().trigger('click')
+    expect(w.emitted('lesson')![0][0]).toMatchObject({ id: 'p' })
+    expect(chip().find('.tick.q').exists()).toBe(true)                      // прошёл, а статуса нет
+    expect(w.findAll('.chip')[1].find('.tick.q').exists()).toBe(false)      // проведён — без «?»
+  })
   it('проведённый урок с удалённым навсегда учеником: имя и цена из истории, итог сходится', () => {
     const lesson = { id: 'L', date: D, hour: 9, studentIds: ['a', 'gone'], done: true, prices: { a: 100, gone: 70 }, names: { gone: 'Рома' } } as Lesson
     const w = mount(LessonSheet, { props: { lesson } })

@@ -5,6 +5,7 @@
   --red: #ff4b4b; --red-d: #ea2b2b; --red-l: #ffdfe0;
   --orange: #ff9600; --orange-d: #cc7900; --orange-l: #fff0d0;
   --yellow: #ffc800; --yellow-d: #e5a500;
+  --grp: #fff3c4; --grp-hover: #ffe58a; --grp-line: #f0d264;      /* группы — жёлтые везде (панель учеников, расписание; в «Информации» групповые тоже жёлтые) */
   --purple: #ce82ff; --purple-d: #a560e8; --purple-l: #f3e2ff;
 
   --bg: #ffffff; --card: #ffffff; --surface: #f7f7f7; --border: #e5e5e5; --group: #eef0f3;
@@ -20,6 +21,7 @@ html[data-theme='dark'] {
   --bg: #131f24; --card: #131f24; --surface: #202f36; --border: #37464f; --group: #27373f;
   --text: #f1f7fb; --hint: #9fb3bd; --hint-2: #6b808a;
   --green-l: #22381a; --blue-l: #16323f; --red-l: #3d1f22; --orange-l: #3b2d16; --purple-l: #2e2140;
+  --grp: #3a3315; --grp-hover: #4d431a; --grp-line: #6b5a1f;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
