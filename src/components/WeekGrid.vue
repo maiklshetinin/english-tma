@@ -153,7 +153,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
   border: 0; border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px #d0d7de;      /* предстоящий — серая плашка с серой окантовкой */
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
 /* Выделенный урок (одно нажатие) — синяя рамка, как выделение в Figma */
-.chip.sel { outline: 2px solid var(--blue); outline-offset: 1px; z-index: 3 }
+.chip.sel { outline: 3px solid #0d99ff; outline-offset: 1px; z-index: 3 }      /* синий как выделение в Figma, линия 3px */
 .chip.done { box-shadow: none; background: transparent; color: var(--hint); cursor: pointer }      /* проведённый — серый, только зелёная галочка */ .chip .tick { font-weight: 900 }
 /* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
 /* Группа: аватарки внахлёст без подписи — на телефоне две (вторая может быть «+N»), на широком экране до четырёх */
