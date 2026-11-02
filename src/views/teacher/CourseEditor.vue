@@ -6,8 +6,11 @@
 //  • Задание можно просто положить на холст рядом (черновики), потом перетащить на рельс — встанет в ближайший промежуток,
 //    соседи расступятся. С рельса — оттащить на холст. С панели — тянуть куда угодно или нажать (в конец рельса).
 //  • Кружки из Telegram: перетащить видео на холст / рельс (или «Кружок» на панели — выбрать файл).
-//  • Интерактивный урок (как в Busuu): двойной клик по уроку или «Собрать урок» — свой рельс экранов (LessonBuilder),
-//    в конце всегда «Итог урока». Экраны — в item.steps; их файлы — в S3 рядом с кружками (до загрузки — в IndexedDB).
+//  • Два рельса (как в Busuu): вертикальный — юниты и уроки курса; от урока вправо — горизонтальный рельс его экранов
+//    (интерактив: новое слово, выбор ответа, пары), в конце всегда «Итог урока». Всё на одном холсте, без окон (LessonRail).
+//    Экраны — в item.steps; их файлы — в S3 рядом с кружками (до загрузки — в IndexedDB).
+//  • Нижняя панель — как в FigJam: нажали группу — над панелью выезжает ряд элементов, нажали элемент — добавился.
+//  • Стикеры-заметки, как в FigJam: doc.notes, лежат на холсте; двойной клик — писать, тянуть — двигать.
 // Только для преподавателя. Хранение: на сервере (Firestore, курс целиком; кружки — в S3 через сервер), а в браузере —
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
@@ -17,8 +20,9 @@ import { API, apiRequest, fb, isDemo } from '../../firebase'
 import { showToast } from '../../composables/useToast'
 import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
-import LessonBuilder from '../../components/LessonBuilder.vue'
-import { INTERACTIVE, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
+import LessonRail from '../../components/LessonRail.vue'
+import LessonPlayer from '../../components/LessonPlayer.vue'
+import { INTERACTIVE, KINDS, KIND_LIST, STEPS_MAX, newStep, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -47,16 +51,16 @@ let seq = Date.now() % 100000
 const uid = () => 'i' + (++seq)
 const it = (type, title, extra = {}) => ({ id: uid(), type, title, ...extra })
 const seed = () => ({
-  title: 'Базовый курс A1', progress: 5, mode: 'wave',
+  title: 'Базовый курс A1', progress: 5, mode: 'line',
   items: [
     it('unit', 'Юнит 1', { sub: 'Present Simple' }),
     it('lesson', 'Глагол to be'), it('words', 'Слова: семья'), it('hw', 'Упражнения 1–5'), it('lesson', 'Отрицания'), it('tutor', 'Разговор с репетитором'), it('test', 'Тест юнита'), it('reward', 'Сундук'),
     it('unit', 'Юнит 2', { sub: 'Past Simple' }),
     it('lesson', 'Правильные глаголы'), it('words', 'Слова: путешествия'), it('lesson', 'Неправильные глаголы'), it('hw', 'Рассказ о выходных'), it('test', 'Тест юнита'),
   ],
-  loose: [it('words', 'Слова: еда', { x: 300, y: 90 }), it('lesson', 'Артикли a / the', { x: 300, y: 220 })],
+  loose: [it('words', 'Слова: еда', { x: -320, y: 120 }), it('lesson', 'Артикли a / the', { x: -320, y: 250 })], notes: [],
 })
-const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], ...v } } catch { /* нет */ } return seed() }
+const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], notes: [], ...v } } catch { /* нет */ } return seed() }
 const doc = reactive(load())
 let st = 0
 if (!doc.id) doc.id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -71,14 +75,15 @@ const save = () => {
 // Курс после правки уходит коллегам в этом же курсе через ~0,1 с (сохраняет в базу тот, кто правил). Одновременные правки:
 // побеждает последняя — поэтому выбранное коллегой подсвечено его цветом.
 let remote = false, shareT = 0
-const payload = () => ({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)) })
+const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), text: n.text ?? '', color: n.color })
+const payload = () => ({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote) })
 function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
   const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   remote = true
-  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), dirty: false })
+  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], dirty: false })
   nextTick(() => { remote = false })
   clearTimeout(pt); if (online) sync.value = 'saved'       // коллега сам сохранил это в базу
   try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ }
@@ -111,7 +116,7 @@ function push(delay = 900) {
     if (busy) return push(400)
     busy = true; sync.value = 'saving'
     try {
-      const r = await apiRequest(`/courses/${doc.id}`, { method: 'PUT', body: JSON.stringify({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)) }) })
+      const r = await apiRequest(`/courses/${doc.id}`, { method: 'PUT', body: JSON.stringify(payload()) })
       if (!r.ok) throw new Error(String(r.status))
       doc.dirty = false; sync.value = 'saved'; localStorage.setItem(KEY, JSON.stringify(doc))
     } catch { sync.value = 'offline'; push(15000) } finally { busy = false }
@@ -128,12 +133,12 @@ onUnmounted(() => {
 })
 // Открыли редактор (из «Курсов»: #/courses?id=<курс> или ?id=new). В браузере — копия последнего открытого курса:
 // если в ней несохранённые правки другого курса — сначала отправляем их, потом открываем нужный.
-const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'wave',
-  items: [it('unit', 'Юнит 1', { sub: 'Тема юнита' })], loose: [], dirty: false })
+const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'line',
+  items: [it('unit', 'Юнит 1', { sub: 'Тема юнита' })], loose: [], notes: [], dirty: false })
 const fromServer = (c) => {
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
   const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
-  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), dirty: false })
+  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], dirty: false })
   localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'
 }
 const flush = () => apiRequest(`/courses/${doc.id}`, { method: 'PUT', body: JSON.stringify(payload()) }).then(r => { if (r.ok) doc.dirty = false })
@@ -245,15 +250,61 @@ function resolveRef(v, kind) {
   if (/^t\//.test(v)) return mediaUrl({ file: v })
   return kind === 'audio' ? audSrc(v) : kind === 'image' ? imgSrc(v) : v
 }
-// Открытый конструктор урока (id задания); в адресе — ?lesson=<id>, чтобы после обновления страницы вернуться туда же
-const lessonId = ref(String(route.query.lesson || '') || null)
-const lesson = computed(() => (lessonId.value ? findAny(lessonId.value) : null))
-function openLesson(x) {
-  if (!x || !INTERACTIVE.includes(x.type)) return
-  if (!Array.isArray(x.steps)) x.steps = []
-  sel.value = null; lessonId.value = x.id; router.replace({ query: { ...route.query, lesson: x.id } })
+// ---------- Второй рельс: экраны урока ----------
+// Горизонтальные рельсы видны у всех уроков с экранами и у выбранного урока (чтобы начать собирать).
+const pick = reactive({ lesson: null, step: null })                // открытый экран: урок и экран (или 'final')
+const activeLesson = computed(() => pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
+const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (x.steps?.length || x.id === activeLesson.value)))
+function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; pick.step = stepId; if (stepId) sel.value = null }
+// «Интерактив» на панели: экран — в выбранный урок; ничего не выбрано — новый урок в конец рельса
+function addScreen(kind) {
+  let L = activeLesson.value ? findAny(activeLesson.value) : null
+  if (!L) { L = it('lesson', 'Урок', { steps: [] }); doc.items.push(L) }
+  if (!Array.isArray(L.steps)) L.steps = []
+  if (L.steps.length >= STEPS_MAX) return alert(`В уроке не больше ${STEPS_MAX} экранов`)
+  const st = newStep(kind); L.steps.push(st); tray.value = null
+  selectStep(L.id, st.id); setProgress(doc.progress)
+  nextTick(() => { const i = order.value.findIndex(v => v.id === L.id); if (i >= 0) showPoint({ x: pos(i).x + 230 + (L.steps.length - 1) * 92, y: pos(i).y + 200 }) })
 }
-function closeLesson() { lessonId.value = null; const q = { ...route.query }; delete q.lesson; router.replace({ query: q }) }
+function showPoint(w) { const p = toScreen(w); if (p.x < 40 || p.x > W.value - 300 || p.y < 90 || p.y > H.value - 140) animView({ ...view, x: view.x - (p.x - W.value / 2), y: view.y - (p.y - H.value / 2 + 60) }, true) }
+function removeStepKey() {
+  const L = findAny(pick.lesson), s = L?.steps?.find(v => v.id === pick.step); if (!s) return
+  const files = stepRefs(s)
+  if (files.some(f => !f.startsWith('https://')) && !confirm('Удалить экран? Его видео, фото и звук удалятся из хранилища.')) return
+  L.steps.splice(L.steps.indexOf(s), 1); dropRefs(files); selectStep(null, null); save()
+}
+const run = ref(null)                                             // «Пройти урок» — урок целиком, как ученик (как «Презентация» в Figma)
+const runLesson = computed(() => (run.value ? findAny(run.value) : null))
+
+// ---------- Нижняя панель как в FigJam: группа → ряд элементов над панелью ----------
+const tray = ref(null)                                            // открытая группа: 'tasks' | 'media' | 'inter' | 'note'
+const GROUPS = [
+  { k: 'tasks', t: 'Задания', ic: T.lesson.ic, c: 'var(--green)' },
+  { k: 'media', t: 'Медиа', ic: T.video.ic, c: '#2aabee' },
+  { k: 'inter', t: 'Интерактив', ic: KINDS.choice.ic, c: 'var(--purple)' },
+  { k: 'note', t: 'Стикер', ic: '<path d="M5 4.5h14v10l-4.5 4.5H5z"/><path d="M14.5 19v-4.5H19"/>', c: '#f5b400' },
+]
+const NOTE_COLORS = ['#fff1a8', '#c9f2c7', '#cfe8ff', '#ffd6e7', '#e6d9ff']
+
+// ---------- Стикеры, как в FigJam ----------
+const noteSel = ref(null), noteEdit = ref(null)
+function addNote(color) {
+  const r = board.value.getBoundingClientRect(), w = toWorld(r.left + r.width / 2, r.top + r.height / 2)
+  const n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), x: Math.round(w.x - 90 + (Math.random() - .5) * 40), y: Math.round(w.y - 90), text: '', color }
+  ;(doc.notes ??= []).push(n); tray.value = null; noteSel.value = n.id; save()
+  nextTick(() => editNote(n.id))
+}
+function editNote(id) { noteEdit.value = id; noteSel.value = id; nextTick(() => document.querySelector(`[data-note="${id}"] textarea`)?.focus()) }
+let nm = null
+function noteDown(e, n) {
+  if (noteEdit.value === n.id) return
+  sel.value = null; selectStep(null, null); noteSel.value = n.id
+  const w = toWorld(e.clientX, e.clientY); nm = { n, dx: w.x - n.x, dy: w.y - n.y, moved: false }
+  addEventListener('pointermove', noteMove); addEventListener('pointerup', noteUp, { once: true })
+}
+function noteMove(e) { if (!nm) return; sendCursor(e); const w = toWorld(e.clientX, e.clientY); nm.n.x = Math.round(w.x - nm.dx); nm.n.y = Math.round(w.y - nm.dy); nm.moved = true }
+function noteUp() { removeEventListener('pointermove', noteMove); if (nm?.moved) save(); nm = null }
+function delNote(id) { const i = doc.notes.findIndex(n => n.id === id); if (i >= 0) doc.notes.splice(i, 1); noteSel.value = noteEdit.value = null; save() }
 const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'экрана' : 'экранов'}`
 
 // ---------- Холст: сдвиг и масштаб ----------
@@ -279,7 +330,8 @@ function onWheel(e) {
 }
 // «Весь курс»: рельс, черновики и сводка — на экране целиком
 function fit(anim = true) {
-  const ps = [...layout.value, ...doc.loose.map(l => ({ x: l.x, y: l.y }))]
+  const ps = [...layout.value, ...doc.loose.map(l => ({ x: l.x, y: l.y })), ...(doc.notes ?? []).map(n => ({ x: n.x + 100, y: n.y + 100 })),
+    ...lessonRails.value.map(({ x, p }) => ({ x: p.x + 230 + ((x.steps?.length ?? 0) + 1) * 92 - 150, y: p.y }))]
   const xs = [...ps.map(p => p.x - 200), ...ps.map(p => p.x + 200), -230, 230], ys = [...ps.map(p => p.y + 70), -250]
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
   const top = phone.value ? 110 : 76, bottom = 110
@@ -347,6 +399,17 @@ const pct = computed(() => (tasksCount.value ? Math.round(doc.progress / tasksCo
 const curUnit = computed(() => { let u = null; order.value.slice(0, curIndex.value + 1).forEach(x => { if (x.type === 'unit') u = x }); return u ?? order.value.find(x => x.type === 'unit') })
 const curUnitNo = computed(() => order.value.filter(x => x.type === 'unit').indexOf(curUnit.value) + 1)
 const unitsCount = computed(() => doc.items.filter(x => x.type === 'unit').length)
+// Юниты — «главы», как в Busuu: светлая карточка вокруг своих уроков, сверху название и полоска прогресса юнита
+const chapters = computed(() => {
+  const out = [], L = layout.value
+  order.value.forEach((x, i) => {
+    if (x.type === 'unit') out.push({ id: x.id, i, last: i, tasks: 0, done: 0 })
+    else if (out.length) { const c = out[out.length - 1]; c.last = i; c.tasks++; if (stateOf(x, i) === 'done') c.done++ }
+  })
+  const [x0, x1] = mode.value === 'wave' ? [-330, 330] : [-70, 420]
+  return out.map(c => ({ ...c, pct: c.tasks ? Math.round(c.done / c.tasks * 100) : 0, style: { left: x0 + 'px', width: x1 - x0 + 'px', top: L[c.i].y - 62 + 'px', height: L[c.last].y - L[c.i].y + 62 + 64 + 'px' } }))
+})
+const chapterOf = (i) => chapters.value.find(c => c.i === i)
 const looseShown = computed(() => doc.loose.filter(l => !(drag.on && l.id === drag.item?.id)))
 const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1], ...(selColor.value[x.id] ? { '--rc': selColor.value[x.id] } : {}) })
 const colorOf = (x, i) => (x.type === 'unit' ? (i == null ? UNIT_COLORS[0] : unitColor(i)) : [T[x.type].c, T[x.type].d])
@@ -388,7 +451,7 @@ function up(e) {
   if (!drag.on) {                    // нажатие
     if (MEDIA.includes(p?.type)) return pickFile(null, p.type)
     if (p?.type) { const x = newItem(p.type); doc.items.push(x); sel.value = x.id; save(); nextTick(() => showRailEnd()) }
-    else if (p?.item) sel.value = sel.value === p.item.id ? null : p.item.id
+    else if (p?.item) { sel.value = sel.value === p.item.id ? null : p.item.id; selectStep(null, null); noteSel.value = null }
     return
   }
   drop(drag.over ? 'rail' : overToolbar(e.clientY) ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))
@@ -438,7 +501,7 @@ function boardMove(e) {
 }
 function boardUp(e) {
   touches.delete(e.pointerId); if (touches.size < 2) pinch = null
-  if (pan && !pan.moved) sel.value = null
+  if (pan && !pan.moved) { sel.value = null; selectStep(null, null); noteSel.value = noteEdit.value = null; tray.value = null }
   pan = null
 }
 
@@ -491,7 +554,6 @@ async function onPicked(e) {
 // Файл тащат из Telegram / проводника: на рельс — с местом вставки, мимо — на холст
 const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
 function fileOver(e) {
-  if (lessonId.value) { e.preventDefault(); return }           // в конструкторе урока файлы — через его кнопки
   if (!hasFiles(e)) return
   e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
   if (!drag.on) {        // тип видно по первому файлу ещё до броска (картинка → «Фото», иначе — кружок)
@@ -503,7 +565,6 @@ function fileOver(e) {
 }
 function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.from === 'file') Object.assign(drag, { on: false, item: null }) }
 async function fileDrop(e) {
-  if (lessonId.value) { e.preventDefault(); return }
   if (!hasFiles(e)) return
   e.preventDefault()
   const files = [...e.dataTransfer.files].filter(kindOf), first = drag.item, w = toWorld(e.clientX, e.clientY), onRail = drag.over
@@ -546,16 +607,19 @@ const popStyle = computed(() => {
   return { left: Math.min(Math.max(8, want), W.value - w - 8) + 'px', top: Math.min(Math.max(70, s.y - 60), H.value - 380) + 'px', width: w + 'px' }
 })
 const onKey = (e) => {
-  if (/INPUT|TEXTAREA/.test(e.target?.tagName) || lessonId.value) return
-  if (e.key === 'Escape') sel.value = null
-  if ((e.key === 'Delete' || e.key === 'Backspace') && sel.value) remove()
+  if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) { if (e.key === 'Escape') e.target.blur(); return }
+  if (e.key === 'Escape') { if (run.value) run.value = null; else { sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null } }
+  if (run.value || !(e.key === 'Delete' || e.key === 'Backspace')) return
+  if (noteSel.value) delNote(noteSel.value)
+  else if (pick.step && pick.step !== 'final') removeStepKey()
+  else if (sel.value) remove()
 }
 onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEventListener('keydown', onKey))
 
 function exportJson() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
 }
-function reset() { if (!confirm('Вернуть пример курса? Текущий черновик удалится.')) return; Object.assign(doc, seed()); sel.value = null; save(); nextTick(() => fit()) }
+function reset() { if (!confirm('Вернуть пример курса? Текущий черновик удалится.')) return; Object.assign(doc, seed()); sel.value = null; selectStep(null, null); save(); nextTick(() => fit()) }
 </script>
 
 <template>
@@ -570,23 +634,31 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
           <div class="bar"><i :style="{ width: pct + '%' }" /></div>
           <div class="sf"><span>Пройдено: <b>{{ doc.progress }} из {{ tasksCount }}</b></span><span>Осталось {{ tasksCount - doc.progress }}</span></div>
         </div>
+        <div v-for="c in chapters" :key="'ch' + c.id" class="chap" :class="{ full: c.tasks && c.done === c.tasks }" :style="c.style" />
         <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
+        <!-- Вторые рельсы: экраны уроков, вправо от урока -->
+        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
+          :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
+          @change="save" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
         <!-- Рельс -->
         <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id, rsel: !!selColor[x.id] }]"
-          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick="openLesson(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
-          <template v-if="x.type === 'unit'"><b class="no">{{ unitNo(i) }}</b><div class="sign"><b>{{ x.title }}</b><span>{{ x.sub }}</span></div></template>
+          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          <template v-if="x.type === 'unit'">
+            <div class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
+            <div class="ubar"><i :style="{ width: (chapterOf(i)?.pct ?? 0) + '%' }" /><em>{{ chapterOf(i)?.pct ?? 0 }}%</em></div>
+          </template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
             <img v-else-if="x.type === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" alt="" draggable="false" />
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
-            <svg v-if="!MEDIA.includes(x.type) || !mediaUrl(x) || stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ic" :class="{ badge: MEDIA.includes(x.type) && mediaUrl(x) }" v-html="stateOf(x, i) === 'done' ? CHECK : T[x.type].ic" />
-            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small v-if="x.title !== T[x.type].t || x.steps?.length">{{ [x.title !== T[x.type].t ? T[x.type].t : '', x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></em>
-            <i v-if="x.steps?.length" class="ilb" title="Интерактивный урок">{{ x.steps.length }}</i>
+            <svg v-if="!MEDIA.includes(x.type) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
+            <svg v-if="stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
+            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span>{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></em>
           </template>
         </div>
         <!-- Черновики на холсте: ещё не на рельсе -->
         <div v-for="x in looseShown" :key="x.id" class="bead loose" :class="[x.type, { on: sel === x.id, rsel: !!selColor[x.id] }]" :style="beadStyle(x, x, colorOf(x))"
-          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @dblclick="openLesson(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
           <template v-else>
             <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
@@ -595,6 +667,12 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <em class="cap">{{ x.title }}<small>не на рельсе</small></em>
           </template>
+        </div>
+        <!-- Стикеры, как в FigJam -->
+        <div v-for="n in doc.notes" :key="n.id" class="note" :data-note="n.id" :class="{ on: noteSel === n.id, edit: noteEdit === n.id }" :style="{ left: n.x + 'px', top: n.y + 'px', background: n.color }"
+          @pointerdown.stop="noteDown($event, n)" @dblclick.stop="editNote(n.id)" @wheel.stop="noteEdit === n.id || $event.stopPropagation()">
+          <textarea v-model="n.text" placeholder="Заметка…" :readonly="noteEdit !== n.id" @input="save" @blur="noteEdit = null" />
+          <div v-if="noteSel === n.id" class="nbar" @pointerdown.stop><button v-for="c in NOTE_COLORS" :key="c" :style="{ background: c }" :class="{ on: n.color === c }" @click="n.color = c; save()" /><button class="nd" title="Удалить" @click="delNote(n.id)">✕</button></div>
         </div>
       </div>
     </div>
@@ -626,13 +704,13 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
       <div v-else-if="selItem.type !== 'unit'" class="types">
         <button v-for="k in TASKS" :key="k" class="tt" :class="{ on: selItem.type === k }" :style="{ '--c': T[k].c }" :title="T[k].t" @click="selItem.type = k; save()"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></button>
       </div>
-      <button v-if="INTERACTIVE.includes(selItem.type)" class="btn-l" @click="openLesson(selItem)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2" /><rect x="13" y="4" width="7" height="7" rx="2" /><rect x="4" y="13" width="7" height="7" rx="2" /><path d="M13.8 16.6l2.1 2.1 3.6-4.2" /></svg>{{ selItem.steps?.length ? 'Открыть урок · ' + screens(selItem.steps.length) : 'Собрать интерактивный урок' }}</button>
+      <p v-if="INTERACTIVE.includes(selItem.type) && !selLoose" class="hint-l">Экраны урока — на рельсе справа. Добавить: «Интерактив» внизу.</p>
       <button v-if="selLoose" class="btn-r" @click="toRailEnd">На рельс — в конец</button>
       <button class="del" @click="remove">{{ selLoose ? 'Удалить' : 'Убрать с рельса' }}</button>
     </div>
 
-    <!-- Конструктор интерактивного урока — поверх курса -->
-    <LessonBuilder v-if="lesson" :key="lesson.id" :item="lesson" :type-name="T[lesson.type].t" :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" @change="save" @close="closeLesson" />
+    <!-- «Пройти урок» — как ученик, во весь экран (как «Презентация» в Figma) -->
+    <div v-if="runLesson" class="runov" @pointerdown.self="run = null"><div class="runbox"><LessonPlayer :steps="runLesson.steps ?? []" :resolve="resolveRef" closable @close="run = null" /></div></div>
 
     <!-- Сверху -->
     <div class="fl tl-panel">
@@ -650,12 +728,19 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
     <!-- Масштаб -->
     <div class="fl zoom"><button title="Отдалить" @click="zoomBtn(1 / 1.25)">−</button><b title="100%" @click="zoomAt(1 / view.z, W / 2, H / 2)">{{ Math.round(view.z * 100) }}%</b><button title="Приблизить" @click="zoomBtn(1.25)">+</button><i class="vs" /><button class="all" title="Показать весь курс" @click="fit()">Весь курс</button></div>
 
-    <!-- Снизу: что положить -->
+    <!-- Снизу: панель как в FigJam — группа, над ней ряд элементов -->
+    <div v-if="tray" class="fl tray" role="toolbar" @pointerdown.stop>
+      <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
+      <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
+      <template v-else-if="tray === 'inter'">
+        <span class="tt2">{{ activeLesson ? 'В урок «' + (findAny(activeLesson)?.title || 'Урок') + '»' : 'Новый урок в конце' }}</span>
+        <button v-for="k in KIND_LIST" :key="k" class="ti wide" :title="KINDS[k].d" :style="{ '--c': KINDS[k].c }" @click="addScreen(k)"><span class="tc"><svg viewBox="0 0 24 24" v-html="KINDS[k].ic" /></span><small>{{ KINDS[k].t }}</small></button>
+      </template>
+      <template v-else-if="tray === 'note'"><button v-for="c in NOTE_COLORS" :key="c" class="sw" :style="{ background: c }" title="Новый стикер" @click="addNote(c)" /></template>
+    </div>
     <div class="fl tools" role="toolbar">
-      <span class="tl">Тяните на рельс или на холст<small>или нажмите — в конец рельса</small></span><i class="sep" />
-      <button v-for="k in PALETTE" :key="k" class="pb" :class="k" :style="{ '--c': T[k].c, '--d': T[k].d }" :title="T[k].t" @pointerdown.prevent="startDrag($event, { type: k })">
-        <span class="pc"><b v-if="k === 'unit'">1</b><svg v-else viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small>
-      </button>
+      <button class="tb" :title="'Юнит — тяните на рельс или нажмите'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Юнит</small></button>
+      <button v-for="g in GROUPS" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
     </div>
   </div>
 </template>
@@ -780,5 +865,64 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
   .pb { flex: none; width: 58px }
   .pop { position: fixed; left: 8px !important; right: 8px; top: auto !important; bottom: 88px; width: auto !important; max-height: 62vh; overflow-y: auto; z-index: 20 }      /* телефон: карточка — снизу над панелью */
   .zoom { right: 8px; bottom: 88px; padding: 2px } .zoom b { display: none } .zoom .all { font-size: 12px; padding: 0 8px } .pl, .tr-panel .pill, .tr-panel .vs.dk { display: none } .tr-panel { justify-content: space-between; gap: 3px } .cap { width: 120px; font-size: 13px }      /* телефон: только вид и прогресс; экспорт и сброс — на компьютере */
+}
+/* ===== Стиль как в Busuu: тонкая линия, кружки с кольцом и галочкой снизу, юнит — светлая «глава» с прогрессом ===== */
+.r0 { stroke: #dedede; stroke-width: 4 } .r1 { stroke: #1fbe78; stroke-width: 4 }
+.chap { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid #e3e3e3; border-radius: 22px; background: #fff; pointer-events: none }
+.chap.full { border-color: #1fbe78; background: #f2fbf7 }
+.bead { width: 56px; height: 56px; margin: -28px 0 0 -28px; color: #fff; background: var(--c); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1fbe78 }
+.bead:hover { transform: none; filter: brightness(1.04) }
+.bead.todo { background: #f1f1f1; color: #b7b7b7; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e2e2e2 } .bead.todo .cap { color: var(--text) }
+.bead.current { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent); animation: none }
+.bead.tutor { border-radius: 50% }
+.ic { width: 26px; height: 26px; stroke-width: 2 }
+.ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
+.ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
+.cap { left: calc(100% + 22px); width: 190px; gap: 2px; font-size: 15px; font-weight: 800; color: #252a31 }
+.cap small { font-size: 12.5px; font-weight: 600; color: #6b7280 }
+.bead.s-l .cap { right: calc(100% + 22px) }
+.start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; box-shadow: none }
+/* юнит: заголовок главы и полоска прогресса */
+.bead.unit { width: auto; height: auto; margin: -40px 0 0 -46px; display: grid; gap: 10px; place-items: stretch; padding: 0; border-radius: 0; background: none !important; box-shadow: none !important; color: #252a31; cursor: grab; outline-offset: 10px }
+.bead.unit.todo { box-shadow: none } .bead.unit .sign, .bead.unit .no { display: none }
+.uh { display: flex; align-items: center; gap: 8px; width: 420px; white-space: nowrap }
+.uh b { font-size: 20px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
+.uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
+.ubar { position: relative; width: 446px; height: 10px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
+.ubar em { position: absolute; right: 0; top: 50%; transform: translateY(-50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
+.bead.unit.lift { outline: 2px dashed #1fbe78; background: #fff !important }
+.fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px; background: #1fbe78; box-shadow: 0 10px 20px rgba(0, 0, 0, .2) }
+/* сводка курса — плоско */
+.sum { box-shadow: none; border: 1px solid #e3e3e3 } .pp { background: #e3fbef; color: #128a55 } .bar i { background: #1fbe78 } .dt { background: #1fbe78 }
+.bead.loose { box-shadow: 0 0 0 3px #f5f5f5, 0 0 0 5px color-mix(in srgb, var(--c) 55%, transparent) }
+.hint-l { margin: 0; font-size: 12px; color: var(--hint); font-weight: 600 }
+/* «Пройти урок» */
+.runov { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
+.runbox { width: min(560px, 100%); height: min(820px, 96vh); border-radius: 22px; overflow: hidden; background: #fff }
+/* Стикеры */
+.note { position: absolute; z-index: 4; width: 190px; min-height: 190px; display: flex; box-sizing: border-box; padding: 14px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, .12); cursor: grab; touch-action: none }
+.note.on { outline: 2px solid #0d99ff; outline-offset: 2px }
+.note textarea { flex: 1; min-height: 160px; margin: 0; padding: 0; border: 0; background: none; resize: none; outline: none; font: inherit; font-size: 16px; font-weight: 700; color: #2b2b2b; line-height: 1.3; cursor: inherit; pointer-events: none }
+.note.edit textarea { pointer-events: auto; cursor: text } .note.edit { cursor: default }
+.nbar { position: absolute; left: 0; top: -46px; display: flex; gap: 4px; padding: 5px; border-radius: 10px; background: #2c2c2c; box-shadow: 0 4px 12px rgba(0, 0, 0, .2) }
+.nbar button { width: 22px; height: 22px; border: 2px solid transparent; border-radius: 50%; cursor: pointer; padding: 0 } .nbar button.on { border-color: #fff }
+.nbar .nd { background: none; color: #fff; font-size: 12px }
+/* Нижняя панель как в FigJam */
+.tools { height: 64px; padding: 0 8px; gap: 2px; border-radius: 16px }
+.tb { display: grid; justify-items: center; gap: 2px; width: 74px; padding: 7px 0 5px; border: 0; border-radius: 12px; background: none; font: inherit; color: #2c2c2c; cursor: pointer; touch-action: none }
+.tb:hover { background: #f2f2f2 } .tb.on { background: #e5f4ff; color: #0d99ff }
+.tb svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.tb small { font-size: 11px; font-weight: 700 }
+.tray { left: 50%; bottom: 94px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 6px 8px; border-radius: 14px; animation: tray .14s ease-out; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none }
+@keyframes tray { from { opacity: 0; transform: translate(-50%, 6px) } }
+.ti { display: grid; justify-items: center; gap: 3px; width: 70px; padding: 6px 0 4px; border: 0; border-radius: 10px; background: none; font: inherit; cursor: pointer; touch-action: none; flex: none }
+.ti.wide { width: 92px } .ti:hover { background: #f2f2f2 }
+.tc { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: #fff; background: var(--c) }
+.tc svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.ti small { font-size: 11px; font-weight: 700; color: #2c2c2c; white-space: nowrap }
+.tt2 { padding: 0 8px; font-size: 11px; font-weight: 800; color: var(--hint); max-width: 150px; line-height: 1.2 }
+.sw { flex: none; width: 34px; height: 34px; margin: 4px; border: 1px solid rgba(0, 0, 0, .08); border-radius: 6px; cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) } .sw:hover { transform: translateY(-2px) }
+@media (max-width: 719px) {
+  .tools { left: 50%; right: auto; transform: translateX(-50%); overflow: visible } .tb { width: 62px } .tray { bottom: 82px }
 }
 </style>

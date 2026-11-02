@@ -42,6 +42,9 @@ ok('экраны урока: лишнее выкинуто, файлы — то�
 ok('выбор: верный ответ в пределах, плохая ссылка выкинута; пар не больше 6', st[1].ask === 'audio' && st[1].ans === 1 && !('audio' in st[1].opts[0]) && st[2].pairs.length === 6)
 ok('файлы экранов — в чистку', C.filesOf({ items: store.get('courses/k3').items, loose: [] }).includes('t/tg_1/c/k1/b.jpg'))
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)
+await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
+const nt = store.get('courses/k4').notes[0]
+ok('стикеры: координаты округлены, текст обрезан, чужой цвет заменён', nt.x === 1 && nt.text.length === 1000 && nt.color === '#fff1a8' && !('junk' in nt))
 ok('удалить, потом — 404', (await C.remove('k1'), !store.has('courses/k1')) && await code(C.get('k1')) === 404)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')

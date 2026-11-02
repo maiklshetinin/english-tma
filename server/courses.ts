@@ -1,4 +1,5 @@
-// Курсы (редактор «рельс»): courses/<id> — { teacherId, title, mode, progress, items, loose, updatedAt }.
+// Курсы (редактор «рельс»): courses/<id> — { teacherId, title, mode, progress, items, loose, notes, updatedAt }.
+//  • notes — стикеры-заметки на холсте: { id, x, y, text, color }.
 //  • items — задания по порядку на рельсе; loose — черновики на холсте (с x, y); у кружка и фото — file: ключ файла в S3.
 //  • У урока (и «Слова», «Домашка», «Тест») — steps: экраны интерактивного урока (src/utils/lesson.ts). Файлы экранов — ключи
 //    файлов курса в S3 или https-ссылки (фото и озвучка карточек); остальное (файлы, которые пока только в браузере) выкидываем.
@@ -20,7 +21,9 @@ const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.
 
 export interface Step { id: string; kind: string; [k: string]: unknown }
 export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; x?: number; y?: number; steps?: Step[] }
-export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; updatedAt?: number }
+export interface Note { id: string; x: number; y: number; text: string; color: string }
+export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; updatedAt?: number }
+export const NOTE_COLORS = ['#fff1a8', '#c9f2c7', '#cfe8ff', '#ffd6e7', '#e6d9ff'], NOTES_MAX = 200
 
 export function makeCourses({ db, FieldValue }: CoursesDeps) {
   const col = () => db.collection('courses')
@@ -65,7 +68,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     return out
   }
   const pub = (id: string, d: Record<string, any>): Course => ({ id, title: d.title ?? '', mode: d.mode === 'line' ? 'line' : 'wave', progress: d.progress ?? 0,
-    items: d.items ?? [], loose: d.loose ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined })
+    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined })
   const found = async (id: string) => {
     const s = await col().doc(id).get()
     if (!s.exists) throw fail(404, 'course not found')
@@ -87,11 +90,17 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       const items = (b.items as unknown[]).map((x) => item(uid, x, false)), loose = ((b.loose ?? []) as unknown[]).map((x) => item(uid, x, true))
       if (items.length + loose.length > COURSE_ITEMS_MAX) throw fail(413, 'too many items')
       if (new Set([...items, ...loose].map((x) => x.id)).size !== items.length + loose.length) throw fail(400, 'duplicate item id')
+      // Стикеры-заметки на холсте (как в FigJam)
+      const notes = (Array.isArray(b.notes) ? b.notes : []).slice(0, NOTES_MAX).map((raw) => {
+        const r = (raw ?? {}) as Record<string, unknown>
+        if (!ID.test(String(r.id))) throw fail(400, 'bad note')
+        return { id: String(r.id), x: num(r.x), y: num(r.y), text: str(r.text, 1000), color: NOTE_COLORS.includes(String(r.color)) ? String(r.color) : NOTE_COLORS[0] }
+      })
       const ref = col().doc(id), s = await ref.get()
       if (!s.exists && (await col().get()).size >= COURSES_MAX) throw fail(413, 'too many courses')
       const tasks = items.filter((x) => x.type !== 'unit').length
       const doc = { updatedBy: uid, title: str(b.title, 120) || 'Без названия', mode: b.mode === 'line' ? 'line' : 'wave',
-        progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, updatedAt: FieldValue.serverTimestamp() }
+        progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, notes, updatedAt: FieldValue.serverTimestamp() }
       await ref.set(s.exists ? doc : { ...doc, teacherId: uid, createdAt: FieldValue.serverTimestamp() }, { merge: true })
       return { id, ok: true }
     },
