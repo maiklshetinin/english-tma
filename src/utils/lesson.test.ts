@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { newStep, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs } from './lesson'
+import { newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs } from './lesson'
 
 describe('интерактивный урок', () => {
   it('новые экраны — с пустыми полями своего типа', () => {
@@ -27,6 +27,10 @@ describe('интерактивный урок', () => {
     expect(o.video).toBeUndefined(); expect(o.image).toBe('https://x/p.jpg')
     expect(keepLocalFiles([o], [s])![0].video).toBe('idb:m1')
     expect(stepRefs(s)).toEqual(['https://x/p.jpg', 'idb:m1'])
+  })
+  it('«рыба» — сразу готова к прохождению', () => {
+    for (const k of ['intro', 'choice', 'pairs'] as const) expect(stepIssue(fishStep(k))).toBe('')
+    const L = fishLesson(); expect(L).toHaveLength(5); expect(new Set(L.map(s => s.id)).size).toBe(5); expect(L.every(s => !stepIssue(s))).toBe(true)
   })
   it('перемешивание не теряет элементы', () => {
     expect(shuffle([1, 2, 3, 4]).sort()).toEqual([1, 2, 3, 4])

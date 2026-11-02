@@ -5,6 +5,8 @@
 //  • Пары — нажать слово, потом перевод; верная пара зеленеет, ошибка мигает красным.
 //  • Последний экран — всегда итог урока: время, сколько верно, слова урока.
 // В конструкторе (single) показывает один экран без перемешивания — чтобы правки было видно на месте.
+// На ветке урока в редакторе (embedded) — один живой экран: отвечаешь, «Продолжить» → emit('next', счёт экрана);
+// прогресс (pct) и итог (stats) приходят от ветки; на итоге — «Заново» и «Во весь экран».
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
 import { KINDS, shuffle } from '../utils/lesson'
@@ -16,22 +18,24 @@ const props = defineProps({
   single: Boolean,                                        // просмотр одного экрана в конструкторе
   name: { type: String, default: '' },
   closable: Boolean,
+  embedded: Boolean, pct: { type: Number, default: null }, stats: { type: Object, default: null },
 })
-const emit = defineEmits(['close', 'done'])
+const emit = defineEmits(['close', 'done', 'next', 'restart', 'full'])
 
 const i = ref(props.start), t0 = Date.now(), endT = ref(0)
 const score = reactive({ ok: 0, all: 0 })
 const step = computed(() => props.steps[i.value])
 const isFinal = computed(() => i.value >= props.steps.length)
-const pct = computed(() => props.single ? (props.steps.length ? Math.round(Math.min(i.value + 1, props.steps.length) / (props.steps.length + 1) * 100) : 0)
+const pct = computed(() => props.pct != null ? props.pct : props.single ? (props.steps.length ? Math.round(Math.min(i.value + 1, props.steps.length) / (props.steps.length + 1) * 100) : 0)
   : Math.round(i.value / (props.steps.length || 1) * 100))
 const src = (v, k) => (v ? props.resolve(v, k) : '')
 
 // ---- состояние текущего экрана ----
 let au = null
+const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
 const st = reactive({ picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [] })
 function setup() {
-  Object.assign(st, { picked: null, done: false, left: null, right: null, matched: [], bad: [] })
+  Object.assign(st, { picked: null, done: false, left: null, right: null, matched: [], bad: [] }); Object.assign(mine, { ok: 0, all: 0 })
   const s = step.value; if (!s) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
   if (s.kind === 'pairs') {
@@ -39,7 +43,7 @@ function setup() {
     st.L = props.single ? idx : shuffle(idx); st.R = props.single ? idx.slice().reverse() : shuffle(idx)
   }
   if (s.kind === 'intro') st.done = true
-  if (!props.single) autoplay()
+  if (!props.single && !props.embedded) autoplay()
 }
 const full = (s) => (s.pairs ?? []).filter(p => p.a?.trim() && p.b?.trim())
 
@@ -56,8 +60,8 @@ const qAudio = (s) => s.audio || s.opts?.[s.ans ?? 0]?.audio || ''
 // ---- выбор ----
 function pick(k) {
   if (st.done) return
-  st.picked = k; st.done = true; score.all++
-  if (k === (step.value.ans ?? 0)) score.ok++
+  st.picked = k; st.done = true; score.all++; mine.all++
+  if (k === (step.value.ans ?? 0)) { score.ok++; mine.ok++ }
 }
 const right = computed(() => step.value?.kind === 'choice' && st.picked === (step.value.ans ?? 0))
 
@@ -66,16 +70,16 @@ function tap(side, k) {
   if (st.matched.includes(k) && side) return
   st[side] = st[side] === k ? null : k
   if (st.left == null || st.right == null) return
-  const a = st.left, b = st.right; st.left = st.right = null; score.all++
-  if (a === b) { st.matched.push(a); score.ok++; if (st.matched.length === full(step.value).length) st.done = true }
+  const a = st.left, b = st.right; st.left = st.right = null; score.all++; mine.all++
+  if (a === b) { st.matched.push(a); score.ok++; mine.ok++; if (st.matched.length === full(step.value).length) st.done = true }
   else { st.bad = [a, 'r' + b]; setTimeout(() => { st.bad = [] }, 550) }
 }
 
 // ---- дальше ----
-function next() { if (props.single) return; if (!st.done) return; i.value++ }
+function next() { if (props.single || !st.done) return; if (props.embedded) return emit('next', { ...mine }); i.value++ }
 const answer = computed(() => step.value?.opts?.[step.value.ans ?? 0])
-const time = computed(() => { const s = Math.round(((endT.value || Date.now()) - t0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
-const acc = computed(() => (score.all ? Math.round(score.ok / score.all * 100) : 100))
+const time = computed(() => { const s = props.stats ? props.stats.sec : Math.round(((endT.value || Date.now()) - t0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
+const acc = computed(() => { const x = props.stats ?? score; return x.all ? Math.round(x.ok / x.all * 100) : 100 })
 // слова урока для итога
 const words = computed(() => {
   const out = [], seen = new Set()
@@ -89,14 +93,14 @@ const words = computed(() => {
 })
 const say = (a) => { au?.pause(); au = new Audio(src(a, 'audio')); au.play().catch(() => {}) }
 // всё объявлено — теперь можно запускать (immediate вызывает setup сразу)
-watch([i, () => (props.single ? JSON.stringify(step.value) : props.steps)], setup, { immediate: true })     // в конструкторе — заново при каждой правке
+watch([i, () => (props.single || props.embedded ? JSON.stringify(step.value) : props.steps)], setup, { immediate: true })     // в конструкторе — заново при каждой правке
 watch(isFinal, (v) => { if (v && !endT.value) { endT.value = Date.now(); emit('done', { ...score }) } }, { immediate: true })
-const onKey = (e) => { if (e.key === 'Enter' && !props.single && !/INPUT|TEXTAREA/.test(e.target?.tagName)) isFinal.value ? emit('close') : next() }
+const onKey = (e) => { if (e.key === 'Enter' && !props.single && !props.embedded && !/INPUT|TEXTAREA/.test(e.target?.tagName)) isFinal.value ? emit('close') : next() }
 onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="lp" :class="{ single }">
+  <div class="lp" :class="{ single, embedded }">
     <div class="top">
       <button v-if="closable" class="x" title="Закрыть" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
       <div class="pb"><i :style="{ width: (isFinal ? 100 : pct) + '%' }" /></div>
@@ -106,7 +110,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
     <div v-if="isFinal" class="body fin">
       <svg class="thumb" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="var(--yellow)" /><path d="M20 30h7l6-12c3 0 4.5 2 4 5l-1.5 6H45a3.5 3.5 0 0 1 3.4 4.3l-3 11A4 4 0 0 1 41.5 47H27l-7-2z" fill="#fff" /><rect x="15" y="29" width="7" height="18" rx="2" fill="#fff" /></svg>
       <h2>Отлично{{ name ? ', ' + name : '' }}!</h2>
-      <div class="tiles"><div><small>Время</small><b>{{ single ? '—' : time }}</b></div><div><small>Верно</small><b>{{ single ? '—' : acc + '%' }}</b></div><div><small>Экранов</small><b>{{ steps.length }}</b></div></div>
+      <div class="tiles"><div><small>Время</small><b>{{ single || (embedded && !stats) ? '—' : time }}</b></div><div><small>Верно</small><b>{{ single || (embedded && !stats) ? '—' : acc + '%' }}</b></div><div><small>Экранов</small><b>{{ steps.length }}</b></div></div>
       <div v-if="words.length" class="wl">
         <div class="wh">Слова урока</div>
         <div v-for="x in words" :key="x.w" class="wr"><button v-if="x.a" class="say" title="Послушать" @click="say(x.a)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button><span v-else class="say no" /><b>{{ x.w }}</b><small>{{ x.t }}</small></div>
@@ -156,7 +160,9 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
         <span class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span v-if="!right">{{ answer?.w }}</span></span>
       </template>
       <span v-else class="fb" />
-      <button v-if="isFinal" class="go" @click="emit('close')">{{ single ? 'Так увидит ученик' : 'Готово' }}</button>
+      <template v-if="embedded && isFinal"><button class="go ghost" @click="emit('restart')">↺ Заново</button><button class="go" @click="emit('full')">Во весь экран</button></template>
+      <button v-else-if="embedded" class="go" :disabled="!st.done" @click="next">Продолжить</button>
+      <button v-else-if="isFinal" class="go" @click="emit('close')">{{ single ? 'Так увидит ученик' : 'Готово' }}</button>
       <button v-else class="go" :disabled="!st.done && !single" @click="next">{{ single ? 'Так увидит ученик' : 'Продолжить' }}</button>
     </div>
   </div>
@@ -210,4 +216,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .go:disabled { background: var(--border); color: var(--hint-2); cursor: not-allowed }
 .single .go { background: var(--surface); color: var(--hint); cursor: default; font-size: 13px; padding: 9px 16px }
 .single .top { padding-top: 14px }
+.embedded { height: auto; border-radius: inherit } .embedded .body { flex: none; overflow: visible; padding: 10px 40px 20px } .embedded .top { padding: 16px 110px 4px } .embedded .foot { padding: 10px 14px }
+.embedded .go { padding: 9px 22px; font-size: 14px } .go.ghost { background: var(--surface); color: var(--text); margin-right: auto }
+.embedded .pb i { transition: width .5s ease }
 </style>

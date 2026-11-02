@@ -6,8 +6,9 @@
 //    пример — текстом; видео / фото / звук — нажать на место под файл или перетащить файл; «из карточек» — слова из колод.
 //  • Переставить экран — тянуть за шапку карточки вдоль рельса. Удалить — корзина в шапке или Delete.
 // Координаты — холста (родитель масштабирует .world); x, y — центр бусины урока на вертикальном рельсе.
-import { ref, reactive, computed, nextTick } from 'vue'
+import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
+import LessonPlayer from './LessonPlayer.vue'
 import { useDecksStore } from '../stores/decks'
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair } from '../utils/lesson'
 
@@ -19,13 +20,13 @@ const props = defineProps({
   upPct: { type: Object, default: () => ({}) },
   toWorld: { type: Function, required: true },
 })
-const emit = defineEmits(['change', 'select', 'play', 'add'])
+const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus'])
 const decks = useDecksStore()
 const changed = () => emit('change')
 const steps = computed(() => props.item.steps ?? [])
 
 // ---------- Раскладка: карточки на горизонтальном рельсе ----------
-const CW = 460, GAP = 60, STEP = CW + GAP, X0 = 280, TOP = -6       // ширина экрана, промежуток, отступ от урока (под его подпись); экраны висят под линией
+const CW = 460, GAP = 60, STEP = CW + GAP, X0 = 280, TOP = -40      // ширина экрана, промежуток, отступ от урока (под его подпись); экраны висят под линией на «ножке»
 const mv = reactive({ id: null, dx: 0, to: 0, sx: 0, on: false })
 const order = computed(() => {
   const list = steps.value.filter(s => !(mv.on && s.id === mv.id))
@@ -33,7 +34,7 @@ const order = computed(() => {
   return list
 })
 const cx = (i) => props.x + X0 + i * STEP
-const endX = computed(() => (steps.value.length ? cx(order.value.length) + 20 : cx(0) - GAP / 2))                   // до итога
+const endX = computed(() => (steps.value.length ? cx(order.value.length) + CW / 2 : cx(0) - GAP / 2))                   // до итога
 // Шапка карточки: тянуть вдоль рельса — переставить
 function down(e, s) {
   const w = props.toWorld(e.clientX, e.clientY)
@@ -87,7 +88,7 @@ const pk = reactive({ id: null, for: '', deck: '', q: '' })
 function openPk(s, what) { Object.assign(pk, { id: pk.id === s.id && pk.for === what ? null : s.id, for: what, q: '', deck: pk.deck || decks.list[0]?.id || '' }) }
 const cards = computed(() => {
   const q = pk.q.trim().toLowerCase(), d = decks.byId(pk.deck)
-  return (d?.cards ?? []).filter(c => c.front?.trim() && (!q || c.front.toLowerCase().includes(q) || c.back?.toLowerCase().includes(q))).slice(0, 80)
+  return (d?.cards ?? []).filter(c => c.front?.trim() && (!q || c.front.toLowerCase().includes(q) || c.back?.toLowerCase().includes(q))).slice(0, 12)
 })
 const used = (s, c) => (pk.for === 'opts' ? s.opts?.some(o => o.w === c.front) : pk.for === 'pairs' ? s.pairs?.some(p => p.a === c.front) : s.word === c.front)
 function takeCard(s, c) {
@@ -122,6 +123,36 @@ const words = computed(() => {
   return out
 })
 const full = computed(() => steps.value.length >= STEPS_MAX)
+// Экраны без прокрутки — во весь рост; редактору курса сообщаем высоту самого высокого, чтобы он раздвинул рельс
+const frames = new Set(); let hT = 0
+const ro = new ResizeObserver(() => { cancelAnimationFrame(hT); hT = requestAnimationFrame(() => emit('height', Math.max(0, ...[...frames].map(el => el.offsetHeight)))) })
+const frameH = reactive({})                     // высота каждого экрана — для пунктирного места при перетаскивании
+const ro2 = new ResizeObserver((es) => { for (const e of es) if (e.target.dataset.id) frameH[e.target.dataset.id] = e.target.offsetHeight })
+const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.observe(el); ro2.observe(el) } }
+// ---------- Живая ветка: экраны проходятся прямо здесь, как у ученика ----------
+// Карандаш — экран правится; «Сохранить» — снова живой. Пустой (незаполненный) экран сразу открыт для правки.
+const editing = reactive({})
+const isEdit = (s) => editing[s.id] ?? !!stepIssue(s)
+function save(s) { editing[s.id] = false; changed() }
+// Прохождение ветки: сколько экранов пройдено, счёт каждого, время — прогресс и итог меняются на ходу
+const run = reactive({ at: 0, res: {}, t0: 0, t1: 0, key: 0 })
+const pctAt = (i) => Math.round((i < run.at ? i + 1 : i) / Math.max(1, steps.value.length) * 100)
+function advance(s, sc) {
+  const i = steps.value.indexOf(s); if (!run.t0) run.t0 = Date.now()
+  run.res[s.id] = sc; run.at = Math.max(run.at, i + 1)
+  if (run.at >= steps.value.length && !run.t1) run.t1 = Date.now()
+  emit('focus', { x: cx(Math.min(i + 1, steps.value.length)) + CW / 2, y: props.y + 200 })
+}
+const stats = computed(() => {
+  if (run.at < steps.value.length) return null
+  const r = steps.value.map(s => run.res[s.id] ?? { ok: 0, all: 0 })
+  return { ok: r.reduce((a, x) => a + x.ok, 0), all: r.reduce((a, x) => a + x.all, 0), sec: Math.round(((run.t1 || Date.now()) - run.t0) / 1000) }
+})
+function restart() { Object.assign(run, { at: 0, res: {}, t0: 0, t1: 0, key: run.key + 1 }); emit('focus', { x: cx(0) + CW / 2, y: props.y + 200 }) }
+const doneX = computed(() => (run.at >= steps.value.length ? endX.value : run.at ? cx(run.at - 1) + CW / 2 : props.x))
+// Стрелки ‹ › в подписи — переставить экран на шаг
+function shift(s, d) { const a = props.item.steps, i = a.indexOf(s), j = i + d; if (j < 0 || j >= a.length) return; a.splice(i, 1); a.splice(j, 0, s); changed() }
+onUnmounted(() => { ro.disconnect(); ro2.disconnect(); cancelAnimationFrame(hT) })
 // Колёсико над экраном прокручивает сам экран; Ctrl + колёсико (и щипок) — масштаб холста, а не всей страницы браузера
 const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 </script>
@@ -130,18 +161,29 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
   <div class="lr" @pointerdown.stop>
     <input ref="fileIn" type="file" :accept="accept" hidden @change="onFile" />
     <!-- Рельс урока: от урока вправо, через все экраны к итогу -->
-    <svg class="line" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /></svg>
+    <svg class="line" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
 
-    <!-- Экраны — открытые карточки на рельсе -->
-    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: mv.on && mv.id === s.id }" :style="cardStyle(s, i)">
+    <!-- Пока тянем экран — пунктирное место, куда он встанет -->
+    <div v-if="mv.on" class="slot" :style="{ left: cx(mv.to) + 'px', top: y - TOP + 48 + 'px', width: CW + 'px', height: (frameH[mv.id] ?? 380) - 48 + 'px' }" />
+
+    <!-- Экраны — открытые карточки, висят на ветке урока -->
+    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: mv.on && mv.id === s.id }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
+      <!-- станция на ветке с номером и ножка к экрану; за станцию тоже можно тянуть -->
+      <span class="stem" /><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span>
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
       <div class="flab" title="Тяните, чтобы переставить" @pointerdown.stop="emit('select', s.id); down($event, s)">
+        <svg class="grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
         <span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[s.kind].ic" /></span><b>{{ i + 1 }} · {{ KINDS[s.kind].t }}</b>
         <i v-if="stepIssue(s)" class="iss" :title="stepIssue(s)">{{ stepIssue(s) }}</i>
+        <button class="ib mv" title="На шаг левее" :disabled="i === 0" @pointerdown.stop @click="shift(s, -1)">‹</button><button class="ib mv" title="На шаг правее" :disabled="i === order.length - 1" @pointerdown.stop @click="shift(s, 1)">›</button>
+        <button class="ib pen" :class="{ on: isEdit(s) }" :title="isEdit(s) ? 'Сейчас правите — «Сохранить» внизу экрана' : 'Изменить экран'" @pointerdown.stop @click="isEdit(s) ? save(s) : (editing[s.id] = true)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
         <button class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
-      <div class="card" :class="[s.kind, { on: sel === s.id }]" @pointerdown.stop="emit('select', s.id)" @wheel="ownWheel">
-      <div class="pbar"><i :style="{ width: Math.round((i + 1) / (order.length + 1) * 100) + '%' }" /></div>
+      <div class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at }]" @pointerdown.stop="emit('select', s.id)" @wheel="ownWheel">
+      <!-- Живой экран: можно пройти, как ученик -->
+      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" @next="advance(s, $event)" />
+      <template v-else>
+      <div class="pbar"><i :style="{ width: pctAt(i) + '%' }" /></div>
 
       <!-- Карточки из колод: прямо на экране, вместо его содержимого -->
       <div v-if="pk.id === s.id" class="pk">
@@ -208,7 +250,8 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <button class="add deck" @click="openPk(s, 'pairs')">Пары из карточек</button>
       </div>
 
-      <div class="cf"><span v-if="s.kind === 'choice' && s.opts?.length" class="ca"><b>Верный ответ</b><em>{{ s.opts[s.ans ?? 0]?.w || '…' }}</em></span><span class="go">Продолжить</span></div>
+      <div class="cf"><span v-if="s.kind === 'choice' && s.opts?.length" class="ca"><b>Верный ответ</b><em>{{ s.opts[s.ans ?? 0]?.w || '…' }}</em></span><button class="go play" @click="save(s)">Сохранить</button></div>
+      </template>
       </div>
     </div>
 
@@ -217,18 +260,11 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     <button class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
 
     <!-- Итог урока -->
-    <div v-if="steps.length" class="frame" :style="{ left: cx(order.length) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
+    <div v-if="steps.length" :ref="watchFrame" class="frame" :style="{ left: cx(order.length) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
+     <span class="stem" /><span class="node fin-n" :class="{ done: run.at >= steps.length }" title="Итог урока — всегда в конце ветки"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
     <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>Итог урока · всегда в конце</b></div>
-    <div class="card fin" :class="{ on: sel === 'final' }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
-      <div class="pbar"><i style="width: 100%" /></div>
-      <div class="cb">
-        <svg class="thumb" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="var(--yellow)" /><path d="M20 30h7l6-12c3 0 4.5 2 4 5l-1.5 6H45a3.5 3.5 0 0 1 3.4 4.3l-3 11A4 4 0 0 1 41.5 47H27l-7-2z" fill="#fff" /><rect x="15" y="29" width="7" height="18" rx="2" fill="#fff" /></svg>
-        <div class="hd">Отлично!</div>
-        <div class="tiles"><span>Время</span><span>Верно</span><span>{{ steps.length }} экр.</span></div>
-        <div v-for="x in words.slice(0, 6)" :key="x.w" class="wr"><b>{{ x.w }}</b><small>{{ x.t }}</small></div>
-        <p v-if="!words.length" class="none">Здесь будут слова урока</p>
-      </div>
-      <div class="cf"><button class="go play" @click="emit('play')">▶ Пройти урок</button></div>
+    <div class="card fin" :class="{ on: sel === 'final', now: run.at >= steps.length }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
+      <LessonPlayer :key="'fin:' + run.key" embedded :steps="steps" :start="steps.length" :pct="pctAt(steps.length)" :stats="stats" :resolve="resolve" @restart="restart" @full="emit('play')" />
     </div>
     </div>
   </div>
@@ -241,11 +277,24 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .frame { position: absolute; z-index: 3; transition: left .2s ease }
 .frame.lift { z-index: 7 } .frame.lift .card { box-shadow: 0 16px 34px rgba(0, 0, 0, .2) }
 /* подпись над экраном — как имя фрейма в Figma */
+.line line.done { stroke: #1fbe78 }
+.node.done { background: #1fbe78; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px #9be6c4 }
+.node.now { animation: pulse 1.4s ease-in-out infinite } @keyframes pulse { 50% { box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 11px color-mix(in srgb, var(--c) 30%, transparent) } }
+.card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
+.card.editing { border: 2px dashed #0d99ff }
+.ib.pen:hover, .ib.pen.on { background: var(--blue-l); color: var(--blue-d) }
+.stem { position: absolute; left: 50%; top: -26px; width: 4px; height: 40px; margin-left: -2px; background: #d9d9d9; border-radius: 2px }
+.node { position: absolute; left: 50%; top: -54px; width: 34px; height: 34px; margin-left: -17px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px color-mix(in srgb, var(--c) 45%, transparent); cursor: grab; touch-action: none; user-select: none; z-index: 2 }
+.node:hover { transform: scale(1.08) } .frame.lift .node { cursor: grabbing; transform: scale(1.12) }
+.node.fin-n { width: 40px; height: 40px; margin-left: -20px; top: -57px; cursor: default } .node.fin-n svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round }
+.slot { position: absolute; z-index: 2; box-sizing: border-box; border: 3px dashed #0d99ff; border-radius: 22px; background: rgba(13, 153, 255, .06); transition: left .15s ease }
+.grip { flex: none; width: 16px; height: 16px; fill: #a5a5a5 }
+.ib.mv { font-size: 18px; font-weight: 900; color: var(--hint) } .ib.mv:hover:not(:disabled) { background: var(--blue-l); color: var(--blue-d) } .ib.mv:disabled { opacity: .25; cursor: default }
 .flab { display: flex; align-items: center; gap: 6px; height: 34px; margin-top: 14px; padding: 0 2px; cursor: grab; user-select: none; touch-action: none }
 .flab.fix { cursor: default } .flab b { font-size: 13px; font-weight: 800; color: #555; white-space: nowrap }
 .iss { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-style: normal; font-weight: 800; color: var(--orange-d) }
 /* сам экран — как у ученика на телефоне / планшете */
-.card { display: flex; flex-direction: column; height: 430px; box-sizing: border-box; background: #fff; border: 1px solid #e3e3e3; border-radius: 22px; box-shadow: 0 2px 12px rgba(0, 0, 0, .06); cursor: default; user-select: text; overflow: hidden }
+.card { display: flex; flex-direction: column; min-height: 330px; box-sizing: border-box; background: #fff; border: 1px solid #e3e3e3; border-radius: 22px; box-shadow: 0 2px 12px rgba(0, 0, 0, .06); cursor: default; user-select: none; overflow: hidden }
 .card.on { outline: 3px solid #0d99ff; outline-offset: 3px }
 .pbar { flex: none; height: 8px; margin: 18px 120px 4px; border-radius: 4px; background: #e8e8e8; overflow: hidden } .pbar i { display: block; height: 100%; border-radius: 4px; background: #1fbe78 }
 .cf { flex: none; display: flex; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid #ececec }
@@ -263,9 +312,11 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .warn { width: 18px; height: 18px; border-radius: 50%; background: var(--orange); color: #fff; font-size: 12px; font-weight: 900; font-style: normal; display: grid; place-items: center }
 .ib { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: var(--hint-2); cursor: pointer; padding: 0 } .ib:hover { background: var(--red-l); color: var(--red-d) }
 .ib svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.cb { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px 60px 12px; scrollbar-width: thin }
+.cb { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 8px 60px 14px }
 .choice .cb, .pairs .cb { padding: 8px 34px 12px }
 .hd { text-align: center; font-size: 15px; font-weight: 800; margin: 4px 0 2px }
+input, textarea { user-select: text }
+textarea { field-sizing: content; overflow: hidden; min-height: 1.6em }
 input, textarea, select { font: inherit; color: var(--text); border: 1px solid transparent; border-radius: 7px; background: none; outline: none; padding: 3px 6px; min-width: 0; resize: none }
 input:hover, textarea:hover { background: var(--surface) } input:focus, textarea:focus { border-color: var(--blue); background: #fff }
 input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 600 }
@@ -297,7 +348,7 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .op .x { right: 4px; top: 4px; width: 20px; height: 20px; font-size: 10px; opacity: 0 } .op:hover .x { opacity: 1 }
 .opts.text .ok, .opts.text .x { position: static; margin-right: 4px }
 .op.plus { place-items: center; min-height: 36px; border-style: dashed; color: var(--blue-d); font-size: 18px; cursor: pointer; font: inherit }
-.opts.pics .op.plus { min-height: 90px }
+.opts.pics .op.plus { min-height: 90px } .opts.text .op.plus { display: grid; width: 100% }
 .pr { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center }
 .pr input { height: 44px; border: 1px solid #dcdcdc; border-radius: 9px; background: #fff; text-align: center; font-size: 14px; font-weight: 600 }
 .pr:first-of-type input { background: #8ff0c8; border-color: #5fe0aa }
@@ -312,10 +363,10 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .wr { display: grid; justify-items: start; width: 100%; box-sizing: border-box; padding: 7px 10px; border-radius: 9px; background: #f3f3f3; font-size: 13px } .wr b::before { content: '🔈 '; font-size: 11px } .wr small { color: var(--hint); font-size: 12px }
 .none { margin: 4px 0; font-size: 11px; color: var(--hint-2); font-weight: 600 }
 /* список карточек колоды — прямо на экране */
-.pk { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; padding: 8px 10px }
+.pk { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 8px 10px }
 .pkh { display: flex; gap: 6px } .pkh select { flex: 1; border-color: var(--border); font-size: 12px; font-weight: 800 }
 .pq { border-color: var(--border); font-size: 12px }
-.pl { flex: 1; overflow-y: auto; display: grid; gap: 2px; align-content: start; scrollbar-width: thin }
+.pl { display: grid; gap: 2px; align-content: start }
 .pc { display: flex; align-items: center; gap: 7px; padding: 4px; border: 0; border-radius: 7px; background: none; font: inherit; text-align: left; cursor: pointer; color: var(--text) } .pc:hover { background: var(--blue-l) }
 .pc img { width: 36px; height: 24px; border-radius: 4px; object-fit: cover; flex: none } .pc span { flex: 1; display: grid; min-width: 0 } .pc b { font-size: 12px } .pc small { font-size: 10px; color: var(--hint) } .pc i { color: var(--blue); font-style: normal }
 .pc.used { opacity: .4 }

@@ -44,6 +44,20 @@ export function newStep(kind: StepKind): Step {
   return { id: stepId(), kind, word: '', tr: '', ex: '', exTr: '' }
 }
 
+/** «Рыба» — готовый к прохождению экран-образец, как в Busuu: добавили — сразу можно пройти, потом поправить под себя */
+export function fishStep(kind: StepKind): Step {
+  if (kind === 'choice') return { id: stepId(), kind, ask: 'tr', show: 'text', ans: 0,
+    opts: [{ w: 'go ahead', t: 'давай, вперёд' }, { w: 'sounds good', t: 'звучит отлично' }, { w: 'it’s fine', t: 'всё в порядке' }] }
+  if (kind === 'pairs') return { id: stepId(), kind, pairs: [{ a: 'I approve', b: 'одобряю' }, { a: 'no problem', b: 'без проблем' }, { a: 'I have no objection', b: 'я не возражаю' }] }
+  return { id: stepId(), kind, word: 'it’s fine', tr: 'всё в порядке', ex: 'Jim said it’s fine if we meet at 3 o’clock.', exTr: 'Джим сказал, что можно встретиться в 3 часа.' }
+}
+/** Готовый урок-образец: два новых слова, два выбора ответа и пары */
+export function fishLesson(): Step[] {
+  const a = fishStep('intro'), b = { ...fishStep('intro'), word: 'go ahead', tr: 'давай, вперёд', ex: 'Can I ask a question? — Sure, go ahead.', exTr: 'Можно вопрос? — Конечно, давай.' }
+  const c = fishStep('choice'), d = { ...fishStep('choice'), ans: 2, opts: [{ w: 'no problem', t: 'без проблем' }, { w: 'go ahead', t: 'давай, вперёд' }, { w: 'it’s fine', t: 'всё в порядке' }] }
+  return [a, b, c, d, fishStep('pairs')]
+}
+
 /** Подпись экрана на рельсе: само слово, если оно уже есть */
 export function stepTitle(s: Step): string {
   if (s.kind === 'intro') return s.word?.trim() || KINDS.intro.t

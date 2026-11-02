@@ -22,7 +22,7 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import LessonPlayer from '../../components/LessonPlayer.vue'
-import { INTERACTIVE, KINDS, KIND_LIST, STEPS_MAX, RAIL_H, newStep, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, KIND_LIST, STEPS_MAX, RAIL_H, fishStep, fishLesson, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -257,12 +257,14 @@ const activeLesson = computed(() => pick.lesson ?? (selItem.value && INTERACTIVE
 const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (x.steps?.length || x.id === activeLesson.value)))
 function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; pick.step = stepId; if (stepId) sel.value = null }
 // «Интерактив» на панели: экран — в выбранный урок; ничего не выбрано — новый урок в конец рельса
+// Экран добавляется «рыбой» — готовым образцом, который сразу можно пройти, а потом поправить (карандаш); kind 'lesson' — целый урок-образец
 function addScreen(kind) {
   let L = activeLesson.value ? findAny(activeLesson.value) : null
   if (!L) { L = it('lesson', 'Урок', { steps: [] }); doc.items.push(L) }
   if (!Array.isArray(L.steps)) L.steps = []
-  if (L.steps.length >= STEPS_MAX) return alert(`В уроке не больше ${STEPS_MAX} экранов`)
-  const st = newStep(kind); L.steps.push(st); tray.value = null
+  const add = kind === 'lesson' ? fishLesson() : [fishStep(kind)]
+  if (L.steps.length + add.length > STEPS_MAX) return alert(`В уроке не больше ${STEPS_MAX} экранов`)
+  L.steps.push(...add); const st = add[0]; tray.value = null
   selectStep(L.id, st.id); setProgress(doc.progress)
   nextTick(() => { const i = order.value.findIndex(v => v.id === L.id); if (i >= 0) showPoint({ x: pos(i).x + 230 + (L.steps.length - 1) * 92, y: pos(i).y + 200 }) })
 }
@@ -361,11 +363,15 @@ const mode = computed({ get: () => doc.mode ?? 'wave', set: (v) => { doc.mode = 
 const G = { step: 116, unitGap: 160, amp: 84 }
 const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
 const drag = reactive({ on: false, item: null, from: null, over: false, to: 0, x: 0, y: 0 })
+const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
 const hasRail = (x) => INTERACTIVE.includes(x?.type) && !!x.steps?.length
 const layoutOf = (list) => {
   let y = 0
   return list.map((x, i) => {
-    if (i) y += (x.type === 'unit' ? G.unitGap : G.step) + (hasRail(list[i - 1]) ? RAIL_H : 0)      // под урок с экранами — место для карточек
+    if (i) {                                     // под урок с экранами — место во всю высоту его экранов (без прокрутки)
+      const gap = x.type === 'unit' ? G.unitGap : G.step, prev = list[i - 1]
+      y += hasRail(prev) ? Math.max(gap, 40 + (railHs[prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
+    }
     const off = mode.value === 'wave' ? K[i % 8] * G.amp : 0
     return { x: off, y, side: off > 0 ? 'l' : 'r' }
   })
@@ -642,7 +648,7 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
-          @change="save" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
+          @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
         <!-- Рельс -->
         <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id, rsel: !!selColor[x.id] }]"
           :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
@@ -737,7 +743,17 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
         <span class="tt2">{{ activeLesson ? 'В урок «' + (findAny(activeLesson)?.title || 'Урок') + '»' : 'Новый урок в конце' }}</span>
-        <button v-for="k in KIND_LIST" :key="k" class="ti wide" :title="KINDS[k].d" :style="{ '--c': KINDS[k].c }" @click="addScreen(k)"><span class="tc"><svg viewBox="0 0 24 24" v-html="KINDS[k].ic" /></span><small>{{ KINDS[k].t }}</small></button>
+        <!-- мини-окошки: как выглядит экран -->
+        <button v-for="k in [...KIND_LIST, 'lesson']" :key="k" class="mi" :title="k === 'lesson' ? 'Сразу 5 экранов-образцов: два новых слова, два выбора, пары' : KINDS[k].d" @click="addScreen(k)">
+          <span class="mini" :class="k"><i class="mp" />
+            <template v-if="k === 'intro'"><i class="mh" /><i class="mm" /><i class="mw" /><i class="ml" /></template>
+            <template v-else-if="k === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
+            <template v-else-if="k === 'pairs'"><i class="mh" /><span class="mq"><i class="g" /><i class="g" /><i /><i /><i /><i /></span></template>
+            <template v-else><span class="ms"><i /><i /><i /></span></template>
+            <i class="mb" />
+          </span>
+          <small><b>{{ k === 'lesson' ? 'Готовый урок' : KINDS[k].t }}</b>{{ k === 'lesson' ? '5 экранов-образцов' : { intro: 'видео, фото, звук, слово', choice: 'выбрать верный ответ', pairs: 'соединить пары' }[k] }}</small>
+        </button>
       </template>
       <template v-else-if="tray === 'note'"><button v-for="c in NOTE_COLORS" :key="c" class="sw" :class="{ on: noteColor === c }" :style="{ background: c }" title="Цвет стикера — потом нажмите на холст" @click="noteColor = c; noteTool = true" /></template>
     </div>
@@ -935,7 +951,23 @@ function reset() { if (!confirm('Вернуть пример курса? Тек�
 .tc { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #fff; background: var(--c) }
 .tc svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round }
 .ti small { font-size: 13px; font-weight: 800; color: #2c2c2c; white-space: nowrap }
-.tt2 { padding: 0 10px; font-size: 12px; font-weight: 800; color: var(--hint); max-width: 170px; line-height: 1.25 }
+.tt2 { padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--hint); max-width: 130px; line-height: 1.25 }
+.mi { flex: none; display: grid; justify-items: center; gap: 7px; width: 168px; padding: 8px 6px 6px; border: 0; border-radius: 14px; background: none; font: inherit; cursor: pointer }
+.mi:hover { background: #f2f2f2 } .mi:hover .mini { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0, 0, 0, .12) }
+.mi small { display: grid; gap: 1px; font-size: 12px; font-weight: 600; color: var(--hint); text-align: center } .mi small b { font-size: 14px; font-weight: 800; color: #2c2c2c }
+/* мини-окошко экрана */
+.mini { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 150px; height: 104px; box-sizing: border-box; padding: 8px 12px; border: 1px solid #e3e3e3; border-radius: 10px; background: #fff; transition: transform .15s, box-shadow .15s }
+.mini i { display: block; border-radius: 3px; background: #e9e9e9 }
+.mini .mp { width: 60px; height: 4px; background: linear-gradient(90deg, #1fbe78 45%, #e6e6e6 45%) }
+.mini .mh { width: 70px; height: 5px; background: #cfcfcf }
+.mini .mm { width: 100%; height: 30px; border-radius: 5px; background: #8fb8e8 } .mini .mw { width: 90%; height: 10px; background: #e6f0ff } .mini .ml { width: 80%; height: 4px }
+.mini .ma { width: 100%; height: 8px; border-radius: 5px; background: #1cb0f6 }
+.mini .mo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; width: 100% } .mini .mo i { height: 30px; border: 1px solid #e3e3e3; background: #f4f4f4 } .mini .mo i.g { background: #8ff0c8; border-color: #5fe0aa }
+.mini .mq { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100% } .mini .mq i { height: 11px; border: 1px solid #e3e3e3; background: #fff } .mini .mq i.g { background: #8ff0c8; border-color: #5fe0aa }
+.mini .mb { position: absolute; right: 8px; bottom: 7px; width: 34px; height: 9px; border-radius: 5px; background: #1cb0f6 }
+.mini.lesson { background: none; border: 0; padding: 4px } .mini.lesson .mp, .mini.lesson .mb { display: none }
+.mini .ms { position: relative; width: 120px; height: 90px } .mini .ms i { position: absolute; width: 84px; height: 62px; border: 1px solid #e3e3e3; border-radius: 8px; background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .08) }
+.mini .ms i:nth-child(1) { left: 0; top: 0; background: linear-gradient(#fff 20%, #8fb8e8 20% 60%, #fff 60%) } .mini .ms i:nth-child(2) { left: 18px; top: 13px; background: linear-gradient(#fff 35%, #8ff0c8 35% 70%, #fff 70%) } .mini .ms i:nth-child(3) { left: 36px; top: 26px; background: radial-gradient(circle at 50% 40%, #ffc800 12px, #fff 13px) }
 .sw { flex: none; width: 30px; height: 30px; margin: 4px; border: 1px solid rgba(0, 0, 0, .12); border-radius: 50%; cursor: pointer; padding: 0 } .sw:hover { transform: scale(1.1) }
 .sw.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #7b61ff }
 @media (max-width: 719px) {
