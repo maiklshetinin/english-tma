@@ -46,10 +46,9 @@ function sortBy(k) { const s0 = sort.value; sort.value = !s0 || s0.k !== k ? { k
 const arrow = (k) => (sort.value?.k === k ? (sort.value.dir === -1 ? '↓' : '↑') : '⇅')
 onMounted(() => { studentStore.load().catch(() => {}); contentStore.load().catch(() => {}); loadEarn() })
 refreshOnReturn(loadEarn)      // подтянуть новых учеников, статусы «В приложении» и отметки учеников в пути
-// Группы — сверху, каждая своим блоком с цветной полосой слева (цвета чередуются, чтобы соседние группы не сливались); ниже — «Индивидуально».
+// Группы — сверху, каждая своим блоком на жёлтой подложке (группы жёлтые везде, как в панели на «Главной»); ниже — «Индивидуально».
 // Ученик из нескольких групп показан в каждой. Группы — отдельная сущность (stores/groups), состав меняется в панели на «Главной».
 const groups = useGroups()
-const GCOL = ['var(--blue)', 'var(--purple)', 'var(--orange)', 'var(--green)', 'var(--red)']
 const solo = computed(() => { const inG = new Set(groups.value.flatMap(g => g.members.map(m => m.id))); return studentStore.list.filter(s => !inG.has(s.id)) })
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'ученик' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'ученика' : 'учеников')
 const rows = computed(() => {
@@ -59,9 +58,8 @@ const rows = computed(() => {
     return [...studentStore.list].sort((a, b) => (f(a) - f(b)) * sort.value.dir).map(s => ({ t: 'row', key: 's/' + s.id, s }))
   }
   groups.value.forEach((g, gi) => {
-    const c = GCOL[gi % GCOL.length]
-    out.push({ t: 'gh', key: 'gh' + g.key, g, c, first: gi === 0 })
-    g.members.forEach((s, i) => out.push({ t: 'row', key: g.key + '/' + s.id, s, c, last: i === g.members.length - 1 }))
+    out.push({ t: 'gh', key: 'gh' + g.key, g, first: gi === 0 })
+    g.members.forEach((s, i) => out.push({ t: 'row', key: g.key + '/' + s.id, s, ing: true, last: i === g.members.length - 1 }))
   })
   if (groups.value.length && solo.value.length) out.push({ t: 'sl', key: 'sl' })
   for (const s of solo.value) out.push({ t: 'row', key: 's/' + s.id, s })
@@ -80,9 +78,9 @@ const PAY = { paid: ['Оплачено', 'ok'], due: ['Ждёт оплаты', '
       <div class="tr th"><span>Ученик</span><span class="pc">Прогресс</span><span>Оплата</span><button class="rt sh" :class="{ on: sort?.k === 'r' }" title="Цена часа занятия" @click="sortBy('r')">Ставка <i>{{ arrow('r') }}</i></button><button class="mo sh" :class="{ on: sort?.k === 'm' }" @click="sortBy('m')">За месяц <i>{{ arrow('m') }}</i></button><button class="mo sh" :class="{ on: sort?.k === 'a' }" @click="sortBy('a')">За всё время <i>{{ arrow('a') }}</i></button></div>
       <!-- Один список: заголовок группы → её ученики (цветная полоса слева, серая подложка) → … → «Индивидуально» → остальные -->
       <template v-for="it in rows" :key="it.key">
-        <div v-if="it.t === 'gh'" class="gh" :class="{ first: it.first }" :style="{ '--gc': it.c }"><AppIcon name="users" :size="15" /> Группа · {{ it.g.label }}<span>{{ it.g.members.length }} {{ word(it.g.members.length) }}</span></div>
+        <div v-if="it.t === 'gh'" class="gh" :class="{ first: it.first }"><AppIcon name="users" :size="15" /> Группа · {{ it.g.label }}<span>{{ it.g.members.length }} {{ word(it.g.members.length) }}</span></div>
         <div v-else-if="it.t === 'sl'" class="sl">Индивидуально</div>
-        <button v-else class="tr" :class="{ ing: it.c, last: it.last }" :style="it.c ? { '--gc': it.c } : null" @click="open(it.s.id)">
+        <button v-else class="tr" :class="{ ing: it.ing, last: it.last }" @click="open(it.s.id)">
           <span class="who"><Avatar :s="it.s" :size="56" :online="isOnline(it.s)" /><span class="tx"><b>{{ it.s.name }}</b><small v-if="it.s.status === 'invited'" class="inv">ждёт приглашения</small><small v-else-if="isOnline(it.s)" class="onl">в сети</small><small v-else class="sub">{{ seenLabel(it.s) || (it.s.username ? '@' + it.s.username : '') }}</small></span></span>
           <span class="prog" :title="unitOf(pathStore.of(it.s.id))"><span class="bar"><i :style="{ width: pctOf(pathStore.of(it.s.id)) + '%' }" /></span>{{ pctOf(pathStore.of(it.s.id)) }}%</span>
           <span><span class="badge" :class="PAY[it.s.payment.status][1]">{{ PAY[it.s.payment.status][0] }}</span></span>
@@ -113,13 +111,14 @@ button.tr:hover { background: var(--surface) } .th { padding-top: 8px; padding-b
 /* Колонки: ученик · прогресс · оплата · ставка · за месяц · за всё время */
 @media (min-width: 768px) { .tr { grid-template-columns: 1.5fr 1.2fr 1fr .7fr .8fr .9fr } .tr > .prog { grid-row: auto; grid-column: auto; padding-left: 0 } .th > .pc { display: block }
   .rt { display: block; text-align: right; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap } }
-/* Группы: заголовок и строки учеников на серой подложке с цветной полосой слева; между группами — отступ */
-.gh { display: flex; align-items: center; gap: 6px; margin: 10px 10px 0; padding: 8px 12px 4px; border-radius: 14px 14px 0 0; background: var(--group); box-shadow: inset 4px 0 0 var(--gc);
-  font-size: 12px; font-weight: 900; color: var(--gc); text-transform: uppercase; letter-spacing: .3px }
+/* Группы: заголовок и строки учеников на жёлтой подложке (--grp, как в панели на «Главной»); между группами — отступ */
+.gh { display: flex; align-items: center; gap: 6px; margin: 10px 10px 0; padding: 8px 12px 4px; border-radius: 14px 14px 0 0; background: var(--grp);
+  font-size: 12px; font-weight: 900; color: #946300; text-transform: uppercase; letter-spacing: .3px }
 .gh.first { margin-top: 4px } .gh span { margin-left: auto; color: var(--hint); font-weight: 700; text-transform: none; letter-spacing: 0 }
-.tr.ing { width: calc(100% - 20px); margin: 0 10px; background: var(--group); box-shadow: inset 4px 0 0 var(--gc) }
+.tr.ing { width: calc(100% - 20px); margin: 0 10px; background: var(--grp) }
 .tr.ing.last { border-radius: 0 0 14px 14px; margin-bottom: 4px }
-button.tr.ing:hover { background: var(--border) }
+button.tr.ing:hover { background: var(--grp-hover) }
+html[data-theme='dark'] .gh { color: var(--yellow) }
 .sl { margin: 12px 14px 2px; font-size: 12px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .mo { display: none } .tot { display: none }
 @media (min-width: 768px) {

@@ -9,9 +9,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDecksStore } from '../../stores/decks'
-import { useStudentsStore } from '../../stores/students'
-import { srsOf, kindOf } from '../../composables/useSrs'
-import { relDay } from '../../utils/dates'
 import { isDemo } from '../../firebase'
 import { audioSrc } from '../../utils/media'
 import { newId } from '../../utils/id'
@@ -173,22 +170,6 @@ const ec = computed(() => cards.value.find(c => c.id === edit.value))
 function openEdit(c, k = '') { edit.value = c.id; if (k) setTimeout(() => document.querySelector(`.ce [data-k="${k}"]`)?.focus(), 30) }
 function addCard() { const n = { id: newId('c'), front: '', back: '' }; deck.value.cards.unshift(n); q.value = ''; openEdit(n, 'front') }
 function delCard(c) { removeCard(deck.value, c) }
-// ---------- Статистика по карточке: кто из учеников её учит и когда повтор ----------
-const studentsStore = useStudentsStore()
-const learners = computed(() => (deck.value?.forAll ? studentsStore.list : studentsStore.list.filter(x => deck.value?.assigned.includes(x.id))))
-const dayLabel = (d) => { const r = relDay(d); return r === 'Прошло' ? 'пора повторить' : r.toLowerCase() }
-function statsOf(c) {
-  const bars = []; let lapses = 0, next = ''
-  for (const st of learners.value) {
-    const s = srsOf(st.id, c); if (!s) continue
-    const k = kindOf(s), iv = s.interval || 0
-    lapses += s.lapses || 0
-    if (s.due && (!next || s.due < next)) next = s.due
-    bars.push({ id: st.id, h: Math.max(12, Math.min(100, Math.log2(iv + 1) / Math.log2(61) * 100)), cls: k === 'review' ? (iv >= 21 ? 'mature' : 'rev') : 'lrn',
-      title: `${st.name}: ${k === 'learn' ? 'учит (шаги)' : `интервал ${iv} дн.`}${s.due ? ', повтор — ' + dayLabel(s.due) : ''}${s.lapses ? `, ошибок ${s.lapses}` : ''}` })
-  }
-  return { n: bars.length, bars, lapses, next: next ? 'повтор: ' + dayLabel(next) : '' }
-}
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'карточки' : 'карточек')
 const back = () => router.push({ name: 'words' })
 </script>
@@ -235,7 +216,7 @@ const back = () => router.push({ name: 'words' })
           <thead><tr><th class="n" />
             <th v-for="col in COLS" :key="col.k" :class="col.kind">
               <span class="hd1">{{ col.short }}</span><small v-for="f in (col.pair || [])" :key="f.k" v-show="f.need && filled(f.k) < cards.length" class="miss"> · без {{ f.k === 'front' ? 'слова' : 'перевода' }}: {{ cards.length - filled(f.k) }}</small></th>
-            <th class="stc" title="Столбик — ученик, который учит карточку: чем выше, тем дольше до повтора. Розовый — ещё запоминает, зелёный — повторяет, тёмно-зелёный — выучил (21+ дн.)"><span class="hd1">Ученики</span></th><th class="act" /></tr></thead>
+            <th class="act" /></tr></thead>
           <!-- Список — только смотреть: нажали на строку — карточка-редактор; в строке можно лишь послушать звук и удалить -->
           <tbody>
             <tr v-for="(c, i) in shown.slice(0, limit)" :key="c.id" class="crow" :class="{ bad: !c.front || !c.back, off: c.suspended, editing: edit === c.id }" title="Открыть карточку" @click="openEdit(c)">
@@ -259,13 +240,6 @@ const back = () => router.push({ name: 'words' })
                   <i v-else class="noph" />
                 </span>
               </td>
-              <!-- Как карточку учат ученики (как график активности у репозиториев GitHub): столбик на ученика — высота = через сколько дней повтор -->
-              <td class="stc"><template v-for="st in [statsOf(c)]" :key="0">
-                <span v-if="!st.n" class="sx">{{ learners.length ? 'ещё не начали' : '' }}</span>
-                <template v-else><span class="sx"><b>{{ st.n }}</b> из {{ learners.length }} учат<template v-if="st.lapses"> · <em>ошибок {{ st.lapses }}</em></template></span>
-                  <span class="spark"><i v-for="b in st.bars" :key="b.id" :class="b.cls" :style="{ height: b.h + '%' }" :title="b.title" /></span>
-                  <span class="sx">{{ st.next }}</span></template>
-              </template></td>
               <td class="act"><span v-if="c.suspended" class="hid" title="Скрыта от учеников">скрыта</span><button class="icon-btn danger" title="Удалить карточку" aria-label="Удалить карточку" @click.stop="delCard(c)"><AppIcon name="trash" :size="18" /></button></td>
             </tr>
           </tbody>
@@ -315,16 +289,12 @@ tbody tr:not(:hover):not(.rowhot) .slot, tbody tr:not(:hover):not(.rowhot) .mic 
 .pm.down { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40 }
 .lnkb { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 800; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; cursor: pointer }
 .tbl { overflow-x: auto }      /* без рамки — просто строки с линиями, как список в GitHub */
-th.stc { width: 150px } td.stc { padding-top: 18px }
-.sx { display: block; font-size: 12px; font-weight: 700; color: var(--hint-2); white-space: nowrap } .sx b { color: var(--text) } .sx em { font-style: normal; color: var(--red-d) }
-.spark { display: flex; align-items: flex-end; gap: 3px; height: 30px; margin: 6px 0 4px; padding-bottom: 1px; border-bottom: 1.5px solid #9be9a8 }
-.spark i { width: 7px; border-radius: 2px 2px 0 0 } .spark .lrn { background: #ff9b9b } .spark .rev { background: #40c463 } .spark .mature { background: #216e39 }
-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; table-layout: fixed; font-size: 14px }
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 860px; table-layout: fixed; font-size: 14px }
 th { position: sticky; top: 0; z-index: 1; background: var(--card); text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top }
 .hd { display: grid; gap: 4px; justify-items: stretch; text-align: left } .hd small { display: block; text-align: left } .hd span { font-weight: 900; font-size: 13px } .hd em { color: var(--red); font-style: normal }
 .hd small { font-size: 11px; font-weight: 700; color: var(--hint-2) } .hd small.miss { color: var(--red-d) }
 .fill { display: block; height: 4px; border-radius: 3px; background: var(--surface); overflow: hidden } .fill b { display: block; height: 100%; background: var(--green) }
-th.image { width: 150px } td.image { padding-right: 0 } td.image + td .two { padding-left: 4px } th.n, td.n { width: 34px; color: var(--hint-2); text-align: center; font-size: 12px } th.act { width: 104px } td.act { white-space: nowrap; text-align: right }
+th.image { width: 284px } td.image { padding-right: 0 } td.image + td .two { padding-left: 4px } th.n, td.n { width: 34px; color: var(--hint-2); text-align: center; font-size: 12px } th.act { width: 104px } td.act { white-space: nowrap; text-align: right }
 td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: middle }
 tr:hover td { background: #fafafa } tr.crowhot td { background: var(--blue-l) !important } tr.crowhot td:first-child { box-shadow: inset 3px 0 0 var(--blue) } tr.bad td.n { color: var(--red) }
 td input { margin: 0; padding: 6px 8px; width: 100%; box-sizing: border-box; border: 1px solid transparent; border-radius: 8px; background: none; font-size: 14px }
@@ -335,9 +305,9 @@ td input { margin: 0; padding: 6px 8px; width: 100%; box-sizing: border-box; bor
 tr.editing td { background: var(--blue-l) }
 /* Строка списка: вся кликабельна (откроет карточку) */
 tr.crow { cursor: pointer } tr.crow:hover td { background: #f6f9fc }
-.noph { display: block; width: 132px; height: 88px; border-radius: 12px; background: var(--surface) }
+.noph { display: block; width: 264px; height: 176px; border-radius: 12px; background: var(--surface) }
 tr.crow td { padding-top: 14px; padding-bottom: 14px } .cell img { border-radius: 12px }
-.two .t1 { font-size: 17px } .two .t2 { font-size: 15px } .two .wvrow { padding: 6px 0 0; max-width: 240px }
+.two .t1 { font-size: 19px } .two .t2 { font-size: 16px } .two .wvrow { padding: 6px 0 0; max-width: 240px }
 td.c-e .two .t1 { font-size: 15px; font-weight: 700 } td.c-e .two span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
 tr.crow td { vertical-align: top } tr.crow td.act { vertical-align: middle }      /* корзина — всегда видна, по центру строки */ tr.crow td.n { padding-top: 22px } tr.crow .two { padding-top: 6px; cursor: pointer }
 .ea { margin-left: 6px; font-size: 12px; font-style: normal; opacity: .6 }
@@ -353,7 +323,9 @@ th.pair .hd + .hd { margin-top: 6px } .hd span small { margin-left: 6px; display
 td input:hover { border-color: var(--border) } td input:focus { border-color: var(--blue); background: var(--card) } td input.need { background: #fff1f1 }
 td.dz { text-align: center } td.hot { background: var(--blue-l) !important; box-shadow: inset 0 0 0 2px var(--blue) }
 .cell { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px }
-.cell img { width: 132px; height: 88px; object-fit: cover; border-radius: 10px; cursor: pointer; display: block }
+/* Фото крупно, как превью в списке YouTube (в 2 раза больше прежнего 132×88); на телефоне — поменьше, чтобы влезали слово и пример */
+@media (max-width: 719px) { th.image { width: 186px } .cell img, .noph { width: 168px !important; height: 112px !important } table { min-width: 640px } }
+.cell img { width: 264px; height: 176px; object-fit: cover; border-radius: 12px; cursor: pointer; display: block }
 .pm { position: fixed; z-index: 40; display: grid; min-width: 220px; padding: 6px; border-radius: 12px; background: var(--card); box-shadow: 0 10px 30px rgba(0, 0, 0, .18), 0 0 0 1px var(--border); text-align: left }
 .pm small { padding: 4px 8px 6px; font-size: 11px; font-weight: 800; color: var(--hint); white-space: normal }
 .pm button, .pm a { display: block; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); text-align: left; text-decoration: none; cursor: pointer }
