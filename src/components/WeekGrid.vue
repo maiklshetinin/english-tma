@@ -142,14 +142,14 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .dlost { position: absolute; left: 50%; top: calc(100% - 7px); transform: translateX(-50%); z-index: 2; padding: 0 4px; border-radius: 6px; background: var(--card); font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 14px; white-space: nowrap; pointer-events: none }      /* потеряно из-за отмен — мелко красным под суммой, поверх зазора: шапка не прыгает */
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
 /* «Сегодня» — серая шапка дня во всю ширину колонки (края совпадают с линиями таблицы), скруглена только сверху и стоит прямо на таблице */
-.dh.today { background: var(--group) } .dh.today b, .dh.today small { color: var(--text) }
+.dh.today { background: var(--surface) }      /* тот же серый, что у закрашенного прошедшего времени — одна шкала времени */ .dh.today b, .dh.today small { color: var(--text) }
 .wk.gs-cells .dh.today { margin: 0; border-radius: 12px 12px 0 0 }
 /* Сегодня понедельник / воскресенье — угол таблицы под шапкой дня прямой, иначе в углу остаётся белый «треугольничек» */
 .wk.gs-cells.td-first .g.head + .g > .cell:nth-child(2) { border-top-left-radius: 0 }
 .wk.gs-cells.td-last .g.head + .g > .cell:last-child { border-top-right-radius: 0 }
 .cell { position: relative; height: 38px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); transition: background .1s, box-shadow .1s }      /* белые ячейки с тонкой рамкой */
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
-.tm.now { background: var(--group); border-radius: 10px; color: var(--text); font-weight: 900 }
+.tm.now { background: var(--surface); border-radius: 10px; color: var(--text); font-weight: 900 }
 /* Текущий час — как «сегодня» в шапке: серая подсветка во всю высоту строки, скруглена только слева и прилегает к таблице */
 .wk.gs-cells .tm.now { margin-right: 0; border-radius: 10px 0 0 10px }
 .wk.gs-cells.tm-first .g.head + .g > .cell:nth-child(2) { border-top-left-radius: 0 }      /* первый / последний час — угол таблицы прямой, без белого уголка */
