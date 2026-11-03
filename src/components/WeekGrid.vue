@@ -74,7 +74,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
 </script>
 
 <template>
-  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date }]">
+  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]) }]">
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
         <span>{{ tzShort(tz) }}</span>
@@ -150,6 +150,10 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .cell { position: relative; height: 38px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); transition: background .1s, box-shadow .1s }      /* белые ячейки с тонкой рамкой */
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
 .tm.now { background: var(--group); border-radius: 10px; color: var(--text); font-weight: 900 }
+/* Текущий час — как «сегодня» в шапке: серая подсветка во всю высоту строки, скруглена только слева и прилегает к таблице */
+.wk.gs-cells .tm.now { margin-right: 0; border-radius: 10px 0 0 10px }
+.wk.gs-cells.tm-first .g.head + .g > .cell:nth-child(2) { border-top-left-radius: 0 }      /* первый / последний час — угол таблицы прямой, без белого уголка */
+.wk.gs-cells.tm-last .g:last-child > .cell:nth-child(2) { border-bottom-left-radius: 0 }
 .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
 .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
 .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
