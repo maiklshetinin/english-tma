@@ -141,18 +141,18 @@ onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInt
 .sent.tap { cursor: pointer }
 .sent { flex: none; width: 100%; min-height: 1.3em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; font-size: 17px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere }      /* пример под фото: до ответа — на одном языке, после — на другом, в том же месте */
 .wd { display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 100% }
-.spk { border: 2px solid var(--border); background: var(--card); border-radius: 50%; width: 40px; height: 40px; font-size: 18px; cursor: pointer; flex: none }
+.spk { border: 0; background: var(--group); border-radius: 50%; width: 40px; height: 40px; font-size: 18px; cursor: pointer; flex: none }
 .media { position: relative; flex: none; width: 100%; max-width: 380px; aspect-ratio: 3 / 2; overflow: hidden; border-radius: 14px }      /* фото — только если оно есть (без фото — пустого места нет) */
 .pic { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: 14px; background: transparent }      /* фото вписывается в слот и не может наехать на пример */
 .dock { height: 58px; min-height: 54px; flex: none; display: grid; overflow: hidden }      /* одна высота для «Показать ответ» и для оценок */
 .show { width: 100%; height: 54px; padding: 0 }
 .grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
-.g { height: 54px; display: grid; align-content: center; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 14px; padding: 0 4px; font: inherit; font-weight: 800; cursor: pointer; background: var(--card); color: var(--text) }
-.g:active { transform: translateY(2px); border-bottom-width: 2px } .g small { display: block; font-weight: 600; color: var(--hint); font-size: 11px }
+.g { height: 54px; display: grid; align-content: center; border: 0; border-radius: 12px; padding: 0 4px; font: inherit; font-weight: 800; cursor: pointer; background: var(--group); color: var(--text); transition: filter .12s }      /* плоские, как .btn (Telegram): серые, цветное только название */
+.g:hover { filter: brightness(.96) } .g:active { filter: brightness(.92) } .g small { display: block; font-weight: 600; color: var(--hint); font-size: 11px }
 .g0 { color: var(--red) } .g1 { color: var(--orange-d) } .g2 { color: var(--green-d) } .g3 { color: var(--blue) }
 .tools { height: 36px; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none }      /* одна строка фиксированной высоты — ничего не прыгает */
 .tools button { flex: none; white-space: nowrap }
-.tools button { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--border); background: var(--card); color: var(--hint); font: inherit; font-weight: 800; font-size: 13px; border-radius: 12px; padding: 6px 10px; cursor: pointer }
+.tools button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: var(--group); color: var(--hint); font: inherit; font-weight: 700; font-size: 13px; border-radius: 12px; padding: 7px 12px; cursor: pointer } .tools button:hover { filter: brightness(.96) }
 .tools button:disabled { opacity: .45; cursor: default } .keys { margin-left: auto; font-size: 12px; white-space: nowrap }
 .done { text-align: center; display: grid; gap: 6px } .done p { margin: 0 } .wl { color: var(--blue); font-variant-numeric: tabular-nums }
 .tb { flex: none; display: inline-flex; gap: 2px }      /* кнопки-значки: серые, без обводки — как во всём приложении */
