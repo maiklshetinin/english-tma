@@ -106,7 +106,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
           </button>
         </template>
         <!-- Призрак: бледный урок с прошлой недели. Нажать — урок создан; × — убрать подсказку -->
-        <button v-for="g in [ghostAt(d, h)].filter(Boolean)" :key="g.key" class="chip ghost" :class="{ hasmin: g.minute }" :title="`Как на этой неделе: ${ghostStu(g).map(s => s.name).join(', ')} — нажмите, чтобы поставить урок`" @click.stop="emit('ghost', g)">
+        <button v-for="g in [ghostAt(d, h)].filter(Boolean)" :key="g.key" class="chip ghost up" :class="{ hasmin: g.minute, group: ghostStu(g).length > 1 }" :title="`Как на этой неделе: ${ghostStu(g).map(s => s.name).join(', ')} — нажмите, чтобы поставить урок`" @click.stop="emit('ghost', g)">
           <AvatarStack v-if="ghostStu(g).length > 1" class="st-lg" :students="ghostStu(g)" :size="39" :max="3" ring="var(--card)" /><AvatarStack v-if="ghostStu(g).length > 1" class="st-sm" :students="ghostStu(g)" :size="26" :max="2" ring="var(--card)" />
           <template v-else><Avatar :s="ghostStu(g)[0]" :size="39" /><span class="nm">{{ ghostStu(g)[0].name }}</span></template>
           <i v-if="g.minute" class="min">:{{ String(g.minute).padStart(2, '0') }}</i>
@@ -192,30 +192,26 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 /* Прошедшее время (настройка): прошлые часы — серые, текущий час закрашивается сверху по минутам */
 .wk.shade .cell.past:not(.ok):not(.bad):not(.swap) { background: var(--surface) }
 .wk.shade .cell.now:not(.ok):not(.bad):not(.swap) { background: linear-gradient(var(--surface) var(--fill), var(--card) var(--fill)) }
-/* Призрак урока (следующая неделя, не подтверждён): бледный, пунктирная рамка; при наведении — ярче и крестик «убрать» */
-.chip.ghost { background: transparent !important; box-shadow: inset 0 0 0 1.5px #d0d7de !important; border-radius: 10px; opacity: .45; cursor: pointer; transition: opacity .12s }
-.chip.ghost { outline: 1.5px dashed #b6bec7; outline-offset: -1.5px; box-shadow: none !important }
-.chip.ghost:hover { opacity: .9 } .chip.ghost::before, .chip.ghost::after { display: none }
+/* Призрак урока (следующая неделя, не подтверждён): в том же виде, что и урок (голубая капсула, жёлтая группа, стикер — как выбрано
+   в настройке «Урок»), только бледный; при наведении — ярче и крестик «убрать» */
+.chip.ghost { opacity: .38; cursor: pointer; transition: opacity .12s }
+.chip.ghost:hover { opacity: .85 }
 .gx { position: absolute; top: -6px; right: -6px; z-index: 3; display: none; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--card); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); color: var(--hint); font-size: 13px; font-weight: 900; line-height: 1 }
 .chip.ghost:hover .gx { display: grid } .gx:hover { color: var(--red-d) }
 @media (hover: none) { .gx { display: grid } }
 /* Вид будущего урока (настройка «Урок»): только у запланированных — у прошедших подложки нет */
 .wk .chip.up { isolation: isolate }
 @media (min-width: 720px) {
-  .wk.ls-tail .chip.up { background: transparent; box-shadow: none }
-  .wk.ls-tail .chip.up::before { content: ''; position: absolute; z-index: -1; left: 20px; right: 0; top: 0; bottom: 0; border-radius: 0 10px 10px 0; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
-  /* Стикер-закладка: ровный жёлтый, без теней */
-  .wk.ls-sticker .chip.up { padding-left: 0; border-radius: 999px 3px 3px 999px; background: transparent; box-shadow: none }
-  .wk.ls-sticker .chip.up::before { content: ''; position: absolute; z-index: -1; inset: 0; border-radius: inherit; background: #fff4b8 }
-  .wk.ls-blue .chip.up { padding-left: 0; border-radius: 999px; background: var(--blue-l); box-shadow: 0 2px 5px rgba(28, 120, 200, .18) }
-  .wk.ls-blue .chip.up .nm { color: #1a5b8a }
+  /* Капсула (серая или голубая) — кружок ученика слева, как аватарка в списке чатов Telegram */
+  .wk .chip.up { padding-left: 0; border-radius: 999px }
+  .wk.ls-blue .chip.up { box-shadow: 0 2px 5px rgba(28, 120, 200, .18) } .wk.ls-blue .chip.up .nm { color: #1a5b8a }
+  .wk.ls-gray .chip.up { box-shadow: 0 2px 5px rgba(0, 0, 0, .1) }
 }
-.wk.ls-sticker .chip.up { background: #fff4b8 } .wk.ls-blue .chip.up { background: var(--blue-l) }
+.wk.ls-blue .chip.up { background: var(--blue-l) } .wk.ls-gray .chip.up { background: var(--group) }
 /* Группа — жёлтая плашка (как в панели учеников и в «Информации»); у прошедших подложки нет */
 .wk .chip.up.group { background: var(--grp); box-shadow: inset 0 0 0 1px var(--grp-line) }
 @media (min-width: 720px) {
-  .wk.ls-tail .chip.up.group { background: transparent; box-shadow: none } .wk.ls-tail .chip.up.group::before { background: var(--grp); box-shadow: inset 0 0 0 1px var(--grp-line) }
-  .wk.ls-sticker .chip.up.group::before { background: var(--grp-hover) } .wk.ls-blue .chip.up.group { background: var(--grp); box-shadow: none }
+  .wk .chip.up.group { background: var(--grp); box-shadow: none }
 }
 /* Вид сетки (utils/gridStyle.js, кнопка с решёткой над таблицей): клетки — по умолчанию (выше) */
 /* «Клетки» — простая таблица: прямые ячейки без промежутков, тонкие линии 1px; скруглены только внешние углы таблицы */
@@ -231,17 +227,5 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } }
 @media (max-width: 719px) { .wk.gs-cells .chip { inset: 2px } }
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
-.wk.gs-gray .cell { background: var(--surface); box-shadow: none }
-.wk.gs-gray .chip:not(.done):not(.canceled):not(.orphan) { background: var(--card) }      /* на серой ячейке урок — белый, иначе сольётся */
-.wk.gs-gray .chip.up.group:not(.orphan) { background: var(--grp) }      /* группа и тут жёлтая */
-.wk.gs-none .cell { background: transparent; box-shadow: none }      /* без линий: чистый фон, только уроки */
-.wk.gs-lines { gap: 0 } .wk.gs-lines .g.head { margin-bottom: 4px }
-.wk.gs-lines .g:not(.head) { box-shadow: inset 0 -1px 0 var(--border); padding: 2px 0 }      /* линия под каждым часом во всю ширину */
-.wk.gs-lines .cell { background: transparent; box-shadow: none; border-radius: 8px }
-.wk.gs-gray .cell.free:hover, .wk.gs-lines .cell.free:hover, .wk.gs-none .cell.free:hover { background: var(--blue-l) }
-.wk.gs-lines .cell.ok, .wk.gs-gray .cell.ok, .wk.gs-none .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
-.wk.gs-lines .cell.swap, .wk.gs-gray .cell.swap, .wk.gs-none .cell.swap { background: var(--orange-l); box-shadow: inset 0 0 0 2px var(--orange) }
-.wk.gs-lines .cell.bad, .wk.gs-gray .cell.bad, .wk.gs-none .cell.bad { background: var(--red-l); box-shadow: inset 0 0 0 2px var(--red) }
-.wk.gs-lines .cell.join, .wk.gs-gray .cell.join, .wk.gs-none .cell.join { box-shadow: inset 0 0 0 2px var(--green) }
 @media (max-width: 719px) { .min { top: auto; bottom: -5px; right: -4px; transform: none; font-size: 10px; padding: 0 3px } }      /* на телефоне — в правом нижнем углу, чтобы не закрывать кружок */
 </style>

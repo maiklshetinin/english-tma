@@ -111,16 +111,10 @@ const hintPos = computed(() => {
 .ghost.lesson .nm { display: none; margin: 0; font-size: 13px; font-weight: 700; opacity: .85 }
 @media (min-width: 720px) { .ghost.lesson .nm { display: block } .ghost.lesson { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px } .ghost.lesson :deep(.av) { width: 39px !important; height: 39px !important; font-size: 17px !important } }
 @media (max-width: 420px) { .ghost.lesson :deep(.av) { width: 29px !important; height: 29px !important } }
-/* Урок в руке выглядит так же, как в таблице (настройка «Урок»: плашка / хвостик / стикер / голубой) */
+/* Урок в руке выглядит так же, как в таблице (настройка «Урок»: серая или голубая капсула) */
 .ghost.lesson { isolation: isolate }
-.ghost.lesson.ls-plain { box-shadow: inset 0 0 0 1px #d0d7de, 0 8px 20px rgba(0, 0, 0, .2) }
-@media (min-width: 720px) {
-  .ghost.lesson.ls-tail { background: transparent; box-shadow: none; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .2)) }
-  .ghost.lesson.ls-tail::before { content: ''; position: absolute; z-index: -1; left: 20px; right: 0; top: 0; bottom: 0; border-radius: 0 10px 10px 0; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
-  .ghost.lesson.ls-sticker { padding-left: 0; border-radius: 999px 3px 3px 999px }
-  .ghost.lesson.ls-blue { padding-left: 0; border-radius: 999px } .ghost.lesson.ls-blue .nm { color: #1a5b8a }
-}
-.ghost.lesson.ls-sticker { background: #fff4b8 } .ghost.lesson.ls-blue { background: var(--blue-l) }
+@media (min-width: 720px) { .ghost.lesson { padding-left: 0; border-radius: 999px } .ghost.lesson.ls-blue .nm { color: #1a5b8a } }
+.ghost.lesson.ls-blue { background: var(--blue-l) } .ghost.lesson.ls-gray { background: var(--group) }
 .dhint { position: absolute; transform: translate(-50%, -100%); width: max-content; max-width: 260px; padding: 5px 10px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 800; line-height: 1.3; text-align: center;
   white-space: normal; box-shadow: 0 6px 16px rgba(0, 0, 0, .18); background: var(--green-d) }
 /* Урок вытащили за таблицу — снимется: бледнеет и краснеет рамка */
