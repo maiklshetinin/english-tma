@@ -6,6 +6,7 @@
 //    пример — текстом; видео / фото / звук — нажать на место под файл или перетащить файл; «из карточек» — слова из колод.
 //  • Переставить экран — тянуть за шапку карточки вдоль рельса. Удалить — корзина в шапке или Delete.
 // Координаты — холста (родитель масштабирует .world); x, y — центр бусины урока на вертикальном рельсе.
+import { ask, say } from '../composables/useDialog'
 import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
 import LessonPlayer from './LessonPlayer.vue'
@@ -59,9 +60,9 @@ const cardStyle = (s, i) => {
   return { left: left + 'px', top: props.y - TOP + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: lift ? 7 : 3, transition: lift ? 'none' : undefined }
 }
 
-function removeStep(s) {
+async function removeStep(s) {
   const files = stepRefs(s)
-  if (files.some(f => !f.startsWith('https://')) && !confirm('Удалить экран? Его видео, фото и звук удалятся из хранилища.')) return
+  if (files.some(f => !f.startsWith('https://')) && !(await ask('Удалить экран?', { text: 'Его видео, фото и звук удалятся из хранилища.', ok: 'Удалить', danger: true }))) return
   props.item.steps.splice(props.item.steps.indexOf(s), 1); props.dropFiles(files); emit('select', null); changed()
 }
 defineExpose({ removeStep })
@@ -74,8 +75,8 @@ const kindOf = (f) => (/^video\//.test(f.type) || /\.(mp4|webm|mov|m4v)$/i.test(
 function pick(s, fields, opt = null) { target = { s, fields, opt }; accept.value = fields.map(f => f + '/*').join(','); fileIn.value.value = ''; nextTick(() => fileIn.value.click()) }
 function take(s, fields, opt, f) {
   const k = kindOf(f)
-  if (!k || !fields.includes(k)) return alert(fields.includes('audio') ? 'Нужен звук (MP3, M4A, OGG, WAV)' : 'Нужно видео или фото')
-  if (f.size > 200 * 1024 * 1024) return alert('Файл больше 200 МБ — слишком большой.')
+  if (!k || !fields.includes(k)) return say(fields.includes('audio') ? 'Нужен звук' : 'Нужно видео или фото', { text: fields.includes('audio') ? 'MP3, M4A, OGG или WAV.' : 'MP4, MOV, WebM — или JPG, PNG, WebP.' })
+  if (f.size > 200 * 1024 * 1024) return say('Файл слишком большой', { text: 'Можно до 200 МБ.' })
   props.putFile(s.id, k, f, opt)
 }
 const onFile = (e) => { const f = e.target.files?.[0]; if (f && target) take(target.s, target.fields, target.opt, f) }

@@ -83,10 +83,12 @@ export const useAuthStore = defineStore('auth', () => {
     syncAvatar()
   }
 
+  // Нет доступа (не преподаватель и не ученик по приглашению, или преподавателя убрали из TEACHER_IDS) — один и тот же экран
+  const NO_ACCESS = 'У вас нет доступа. Обратитесь к администратору.'
   async function exchange(path: string, init: RequestInit) {
     let r: Response
     try { r = await fetch(`${API}${path}`, { method: 'POST', ...init }) } catch { throw new Error('Сервер не отвечает. Если он спал — подождите полминуты и повторите.') }
-    if (r.status === 403) throw new Error('Нет доступа. Попросите преподавателя прислать ссылку-приглашение.')
+    if (r.status === 403) throw new Error(NO_ACCESS)
     if (!r.ok) throw new Error(`Не удалось подтвердить вход (${r.status})`)
     await signInWithCustomToken(fb!, ((await r.json()) as AuthResponse).token)
     await applySession(fb!.currentUser!)
@@ -104,7 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
         else { status.value = 'login'; return }
       }
       status.value = 'ready'
-    } catch (e) { error.value = (e as Error).message; status.value = 'error' }
+    } catch (e) { const m = (e as Error).message; error.value = m === 'Нет прав на это действие' ? NO_ACCESS : m; status.value = 'error' }      // сохранённая сессия, а доступ уже закрыт
   }
 
   /** Вызывается кнопкой «Войти через Telegram». */

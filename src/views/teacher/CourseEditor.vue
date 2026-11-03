@@ -13,6 +13,7 @@
 //  • Стикеры-заметки, как в FigJam: doc.notes, лежат на холсте; двойной клик — писать, тянуть — двигать.
 // Только для преподавателя. Хранение: на сервере (Firestore, курс целиком; кружки — в S3 через сервер), а в браузере —
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
+import { ask, say, dialog } from '../../composables/useDialog'
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import BackButton from '../../components/BackButton.vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -221,7 +222,7 @@ const slotOf = (sid, opt) => { const s = findStep(sid); return opt == null ? s :
 async function putStepFile(sid, field, file, opt = null) {
   const obj = slotOf(sid, opt); if (!obj) return
   const id = `m${sid}_${field}${opt ?? ''}_${Date.now().toString(36)}`
-  try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return alert('Не удалось сохранить файл в браузере (мало места?).') }
+  try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return say('Не удалось сохранить файл', { text: 'В браузере не хватило места.' }) }
   const old = obj[field]
   urls[id] = URL.createObjectURL(file); obj[field] = 'idb:' + id; save()
   if (old) dropRefs([old])
@@ -263,16 +264,16 @@ function addScreen(kind) {
   if (!L) { L = it('lesson', 'Урок', { steps: [] }); doc.items.push(L) }
   if (!Array.isArray(L.steps)) L.steps = []
   const add = kind === 'lesson' ? fishLesson() : [fishStep(kind)]
-  if (L.steps.length + add.length > STEPS_MAX) return alert(`В уроке не больше ${STEPS_MAX} экранов`)
+  if (L.steps.length + add.length > STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
   L.steps.push(...add); const st = add[0]; tray.value = null
   selectStep(L.id, st.id); setProgress(doc.progress)
   nextTick(() => { const i = order.value.findIndex(v => v.id === L.id); if (i >= 0) showPoint({ x: pos(i).x + 230 + (L.steps.length - 1) * 92, y: pos(i).y + 200 }) })
 }
 function showPoint(w) { const p = toScreen(w); if (p.x < 40 || p.x > W.value - 300 || p.y < 90 || p.y > H.value - 140) animView({ ...view, x: view.x - (p.x - W.value / 2), y: view.y - (p.y - H.value / 2 + 60) }, true) }
-function removeStepKey() {
+async function removeStepKey() {
   const L = findAny(pick.lesson), s = L?.steps?.find(v => v.id === pick.step); if (!s) return
   const files = stepRefs(s)
-  if (files.some(f => !f.startsWith('https://')) && !confirm('Удалить экран? Его видео, фото и звук удалятся из хранилища.')) return
+  if (files.some(f => !f.startsWith('https://')) && !(await ask('Удалить экран?', { text: 'Его видео, фото и звук удалятся из хранилища.', ok: 'Удалить', danger: true }))) return
   L.steps.splice(L.steps.indexOf(s), 1); dropRefs(files); selectStep(null, null); save()
 }
 const run = ref(null)                                             // «Пройти урок» — урок целиком, как ученик (как «Презентация» в Figma)
@@ -543,10 +544,10 @@ const MAX_MB = 200
 async function attach(item, file) {
   if (!item) return
   const kind = kindOf(file)
-  if (!kind || kind !== item.type) return alert(item.type === 'photo' ? 'Это не фото. Нужна картинка (JPG, PNG, WebP).' : 'Это не видео. Перетащите кружок из Telegram (видеофайл).')
-  if (file.size > MAX_MB * 1024 * 1024) return alert(`Файл больше ${MAX_MB} МБ — слишком большой.`)
+  if (!kind || kind !== item.type) return say(item.type === 'photo' ? 'Это не фото' : 'Это не видео', { text: item.type === 'photo' ? 'Нужна картинка: JPG, PNG или WebP.' : 'Перетащите кружок из Telegram (видеофайл).' })
+  if (file.size > MAX_MB * 1024 * 1024) return say('Файл слишком большой', { text: `Можно до ${MAX_MB} МБ.` })
   const id = 'm' + item.id
-  try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return alert('Не удалось сохранить файл в браузере (мало места?).') }
+  try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return say('Не удалось сохранить файл', { text: 'В браузере не хватило места.' }) }
   urls[id] = URL.createObjectURL(file); item.media = id; save()
   if (storageOn.value) upload(item, file)                   // и сразу в S3 (копия в браузере удалится после загрузки)
 }
@@ -578,7 +579,7 @@ async function fileDrop(e) {
   if (!hasFiles(e)) return
   e.preventDefault()
   const files = [...e.dataTransfer.files].filter(kindOf), first = drag.item, w = toWorld(e.clientX, e.clientY), onRail = drag.over
-  if (!files.length || !first) { Object.assign(drag, { on: false, item: null }); return alert('Перетащите кружок из Telegram (видео) или фото') }
+  if (!files.length || !first) { Object.assign(drag, { on: false, item: null }); return say('Это не кружок и не фото', { text: 'Перетащите кружок из Telegram (видео) или фото.' }) }
   first.type = kindOf(files[0]); if (first.title === T.video.t || first.title === T.photo.t) first.title = T[first.type].t
   const extra = files.slice(1).map(f => newItem(kindOf(f)))
   if (onRail) {
@@ -597,10 +598,10 @@ const sel = ref(null), editing = ref(false)
 watch(sel, (id) => liveSend({ t: 'sel', id }))
 const selItem = computed(() => findAny(sel.value))
 const selLoose = computed(() => !!doc.loose.find(v => v.id === sel.value))
-function remove() {
+async function remove() {
   const x = selItem.value; if (!x) return
-  if (x.file && !confirm(`Удалить ${x.type === 'photo' ? 'фото' : 'кружок'}? Файл удалится и из хранилища.`)) return
-  if (x.steps?.length && !confirm(`Удалить «${x.title}» вместе с интерактивным уроком (${screens(x.steps.length)})?`)) return
+  if (x.file && !(await ask(`Удалить ${x.type === 'photo' ? 'фото' : 'кружок'}?`, { text: 'Файл удалится и из хранилища.', ok: 'Удалить', danger: true }))) return
+  if (x.steps?.length && !(await ask(`Удалить «${x.title}»?`, { text: `Вместе с интерактивным уроком (${screens(x.steps.length)}).`, ok: 'Удалить', danger: true }))) return
   dropRefs((x.steps ?? []).flatMap(stepRefs))
   const a = doc.items.findIndex(v => v.id === x.id); if (a >= 0) doc.items.splice(a, 1)
   const b = doc.loose.findIndex(v => v.id === x.id); if (b >= 0) doc.loose.splice(b, 1)
@@ -619,6 +620,7 @@ function rename(x) {
 }
 function renameDone() { renaming.value = null; editing.value = false; save() }
 const onKey = (e) => {
+  if (dialog.open) return                                       // открыто окно подтверждения — клавиши его
   if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) { if (e.key === 'Escape') e.target.blur(); return }
   if (e.key === 'Enter' && sel.value && !run.value) { e.preventDefault(); return rename(selItem.value) }
   if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null } }
@@ -632,7 +634,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 function exportJson() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
 }
-function reset() { if (!confirm('Вернуть пример курса? Текущий черновик удалится.')) return; Object.assign(doc, seed()); sel.value = null; selectStep(null, null); save(); nextTick(() => fit()) }
+async function reset() { if (!(await ask('Вернуть пример курса?', { text: 'Текущий черновик удалится.', ok: 'Вернуть', danger: true }))) return; Object.assign(doc, seed()); sel.value = null; selectStep(null, null); save(); nextTick(() => fit()) }
 </script>
 
 <template>

@@ -14,7 +14,7 @@ New → Web Service → этот репозиторий, **Root Directory: `serv
 | `BOT_USERNAME` | ник бота без @ |
 | `APP_SHORT_NAME` | short name мини-приложения из @BotFather → /newapp (если приложение задано как Main Mini App — не нужно) |
 | `FIREBASE_SERVICE_ACCOUNT` | весь JSON сервисного ключа в одну строку: Firebase → Project settings → Service accounts → Generate new private key (секрет) |
-| `TEACHER_IDS` | ваш Telegram id (число; узнать — @userinfobot), несколько через запятую |
+| `TEACHER_IDS` | ваш Telegram id (число; узнать — @userinfobot), несколько через запятую. Закрыть доступ преподавателю — убрать его id и сохранить (Render перезапустит сервер): доступ закрывается сразу, даже если он уже в приложении |
 | `DEV_IDS` | Telegram id разработчиков (через запятую): всё, что у преподавателя, + блок «Для разработчика» в «Профиле» (курсоры коллег на всех экранах, проверка связи). В `TEACHER_IDS` их дублировать не нужно |
 | `SCHEDULE_TZ` | часовой пояс для «этой» и «следующей» недели (по умолчанию `Europe/Moscow`) |
 | `ALLOWED_ORIGIN` | откуда можно обращаться: `https://<ваш_ник>.github.io` (через запятую можно добавить `http://localhost:5173`) |

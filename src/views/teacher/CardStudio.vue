@@ -6,6 +6,7 @@
 //  • Фото строго 450×300 (3:2 — как место под фото у ученика): обрезаем по центру, WebP ≤ 40 КБ. Меньше 450×300 — не берём.
 //  • Файлы — в S3 (server/storage.ts, папка колоды); в карточке — ссылка ${API}/media/f/<ключ>, её открывают и ученики.
 //    Без сервера (демо) файлы остаются ссылками в памяти браузера.
+import { askText } from '../../composables/useDialog'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDecksStore } from '../../stores/decks'
@@ -144,7 +145,7 @@ function remapImport() { const f = lastImport.value?.fileObj; undoImport(); if (
 // дальше — то же окно импорта. Берётся лист из ссылки (#gid=…), без него — первый.
 const gBusy = ref(false)
 async function fromGoogle() {
-  const url = prompt('Ссылка на Google Таблицу (лист — тот, что открыт по ссылке)', '')?.trim(); if (!url) return
+  const url = (await askText('Ссылка на Google Таблицу', { text: 'Возьмётся лист, который открыт по ссылке. У таблицы должен быть доступ «Все, у кого есть ссылка».', placeholder: 'https://docs.google.com/spreadsheets/…', ok: 'Загрузить' }))?.trim(); if (!url) return
   if (!/docs\.google\.com\/spreadsheets\/d\//.test(url)) return showToast('Это не похоже на ссылку Google Таблицы', null, 'bad')
   gBusy.value = true
   try { startImport(new File([await fetchSheetCsv(url)], 'Google Таблица.csv', { type: 'text/csv' })) }
@@ -152,8 +153,8 @@ async function fromGoogle() {
   finally { gBusy.value = false }
 }
 // Фото по ссылке (если файла нет под рукой): любая https-ссылка, как из Google Диска
-function linkPhoto(c) {
-  const u = prompt('Ссылка на фото (https://…)', isLink(c.image) ? c.image : '')?.trim(); if (!u) return
+async function linkPhoto(c) {
+  const u = (await askText('Ссылка на фото', { value: isLink(c.image) ? c.image : '', placeholder: 'https://…', ok: 'Поставить' }))?.trim(); if (!u) return
   if (!/^https:\/\//i.test(u)) return showToast('Нужна ссылка, которая начинается с https://', null, 'bad')
   const old = c.image; c.image = u; if (old) forget(old)
 }
@@ -173,7 +174,7 @@ const edit = ref('')
 const ec = computed(() => cards.value.find(c => c.id === edit.value))
 function openEdit(c, k = '') { edit.value = c.id; if (k) setTimeout(() => document.querySelector(`.ce [data-k="${k}"]`)?.focus(), 30) }
 function addCard() { const n = { id: newId('c'), front: '', back: '' }; deck.value.cards.unshift(n); q.value = ''; openEdit(n, 'front') }
-function delCard(c) { removeCard(deck.value, c) }
+async function delCard(c) { await removeCard(deck.value, c) }
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'карточки' : 'карточек')
 // Вышли из только что созданной колоды, ничего не вписав (нет карточек, название не меняли) — пустую «Новую колоду» не оставляем
 const fresh = !!route.query.new

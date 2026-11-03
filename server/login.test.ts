@@ -47,4 +47,8 @@ r = await tryLogin(20);                                     ok('дальше в�
 store.set('students/s4', { name: 'Саша 2', archived: false, status: 'invited', tgId: null }); store.set('invites/inviteCodeEEEE', { studentId: 's4' })
 r = await tryLogin(20, 'invite_inviteCodeEEEE');            ok('ссылка на другую запись → переход', r.studentId === 's4' && store.get('students/s3').tgId === null && store.get('students/s3').status === 'invited')
 r = await tryLogin(20, 'invite_inviteCodeEEEE');            ok('та же (уже использованная) ссылка не мешает входу', r.role === 'student' && r.studentId === 's4')
+// Убрали преподавателя из TEACHER_IDS: в базе у него осталась роль teacher, но войти он больше не может
+const login2 = makeLogin({ db, auth, FieldValue, teacherIds: [], devIds: ['7'] })
+const st2 = await login2({ user: { id: 1, first_name: 'N1', username: 'u1', photo_url: 'p1' }, startParam: '' }).then(() => 200, (e: any) => e.status)
+ok('убран из TEACHER_IDS — вход закрыт (403), хотя в базе роль teacher', st2 === 403 && store.get('users/tg:1').role === 'teacher')
 process.exit(bad ? 1 : 0)

@@ -18,7 +18,7 @@ const ec = computed(() => props.deck.cards.find(c => c.id === props.modelValue))
 const eIdx = computed(() => list.value.findIndex(c => c.id === props.modelValue))
 const close = () => emit('update:modelValue', '')
 const step = (d) => { const n = list.value[eIdx.value + d]; if (n) emit('update:modelValue', n.id) }
-const del = () => { if (removeCard(props.deck, ec.value)) close() }
+const del = async () => { if (await removeCard(props.deck, ec.value)) close() }
 const FIELDS = [null, null, null, null, { k: 'image', kind: 'image' }, { k: 'audio', kind: 'audio' }, { k: 'exampleAudio', kind: 'audio' }]
 const { busy, attach, clearField } = useCardMedia(() => props.deck)
 // Выбрать файл кнопкой

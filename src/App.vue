@@ -5,6 +5,7 @@ import { BOT_USERNAME } from './firebase'
 import TelegramLogin from './components/TelegramLogin.vue'
 import BottomNav from './components/BottomNav.vue'
 import Toast from './components/Toast.vue'
+import AppDialog from './components/AppDialog.vue'
 import DragGhost from './components/DragGhost.vue'
 import WakeUp from './components/WakeUp.vue'
 import PresenceBar from './components/PresenceBar.vue'
@@ -67,6 +68,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
     </div>
     <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" />
   </template>
+  <AppDialog />
 </template>
 
 <style>

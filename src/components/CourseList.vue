@@ -2,6 +2,7 @@
 // Вкладка «Курсы» преподавателя: список курсов (общий для всех преподавателей) и «+ Новый курс».
 // Нажатие на курс — редактор (холст + рельс, #/courses?id=…). Курс хранится на сервере (server/courses.ts);
 // без сервера (демо) — один курс из этого браузера.
+import { ask } from '../composables/useDialog'
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
@@ -28,7 +29,7 @@ const ago = (t) => {
 }
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'элемент' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'элемента' : 'элементов')
 async function remove(c) {
-  if (!confirm(`Удалить курс «${c.title}»? Кружки и фото этого курса удалятся из хранилища.`)) return
+  if (!(await ask(`Удалить курс «${c.title}»?`, { text: 'Кружки и фото этого курса удалятся из хранилища.', ok: 'Удалить', danger: true }))) return
   if (!online) { localStorage.removeItem(LOCAL); return load() }
   const r = await apiRequest(`/courses/${c.id}`, { method: 'DELETE' }).catch(() => null)
   if (!r?.ok) return showToast('Не удалось удалить курс', null, 'bad')

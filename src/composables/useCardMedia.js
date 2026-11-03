@@ -2,6 +2,7 @@
 //  • Фото строго 450×300 (3:2 — как место под фото у ученика): обрезаем по центру, WebP ≤ 40 КБ. Меньше 450×300 — не берём.
 //  • Файлы — в S3 (server/storage.ts, папка колоды); в карточке — ссылка ${API}/media/f/<ключ>, её открывают и ученики.
 //    Без сервера (демо) файлы остаются ссылками в памяти браузера.
+import { ask } from './useDialog'
 import { reactive } from 'vue'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { imageSrc, audioSrc } from '../utils/media'
@@ -74,9 +75,9 @@ export function useCardMedia(deck) {
 }
 
 /** Удалить карточку из колоды (с вопросом, если в ней что-то есть); её фото и звук — из хранилища. true — удалили. */
-export function removeCard(deck, c) {
+export async function removeCard(deck, c) {
   const files = ['image', 'audio', 'exampleAudio'].filter(k => c[k])
-  if ((c.front || files.length) && !confirm(`Удалить карточку «${c.front || 'без слова'}»?${files.length ? ' Её фото и озвучка удалятся из хранилища.' : ''}`)) return false
+  if ((c.front || files.length) && !(await ask(`Удалить карточку «${c.front || 'без слова'}»?`, { text: files.length ? 'Её фото и озвучка удалятся из хранилища.' : '', ok: 'Удалить', danger: true }))) return false
   files.forEach(k => forget(c[k]))
   const i = deck.cards.findIndex(x => x.id === c.id); if (i >= 0) deck.cards.splice(i, 1)
   return true

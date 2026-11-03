@@ -49,6 +49,7 @@ export function makeLogin({ db, auth, FieldValue, teacherIds, devIds = [] }: Log
         tx.set(ref, { ...profile, role, studentId, createdAt: snap.exists ? snap.get('createdAt') ?? ts : ts })
       } else if (snap.exists) {
         const r = snap.get('role')
+        if (r === 'teacher') return                         // преподаватель — только пока его id в TEACHER_IDS / DEV_IDS: убрали оттуда — вход закрыт
         if (r === 'student' && !isAlive(oldSt)) return      // запись ученика удалена или в архиве — вход закрыт (поможет новая ссылка-приглашение)
         role = r; studentId = snap.get('studentId') ?? null
         tx.update(ref, profile)

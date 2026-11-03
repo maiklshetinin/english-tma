@@ -26,8 +26,12 @@ const env = process.env
 const { BOT_TOKEN, BOT_USERNAME, APP_SHORT_NAME } = env
 if (!BOT_TOKEN || !BOT_USERNAME || !env.FIREBASE_SERVICE_ACCOUNT) throw new Error('Задайте BOT_TOKEN, BOT_USERNAME и FIREBASE_SERVICE_ACCOUNT')
 const list = (v: string | undefined) => (v || '').split(',').map(s => s.trim()).filter(Boolean)
-const TEACHER_IDS = list(env.TEACHER_IDS)
-const DEV_IDS = list(env.DEV_IDS)                       // разработчики: всё, что у преподавателя, + инструменты для разработки               // Telegram id преподавателей (число, не @username — ник можно сменить)
+const TEACHER_IDS = list(env.TEACHER_IDS)                // Telegram id преподавателей (число, не @username — ник можно сменить)
+const DEV_IDS = list(env.DEV_IDS)                        // разработчики: всё, что у преподавателя, + инструменты для разработки
+// Преподаватель — только тот, чей id сейчас в TEACHER_IDS / DEV_IDS. Проверяем на каждом запросе, а не только при входе:
+// убрали id на Render и перезапустили сервер — доступ закрыт сразу, даже с уже выданным токеном.
+const isStaff = (uid: string) => { const id = String(uid).replace(/^tg:/, ''); return TEACHER_IDS.includes(id) || DEV_IDS.includes(id) }
+const roleOf = (u: { uid: string; role?: unknown }) => (u.role === 'teacher' && !isStaff(u.uid) ? undefined : u.role as 'teacher' | 'student' | undefined)
 
 initializeApp({ credential: cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) })
 const auth = getAuth(), db = getFirestore()
@@ -58,7 +62,7 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHan
 const live = makeLive({
   origins: list(env.ALLOWED_ORIGIN),
   hello: () => ({ seen: students.recentSeen() }),
-  verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(u.role), name: String(u.tgName || ''), photo: String(u.tgPhoto || ''), dev: u.dev === true } },
+  verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(roleOf(u) ?? 'none'), name: String(u.tgName || ''), photo: String(u.tgPhoto || ''), dev: u.dev === true } },
 })
 const login = makeLogin({ db, auth, FieldValue, teacherIds: TEACHER_IDS, devIds: DEV_IDS })
 const students = makeStudents({ db, FieldValue, photoByUsername, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })
@@ -90,7 +94,7 @@ app.post('/ping', wrap(async (req, res) => {
 
 // Дальше — запросы с Firebase ID-токеном (Authorization: Bearer …)
 const requireUser = async (req: Request, res: Response, next: NextFunction) => {
-  try { req.user = await auth.verifyIdToken((req.headers.authorization || '').replace(/^Bearer /, '')); next() }
+  try { const u = await auth.verifyIdToken((req.headers.authorization || '').replace(/^Bearer /, '')); req.user = { ...u, role: roleOf(u) }; next() }
   catch { res.status(401).json({ error: 'unauthorized' }) }
 }
 const requireTeacher = (req: Request, res: Response, next: NextFunction) => (req.user.role === 'teacher' ? next() : res.status(403).json({ error: 'teacher only' }))
