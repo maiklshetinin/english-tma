@@ -80,7 +80,7 @@ function addDeck() { const d = deckStore.add('Новая колода'); router.
 .add { display: inline-flex; align-items: center; gap: 6px }
 /* Ряд карточек внахлёст в середине строки */
 .row-pile { --w: 90px; --h: 60px; --step: min(30px, (100% - var(--w)) / max(1, var(--n) - 1)); position: relative; flex: 1; min-width: 80px; height: var(--h) }
-.rc { position: absolute; top: 0; left: calc(var(--i) * var(--step)); width: var(--w); height: var(--h); display: flex; align-items: flex-end; overflow: hidden; border-radius: 6px; border: 1.5px solid var(--card); background: var(--surface) center / cover no-repeat; box-shadow: 0 1px 4px rgba(0, 0, 0, .18) }
+.rc { position: absolute; top: 0; left: calc(var(--i) * var(--step)); width: var(--w); height: var(--h); display: flex; align-items: flex-end; overflow: hidden; border-radius: 6px; background: var(--surface) center / cover no-repeat; box-shadow: 0 1px 4px rgba(0, 0, 0, .18) }
 .rc:not(.ph) { align-items: center; justify-content: center; background-color: #eef0f3 }
 .rc b { width: 100%; padding: 0 5px; font-size: 12px; line-height: 1.1; color: var(--text); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .rc.top.ph b { padding: 10px 5px 3px; color: #fff; text-align: left; background: linear-gradient(transparent, rgba(0, 0, 0, .6)) }
