@@ -74,7 +74,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
 </script>
 
 <template>
-  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade }]">
+  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date }]">
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
         <span>{{ tzShort(tz) }}</span>
@@ -86,7 +86,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
     </div>
     <div v-for="h in HOURS" :key="h" class="g">
       <span class="tm" :class="{ now: rowNow(h) }">{{ rowNow(h) ? hh(h, now.minute) : hh(h) }}</span>
-      <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h), past: slotPast(d, h, now) }]" :style="cellNow(d, h) ? { '--fill': (now.minute / 60 * 100) + '%' } : null"
+      <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h), past: slotPast(d, h, now)}]" :style="cellNow(d, h) ? { '--fill': (now.minute / 60 * 100) + '%' } : null"
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
@@ -141,8 +141,12 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .dh { position: relative }
 .dlost { position: absolute; left: 50%; top: calc(100% - 7px); transform: translateX(-50%); z-index: 2; padding: 0 4px; border-radius: 6px; background: var(--card); font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 14px; white-space: nowrap; pointer-events: none }      /* потеряно из-за отмен — мелко красным под суммой, поверх зазора: шапка не прыгает */
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
-/* «Сегодня» и текущее время — серой подложкой, текст обычный */
+/* «Сегодня» — серая шапка дня во всю ширину колонки (края совпадают с линиями таблицы), скруглена только сверху и стоит прямо на таблице */
 .dh.today { background: var(--group) } .dh.today b, .dh.today small { color: var(--text) }
+.wk.gs-cells .dh.today { margin: 0; border-radius: 12px 12px 0 0 }
+/* Сегодня понедельник / воскресенье — угол таблицы под шапкой дня прямой, иначе в углу остаётся белый «треугольничек» */
+.wk.gs-cells.td-first .g.head + .g > .cell:nth-child(2) { border-top-left-radius: 0 }
+.wk.gs-cells.td-last .g.head + .g > .cell:last-child { border-top-right-radius: 0 }
 .cell { position: relative; height: 38px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); transition: background .1s, box-shadow .1s }      /* белые ячейки с тонкой рамкой */
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
 .tm.now { background: var(--group); border-radius: 10px; color: var(--text); font-weight: 900 }
