@@ -2,6 +2,7 @@
 // «Слова» = мини-Anki. Одинаковый для преподавателя и ученика; разница в правах:
 //  преподаватель (canManage) создаёт колоды и правит карточки — это его база колод; назначают колоду ученику в карточке ученика (StudentDecks.vue);
 //  ученик только учит назначенные ему колоды. Прогресс у каждого свой (stores/srs.ts).
+import { ask } from '../composables/useDialog'
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { deckCounts, buildQueue } from '../composables/useSrs'
@@ -25,7 +26,11 @@ const MAXL = 30
 const pile = (d) => { const q = buildQueue(d, props.userKey); return { n: q.length, top: q[0], cards: q.slice(0, MAXL) } }
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'карточки' : 'карточек')
 // Удаление — сразу, с «Отменить» в уведомлении (как в Telegram), без лишнего окна подтверждения
-function removeDeck(d) { const gone = deckStore.remove(d); if (gone) showToast(`Колода удалена: ${d.title}`, () => deckStore.restore(gone)) }
+const cardsN = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'карточки' : 'карточек'}`
+async function removeDeck(d) {
+  if (!(await ask(`Удалить колоду «${d.title}»?`, { text: d.cards.length ? `${cardsN(d.cards.length)} удалятся вместе с ней.` : '', ok: 'Удалить', danger: true }))) return
+  const gone = deckStore.remove(d); if (gone) showToast(`Колода удалена: ${d.title}`, () => deckStore.restore(gone))
+}
 const back = () => { screen.value = 'list'; deckId.value = null }
 // «+ Добавить» — сразу пустая колода и её редактор (название правится там же, сверху; new=1 — поле названия в фокусе)
 function addDeck() { const d = deckStore.add('Новая колода'); router.push({ name: 'cards-studio', query: { id: d.id, new: '1' } }) }

@@ -1,6 +1,7 @@
 <script setup>
 // Вкладка «Курсы» (раньше «Путь») преподавателя: сверху — курсы (редактор с холстом и рельсом), ниже — пресеты пути. Пресет — заготовка (юниты + кружки),
 // которую добавляют в путь ученика из его профиля. Путь конкретного ученика правится в карточке ученика.
+import { ask } from '../../composables/useDialog'
 import { ref, computed } from 'vue'
 import { newId } from '../../utils/id'
 import { showToast } from '../../composables/useToast'
@@ -17,7 +18,8 @@ function create() {
   sel.value = p.id; name.value = ''; creating.value = false
 }
 const copy = () => { sel.value = pathStore.duplicatePreset(preset.value).id }
-function remove() {
+async function remove() {
+  if (!(await ask(`Удалить пресет «${preset.value.name}»?`, { ok: 'Удалить', danger: true }))) return
   const gone = pathStore.removePreset(preset.value.id); sel.value = pathStore.presets[0]?.id ?? null
   showToast(`Пресет удалён: ${gone.preset.name}`, () => { pathStore.restorePreset(gone); sel.value = gone.preset.id })
 }

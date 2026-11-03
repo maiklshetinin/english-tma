@@ -1,6 +1,7 @@
 <script setup>
 // «Обозреватель» карточек колоды (как Browse в Anki): поиск, фильтр по состоянию, статус для данного пользователя.
 // Преподаватель (canManage) может добавлять, править, скрывать и удалять карточки.
+import { ask } from '../composables/useDialog'
 import { ref, reactive, computed } from 'vue'
 import { relDay } from '../store/app'
 import { newId } from '../utils/id'
@@ -33,7 +34,8 @@ function add() {
   props.deck.cards.push({ id: newId('c'), front: f.front.trim(), back: f.back.trim(), example: f.example.trim() })
   f.front = f.back = f.example = ''
 }
-function del(c) {
+async function del(c) {
+  if (!(await ask(`Удалить карточку «${c.front || 'без слова'}»?`, { ok: 'Удалить', danger: true }))) return
   const i = props.deck.cards.findIndex(x => x.id === c.id); if (i < 0) return
   const [gone] = props.deck.cards.splice(i, 1); edit.value = null
   showToast(`Карточка удалена: ${gone.front}`, () => props.deck.cards.splice(Math.min(i, props.deck.cards.length), 0, gone))

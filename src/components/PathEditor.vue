@@ -1,6 +1,7 @@
 <script setup>
 // Конструктор пути (для ученика и для пресета): «Просмотр / Правка», юниты и кружки добавляются, переименовываются, переставляются и удаляются.
 // preset — режим пресета: без дат и выполнения, без открытия кружков.
+import { ask } from '../composables/useDialog'
 import { ref } from 'vue'
 import { addNode, moveNode, removeNode, addUnit, moveUnit, removeUnit, sortAll } from '../store/app'
 import { showToast } from '../composables/useToast'
@@ -15,12 +16,16 @@ const edit = ref(false), pos = ref(null), sel = ref(null)
 
 const add = ({ ui, type }) => { addNode(props.units, ui, type, !props.preset); pos.value = { ui, i: props.units[ui].nodes.length - 1 } }   // сразу открываем правку нового кружка
 const move = (dir) => { const { ui, i } = pos.value; moveNode(props.units, ui, i, dir); pos.value = { ui, i: Math.max(0, Math.min(props.units[ui].nodes.length - 1, i + dir)) } }
-const remove = () => { removeAt(pos.value); pos.value = null }
-function removeAt({ ui, i }) {
+const remove = async () => { if (await removeAt(pos.value)) pos.value = null }
+async function removeAt({ ui, i }) {
+  if (!(await ask(`Удалить кружок «${props.units[ui].nodes[i]?.title || ''}»?`, { ok: 'Удалить', danger: true }))) return false
   const nodes = props.units[ui].nodes, [n] = removeNode(props.units, ui, i)
   showToast(`Кружок удалён: ${n.title}`, () => nodes.splice(Math.min(i, nodes.length), 0, n))
+  return true
 }
-function removeUnitAt(ui) {
+async function removeUnitAt(ui) {
+  const n = props.units[ui]?.nodes.length ?? 0
+  if (!(await ask(`Удалить юнит «${props.units[ui]?.title || ''}»?`, { text: n ? `Вместе с ним удалятся кружки: ${n}.` : '', ok: 'Удалить', danger: true }))) return
   const u = removeUnit(props.units, ui)
   showToast(`Юнит удалён: ${u.title}`, () => props.units.splice(Math.min(ui, props.units.length), 0, u))
 }

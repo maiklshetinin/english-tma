@@ -1,6 +1,7 @@
 <script setup>
 // Настройки колоды (окно из редактора колоды): название, лимит новых в день, Google Таблица, удаление.
 // Колода в «Словах» — только база преподавателя: назначают её ученику в его карточке («Путь и слова» → «Колоды», StudentDecks.vue).
+import { ask } from '../composables/useDialog'
 import { ref } from 'vue'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
@@ -9,9 +10,11 @@ import { useDecksStore } from '../stores/decks'
 const deckStore = useDecksStore()
 const props = defineProps({ deck: { type: Object, required: true } })
 const emit = defineEmits(['close'])
-const d = ref(props.deck), sure = ref(false)
+const d = ref(props.deck)
 const step = (n) => { d.value.newPerDay = Math.min(500, Math.max(0, (Number(d.value.newPerDay) || 0) + n)) }
-function remove() {
+async function remove() {
+  const n = d.value.cards.length
+  if (!(await ask(`Удалить колоду «${d.value.title}»?`, { text: n ? `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'карточка' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'карточки' : 'карточек'} удалятся вместе с ней.` : '', ok: 'Удалить', danger: true }))) return
   const gone = deckStore.remove(d.value); emit('close')
   showToast(`Колода удалена: ${gone.deck.title}`, () => deckStore.restore(gone))
 }
@@ -35,8 +38,7 @@ function remove() {
         </div>
 
         <div class="ft">
-          <button v-if="!sure" class="lnk red" @click="sure = true"><AppIcon name="trash" :size="15" /> Удалить</button>
-          <button v-else class="lnk red on" @click="remove">Точно удалить ({{ d.cards.length }} карт.)?</button>
+          <button class="lnk red" @click="remove"><AppIcon name="trash" :size="15" /> Удалить</button>
           <button class="lnk" @click="emit('close')">Готово</button>
         </div>
       </template>
