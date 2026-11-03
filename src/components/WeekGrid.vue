@@ -84,9 +84,9 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         <span class="dsum" :class="{ ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'">{{ money(d).plan ? fmtMoney(money(d).plan) : 0 }}</span>
         <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−{{ fmtMoney(money(d).lost) }}</span></span>
     </div>
-    <div v-for="h in HOURS" :key="h" class="g">
+    <div v-for="h in HOURS" :key="h" class="g" :class="{ nowrow: rowNow(h) }">
       <span class="tm" :class="{ now: rowNow(h) }">{{ rowNow(h) ? hh(h, now.minute) : hh(h) }}</span>
-      <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h), past: slotPast(d, h, now)}]" :style="cellNow(d, h) ? { '--fill': (now.minute / 60 * 100) + '%' } : null"
+      <div v-for="d in dates" :key="d" class="cell" :class="[dropState(d, h), { free: !at(d, h).length, now: cellNow(d, h), past: slotPast(d, h, now), tcol: d === now.date }]" :style="cellNow(d, h) ? { '--fill': (now.minute / 60 * 100) + '%' } : null"
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
@@ -230,6 +230,12 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk.gs-cells .g.head + .g > .cell { box-shadow: inset 0 1px 0 var(--border), inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g.head + .g > .cell:nth-child(2) { box-shadow: inset 1px 1px 0 var(--border), inset -1px -1px 0 var(--border); border-top-left-radius: 10px }
 .wk.gs-cells .g.head + .g > .cell:last-child { border-top-right-radius: 10px }
+/* Подсветка «сегодня» и текущего часа переходит в таблицу без черты: под шапкой дня нет верхней линии, справа от текущего часа — левой */
+.wk.gs-cells .g.head + .g > .cell.tcol:not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
+.wk.gs-cells .g.head + .g > .cell.tcol:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 1px 0 0 var(--border), inset -1px -1px 0 var(--border) }
+.wk.gs-cells .g.nowrow > .cell:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
+.wk.gs-cells .g.head + .g.nowrow > .cell:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 1px 0 var(--border), inset -1px -1px 0 var(--border) }
+.wk.gs-cells .g.head + .g.nowrow > .cell.tcol:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g:last-child > .cell:nth-child(2) { border-bottom-left-radius: 10px } .wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
 @media (min-width: 720px) { .wk.gs-cells .tm { margin-right: 6px } }
 .wk.gs-cells .chip { inset: 3px; border-radius: 7px }
