@@ -203,7 +203,8 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk .chip.up { isolation: isolate }
 @media (min-width: 720px) {
   /* Капсула (серая или голубая) — кружок ученика слева, как аватарка в списке чатов Telegram */
-  .wk .chip.up { padding-left: 0; border-radius: 999px }
+  .wk.ls-blue .chip.up, .wk.ls-gray .chip.up { padding-left: 3px; border-radius: 999px }      /* сильнее, чем скругление клеток (.wk.gs-cells .chip) */
+  .wk.ls-blue .chip.up :deep(.av), .wk.ls-gray .chip.up :deep(.av) { width: 34px !important; height: 34px !important; font-size: 15px !important }      /* кружок внутри капсулы, с отступом от края */
   .wk.ls-blue .chip.up { box-shadow: 0 2px 5px rgba(28, 120, 200, .18) } .wk.ls-blue .chip.up .nm { color: #1a5b8a }
   .wk.ls-gray .chip.up { box-shadow: 0 2px 5px rgba(0, 0, 0, .1) }
 }
