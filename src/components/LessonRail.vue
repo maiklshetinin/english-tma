@@ -6,7 +6,7 @@
 //    пример — текстом; видео / фото / звук — нажать на место под файл или перетащить файл; «из карточек» — слова из колод.
 //  • Переставить экран — тянуть за шапку карточки вдоль рельса. Удалить — корзина в шапке или Delete.
 // Координаты — холста (родитель масштабирует .world); x, y — центр бусины урока на вертикальном рельсе.
-import { ask, say } from '../composables/useDialog'
+import { say } from '../composables/useDialog'
 import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
 import LessonPlayer from './LessonPlayer.vue'
@@ -64,7 +64,6 @@ const cardStyle = (s, i) => {
 
 async function removeStep(s) {
   const files = stepRefs(s)
-  if (files.some(f => !f.startsWith('https://')) && !(await ask('Удалить экран?', { text: 'Его видео, фото и звук удалятся из хранилища.', ok: 'Удалить', danger: true }))) return
   props.item.steps.splice(props.item.steps.indexOf(s), 1); props.dropFiles(files); emit('select', null); changed()
 }
 defineExpose({ removeStep })
