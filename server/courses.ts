@@ -1,5 +1,5 @@
 // Курсы (редактор «рельс»): courses/<id> — { teacherId, title, mode, progress, items, loose, notes, updatedAt }.
-//  • notes — стикеры-заметки на холсте: { id, x, y, text, color }; ink — рисунки маркером: { id, c, w, p: [x0, y0, x1, y1, …] }.
+//  • notes — стикеры-заметки на холсте: { id, x, y, text, color, by?, sz?, font?, b?, st?, list?, nob? }; ink — рисунки маркером: { id, c, w, p: [x0, y0, x1, y1, …] }.
 //  • items — задания по порядку на рельсе; loose — черновики на холсте (с x, y); у кружка и фото — file: ключ файла в S3.
 //  • У урока (и «Слова», «Домашка», «Тест») — steps: экраны интерактивного урока (src/utils/lesson.ts). Файлы экранов — ключи
 //    файлов курса в S3 или https-ссылки (фото и озвучка карточек); остальное (файлы, которые пока только в браузере) выкидываем.
@@ -104,7 +104,11 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       const notes = (Array.isArray(b.notes) ? b.notes : []).slice(0, NOTES_MAX).map((raw) => {
         const r = (raw ?? {}) as Record<string, unknown>
         if (!ID.test(String(r.id))) throw fail(400, 'bad note')
-        return { id: String(r.id), x: num(r.x), y: num(r.y), text: str(r.text, 1000), color: NOTE_COLORS.includes(String(r.color)) ? String(r.color) : '#ffe99a' }
+        const n: Record<string, unknown> = { id: String(r.id), x: num(r.x), y: num(r.y), text: str(r.text, 1000), color: NOTE_COLORS.includes(String(r.color)) ? String(r.color) : '#ffe99a' }
+        // как в FigJam: кто поставил, размер и шрифт текста, жирный / зачёркнутый / список, скрыть подпись
+        put(n, 'by', str(r.by, 60)); if (r.sz === 'm' || r.sz === 'l') n.sz = r.sz; if (r.font === 'hand') n.font = 'hand'
+        for (const k of ['b', 'st', 'list', 'nob']) if (r[k] === true) n[k] = true
+        return n
       })
       // Рисунки маркером: цвет #rrggbb, толщина 1–20, до 4000 чисел (2000 точек) в штрихе
       const ink = (Array.isArray(b.ink) ? b.ink : []).slice(0, INK_MAX).map((raw) => {

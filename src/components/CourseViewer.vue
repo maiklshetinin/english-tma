@@ -101,7 +101,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <div v-else class="cr">
       <h2 class="ctl">{{ course.title }}</h2>
       <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ done }} из {{ total }}</b><span>·</span><b>{{ total ? Math.round(done / total * 100) : 0 }}%</b></div>
-      <section v-for="u in units" :key="u.id" class="un" :class="{ full: u.tasks.length && u.pct === 100 }">
+      <section v-for="u in units" :key="u.id" class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
         <template v-if="u.title">
           <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b><svg v-if="u.tasks.length && u.pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
           <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em>{{ u.pct }}%</em></div>
@@ -150,7 +150,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .cpill { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 14px; font-size: 16px }
 .cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
 .un { display: grid; padding: 22px 24px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: #fff }
-.un.full { border-color: #1fbe78; background: #f2fbf7 }
+.un.all { border-color: #1fbe78; background: #f2fbf7 }
 .uh { display: flex; align-items: center; gap: 8px; white-space: nowrap }
 .uh b { font-size: 24px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }

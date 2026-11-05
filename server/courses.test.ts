@@ -50,6 +50,9 @@ const ik = store.get('courses/k5').ink[0]
 ok('рисунки: цвет только #rrggbb, толщина ≤ 20, точки парами и целые', ik.c === '#1e1e1e' && ik.w === 20 && ik.p.join() === '2,2' && !('junk' in ik))
 await C.put(me, 'k6', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's1', kind: 'intro', word: 'x', video: 't/tg_1/c/k1/v.mp4' }] }] })
 ok('общий файл (экран скопирован в другой курс) — виден как нужный другим курсам', (await C.filesElsewhere('k1')).has('t/tg_1/c/k1/v.mp4') && !(await C.filesElsewhere('k6')).has('t/tg_1/c/k6/zz.mp4'))
+await C.put(me, 'k7', { ...course, notes: [{ id: 'n2', x: 0, y: 0, text: 'x', color: '#ffe99a', by: 'Миша', sz: 'l', font: 'hand', b: true, st: 'yes', list: true, nob: 1, junk: 2 }] })
+const n2 = store.get('courses/k7').notes[0]
+ok('стикер: автор, размер, шрифт и отметки сохраняются, мусор — нет', n2.by === 'Миша' && n2.sz === 'l' && n2.font === 'hand' && n2.b === true && n2.list === true && !('st' in n2) && !('nob' in n2) && !('junk' in n2))
 ok('удалить, потом — 404', (await C.remove('k1'), !store.has('courses/k1')) && await code(C.get('k1')) === 404)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')

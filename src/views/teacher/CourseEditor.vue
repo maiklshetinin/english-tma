@@ -13,7 +13,8 @@
 //  • Стикеры-заметки, как в FigJam: doc.notes, лежат на холсте; двойной клик — писать, тянуть — двигать.
 // Только для преподавателя. Хранение: на сервере (Firestore, курс целиком; кружки — в S3 через сервер), а в браузере —
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
-import { ask, say, dialog } from '../../composables/useDialog'
+import { ask, say, askText, dialog } from '../../composables/useDialog'
+import { useAuthStore } from '../../stores/auth'
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import BackButton from '../../components/BackButton.vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -76,7 +77,7 @@ const save = () => {
 // Курс после правки уходит коллегам в этом же курсе через ~0,1 с (сохраняет в базу тот, кто правил). Одновременные правки:
 // побеждает последняя — поэтому выбранное коллегой подсвечено его цветом.
 let remote = false, shareT = 0
-const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), text: n.text ?? '', color: n.color })
+const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), text: n.text ?? '', color: n.color, ...(n.by ? { by: n.by } : {}), ...(n.sz && n.sz !== 's' ? { sz: n.sz } : {}), ...(n.font ? { font: n.font } : {}), ...(n.b ? { b: true } : {}), ...(n.st ? { st: true } : {}), ...(n.list ? { list: true } : {}), ...(n.nob ? { nob: true } : {}) })
 const cleanInk = (k) => ({ id: k.id, c: k.c, w: k.w, p: k.p.map(Math.round) })
 const payload = () => ({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk) })
 function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
@@ -263,27 +264,30 @@ function resolveRef(v, kind) {
 const pick = reactive({ lesson: null, step: null })                // открытый экран: урок и экран (или 'final')
 const activeLesson = computed(() => pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
 // «Все уроки» — ветки всех уроков курса раскрыты сразу (видно, что где, и экраны удобно копировать между уроками)
-const allRails = ref((() => { try { return localStorage.getItem('tma.allRails') === '1' } catch { return false } })())
-watch(allRails, (v) => { try { localStorage.setItem('tma.allRails', v ? '1' : '0') } catch { /* — */ } })
+const allRails = ref(false)            // кнопку «Все уроки» убрали (05.11.2026): ветки — у уроков с экранами и у выбранного
 const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (allRails.value || x.steps?.length || x.id === activeLesson.value)))
 
 // ---------- Копировать / вставить экран (Ctrl+C / Ctrl+V или кнопки на ветке) ----------
 // Копия — с новым id; файлы общие (удалятся, только когда их не останется ни у одного экрана), файлы «только в браузере» — копируются.
 const clip = ref(null)                                   // { course, step }
 function copyStep(s, course = doc.id) {
-  if (!s) return
-  clip.value = { course, step: JSON.parse(JSON.stringify(s)) }
-  showToast(`Экран «${KINDS[s.kind].t}» скопирован — выберите урок или экран и нажмите Ctrl+V (или «Вставить» на ветке)`)
+  const list = (Array.isArray(s) ? s : [s]).filter(Boolean); if (!list.length) return
+  clip.value = { course, steps: JSON.parse(JSON.stringify(list)) }
+  showToast(`${list.length === 1 ? `Экран «${KINDS[list[0].kind].t}» скопирован` : `Скопировано экранов: ${list.length}`} — выберите урок или экран и нажмите Ctrl+V (или «Вставить» на ветке)`)
 }
 async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = pick.lesson === lessonId ? pick.step : null) {
   if (!clip.value) return
   const L = lessonId ? findAny(lessonId) : null
   if (!L || !INTERACTIVE.includes(L.type)) return say('Куда вставить?', { text: 'Выберите урок или экран на ветке урока — копия встанет после него.' })
   if (!Array.isArray(L.steps)) L.steps = []
-  if (L.steps.length >= STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
-  const s = { ...JSON.parse(JSON.stringify(clip.value.step)), id: stepId() }
-  const at = after && after !== 'final' ? L.steps.findIndex(v => v.id === after) + 1 : L.steps.length
-  L.steps.splice(at > 0 ? at : L.steps.length, 0, s)
+  if (L.steps.length + clip.value.steps.length > STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
+  let at = after && after !== 'final' ? L.steps.findIndex(v => v.id === after) + 1 : L.steps.length
+  if (at <= 0) at = L.steps.length
+  let s = null
+  for (const src of clip.value.steps) { s = { ...JSON.parse(JSON.stringify(src)), id: stepId() }; L.steps.splice(at++, 0, s); await localCopies(s) }
+  selectStep(L.id, s.id); setProgress(doc.progress); save()
+}
+async function localCopies(s) {
   // файлы, которые пока только в этом браузере, — своя копия (иначе после загрузки в хранилище у одной из копий файл пропадёт)
   const slots = [...['image', 'audio', 'video', 'exAudio'].map(f => [s, f, null]), ...(s.opts ?? []).flatMap((o, k) => [[o, 'image', k], [o, 'audio', k]])]
   for (const [obj, f, k] of slots) {
@@ -295,7 +299,6 @@ async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = p
     urls[id] = URL.createObjectURL(b); obj[f] = 'idb:' + id
     if (storageOn.value) uploadStepFile(s.id, f, k, b instanceof File ? b : new File([b], 'file', { type: b.type }), id)
   }
-  selectStep(L.id, s.id); setProgress(doc.progress); save()
 }
 
 // ---------- «Все курсы»: остальные курсы — справа на том же холсте (смотреть, проходить, копировать экраны) ----------
@@ -365,7 +368,8 @@ const noteColor = ref('#ffe99a'), noteTool = ref(false)            // как в 
 const noteSel = ref(null), noteEdit = ref(null)
 function addNote(color, at) {
   const r = board.value.getBoundingClientRect(), w = at ?? toWorld(r.left + r.width / 2, r.top + r.height / 2)
-  const n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), x: Math.round(w.x - 95), y: Math.round(w.y - 95), text: '', color }
+  const u = useAuthStore().user, by = (u?.first_name || u?.username || '').slice(0, 60)
+  const n = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), x: Math.round(w.x - 120), y: Math.round(w.y - 120), text: '', color, ...(by ? { by } : {}) }
   noteTool.value = false
   ;(doc.notes ??= []).push(n); tray.value = null; noteSel.value = n.id; save()
   nextTick(() => editNote(n.id))
@@ -380,6 +384,19 @@ function noteDown(e, n) {
 }
 function noteMove(e) { if (!nm) return; sendCursor(e); const w = toWorld(e.clientX, e.clientY); nm.n.x = Math.round(w.x - nm.dx); nm.n.y = Math.round(w.y - nm.dy); nm.moved = true }
 function noteUp() { removeEventListener('pointermove', noteMove); if (nm?.moved) save(); nm = null }
+// Панель стикера, как в FigJam: цвет, шрифт, размер, жирный, зачёркнутый, ссылка, список, подпись автора
+const nmenu = ref(null)                         // открытое меню панели: 'color' | 'font' | 'size'
+watch(noteSel, () => { nmenu.value = null })
+const NOTE_SIZES = { s: 'Маленький', m: 'Средний', l: 'Крупный' }
+const NOTE_FONTS = { '': 'Обычный', hand: 'Рукописный' }
+function noteToggle(n, k) { n[k] = !n[k]; if (!n[k]) delete n[k]; save() }
+async function noteLink(n) {
+  const url = await askText('Ссылка', { value: 'https://', placeholder: 'https://…', ok: 'Вставить' })
+  if (!url || !/^https?:\/\/\S+$/.test(url.trim())) return
+  n.text = (n.text ? n.text.replace(/\s*$/, ' ') : '') + url.trim(); save()
+}
+// просмотр стикера: строки (со списком — точками) и кликабельные ссылки
+const noteLines = (t) => (t ?? '').split('\n').map(l => l.split(/(https?:\/\/\S+)/g).map((x, i) => ({ x, url: i % 2 === 1 })))
 function delNote(id) { const i = doc.notes.findIndex(n => n.id === id); if (i >= 0) doc.notes.splice(i, 1); noteSel.value = noteEdit.value = null; save() }
 
 // ---------- Инструменты, как в FigJam: стрелка (выделение рамкой), рука (двигать холст), маркер (рисовать) ----------
@@ -420,7 +437,14 @@ const boxOf = () => {                              // всё, что можно 
   const out = []
   order.value.forEach((x, i) => { const p = pos(i); out.push(x.type === 'unit' ? { id: x.id, k: 'item', x0: p.x - 46, y0: p.y - 40, x1: p.x + 400, y1: p.y + 20 } : { id: x.id, k: 'item', x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) })   // юнит — заголовок с полоской справа
   for (const x of doc.loose) out.push({ id: x.id, k: 'item', x0: x.x - 34, y0: x.y - 34, x1: x.x + 34, y1: x.y + 34 })
-  for (const n of doc.notes ?? []) out.push({ id: n.id, k: 'note', x0: n.x, y0: n.y, x1: n.x + 190, y1: n.y + (noteH[n.id] ?? 190) })
+  for (const n of doc.notes ?? []) out.push({ id: n.id, k: 'note', x0: n.x, y0: n.y, x1: n.x + 240, y1: n.y + (noteH[n.id] ?? 240) })
+  // экраны уроков (свои и соседних курсов) — чтобы рамкой выделить и скопировать сразу несколько
+  const rails = [...lessonRails.value.map(r => ({ course: doc.id, x: r.x, p: r.p, key: '' })),
+    ...othersL.value.flatMap(o => (o.items ?? []).map((x, i) => ({ course: o.id, x, p: { x: o.ox + o.L[i].x, y: o.L[i].y }, key: 'o' + o.id })).filter(r => INTERACTIVE.includes(r.x.type)))]
+  for (const r of rails) (r.x.steps ?? []).forEach((st, i) => {
+    const x0 = r.p.x + 280 + i * 520, y0 = r.p.y + 40
+    out.push({ id: 'st:' + r.course + ':' + st.id, k: 'step', course: r.course, lesson: r.x.id, s: st, x0, y0, x1: x0 + 460, y1: y0 + Math.min(700, railHs[r.key + r.x.id] ?? 420) })
+  })
   for (const k of doc.ink ?? []) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (let i = 0; i < k.p.length; i += 2) { x0 = Math.min(x0, k.p[i]); x1 = Math.max(x1, k.p[i]); y0 = Math.min(y0, k.p[i + 1]); y1 = Math.max(y1, k.p[i + 1]) } out.push({ id: k.id, k: 'ink', x0: x0 - k.w, y0: y0 - k.w, x1: x1 + k.w, y1: y1 + k.w }) }
   return out
 }
@@ -442,15 +466,18 @@ const selBox = computed(() => {
 const isM = (id) => msel.value.includes(id)
 async function delSelected() {
   const ids = new Set(msel.value); if (!ids.size) return
+  const steps = boxOf().filter(o => o.k === 'step' && o.course === doc.id && ids.has(o.id) && !ids.has(o.lesson))     // свои экраны (чужие курсы не трогаем)
   const items = [...doc.items, ...doc.loose].filter(x => ids.has(x.id)), notes = (doc.notes ?? []).filter(n => ids.has(n.id)), inks = (doc.ink ?? []).filter(k => ids.has(k.id))
-  const n = items.length + notes.length + inks.length
-  const what = [items.length && `заданий: ${items.length}`, notes.length && `стикеров: ${notes.length}`, inks.length && `рисунков: ${inks.length}`].filter(Boolean).join(', ')
+  const n = items.length + notes.length + inks.length + steps.length
+  if (!n) return
+  const what = [items.length && `заданий: ${items.length}`, steps.length && `экранов: ${steps.length}`, notes.length && `стикеров: ${notes.length}`, inks.length && `рисунков: ${inks.length}`].filter(Boolean).join(', ')
   if (!(await ask(`Удалить выделенное (${n})?`, { text: what + (items.some(x => x.file || x.steps?.length) ? '. Файлы и экраны уроков удалятся из хранилища.' : '.'), ok: 'Удалить', danger: true }))) return
   for (const x of items) {
     dropRefs((x.steps ?? []).flatMap(stepRefs))
     if (x.media) mediaOp('readwrite', st => st.delete(x.media)).catch(() => {})
     if (x.file && online) apiRequest('/media/delete', { method: 'POST', body: JSON.stringify({ key: x.file }) }).catch(() => {})
   }
+  for (const o of steps) { const L = findAny(o.lesson); const k = L?.steps?.indexOf(o.s) ?? -1; if (k >= 0) { L.steps.splice(k, 1); dropRefs(stepRefs(o.s)) } }
   doc.items = doc.items.filter(x => !ids.has(x.id)); doc.loose = doc.loose.filter(x => !ids.has(x.id))
   doc.notes = (doc.notes ?? []).filter(n => !ids.has(n.id)); doc.ink = (doc.ink ?? []).filter(k => !ids.has(k.id))
   msel.value = []; sel.value = null; selectStep(null, null); noteSel.value = null; setProgress(doc.progress); save()
@@ -480,7 +507,7 @@ function onWheel(e) {
 }
 // «Весь курс»: рельс, черновики и сводка — на экране целиком
 function fit(anim = true) {
-  const ps = [...layout.value, ...doc.loose.map(l => ({ x: l.x, y: l.y })), ...(doc.notes ?? []).map(n => ({ x: n.x + 100, y: n.y + 100 })),
+  const ps = [...layout.value, ...doc.loose.map(l => ({ x: l.x, y: l.y })), ...(doc.notes ?? []).map(n => ({ x: n.x + 120, y: n.y + 120 })),
     ...lessonRails.value.map(({ x, p }) => ({ x: p.x + 230 + ((x.steps?.length ?? 0) + 1) * 92 - 150, y: p.y })),
     ...othersL.value.flatMap(o => [{ x: o.ox, y: -170 }, { x: o.ox + widthOf(o.items ?? []) - 200, y: o.h - 200 }])]          // «Все курсы» — и соседние курсы
   const xs = [...ps.map(p => p.x - 200), ...ps.map(p => p.x + 200), -230, 230], ys = [...ps.map(p => p.y + 70), -250]
@@ -653,7 +680,7 @@ const ghost = ref(null)                                   // выбран сти
 watch(() => noteTool.value, (v) => { if (!v) ghost.value = null })
 function boardMove(e) {
   sendCursor(e)
-  if (noteTool.value && e.pointerType !== 'touch') { const w = toWorld(e.clientX, e.clientY); ghost.value = { x: Math.round(w.x - 95), y: Math.round(w.y - 95) } }
+  if (noteTool.value && e.pointerType !== 'touch') { const w = toWorld(e.clientX, e.clientY); ghost.value = { x: Math.round(w.x - 120), y: Math.round(w.y - 120) } }
   if (ink) return inkMove(e)
   if (mq.value) return mqMove(e)
   if (touches.has(e.pointerId)) {
@@ -792,6 +819,10 @@ const onKey = (e) => {
   if ((e.ctrlKey || e.metaKey) && !run.value && (e.code === 'KeyC' || e.code === 'KeyV')) {
     if (window.getSelection()?.toString()) return                  // выделен текст — обычное копирование
     e.preventDefault()
+    if (e.code === 'KeyC' && msel.value.some(id => id.startsWith('st:'))) {          // рамкой выделены экраны — копируем все (по порядку на холсте)
+      const sel = boxOf().filter(o => o.k === 'step' && msel.value.includes(o.id)).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)
+      return copyStep(sel.map(o => o.s), sel[0].course)
+    }
     if (e.code === 'KeyC') { if (opick.value && !pick.step) return copyStep(opick.value.s, opick.value.course); const L = findAny(pick.lesson); return copyStep(L?.steps?.find(v => v.id === pick.step)) }
     return pasteStep(pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) ? selItem.value.id : activeLesson.value))
   }
@@ -880,8 +911,30 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Стикеры, как в FigJam -->
         <div v-for="n in doc.notes" :key="n.id" class="note" :data-note="n.id" :class="{ on: noteSel === n.id || isM(n.id), edit: noteEdit === n.id }" :ref="(el) => { if (el) noteH[n.id] = el.offsetHeight }" :style="{ left: n.x + 'px', top: n.y + 'px', background: n.color }"
           @pointerdown.stop="noteDown($event, n)" @dblclick.stop="editNote(n.id)" @wheel="noteEdit === n.id && !$event.ctrlKey && !$event.metaKey && $event.stopPropagation()">
-          <textarea v-model="n.text" placeholder="Заметка…" :readonly="noteEdit !== n.id" @input="save" @blur="noteEdit = null" />
-          <div v-if="noteSel === n.id" class="nbar" @pointerdown.stop><button v-for="c in NOTE_COLORS" :key="c" :style="{ background: c }" :class="{ on: n.color === c }" @click="n.color = c; save()" /><button class="nd" title="Удалить" @click="delNote(n.id)">✕</button></div>
+          <div class="nt" :class="['sz-' + (n.sz || 's'), { hand: n.font === 'hand', b: n.b, st: n.st, list: n.list }]">
+            <textarea v-if="noteEdit === n.id" v-model="n.text" placeholder="Напишите что угодно…" @input="save" @blur="noteEdit = null" @pointerdown.stop />
+            <div v-else class="nv"><span v-if="!n.text" class="ph">Напишите что угодно…</span><p v-for="(l, k) in noteLines(n.text)" v-else :key="k"><template v-for="(x, j) in l" :key="j"><a v-if="x.url" :href="x.x" target="_blank" rel="noopener" @pointerdown.stop>{{ x.x }}</a><template v-else>{{ x.x }}</template></template><br v-if="!l.some(x => x.x)" /></p></div>
+          </div>
+          <small v-if="n.by && !n.nob" class="nby">{{ n.by }}</small>
+          <!-- панель стикера, как в FigJam (размер панели не зависит от масштаба холста) -->
+          <div v-if="noteSel === n.id && !isM(n.id)" class="nbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
+            <div class="nb-g"><button class="nb-c" :class="{ open: nmenu === 'color' }" title="Цвет" @click="nmenu = nmenu === 'color' ? null : 'color'"><i :style="{ background: n.color }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
+              <div v-if="nmenu === 'color'" class="nb-pop sw"><button v-for="c in NOTE_COLORS" :key="c" :style="{ background: c }" :class="{ on: n.color === c }" @click="n.color = c; nmenu = null; save()" /></div></div>
+            <i class="nb-s" />
+            <div class="nb-g"><button class="nb-t" title="Шрифт" @click="nmenu = nmenu === 'font' ? null : 'font'"><b :class="{ hand: n.font === 'hand' }">Aa</b><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
+              <div v-if="nmenu === 'font'" class="nb-pop"><button v-for="(t, k) in NOTE_FONTS" :key="k" :class="{ on: (n.font || '') === k, hand: k === 'hand' }" @click="k ? (n.font = k) : delete n.font; nmenu = null; save()">{{ t }}</button></div></div>
+            <i class="nb-s" />
+            <div class="nb-g"><button class="nb-t wide" title="Размер текста" @click="nmenu = nmenu === 'size' ? null : 'size'">{{ NOTE_SIZES[n.sz || 's'] }}<svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
+              <div v-if="nmenu === 'size'" class="nb-pop"><button v-for="(t, k) in NOTE_SIZES" :key="k" :class="{ on: (n.sz || 's') === k }" @click="n.sz = k; nmenu = null; save()">{{ t }}</button></div></div>
+            <i class="nb-s" />
+            <button class="nb-i" :class="{ on: n.b }" title="Жирный" @click="noteToggle(n, 'b')"><svg viewBox="0 0 24 24"><path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z" /></svg></button>
+            <button class="nb-i" :class="{ on: n.st }" title="Зачёркнутый" @click="noteToggle(n, 'st')"><svg viewBox="0 0 24 24"><path d="M4 12h16M16.5 7.5c-.6-1.6-2.3-2.5-4.5-2.5-2.8 0-4.5 1.4-4.5 3.3 0 1.2.7 2.1 2 2.7M7.5 16c.5 1.9 2.3 3 4.7 3 2.9 0 4.8-1.4 4.8-3.5 0-.6-.2-1.1-.5-1.5" /></svg></button>
+            <button class="nb-i" title="Ссылка" @click="noteLink(n)"><svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" /></svg></button>
+            <button class="nb-i" :class="{ on: n.list }" title="Список" @click="noteToggle(n, 'list')"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1" /><circle cx="4.5" cy="12" r="1" /><circle cx="4.5" cy="18" r="1" /></svg></button>
+            <i class="nb-s" />
+            <button class="nb-i au" :class="{ on: !n.nob }" :title="n.nob ? 'Показать, кто поставил' : 'Скрыть, кто поставил'" @click="noteToggle(n, 'nob')"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M14 17.5l5.5-5.5 1.8 1.8-5.5 5.5H14z" /></svg></button>
+            <button class="nb-i" title="Удалить стикер" @click="delNote(n.id)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
+          </div>
         </div>
       </div>
       <!-- Рамка вокруг выделенного, с квадратиками по углам -->
@@ -913,7 +966,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl tr-panel">
       <PresenceBar inline /><i v-if="live.on" class="vs" />
       <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
-      <button class="allr" :class="{ on: allRails }" title="Раскрыть ветки всех уроков — видно все экраны, их удобно копировать между уроками (Ctrl+C / Ctrl+V)" @click="allRails = !allRails"><svg viewBox="0 0 24 24"><path d="M5 4v16M5 7h6M5 12h9M5 17h5" /><circle cx="14" cy="7" r="1.6" /><circle cx="17" cy="12" r="1.6" /><circle cx="13" cy="17" r="1.6" /></svg>Все уроки</button><button class="allr" :class="{ on: allCourses }" title="Показать рядом остальные курсы — смотреть и копировать их экраны в этот (Ctrl+C / Ctrl+V)" @click="allCourses = !allCourses"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="7" height="16" rx="2" /><rect x="13.5" y="4" width="7" height="16" rx="2" /></svg>Все курсы</button><i class="vs" />
+      <button class="allr" :class="{ on: allCourses }" title="Показать рядом остальные курсы — смотреть и копировать их экраны в этот (Ctrl+C / Ctrl+V)" @click="allCourses = !allCourses"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="7" height="16" rx="2" /><rect x="13.5" y="4" width="7" height="16" rx="2" /></svg>Все курсы</button><i class="vs" />
       <span class="pl">Прогресс<small>пример</small></span>
       <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
       <i class="vs dk" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
@@ -952,7 +1005,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl tools" role="toolbar">
       <!-- Стрелка и рука, как в FigJam -->
       <div class="mode">
-        <button class="md" :class="{ on: tool === 'select' && !space && !noteTool }" title="Выделение (V): тяните по пустому месту — рамка; Delete — удалить выделенное" @click="setTool('select')"><svg viewBox="0 0 24 24"><path d="M5.5 3.8l12.6 6.6-5.6 1.7-2.4 5.6z" /></svg></button>
+        <button class="md" :class="{ on: tool === 'select' && !space && !noteTool }" title="Выделение (V): тяните по пустому месту — рамка; Delete — удалить выделенное" @click="setTool('select')"><svg viewBox="0 0 24 24"><path d="M5.2 4.2l14 6.4-6.2 1.9-2.3 6.3z" /></svg></button>
         <button class="md" :class="{ on: handOn }" title="Рука (H или зажатый пробел): двигать холст" @click="setTool('hand')"><svg viewBox="0 0 24 24"><path d="M8 12.5V6.2a1.4 1.4 0 0 1 2.8 0V11M10.8 10.5V4.9a1.4 1.4 0 0 1 2.8 0v5.6M13.6 10.5V5.9a1.4 1.4 0 0 1 2.8 0V12M16.4 9.4a1.4 1.4 0 0 1 2.8 0v4.8a6.3 6.3 0 0 1-6.3 6.3h-.6a6 6 0 0 1-4.7-2.3l-3-3.9a1.5 1.5 0 0 1 2.2-2l1.2 1.1" /></svg></button>
       </div>
       <i class="tsep" />
@@ -986,9 +1039,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .selbox i:nth-child(1) { left: -7px; top: -7px } .selbox i:nth-child(2) { right: -7px; top: -7px } .selbox i:nth-child(3) { left: -7px; bottom: -7px } .selbox i:nth-child(4) { right: -7px; bottom: -7px }
 /* стрелка и рука на панели */
 .mode { display: flex; gap: 4px; padding: 0 2px }
-.md { display: grid; place-items: center; width: 48px; height: 48px; border: 0; border-radius: 12px; background: none; color: #2c2c2c; cursor: pointer; padding: 0 } .md:hover { background: #f2f2f2 }
-.md svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
-.md.on { background: #9747ff; color: #fff } .md.on:first-child svg { fill: #fff }
+.md { display: grid; place-items: center; width: 54px; height: 54px; border: 0; border-radius: 13px; background: none; color: #2c2c2c; cursor: pointer; padding: 0 } .md:hover { background: #f2f2f2 }
+.md svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
+.md.on { background: #9747ff; color: #fff }
 /* маркер, как в FigJam: торчит из панели, выбран — выше */
 .marker { position: relative; align-self: stretch; width: 60px; border: 0; background: none; padding: 0; cursor: pointer; clip-path: inset(-80px -20px 0 -20px) }   /* сверху вылезает на холст, снизу прячется в панель */
 .mk { position: absolute; left: 50%; top: 26px; width: 24px; height: 130px; margin-left: -12px; border-radius: 6px 6px 3px 3px; background: linear-gradient(90deg, #fafafa, #fff 40%, #e9e9e9); box-shadow: 0 2px 6px rgba(0, 0, 0, .18); transition: top .18s ease }
@@ -1145,14 +1198,36 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .runov { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
 .runbox { width: min(560px, 100%); height: min(820px, 96vh); border-radius: 22px; overflow: hidden; background: #fff }
 /* Стикеры */
-.note { position: absolute; z-index: 4; width: 190px; min-height: 190px; display: flex; box-sizing: border-box; padding: 16px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .06); cursor: grab; touch-action: none }
+.note { position: absolute; z-index: 4; width: 240px; min-height: 240px; display: flex; box-sizing: border-box; padding: 16px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .06); cursor: grab; touch-action: none }
 .note.ghost { opacity: .6; pointer-events: none; z-index: 9; box-shadow: none }
-.note.on { outline: 2px solid #0d99ff; outline-offset: 2px }
-.note textarea { flex: 1; min-height: 160px; margin: 0; padding: 0; border: 0; background: none; resize: none; outline: none; font: inherit; font-size: 16px; font-weight: 500; color: #2b2b2b; line-height: 1.3; cursor: inherit; pointer-events: none }
+.nt { flex: 1; display: flex; min-width: 0 }
+.nt textarea, .nv { flex: 1; min-height: 140px; margin: 0; padding: 0; border: 0; background: none; resize: none; outline: none; font: inherit; color: #2b2b2b; line-height: 1.3; overflow-wrap: anywhere }
+.nt textarea { pointer-events: auto; cursor: text }
+.nv p { margin: 0 } .nv .ph { color: rgba(0, 0, 0, .38) } .nv a { color: #0d69d9; text-decoration: underline; pointer-events: auto; cursor: pointer }
+.nt textarea::placeholder { color: rgba(0, 0, 0, .38) }
+.nt.sz-s textarea, .nt.sz-s .nv { font-size: 16px } .nt.sz-m textarea, .nt.sz-m .nv { font-size: 22px } .nt.sz-l textarea, .nt.sz-l .nv { font-size: 30px; line-height: 1.15 }
+.nt textarea, .nv { font-weight: 500 } .nt.b textarea, .nt.b .nv { font-weight: 800 } .nt.st textarea, .nt.st .nv { text-decoration: line-through }
+.nt.hand textarea, .nt.hand .nv, .hand { font-family: 'Comic Sans MS', 'Marker Felt', 'Segoe Print', cursive }
+.nt.list .nv p::before { content: '• ' } .nt.list .nv p:has(br:only-child)::before { content: '' }
+.nby { position: absolute; left: 16px; bottom: 12px; font-size: 12px; font-weight: 600; color: rgba(0, 0, 0, .55); pointer-events: none }
+.note { padding-bottom: 34px }
+.note.on { outline: 3px solid #a5d6fb; outline-offset: 0 }
 .note.edit textarea { pointer-events: auto; cursor: text } .note.edit { cursor: default }
-.nbar { position: absolute; left: 0; top: -46px; display: flex; gap: 4px; padding: 5px; border-radius: 10px; background: #2c2c2c; box-shadow: 0 4px 12px rgba(0, 0, 0, .2) }
-.nbar button { width: 22px; height: 22px; border: 2px solid transparent; border-radius: 50%; cursor: pointer; padding: 0 } .nbar button.on { border-color: #fff }
-.nbar .nd { background: none; color: #fff; font-size: 12px }
+.nbar { position: absolute; left: 50%; bottom: calc(100% + 22px); translate: -50% 0; transform-origin: 50% 100%; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 8px; border-radius: 12px; background: #1e1e1e; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); white-space: nowrap; cursor: default; z-index: 20 }
+.nbar button { border: 0; background: none; color: #fff; font: inherit; cursor: pointer; padding: 0 }
+.nb-g { position: relative }
+.nb-c, .nb-t { display: flex; align-items: center; gap: 4px; height: 36px; padding: 0 8px; border-radius: 8px } .nb-c:hover, .nb-t:hover, .nb-i:hover { background: #383838 }
+.nb-c i { width: 22px; height: 22px; border-radius: 50% } .nb-t b { font-size: 17px; font-weight: 500 } .nb-t.wide { min-width: 120px; justify-content: space-between; font-size: 14px; font-weight: 600 }
+.dd { width: 14px; height: 14px; fill: none; stroke: #bbb; stroke-width: 2; stroke-linecap: round }
+.nb-s { width: 1px; height: 28px; margin: 0 6px; background: #3d3d3d }
+.nb-i { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px } .nb-i.on:not(.au) { background: #383838 }
+.nb-i svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round }
+.nb-i.au { color: #bbb } .nb-i.au.on { background: #9747ff; color: #fff }
+.nb-pop { position: absolute; left: 0; top: calc(100% + 8px); display: grid; gap: 2px; min-width: 150px; padding: 6px; border-radius: 10px; background: #1e1e1e; box-shadow: 0 6px 18px rgba(0, 0, 0, .3) }
+.nb-pop button { padding: 8px 10px; border-radius: 6px; text-align: left; font-size: 14px; font-weight: 600 } .nb-pop button:hover { background: #383838 } .nb-pop button.on { background: #0d99ff }
+.nb-pop.sw { top: auto; bottom: calc(100% + 14px); left: -12px; width: max-content; height: 58px; box-sizing: border-box; align-items: center; grid-template-columns: repeat(10, 32px); min-width: 0; gap: 8px; padding: 12px 14px; border-radius: 14px }
+.nb-pop.sw button { width: 32px; height: 32px; padding: 0; border-radius: 50% } .nb-pop.sw button:hover { filter: brightness(.95) } .nb-pop.sw button.on { box-shadow: 0 0 0 3px #1e1e1e, 0 0 0 5px #9747ff }
+.nb-c.open { background: #383838 }
 /* Нижняя панель как в FigJam — крупно */
 .tools { height: 84px; padding: 0 10px; gap: 4px; border-radius: 20px }
 .tb { display: grid; justify-items: center; gap: 4px; width: 92px; padding: 10px 0 8px; border: 0; border-radius: 14px; background: none; font: inherit; color: #2c2c2c; cursor: pointer; touch-action: none }
@@ -1163,10 +1238,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 /* стикер на панели: торчит снизу, при наведении выезжает */
 .sticky { position: relative; align-self: stretch; width: 96px; border: 0; background: none; padding: 0; cursor: pointer; clip-path: inset(-80px -20px 0 -20px) }
 .sticky::before { content: ''; position: absolute; left: 6px; right: 6px; top: 8px; bottom: 8px; border-radius: 12px; background: transparent; transition: background .15s }
-.sticky:hover::before { background: #f2f2f2 } .sticky.on::before { background: #ececec }
-.sk { position: absolute; left: 20px; top: 24px; width: 56px; height: 56px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .1), 0 4px 10px rgba(0, 0, 0, .12); transform: rotate(-3deg); transition: top .18s ease, transform .18s ease }
-.sk.back { left: 26px; top: 30px; transform: rotate(4deg); filter: brightness(.95) }
-.sticky:hover .sk { top: 16px } .sticky:hover .sk.back { top: 22px } .sticky.on .sk { top: 12px; transform: rotate(-1deg) } .sticky.on .sk.back { top: 18px; transform: rotate(5deg) }
+.sticky::before { display: none }
+.sk { position: absolute; left: 14px; top: 18px; width: 64px; height: 70px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .1), 0 4px 10px rgba(0, 0, 0, .12); transform: rotate(-3deg); transition: top .18s ease, transform .18s ease }
+.sk.back { left: 22px; top: 24px; transform: rotate(4deg); filter: brightness(.95) }
+.sticky:hover .sk { top: 8px } .sticky:hover .sk.back { top: 14px } .sticky.on .sk { top: -2px; transform: rotate(-1deg) } .sticky.on .sk.back { top: 6px; transform: rotate(5deg) }
 .board.placing, .board.placing * { cursor: none !important }
 .tray { left: 50%; bottom: 116px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 18px; animation: tray .14s ease-out; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none }
 @keyframes tray { from { opacity: 0; transform: translate(-50%, 6px) } }
@@ -1178,7 +1253,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tt2 { padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--hint); max-width: 130px; line-height: 1.25 }
 .allr { display: flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9px; background: #fff; font: inherit; font-size: 13px; font-weight: 800; color: var(--hint); cursor: pointer; white-space: nowrap }
 .allr svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .allr:hover { background: var(--surface) }
-.allr + .allr { margin-left: 6px }
 .och { position: absolute; z-index: 3; display: grid; gap: 2px; padding: 10px 14px; border: 1px dashed #c9c9c9; border-radius: 12px; background: #fff; white-space: nowrap; cursor: default }
 .och b { font-size: 22px; font-weight: 900 } .och small { font-size: 12px; font-weight: 700; color: var(--hint) }
 .bead.ro { cursor: default } .bead.ro:hover { transform: none }
