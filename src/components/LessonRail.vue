@@ -93,7 +93,11 @@ const cards = computed(() => {
 })
 const used = (s, c) => (pk.for === 'opts' ? s.opts?.some(o => o.w === c.front) : pk.for === 'pairs' ? s.pairs?.some(p => p.a === c.front) : s.word === c.front)
 function takeCard(s, c) {
-  if (pk.for === 'intro') { const old = stepRefs(s).filter(f => !f.startsWith('https://') && f !== s.video); Object.assign(s, cardToIntro(c)); props.dropFiles(old); pk.id = null }
+  if (pk.for === 'intro') {
+    // как было до карточки — для «Отменить»; свои старые файлы удаляем только при «Сохранить»
+    const prev = undo[s.id]?.prev ?? Object.fromEntries(INTRO_F.map(k => [k, s[k]]))
+    Object.assign(s, cardToIntro(c)); undo[s.id] = { prev }; pk.id = null
+  }
   if (pk.for === 'opts') {
     if (used(s, c) || (s.opts ??= []).length >= OPTS_MAX) return
     s.opts.push(cardToOpt(c)); if (s.opts.length >= OPTS_MAX) pk.id = null
@@ -103,6 +107,15 @@ function takeCard(s, c) {
     s.pairs.push(cardToPair(c)); if (s.pairs.length >= PAIRS_MAX) pk.id = null
   }
   changed()
+}
+
+// «Взять из карточек» в «Новом слове» можно отменить, пока не нажали «Сохранить»
+const INTRO_F = ['word', 'tr', 'ex', 'exTr', 'image', 'audio', 'exAudio']
+const undo = reactive({})
+function undoCard(s) { const u = undo[s.id]; if (!u) return; for (const k of INTRO_F) if (u.prev[k] === undefined) delete s[k]; else s[k] = u.prev[k]; delete undo[s.id]; changed() }
+function keepCard(s) {                 // карточку оставили — свои прежние файлы больше не нужны
+  const u = undo[s.id]; if (!u) return; delete undo[s.id]
+  const now = new Set(stepRefs(s)); props.dropFiles(INTRO_F.map(k => u.prev[k]).filter(f => typeof f === 'string' && /^(idb:|t\/[\w-]+\/c\/)/.test(f) && !now.has(f)))
 }
 
 // ---------- Варианты и пары ----------
@@ -142,7 +155,7 @@ const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.obs
 // Карандаш — экран правится; «Сохранить» — снова живой. Пустой (незаполненный) экран сразу открыт для правки.
 const editing = reactive({})
 const isEdit = (s) => editing[s.id] ?? !!stepIssue(s)
-function save(s) { editing[s.id] = false; changed() }
+function save(s) { keepCard(s); editing[s.id] = false; changed() }
 // Прохождение ветки: сколько экранов пройдено, счёт каждого, время — прогресс и итог меняются на ходу
 const run = reactive({ at: 0, res: {}, t0: 0, t1: 0, key: 0 })
 const pctAt = (i) => Math.round((i < run.at ? i + 1 : i) / Math.max(1, steps.value.length) * 100)
@@ -157,6 +170,12 @@ const stats = computed(() => {
   const r = steps.value.map(s => run.res[s.id] ?? { ok: 0, all: 0 })
   return { ok: r.reduce((a, x) => a + x.ok, 0), all: r.reduce((a, x) => a + x.all, 0), sec: Math.round(((run.t1 || Date.now()) - run.t0) / 1000) }
 })
+// Сбросить один экран: ответы на нём стираются, прохождение ветки откатывается к нему
+const rk = reactive({})
+function resetStep(s) {
+  const i = steps.value.indexOf(s); rk[s.id] = (rk[s.id] ?? 0) + 1; delete run.res[s.id]
+  if (run.at > i) { run.at = i; run.t1 = 0 }
+}
 function restart() { Object.assign(run, { at: 0, res: {}, t0: 0, t1: 0, key: run.key + 1 }); emit('focus', { x: cx(0) + CW / 2, y: props.y + 200 }) }
 const doneX = computed(() => (run.at >= steps.value.length ? endX.value : run.at ? cx(run.at - 1) + CW / 2 : props.x))
 // Стрелки ‹ › в подписи — переставить экран на шаг
@@ -186,17 +205,18 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <i v-if="stepIssue(s)" class="iss" :title="stepIssue(s)">{{ stepIssue(s) }}</i>
         <button class="ib mv" title="На шаг левее" :disabled="i === 0" @pointerdown.stop @click="shift(s, -1)">‹</button><button class="ib mv" title="На шаг правее" :disabled="i === order.length - 1" @pointerdown.stop @click="shift(s, 1)">›</button>
         <button class="ib pen" :class="{ on: isEdit(s) }" :title="isEdit(s) ? 'Сейчас правите — «Сохранить» внизу экрана' : 'Изменить экран'" @pointerdown.stop @click="isEdit(s) ? save(s) : (editing[s.id] = true)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
+        <button v-if="!isEdit(s)" class="ib rs" title="Сбросить экран — пройти заново" @pointerdown.stop @click="resetStep(s)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></svg></button>
         <button class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
       <div class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at }]" @pointerdown.stop="emit('select', s.id)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
-      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" @next="advance(s, $event)" />
+      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" @next="advance(s, $event)" />
       <template v-else>
       <div class="pbar"><i :style="{ width: pctAt(i) + '%' }" /></div>
 
       <!-- Карточки из колод: прямо на экране, вместо его содержимого -->
       <div v-if="pk.id === s.id" class="pk">
-        <div class="pkh"><select v-model="pk.deck"><option v-for="d in decks.list" :key="d.id" :value="d.id">{{ d.title }}</option></select><button class="add sm" @click="pk.id = null">Готово</button></div>
+        <div class="pkh"><select v-model="pk.deck"><option v-for="d in decks.list" :key="d.id" :value="d.id">{{ d.title }}</option></select><button class="add sm" @click="pk.id = null">{{ pk.for === 'intro' ? 'Отмена' : 'Готово' }}</button></div>
         <input v-model="pk.q" class="pq" placeholder="поиск" />
         <div class="pl">
           <button v-for="c in cards" :key="c.id" class="pc" :class="{ used: used(s, c) }" @click="takeCard(s, c)"><img v-if="c.image" :src="resolve(c.image, 'image')" alt="" loading="lazy" /><span><b>{{ c.front }}</b><small>{{ c.back }}</small></span><i v-if="c.audio">♪</i></button>
@@ -229,7 +249,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
           <button v-if="s.exAudio" class="x in" title="Убрать озвучку примера" @click="clear(s, 'exAudio')">✕</button>
           <em v-if="pct(s, 'exAudio') != null" class="up">{{ pct(s, 'exAudio') }}%</em>
         </div>
-        <button class="add deck" @click="openPk(s, 'intro')">Взять из карточек</button>
+        <div class="dk"><button class="add deck" @click="openPk(s, 'intro')">{{ undo[s.id] ? 'Другая карточка' : 'Взять из карточек' }}</button><button v-if="undo[s.id]" class="add deck un" title="Вернуть, как было до карточки" @click="undoCard(s)">↺ Отменить</button></div>
       </div>
 
       <!-- Выбери ответ -->
@@ -365,7 +385,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .node.fin-n { width: 40px; height: 40px; margin-left: -20px; top: -57px; cursor: default } .node.fin-n svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round }
 .slot { position: absolute; z-index: 2; box-sizing: border-box; border: 3px dashed #0d99ff; border-radius: 22px; background: rgba(13, 153, 255, .06); transition: left .15s ease }
 .grip { flex: none; width: 16px; height: 16px; fill: #a5a5a5 }
-.ib.mv { font-size: 18px; font-weight: 900; color: var(--hint) } .ib.mv:hover:not(:disabled) { background: var(--blue-l); color: var(--blue-d) } .ib.mv:disabled { opacity: .25; cursor: default }
+.ib.mv { font-size: 22px; font-weight: 900; color: var(--hint) } .ib.mv:hover:not(:disabled) { background: var(--blue-l); color: var(--blue-d) } .ib.mv:disabled { opacity: .25; cursor: default }
 .flab { display: flex; align-items: center; gap: 6px; height: 34px; margin-top: 14px; padding: 0 2px; cursor: grab; user-select: none; touch-action: none }
 .flab.fix { cursor: default } .flab b { font-size: 13px; font-weight: 800; color: #555; white-space: nowrap }
 .iss { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-style: normal; font-weight: 800; color: var(--orange-d) }
@@ -386,8 +406,9 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .ch b { flex: 1; font-size: 12px; font-weight: 800; color: var(--hint) }
 .kc { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #fff } .kc svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
 .warn { width: 18px; height: 18px; border-radius: 50%; background: var(--orange); color: #fff; font-size: 12px; font-weight: 900; font-style: normal; display: grid; place-items: center }
-.ib { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: var(--hint-2); cursor: pointer; padding: 0 } .ib:hover { background: var(--red-l); color: var(--red-d) }
-.ib svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--hint); cursor: pointer; padding: 0 } .ib:hover { background: var(--red-l); color: var(--red-d) }
+.ib.rs:hover { background: var(--blue-l); color: var(--blue-d) }
+.ib svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .cb { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 8px 60px 14px }
 .choice .cb, .pairs .cb { padding: 8px 34px 12px }
 .hd { text-align: center; font-size: 15px; font-weight: 800; margin: 4px 0 2px }
@@ -406,6 +427,7 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .aud { position: relative; display: flex; align-items: center; gap: 6px; min-height: 30px } .aud > :first-child:not(button) { flex: 1; min-width: 0 }
 .add { border: 1px dashed #cfcfcf; border-radius: 9px; padding: 6px 10px; background: none; font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-d); cursor: pointer; flex: 1 } .add:hover { background: var(--blue-l) }
 .add.sm { flex: none; padding: 4px 8px; font-size: 11px }
+.dk { display: flex; gap: 6px; margin-top: auto } .dk .add.deck { flex: 1; margin-top: 0 } .add.deck.un { flex: none; background: #fff; border-color: var(--border); color: var(--text) }
 .add.deck { flex: none; margin-top: auto; border-style: solid; border-color: var(--blue-l); background: var(--blue-l) }
 .word { display: grid; gap: 0; padding: 6px; border-radius: 10px; background: #f1f6ff; text-align: center }
 .word input { text-align: center; font-size: 17px; font-weight: 900 } .word input.tr { font-size: 12px; font-weight: 700; color: var(--hint) }
