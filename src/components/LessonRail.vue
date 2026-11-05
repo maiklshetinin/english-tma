@@ -190,7 +190,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
   <div class="lr" @pointerdown.stop>
     <input ref="fileIn" type="file" :accept="accept" hidden @change="onFile" />
     <!-- Рельс урока: от урока вправо, через все экраны к итогу -->
-    <svg class="line" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
+    <svg class="line" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="steps.length && doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
 
     <!-- Пока тянем экран — пунктирное место, куда он встанет -->
     <div v-if="mv.on" class="slot" :style="{ left: cx(mv.to) + 'px', top: y - TOP + 48 + 'px', width: CW + 'px', height: (frameH[mv.id] ?? 380) - 48 + 'px' }" />
@@ -354,8 +354,13 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     </div>
 
     <!-- «+» — добавить экран -->
-    <span v-if="!steps.length" class="empty-h" :style="{ left: cx(0) + 10 + 'px', top: y - 10 + 'px' }">экраны урока — «Интерактив» внизу</span>
-    <button v-if="canPaste" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
+    <!-- Урок без экранов: пустое место под экраны — добавить из «Интерактива» или вставить скопированный -->
+    <div v-if="!steps.length" :ref="watchFrame" class="frame empty-f" :style="{ left: cx(0) + 'px', top: y - TOP + 'px', width: CW + 'px' }">
+      <span class="stem" />
+      <div class="ef"><b>Экранов пока нет</b><span>Добавьте из «Интерактива» внизу или вставьте скопированный (Ctrl+V)</span>
+        <div class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">＋ Экран</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
+    </div>
+    <button v-if="canPaste && steps.length" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
     <button class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
 
     <!-- Итог урока -->
@@ -411,6 +416,8 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .warn { width: 18px; height: 18px; border-radius: 50%; background: var(--orange); color: #fff; font-size: 12px; font-weight: 900; font-style: normal; display: grid; place-items: center }
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--hint); cursor: pointer; padding: 0 } .ib:hover { background: var(--red-l); color: var(--red-d) }
 .ib.cp:hover { background: var(--blue-l); color: var(--blue-d) }
+.empty-f .stem { top: -26px } .ef { display: grid; justify-items: center; gap: 4px; margin-top: 14px; padding: 18px; border: 2px dashed #d6d6d6; border-radius: 18px; background: rgba(255, 255, 255, .7); text-align: center }
+.ef b { font-size: 14px; font-weight: 800; color: #555 } .ef span { font-size: 12px; font-weight: 600; color: var(--hint) } .eb { display: flex; gap: 6px; margin-top: 6px }
 .paste { position: absolute; z-index: 3; transform: translateX(-50%); padding: 5px 10px; border: 1px solid var(--blue); border-radius: 14px; background: #fff; color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap }
 .paste:hover:not(:disabled) { background: var(--blue-l) }
 .ib.rs:hover { background: var(--blue-l); color: var(--blue-d) }

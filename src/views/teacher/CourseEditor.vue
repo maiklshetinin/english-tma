@@ -407,7 +407,7 @@ const G = { step: 116, unitGap: 160, amp: 84 }
 const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
 const drag = reactive({ on: false, item: null, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
-const hasRail = (x) => INTERACTIVE.includes(x?.type) && !!x.steps?.length
+const hasRail = (x) => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || allRails.value)          // «Все уроки» — место и под пустые ветки
 const layoutOf = (list) => {
   let y = 0
   return list.map((x, i) => {
@@ -765,7 +765,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl tr-panel">
       <PresenceBar inline /><i v-if="live.on" class="vs" />
       <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
-      <div class="seg"><button :class="{ on: allRails }" title="Раскрыть ветки всех уроков — видно все экраны, их удобно копировать между уроками (Ctrl+C / Ctrl+V)" @click="allRails = !allRails">Все уроки</button></div><i class="vs" />
+      <button class="allr" :class="{ on: allRails }" title="Раскрыть ветки всех уроков — видно все экраны, их удобно копировать между уроками (Ctrl+C / Ctrl+V)" @click="allRails = !allRails"><svg viewBox="0 0 24 24"><path d="M5 4v16M5 7h6M5 12h9M5 17h5" /><circle cx="14" cy="7" r="1.6" /><circle cx="17" cy="12" r="1.6" /><circle cx="13" cy="17" r="1.6" /></svg>Все уроки</button><i class="vs" />
       <span class="pl">Прогресс<small>пример</small></span>
       <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
       <i class="vs dk" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
@@ -995,6 +995,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tc svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round }
 .ti small { font-size: 13px; font-weight: 800; color: #2c2c2c; white-space: nowrap }
 .tt2 { padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--hint); max-width: 130px; line-height: 1.25 }
+.allr { display: flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9px; background: #fff; font: inherit; font-size: 13px; font-weight: 800; color: var(--hint); cursor: pointer; white-space: nowrap }
+.allr svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .allr:hover { background: var(--surface) }
+.allr.on { background: var(--blue-l); border-color: var(--blue); color: var(--blue-d) }
 .tray.inter { display: grid; grid-template-columns: auto repeat(6, 124px); gap: 2px 4px; overflow: visible } .tray.inter .tt2 { grid-row: span 2 }
 .tray.inter .mini { width: 112px; height: 86px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 124px; gap: 5px; padding: 6px 4px 4px; align-self: start }
 .tray.inter .mini .mb { right: 6px; bottom: 5px; width: 26px; height: 7px } .tray.inter .mini.lesson { overflow: visible } .tray.inter .mini .ms { transform: scale(.82); transform-origin: top center }
