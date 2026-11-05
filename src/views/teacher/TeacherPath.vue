@@ -1,5 +1,5 @@
 <script setup>
-// Вкладка «Курсы» (раньше «Путь») преподавателя: сверху — курсы (редактор с холстом и рельсом), ниже — пресеты пути. Пресет — заготовка (юниты + кружки),
+// Вкладка «Курсы» (раньше «Путь») преподавателя: сверху — курсы (редактор с холстом и рельсом), под ними — «Как видит ученик» (просмотр и прохождение курса), ниже — пресеты пути. Пресет — заготовка (юниты + кружки),
 // которую добавляют в путь ученика из его профиля. Путь конкретного ученика правится в карточке ученика.
 import { ask } from '../../composables/useDialog'
 import { ref, computed } from 'vue'
@@ -8,6 +8,7 @@ import { showToast } from '../../composables/useToast'
 import PathEditor from '../../components/PathEditor.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import CourseList from '../../components/CourseList.vue'
+import CourseViewer from '../../components/CourseViewer.vue'
 import { usePathStore } from '../../stores/path'
 const pathStore = usePathStore()
 const sel = ref(pathStore.presets[0]?.id ?? null), name = ref(''), creating = ref(false)
@@ -27,6 +28,7 @@ async function remove() {
 <template>
   <div class="page wide">
     <CourseList />
+    <CourseViewer />
     <h3 class="psh">Пресеты пути <small>старый вид — со временем переедут в курсы</small></h3>
     <div class="card">
       <div class="seg tabs"><button v-for="p in pathStore.presets" :key="p.id" :class="{ on: preset && p.id === preset.id }" @click="sel = p.id">{{ p.name }}</button>

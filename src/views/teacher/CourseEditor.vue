@@ -23,7 +23,7 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import LessonPlayer from '../../components/LessonPlayer.vue'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, fishLesson, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, fishLesson, stepsOut, keepLocalFiles, stepRefs, stepId } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -239,8 +239,14 @@ async function uploadStepFile(sid, field, opt, file, id) {
   mediaOp('readwrite', s => s.delete(id)).catch(() => {})
 }
 // Убрать файлы экранов: свои — из браузера и хранилища; ссылки карточек не трогаем (это файлы колоды)
-function dropRefs(refs) {
+// Файл может быть и у копии экрана (Ctrl+C / Ctrl+V) — удаляем, только если он больше нигде в курсе не нужен.
+// Проверяем чуть позже: вызывающий может убрать экран / вариант сразу после вызова.
+const usedRefs = () => new Set([...doc.items, ...doc.loose].flatMap(x => (x.steps ?? []).flatMap(stepRefs)))
+function dropRefs(refs) { const list = refs.filter(Boolean); if (list.length) setTimeout(() => dropNow(list), 0) }
+function dropNow(refs) {
+  const used = usedRefs()
   for (const v of refs) {
+    if (used.has(v)) continue
     if (v?.startsWith('idb:')) mediaOp('readwrite', s => s.delete(v.slice(4))).catch(() => {})
     else if (v && /^t\//.test(v) && online) apiRequest('/media/delete', { method: 'POST', body: JSON.stringify({ key: v }) }).catch(() => {})
   }
@@ -255,7 +261,42 @@ function resolveRef(v, kind) {
 // Горизонтальные рельсы видны у всех уроков с экранами и у выбранного урока (чтобы начать собирать).
 const pick = reactive({ lesson: null, step: null })                // открытый экран: урок и экран (или 'final')
 const activeLesson = computed(() => pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
-const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (x.steps?.length || x.id === activeLesson.value)))
+// «Все уроки» — ветки всех уроков курса раскрыты сразу (видно, что где, и экраны удобно копировать между уроками)
+const allRails = ref((() => { try { return localStorage.getItem('tma.allRails') === '1' } catch { return false } })())
+watch(allRails, (v) => { try { localStorage.setItem('tma.allRails', v ? '1' : '0') } catch { /* — */ } })
+const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (allRails.value || x.steps?.length || x.id === activeLesson.value)))
+
+// ---------- Копировать / вставить экран (Ctrl+C / Ctrl+V или кнопки на ветке) ----------
+// Копия — с новым id; файлы общие (удалятся, только когда их не останется ни у одного экрана), файлы «только в браузере» — копируются.
+const clip = ref(null)                                   // { course, step }
+function copyStep(s) {
+  if (!s) return
+  clip.value = { course: doc.id, step: JSON.parse(JSON.stringify(s)) }
+  showToast(`Экран «${KINDS[s.kind].t}» скопирован — выберите урок или экран и нажмите Ctrl+V (или «Вставить» на ветке)`)
+}
+async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = pick.lesson === lessonId ? pick.step : null) {
+  if (!clip.value) return
+  if (clip.value.course !== doc.id) return say('Экран из другого курса', { text: 'Вставить можно в тот же курс, где скопировали.' })
+  const L = lessonId ? findAny(lessonId) : null
+  if (!L || !INTERACTIVE.includes(L.type)) return say('Куда вставить?', { text: 'Выберите урок или экран на ветке урока — копия встанет после него.' })
+  if (!Array.isArray(L.steps)) L.steps = []
+  if (L.steps.length >= STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
+  const s = { ...JSON.parse(JSON.stringify(clip.value.step)), id: stepId() }
+  const at = after && after !== 'final' ? L.steps.findIndex(v => v.id === after) + 1 : L.steps.length
+  L.steps.splice(at > 0 ? at : L.steps.length, 0, s)
+  // файлы, которые пока только в этом браузере, — своя копия (иначе после загрузки в хранилище у одной из копий файл пропадёт)
+  const slots = [...['image', 'audio', 'video', 'exAudio'].map(f => [s, f, null]), ...(s.opts ?? []).flatMap((o, k) => [[o, 'image', k], [o, 'audio', k]])]
+  for (const [obj, f, k] of slots) {
+    const v = obj[f]; if (!v?.startsWith('idb:')) continue
+    const b = await mediaOp('readonly', st => st.get(v.slice(4))).catch(() => null)
+    if (!b) { delete obj[f]; continue }
+    const id = `m${s.id}_${f}${k ?? ''}_${Date.now().toString(36)}`
+    await mediaOp('readwrite', st => st.put(b, id)).catch(() => {})
+    urls[id] = URL.createObjectURL(b); obj[f] = 'idb:' + id
+    if (storageOn.value) uploadStepFile(s.id, f, k, b instanceof File ? b : new File([b], 'file', { type: b.type }), id)
+  }
+  selectStep(L.id, s.id); setProgress(doc.progress); save()
+}
 function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; pick.step = stepId; if (stepId) sel.value = null }
 // «Интерактив» на панели: экран — в выбранный урок; ничего не выбрано — новый урок в конец рельса
 // Экран добавляется «рыбой» — готовым образцом, который сразу можно пройти, а потом поправить (карандаш); 'lesson' — целый урок-образец
@@ -624,6 +665,12 @@ const onKey = (e) => {
   if (dialog.open) return                                       // открыто окно подтверждения — клавиши его
   if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) { if (e.key === 'Escape') e.target.blur(); return }
   if (e.key === 'Enter' && sel.value && !run.value) { e.preventDefault(); return rename(selItem.value) }
+  if ((e.ctrlKey || e.metaKey) && !run.value && (e.code === 'KeyC' || e.code === 'KeyV')) {
+    if (window.getSelection()?.toString()) return                  // выделен текст — обычное копирование
+    e.preventDefault()
+    if (e.code === 'KeyC') { const L = findAny(pick.lesson); return copyStep(L?.steps?.find(v => v.id === pick.step)) }
+    return pasteStep(pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) ? selItem.value.id : activeLesson.value))
+  }
   if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null } }
   if (run.value || !(e.key === 'Delete' || e.key === 'Backspace')) return
   if (noteSel.value) delNote(noteSel.value)
@@ -654,6 +701,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
+          :can-paste="!!clip && clip.course === doc.id" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
         <!-- Рельс -->
         <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id, rsel: !!selColor[x.id] }]"
@@ -717,6 +765,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl tr-panel">
       <PresenceBar inline /><i v-if="live.on" class="vs" />
       <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
+      <div class="seg"><button :class="{ on: allRails }" title="Раскрыть ветки всех уроков — видно все экраны, их удобно копировать между уроками (Ctrl+C / Ctrl+V)" @click="allRails = !allRails">Все уроки</button></div><i class="vs" />
       <span class="pl">Прогресс<small>пример</small></span>
       <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
       <i class="vs dk" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
