@@ -59,7 +59,14 @@ const ready = (x) => INTERACTIVE.includes(x.type) && (x.steps ?? []).some(s => !
 
 // открыто в рамке: урок (экраны), кружок, фото или «пусто»
 const open = ref(null)
-function tap(x) { open.value = x }
+// кружок и фото — открываются прямо тут, под строкой (как в Telegram), остальное — во весь экран
+const inline = ref(null)
+function tap(x) {
+  if (x.type === 'video' || x.type === 'photo') { inline.value = inline.value === x.id ? null : x.id; return }
+  open.value = x
+}
+// при наведении кружок тихо проигрывается
+const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value?.steps ?? []).filter(s => !stepIssue(s)))
 
 // файлы: свой ключ курса в S3 — ссылка на просмотр (пачкой), «idb:» — из этого браузера, остальное — как в карточках
@@ -108,13 +115,19 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em>{{ u.pct }}%</em></div>
         </template>
         <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1 }]">
-          <button class="bead" :class="[x.type, state(x)]" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }" :title="(T[x.type] ?? T.lesson).t" @click="tap(x)">
-            <video v-if="x.type === 'video' && fileOf(x)" :src="fileOf(x)" class="vid" muted playsinline preload="metadata" />
+          <button class="bead" :class="[x.type, state(x), { open: inline === x.id }]" @pointerenter="hover($event, true)" @pointerleave="hover($event, false)" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }" :title="(T[x.type] ?? T.lesson).t" @click="tap(x)">
+            <video v-if="x.type === 'video' && fileOf(x)" :src="fileOf(x)" class="vid" muted loop playsinline preload="metadata" />
             <img v-else-if="x.type === 'photo' && fileOf(x)" :src="fileOf(x)" class="vid img" alt="" />
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
           <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></div>
+          <!-- открыт прямо тут: кружок крупно со звуком / фото -->
+          <div v-if="inline === x.id" class="kin" @click.stop>
+            <video v-if="x.type === 'video' && fileOf(x)" :src="fileOf(x)" class="kbig" autoplay playsinline @click="$event.target.paused ? $event.target.play() : $event.target.pause()" @ended="$event.target.currentTime = 0" />
+            <img v-else-if="x.type === 'photo' && fileOf(x)" :src="fileOf(x)" class="pbig" alt="" />
+            <p v-else class="hint">{{ x.type === 'video' ? 'Кружок ещё не загружен' : 'Фото ещё не загружено' }}</p>
+          </div>
         </div>
       </section>
       <p v-if="!units.length" class="hint none">В курсе пока нет заданий</p>
@@ -158,10 +171,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .ubar { position: relative; width: 100%; height: 10px; margin: 16px 0 12px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78 }
 .ubar em { position: absolute; right: 0; top: 50%; transform: translateY(-50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 /* строка рельса: линия, кружок, подпись */
-.vrow { position: relative; display: flex; align-items: center; gap: 22px; min-height: 130px; padding-left: 6px }
+.vrow { position: relative; display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 22px; min-height: 130px; padding-left: 6px }
 .vrow::before { content: ''; position: absolute; left: 45px; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: #e6e6e6; z-index: 0 }
-.vrow.done::before, .vrow.current::before { background: #1fbe78 } .vrow.current::before { bottom: 50% }
-.vrow.first::before { top: 50% } .vrow.last::before { bottom: 50% } .vrow.first.last::before { display: none }
+.vrow.done::before, .vrow.current::before { background: #1fbe78 } .vrow.current::before { bottom: auto; height: 65px }
+.vrow.first::before { top: 65px } .vrow.last::before { bottom: auto; height: 65px } .vrow.first.current::before { display: none } .vrow.first.last::before { display: none }
 .bead { position: relative; z-index: 1; flex: none; display: grid; place-items: center; width: 68px; height: 68px; padding: 0; border: 0; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1fbe78; cursor: pointer }
 .bead:hover { filter: brightness(1.05) }
 .bead.todo { background: #f1f1f1; color: #b7b7b7; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e2e2e2 }
@@ -172,6 +185,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .bead.todo .vid { filter: grayscale(1); opacity: .6 }
 .ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
+.vrow > .bead { margin: 31px 0 }
+.kin { flex: 0 0 100%; padding: 4px 0 18px 64px; position: relative; z-index: 1 }
+.kbig { display: block; width: 260px; height: 260px; border-radius: 50%; object-fit: cover; background: #000; cursor: pointer; box-shadow: 0 0 0 4px #fff, 0 0 0 7px #2aabee }
+.pbig { display: block; max-width: 100%; max-height: 420px; border-radius: 16px }
+.bead.open { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }
 .cap { flex: 0 1 auto; display: grid; justify-items: start; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 17px; font-weight: 800; color: #252a31; cursor: pointer }
 .cap small { font-size: 14px; font-weight: 500; color: #4b5563 }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; font-weight: 900; text-transform: uppercase }

@@ -1,6 +1,6 @@
 <script setup>
 // Вкладка «Курсы» преподавателя: список курсов (общий для всех преподавателей) и «+ Новый курс».
-// Как в Figma: одно нажатие — выбрать курс (он показывается ниже, в «Как видит ученик»), двойное или «›» — редактор (холст + рельс, #/courses?id=…). Курс хранится на сервере (server/courses.ts);
+// Как в Figma: одно нажатие — выбрать курс (он показывается ниже, в «Как видит ученик»), двойное или карандаш — редактор; корзина — удалить (холст + рельс, #/courses?id=…). Курс хранится на сервере (server/courses.ts);
 // без сервера (демо) — один курс из этого браузера.
 import { ask } from '../composables/useDialog'
 import { ref, watch, onMounted } from 'vue'
@@ -54,8 +54,9 @@ async function remove(c) {
         @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
         <span class="ic"><AppIcon name="route" :size="24" /></span>
         <span class="tx"><b>{{ c.title }}</b><small>{{ c.count }} {{ word(c.count) }}<template v-if="c.updatedAt"> · изменён {{ ago(c.updatedAt) }}</template></small></span>
-        <button class="del" title="Удалить курс" @click.stop="remove(c)"><AppIcon name="trash" :size="18" /></button>
-        <button class="go" title="Открыть в редакторе" @click.stop="open(c.id)">›</button>
+        <!-- как везде: справа карандаш (редактор) и корзина -->
+        <button class="icon-btn" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="20" /></button>
+        <button class="icon-btn danger" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="20" /></button>
       </div>
     </div>
   </div>
@@ -64,14 +65,11 @@ async function remove(c) {
 .cl { display: grid; gap: 10px; margin-bottom: 18px }
 .ch { display: flex; align-items: center; justify-content: space-between; gap: 10px } .ch h2 { margin: 0 }
 .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) }
-.cc { user-select: none; display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0; cursor: pointer; transition: border-color .1s }
+.cc { user-select: none; display: flex; align-items: center; gap: 10px; padding: 14px 16px; margin: 0; cursor: pointer; transition: border-color .1s }
 .cc:hover { border-color: var(--blue) }
+.cc .icon-btn { --ib: 40px; color: var(--hint) }
 .ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--purple); color: #fff }
 .tx { flex: 1; display: grid; min-width: 0 } .tx b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tx small { font-size: 13px; font-weight: 600; color: var(--hint) }
-.del { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer; opacity: 0; transition: opacity .1s }
-.cc:hover .del, .del:focus-visible { opacity: 1 } .del:hover { background: var(--red-l); color: var(--red-d) }
-@media (hover: none) { .del { opacity: 1 } }
-.go { flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; font-size: 24px; line-height: 1; color: var(--hint-2); cursor: pointer; padding: 0 0 3px } .go:hover { background: var(--blue-l); color: var(--blue-d) }
 .cc.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) }
 .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 24px } .empty span { max-width: 420px; color: var(--hint); font-size: 14px }
 .sk { height: 74px; opacity: .5 }
