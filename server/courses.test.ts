@@ -48,6 +48,8 @@ ok('стикеры: координаты округлены, текст обре
 await C.put(me, 'k5', { ...course, ink: [{ id: 'k1', c: 'javascript:x', w: 99, p: [1.6, 2, 3], junk: 1 }] })
 const ik = store.get('courses/k5').ink[0]
 ok('рисунки: цвет только #rrggbb, толщина ≤ 20, точки парами и целые', ik.c === '#1e1e1e' && ik.w === 20 && ik.p.join() === '2,2' && !('junk' in ik))
+await C.put(me, 'k6', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's1', kind: 'intro', word: 'x', video: 't/tg_1/c/k1/v.mp4' }] }] })
+ok('общий файл (экран скопирован в другой курс) — виден как нужный другим курсам', (await C.filesElsewhere('k1')).has('t/tg_1/c/k1/v.mp4') && !(await C.filesElsewhere('k6')).has('t/tg_1/c/k6/zz.mp4'))
 ok('удалить, потом — 404', (await C.remove('k1'), !store.has('courses/k1')) && await code(C.get('k1')) === 404)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')

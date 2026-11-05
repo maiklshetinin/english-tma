@@ -121,6 +121,11 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       await ref.set(s.exists ? doc : { ...doc, teacherId: uid, createdAt: FieldValue.serverTimestamp() }, { merge: true })
       return { id, ok: true }
     },
+    /** Файлы, которые нужны другим курсам (экран скопировали из курса в курс — файл общий): при удалении курса их не трогаем */
+    async filesElsewhere(exceptId: string) {
+      const docs = (await col().get()).docs.filter((d) => d.id !== exceptId)
+      return new Set(docs.flatMap((d) => { const c = pub(d.id, d.data()); return this.filesOf(c) }))
+    },
     async remove(rawId: unknown) { const id = checkId(rawId); await found(id); await col().doc(id).delete() },
     /** Ключи файлов курса (кружки, фото, файлы экранов уроков) — чтобы после удаления курса почистить хранилище */
     filesOf: (c: Pick<Course, 'items' | 'loose'>) => [...c.items, ...c.loose].flatMap((x) => [x.file, ...(x.steps ?? []).flatMap((s) =>

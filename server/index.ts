@@ -172,7 +172,8 @@ app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => re
 app.delete('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => {
   const c = await courses.get(req.params.id)
   await courses.remove(req.params.id)
-  for (const k of courses.filesOf(c)) await storage.remove(req.user.uid, k).catch(() => {})      // кружки и фото курса — тоже долой
+  const keep = await courses.filesElsewhere(c.id)                                                   // скопированные в другие курсы — оставляем
+  for (const k of courses.filesOf(c)) if (!keep.has(k)) await storage.remove(req.user.uid, k).catch(() => {})      // кружки и фото курса — тоже долой
   res.json({ ok: true })
 }))
 // Кружки и фото: загрузка потоком через сервер (тело — сам файл, Content-Type: video/… или image/…), ссылки на просмотр, удаление

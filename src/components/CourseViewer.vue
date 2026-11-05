@@ -97,14 +97,16 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <div v-if="loading || !course" class="card hint none">{{ loading ? 'Загрузка…' : 'Выберите курс выше' }}</div>
 
     <!-- курс тем же рельсом, что в редакторе -->
-    <div v-else class="card cr">
-      <div class="ct"><b>{{ course.title }}</b><span class="pb"><i :style="{ width: (total ? done / total * 100 : 0) + '%' }" /></span><small>{{ done }} / {{ total }}</small></div>
-      <section v-for="u in units" :key="u.id" class="un">
+    <!-- как в Busuu: узкая колонка по центру, название курса, плашка с прогрессом, юниты — карточками -->
+    <div v-else class="cr">
+      <h2 class="ctl">{{ course.title }}</h2>
+      <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ done }} из {{ total }}</b><span>·</span><b>{{ total ? Math.round(done / total * 100) : 0 }}%</b></div>
+      <section v-for="u in units" :key="u.id" class="un" :class="{ full: u.tasks.length && u.pct === 100 }">
         <template v-if="u.title">
           <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b><svg v-if="u.tasks.length && u.pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
           <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em>{{ u.pct }}%</em></div>
         </template>
-        <div v-for="x in u.tasks" :key="x.id" class="vrow" :class="state(x)">
+        <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1 }]">
           <button class="bead" :class="[x.type, state(x)]" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }" :title="(T[x.type] ?? T.lesson).t" @click="tap(x)">
             <video v-if="x.type === 'video' && fileOf(x)" :src="fileOf(x)" class="vid" muted playsinline preload="metadata" />
             <img v-else-if="x.type === 'photo' && fileOf(x)" :src="fileOf(x)" class="vid img" alt="" />
@@ -139,37 +141,38 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
 <style scoped>
 .cv { display: grid; gap: 10px; margin-bottom: 22px }
-.vh { margin: 0; font-size: 15px } .vh small { font-size: 12px; font-weight: 600; color: var(--hint) }
+.vh { width: 100%; max-width: 620px; margin: 0 auto; font-size: 15px } .vh small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .tabs { flex-wrap: wrap; justify-self: start }
 .none { text-align: center; margin: 0 }
 /* курс — как рельс в редакторе */
-.cr { display: grid; gap: 0; padding: 18px 22px 26px; margin: 0 }
-.ct { display: flex; align-items: center; gap: 12px; margin-bottom: 18px } .ct b { font-size: 17px; white-space: nowrap }
-.ct .pb { flex: 1; max-width: 360px; height: 8px; border-radius: 4px; background: #e8e8e8; overflow: hidden } .ct .pb i { display: block; height: 100%; background: #1fbe78; border-radius: 4px }
-.ct small { font-size: 12px; font-weight: 800; color: var(--hint) }
-.un { display: grid; padding-left: 4px }
-.uh { display: flex; align-items: center; gap: 8px; margin-top: 8px; white-space: nowrap }
-.uh b { font-size: 20px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
+.cr { display: grid; gap: 16px; width: 100%; max-width: 620px; margin: 6px auto 0 }
+.ctl { margin: 0; font-size: 30px; font-weight: 900 }
+.cpill { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 14px; font-size: 16px }
+.cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
+.un { display: grid; padding: 22px 24px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: #fff }
+.un.full { border-color: #1fbe78; background: #f2fbf7 }
+.uh { display: flex; align-items: center; gap: 8px; white-space: nowrap }
+.uh b { font-size: 24px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
-.ubar { position: relative; width: min(446px, 100%); height: 10px; margin: 10px 0 14px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78 }
+.ubar { position: relative; width: 100%; height: 10px; margin: 16px 0 12px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78 }
 .ubar em { position: absolute; right: 0; top: 50%; transform: translateY(-50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 /* строка рельса: линия, кружок, подпись */
-.vrow { position: relative; display: flex; align-items: center; gap: 22px; min-height: 92px; padding-left: 14px }
-.vrow::before { content: ''; position: absolute; left: 40px; top: 0; bottom: 0; width: 6px; margin-left: -3px; background: #e6e6e6; z-index: 0 }
+.vrow { position: relative; display: flex; align-items: center; gap: 22px; min-height: 130px; padding-left: 6px }
+.vrow::before { content: ''; position: absolute; left: 45px; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: #e6e6e6; z-index: 0 }
 .vrow.done::before, .vrow.current::before { background: #1fbe78 } .vrow.current::before { bottom: 50% }
-.un .vrow:first-of-type::before { top: 10px }
-.bead { position: relative; z-index: 1; flex: none; display: grid; place-items: center; width: 56px; height: 56px; padding: 0; border: 0; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1fbe78; cursor: pointer }
+.vrow.first::before { top: 50% } .vrow.last::before { bottom: 50% } .vrow.first.last::before { display: none }
+.bead { position: relative; z-index: 1; flex: none; display: grid; place-items: center; width: 68px; height: 68px; padding: 0; border: 0; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1fbe78; cursor: pointer }
 .bead:hover { filter: brightness(1.05) }
 .bead.todo { background: #f1f1f1; color: #b7b7b7; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e2e2e2 }
 .bead.current { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }
 .bead.photo { border-radius: 16px }
-.ic { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
+.ic { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
 .vid { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #000 } .vid.img { border-radius: 16px }
 .bead.todo .vid { filter: grayscale(1); opacity: .6 }
 .ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
-.cap { flex: 0 1 auto; display: grid; justify-items: start; gap: 2px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 15px; font-weight: 800; color: #252a31; cursor: pointer }
-.cap small { font-size: 12.5px; font-weight: 600; color: #6b7280 }
+.cap { flex: 0 1 auto; display: grid; justify-items: start; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 17px; font-weight: 800; color: #252a31; cursor: pointer }
+.cap small { font-size: 14px; font-weight: 500; color: #4b5563 }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; font-weight: 900; text-transform: uppercase }
 /* во весь экран */
 .full { position: fixed; inset: 0; z-index: 1000; background: #fff; display: flex; flex-direction: column }

@@ -270,14 +270,13 @@ const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) }))
 // ---------- Копировать / вставить экран (Ctrl+C / Ctrl+V или кнопки на ветке) ----------
 // Копия — с новым id; файлы общие (удалятся, только когда их не останется ни у одного экрана), файлы «только в браузере» — копируются.
 const clip = ref(null)                                   // { course, step }
-function copyStep(s) {
+function copyStep(s, course = doc.id) {
   if (!s) return
-  clip.value = { course: doc.id, step: JSON.parse(JSON.stringify(s)) }
+  clip.value = { course, step: JSON.parse(JSON.stringify(s)) }
   showToast(`Экран «${KINDS[s.kind].t}» скопирован — выберите урок или экран и нажмите Ctrl+V (или «Вставить» на ветке)`)
 }
 async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = pick.lesson === lessonId ? pick.step : null) {
   if (!clip.value) return
-  if (clip.value.course !== doc.id) return say('Экран из другого курса', { text: 'Вставить можно в тот же курс, где скопировали.' })
   const L = lessonId ? findAny(lessonId) : null
   if (!L || !INTERACTIVE.includes(L.type)) return say('Куда вставить?', { text: 'Выберите урок или экран на ветке урока — копия встанет после него.' })
   if (!Array.isArray(L.steps)) L.steps = []
@@ -298,6 +297,35 @@ async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = p
   }
   selectStep(L.id, s.id); setProgress(doc.progress); save()
 }
+
+// ---------- «Все курсы»: остальные курсы — справа на том же холсте (смотреть, проходить, копировать экраны) ----------
+// Правится только открытый курс; соседний — двойным нажатием по его названию он открывается в редакторе.
+const allCourses = ref(false), others = ref([]), opick = ref(null)          // opick — выбранный экран соседнего курса (для Ctrl+C)
+async function loadOthers() {
+  try {
+    if (online) {
+      const r = await apiRequest('/courses'); if (!r.ok) throw new Error()
+      const list = (await r.json()).courses.filter(c => c.id !== doc.id)
+      others.value = (await Promise.all(list.map(c => apiRequest(`/courses/${c.id}`).then(x => (x.ok ? x.json() : null)).catch(() => null)))).filter(Boolean)
+    } else others.value = (JSON.parse(localStorage.getItem('tma.demoCourses') ?? '[]') ?? []).filter(c => c.id !== doc.id)   // демо: курсы-образцы
+  } catch { others.value = [] }
+  if (!others.value.length) showToast('Других курсов пока нет — создайте курс на вкладке «Курсы»')
+}
+watch(allCourses, (v) => { if (v) loadOthers(); else { others.value = []; opick.value = null } })
+// ширина курса на холсте: самая длинная ветка урока
+const widthOf = (items) => Math.max(760, ...items.filter(x => INTERACTIVE.includes(x.type)).map(x => 280 + ((x.steps?.length ?? 0) + 1) * 520 + 120))
+const othersL = computed(() => {
+  let x = widthOf(doc.items) + 260
+  return others.value.map((c) => {
+    const items = c.items ?? [], L = layoutOf(items, c.mode ?? 'line', 'o' + c.id), ox = x
+    x += widthOf(items) + 260
+    let k = 0
+    return { ...c, ox, L, path: railPath(items.length, L, ox), h: Math.max(0, ...L.map(p => p.y)) + 200,
+      st: items.map(it => (it.type === 'unit' ? 'done' : (k++ < (c.progress ?? 0) ? 'done' : 'todo'))) }
+  })
+})
+const openOther = (id) => { allCourses.value = false; router.push({ name: 'courses', query: { id } }) }
+const noop = () => {}
 function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; pick.step = stepId; if (stepId) sel.value = null }
 // «Интерактив» на панели: экран — в выбранный урок; ничего не выбрано — новый урок в конец рельса
 // Экран добавляется «рыбой» — готовым образцом, который сразу можно пройти, а потом поправить (карандаш); 'lesson' — целый урок-образец
@@ -368,10 +396,23 @@ const penCursor = computed(() => {
 })
 function setTool(t) { tool.value = t; noteTool.value = false; tray.value = t === 'pen' ? 'pen' : tray.value === 'pen' ? null : tray.value }
 const inkD = (p) => { if (p.length < 4) return p.length ? `M${p[0]} ${p[1]}h0.1` : ''; let d = `M${p[0]} ${p[1]}`; for (let i = 2; i < p.length; i += 2) d += `L${p[i]} ${p[i + 1]}`; return d }
+// Пока рисуем — штрих живёт вне Vue (рисуем прямо в <path>, без перерисовки редактора), в курс — по отпусканию
 let ink = null
-function inkStart(e) { const w = toWorld(e.clientX, e.clientY); ink = { id: 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), c: inkColor.value, w: 4, p: [Math.round(w.x), Math.round(w.y)] }; (doc.ink ??= []).push(ink) }
-function inkMove(e) { if (!ink) return; const w = toWorld(e.clientX, e.clientY), n = ink.p.length; if (Math.hypot(w.x - ink.p[n - 2], w.y - ink.p[n - 1]) * view.z < 2.5 || n >= 4000) return; ink.p.push(Math.round(w.x), Math.round(w.y)) }
-function inkEnd() { if (ink) save(); ink = null }
+const liveInk = ref(null)
+function inkStart(e) {
+  const w = toWorld(e.clientX, e.clientY); ink = { id: 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), c: inkColor.value, w: 4, p: [Math.round(w.x), Math.round(w.y)] }
+  const el = liveInk.value; if (el) { el.setAttribute('stroke', ink.c); el.setAttribute('d', inkD(ink.p)) }
+}
+function inkMove(e) {
+  if (!ink) return
+  for (const ev of e.getCoalescedEvents?.() ?? [e]) {          // все точки движения, а не только по кадрам — линия ровная
+    const w = toWorld(ev.clientX, ev.clientY), n = ink.p.length
+    if (n >= 4000 || Math.hypot(w.x - ink.p[n - 2], w.y - ink.p[n - 1]) * view.z < 1) continue
+    ink.p.push(Math.round(w.x), Math.round(w.y))
+  }
+  liveInk.value?.setAttribute('d', inkD(ink.p))
+}
+function inkEnd() { if (ink) { (doc.ink ??= []).push(ink); save() } ink = null; liveInk.value?.setAttribute('d', '') }
 
 // Выделение рамкой: id выделенного (задания на рельсе и черновики, стикеры, штрихи)
 const msel = ref([]), mq = ref(null)              // mq — рамка на экране { x0, y0, x1, y1 }
@@ -440,7 +481,8 @@ function onWheel(e) {
 // «Весь курс»: рельс, черновики и сводка — на экране целиком
 function fit(anim = true) {
   const ps = [...layout.value, ...doc.loose.map(l => ({ x: l.x, y: l.y })), ...(doc.notes ?? []).map(n => ({ x: n.x + 100, y: n.y + 100 })),
-    ...lessonRails.value.map(({ x, p }) => ({ x: p.x + 230 + ((x.steps?.length ?? 0) + 1) * 92 - 150, y: p.y }))]
+    ...lessonRails.value.map(({ x, p }) => ({ x: p.x + 230 + ((x.steps?.length ?? 0) + 1) * 92 - 150, y: p.y })),
+    ...othersL.value.flatMap(o => [{ x: o.ox, y: -170 }, { x: o.ox + widthOf(o.items ?? []) - 200, y: o.h - 200 }])]          // «Все курсы» — и соседние курсы
   const xs = [...ps.map(p => p.x - 200), ...ps.map(p => p.x + 200), -230, 230], ys = [...ps.map(p => p.y + 70), -250]
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
   const top = phone.value ? 110 : 76, bottom = 110
@@ -470,14 +512,14 @@ const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
 const drag = reactive({ on: false, item: null, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
 const hasRail = (x) => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || allRails.value)          // «Все уроки» — место и под пустые ветки
-const layoutOf = (list) => {
+const layoutOf = (list, m = mode.value, key = '') => {
   let y = 0
   return list.map((x, i) => {
     if (i) {                                     // под урок с экранами — место во всю высоту его экранов (без прокрутки)
       const gap = x.type === 'unit' ? G.unitGap : G.step, prev = list[i - 1]
-      y += hasRail(prev) ? Math.max(gap, 40 + (railHs[prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
+      y += hasRail(prev) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
     }
-    const off = mode.value === 'wave' ? K[i % 8] * G.amp : 0
+    const off = m === 'wave' ? K[i % 8] * G.amp : 0
     return { x: off, y, side: off > 0 ? 'l' : 'r' }
   })
 }
@@ -489,9 +531,9 @@ const order = computed(() => {
 })
 const layout = computed(() => layoutOf(order.value))
 const pos = (i) => layout.value[i] ?? { x: 0, y: 0, side: 'r' }
-function railPath(n) {
+function railPath(n, L = layout.value, dx = 0) {
   if (!n) return ''
-  const P = layout.value.slice(0, n); let d = `M${P[0].x},${P[0].y}`
+  const P = L.slice(0, n).map(p => ({ x: p.x + dx, y: p.y })); let d = `M${P[0].x},${P[0].y}`
   for (let i = 1; i < P.length; i++) {
     const p0 = P[i - 2] ?? P[i - 1], p1 = P[i - 1], p2 = P[i], p3 = P[i + 1] ?? p2
     d += ` C${p1.x + (p2.x - p0.x) / 6},${p1.y + (p2.y - p0.y) / 6} ${p2.x - (p3.x - p1.x) / 6},${p2.y - (p3.y - p1.y) / 6} ${p2.x},${p2.y}`
@@ -750,7 +792,7 @@ const onKey = (e) => {
   if ((e.ctrlKey || e.metaKey) && !run.value && (e.code === 'KeyC' || e.code === 'KeyV')) {
     if (window.getSelection()?.toString()) return                  // выделен текст — обычное копирование
     e.preventDefault()
-    if (e.code === 'KeyC') { const L = findAny(pick.lesson); return copyStep(L?.steps?.find(v => v.id === pick.step)) }
+    if (e.code === 'KeyC') { if (opick.value && !pick.step) return copyStep(opick.value.s, opick.value.course); const L = findAny(pick.lesson); return copyStep(L?.steps?.find(v => v.id === pick.step)) }
     return pasteStep(pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) ? selItem.value.id : activeLesson.value))
   }
   if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null; msel.value = []; if (tool.value === 'pen') tool.value = 'select' } }
@@ -776,7 +818,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
         <div v-if="noteTool && ghost" class="note ghost" :style="{ left: ghost.x + 'px', top: ghost.y + 'px', background: noteColor }" />
         <!-- Рисунки маркером -->
-        <svg class="ink"><path v-for="k in doc.ink ?? []" :key="k.id" :d="inkD(k.p)" :stroke="k.c" :stroke-width="k.w" :class="{ on: isM(k.id) }" /></svg>
+        <svg class="ink"><path v-for="k in doc.ink ?? []" :key="k.id" :d="inkD(k.p)" :stroke="k.c" :stroke-width="k.w" :class="{ on: isM(k.id) }" /><path ref="liveInk" stroke-width="4" /></svg>
         <!-- Сводка, как увидит ученик -->
         <div class="sum" @pointerdown.stop>
           <div class="sh"><span><i class="dt" />Юнит {{ curUnitNo }} из {{ unitsCount }}</span><b class="pp">{{ pct }}%</b></div>
@@ -788,8 +830,24 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
-          :can-paste="!!clip && clip.course === doc.id" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
+          :can-paste="!!clip" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
+        <!-- «Все курсы»: соседние курсы справа (только смотреть, проходить и копировать) -->
+        <template v-for="o in othersL" :key="'oc' + o.id">
+          <div class="och" :style="{ left: o.ox - 46 + 'px', top: '-170px' }" title="Дважды — открыть этот курс в редакторе" @pointerdown.stop @dblclick.stop="openOther(o.id)"><b>{{ o.title }}</b><small>другой курс · смотреть и копировать экраны · дважды — открыть</small></div>
+          <svg class="rail" :height="o.h"><path :d="o.path" class="r0" /></svg>
+          <LessonRail v-for="(x, i) in o.items.filter(v => INTERACTIVE.includes(v.type) && v.steps?.length)" :key="'olr' + o.id + x.id" :item="x" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
+            :sel="opick?.lesson === x.id ? opick.s.id : null" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly
+            @copy="copyStep($event, o.id)" @select="(sid) => { opick = sid && sid !== 'final' ? { course: o.id, lesson: x.id, s: x.steps.find(v => v.id === sid) } : null; if (sid) selectStep(null, null) }"
+            @height="railHs['o' + o.id + x.id] = $event" @focus="showPoint" />
+          <div v-for="(x, i) in o.items" :key="'ob' + o.id + x.id" class="bead ro" :class="[x.type, o.st[i], 's-' + o.L[i].side]" :style="beadStyle(x, { x: o.ox + o.L[i].x, y: o.L[i].y }, colorOf(x, null))" @pointerdown.stop @dblclick.stop="openOther(o.id)">
+            <div v-if="x.type === 'unit'" class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b></div>
+            <template v-else>
+              <svg viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
+              <em class="cap">{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></em>
+            </template>
+          </div>
+        </template>
         <!-- Рельс -->
         <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]"
           :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
@@ -855,7 +913,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl tr-panel">
       <PresenceBar inline /><i v-if="live.on" class="vs" />
       <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
-      <button class="allr" :class="{ on: allRails }" title="Раскрыть ветки всех уроков — видно все экраны, их удобно копировать между уроками (Ctrl+C / Ctrl+V)" @click="allRails = !allRails"><svg viewBox="0 0 24 24"><path d="M5 4v16M5 7h6M5 12h9M5 17h5" /><circle cx="14" cy="7" r="1.6" /><circle cx="17" cy="12" r="1.6" /><circle cx="13" cy="17" r="1.6" /></svg>Все уроки</button><i class="vs" />
+      <button class="allr" :class="{ on: allRails }" title="Раскрыть ветки всех уроков — видно все экраны, их удобно копировать между уроками (Ctrl+C / Ctrl+V)" @click="allRails = !allRails"><svg viewBox="0 0 24 24"><path d="M5 4v16M5 7h6M5 12h9M5 17h5" /><circle cx="14" cy="7" r="1.6" /><circle cx="17" cy="12" r="1.6" /><circle cx="13" cy="17" r="1.6" /></svg>Все уроки</button><button class="allr" :class="{ on: allCourses }" title="Показать рядом остальные курсы — смотреть и копировать их экраны в этот (Ctrl+C / Ctrl+V)" @click="allCourses = !allCourses"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="7" height="16" rx="2" /><rect x="13.5" y="4" width="7" height="16" rx="2" /></svg>Все курсы</button><i class="vs" />
       <span class="pl">Прогресс<small>пример</small></span>
       <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
       <i class="vs dk" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
@@ -1120,6 +1178,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tt2 { padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--hint); max-width: 130px; line-height: 1.25 }
 .allr { display: flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9px; background: #fff; font: inherit; font-size: 13px; font-weight: 800; color: var(--hint); cursor: pointer; white-space: nowrap }
 .allr svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .allr:hover { background: var(--surface) }
+.allr + .allr { margin-left: 6px }
+.och { position: absolute; z-index: 3; display: grid; gap: 2px; padding: 10px 14px; border: 1px dashed #c9c9c9; border-radius: 12px; background: #fff; white-space: nowrap; cursor: default }
+.och b { font-size: 22px; font-weight: 900 } .och small { font-size: 12px; font-weight: 700; color: var(--hint) }
+.bead.ro { cursor: default } .bead.ro:hover { transform: none }
 .allr.on { background: var(--blue-l); border-color: var(--blue); color: var(--blue-d) }
 .tray.inter { display: grid; grid-template-columns: auto repeat(6, 124px); gap: 2px 4px; overflow: visible } .tray.inter .tt2 { grid-row: span 2 }
 .tray.inter .mini { width: 112px; height: 86px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 124px; gap: 5px; padding: 6px 4px 4px; align-self: start }

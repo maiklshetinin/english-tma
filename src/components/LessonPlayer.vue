@@ -394,6 +394,32 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .go:disabled { background: var(--border); color: var(--hint-2); cursor: not-allowed }
 .single .go { background: var(--surface); color: var(--hint); cursor: default; font-size: 13px; padding: 9px 16px }
 .single .top { padding-top: 14px }
+/* Во весь экран на компьютере — крупно, как в Busuu */
+@media (min-width: 900px) {
+  .lp:not(.embedded):not(.single) .top { max-width: 760px; padding-top: 22px }
+  .lp:not(.embedded):not(.single) .pb { height: 12px }
+  .lp:not(.embedded):not(.single) .body { max-width: 760px; gap: 18px; padding-top: 22px }
+  .lp:not(.embedded):not(.single) .hd { font-size: 19px; margin-bottom: 6px }
+  .lp:not(.embedded):not(.single) .nw, .lp:not(.embedded):not(.single) .ex, .lp:not(.embedded):not(.single) .two, .lp:not(.embedded):not(.single) .wr2 { max-width: 700px }
+  .lp:not(.embedded):not(.single) .media { aspect-ratio: 16 / 9 }
+  .lp:not(.embedded):not(.single) .word { padding: 18px } .lp:not(.embedded):not(.single) .word b { font-size: 20px } .lp:not(.embedded):not(.single) .word span { font-size: 15px }
+  .lp:not(.embedded):not(.single) .ex small { font-size: 12px } .lp:not(.embedded):not(.single) .ex p { font-size: 19px } .lp:not(.embedded):not(.single) .ex span { font-size: 15px }
+  .lp:not(.embedded):not(.single) .exs { width: 26px; height: 26px } .lp:not(.embedded):not(.single) .exs svg { width: 22px; height: 22px }
+  .lp:not(.embedded):not(.single) .qa { max-width: 700px; height: 42px }
+  .lp:not(.embedded):not(.single) :deep(.ap) { height: 40px; border-radius: 20px; padding: 0 10px 0 8px; gap: 12px }
+  .lp:not(.embedded):not(.single) :deep(.ap .pp) { width: 30px; height: 30px } .lp:not(.embedded):not(.single) :deep(.ap .pp svg) { width: 20px; height: 20px }
+  .lp:not(.embedded):not(.single) :deep(.ap .sp) { font-size: 12px }
+  .lp:not(.embedded):not(.single) .media .over { left: 9%; right: 9%; bottom: 16px }
+  .lp:not(.embedded):not(.single) .pics { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px }
+  .lp:not(.embedded):not(.single) .ow { font-size: 17px; padding: 12px } .lp:not(.embedded):not(.single) .rows .ow { padding: 18px 16px; font-size: 17px }
+  .lp:not(.embedded):not(.single) .q { font-size: 24px; padding: 20px }
+  .lp:not(.embedded):not(.single) .pr { min-height: 60px; font-size: 17px }
+  .lp:not(.embedded):not(.single) .chip { font-size: 18px; padding: 11px 18px } .lp:not(.embedded):not(.single) .sent { font-size: 22px }
+  .lp:not(.embedded):not(.single) .tip { font-size: 18px } .lp:not(.embedded):not(.single) .tr { font-size: 16px; padding: 14px 16px }
+  .lp:not(.embedded):not(.single) .foot { padding: 18px max(24px, calc(50% - 560px)) } .lp:not(.embedded):not(.single) .fb { font-size: 16px }
+  .lp:not(.embedded):not(.single) .go { min-width: 200px; padding: 15px 34px; font-size: 17px; border-radius: 26px }
+  .lp:not(.embedded):not(.single) .back { height: 38px; font-size: 15px }
+}
 .embedded { height: auto; border-radius: inherit } .embedded .body { flex: none; overflow: visible; padding: 10px 40px 20px } .embedded .top { padding: 16px 110px 4px } .embedded .foot { padding: 10px 14px }
 .embedded .go { padding: 9px 22px; font-size: 14px } .go.ghost { background: var(--surface); color: var(--text); margin-right: auto }
 .embedded .pb i { transition: width .5s ease }

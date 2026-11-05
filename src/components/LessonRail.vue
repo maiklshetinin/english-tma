@@ -20,7 +20,8 @@ const props = defineProps({
   resolve: { type: Function, required: true }, putFile: { type: Function, required: true }, dropFiles: { type: Function, required: true },
   upPct: { type: Object, default: () => ({}) },
   toWorld: { type: Function, required: true },
-  canPaste: Boolean,                                      // есть скопированный экран — показать «Вставить»
+  canPaste: Boolean,
+  readonly: Boolean,                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
 })
 const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus', 'copy', 'paste'])
 const decks = useDecksStore()
@@ -155,7 +156,7 @@ const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.obs
 // ---------- Живая ветка: экраны проходятся прямо здесь, как у ученика ----------
 // Карандаш — экран правится; «Сохранить» — снова живой. Пустой (незаполненный) экран сразу открыт для правки.
 const editing = reactive({})
-const isEdit = (s) => editing[s.id] ?? !!stepIssue(s)
+const isEdit = (s) => !props.readonly && (editing[s.id] ?? !!stepIssue(s))
 function save(s) { keepCard(s); editing[s.id] = false; changed() }
 // Прохождение ветки: сколько экранов пройдено, счёт каждого, время — прогресс и итог меняются на ходу
 const run = reactive({ at: 0, res: {}, t0: 0, t1: 0, key: 0 })
@@ -198,17 +199,17 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     <!-- Экраны — открытые карточки, висят на ветке урока -->
     <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: mv.on && mv.id === s.id }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
       <!-- станция на ветке с номером и ножка к экрану; за станцию тоже можно тянуть -->
-      <span class="stem" /><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span>
+      <span class="stem" /><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span>
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
-      <div class="flab" title="Тяните, чтобы переставить" @pointerdown.stop="emit('select', s.id); down($event, s)">
+      <div class="flab" :class="{ ro: readonly }" :title="readonly ? 'Экран другого курса — скопируйте и вставьте в свой' : 'Тяните, чтобы переставить'" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
         <svg class="grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
         <span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[s.kind].ic" /></span><b>{{ i + 1 }} · {{ KINDS[s.kind].t }}</b>
         <i v-if="stepIssue(s)" class="iss" :title="stepIssue(s)">{{ stepIssue(s) }}</i>
-        <button class="ib mv" title="На шаг левее" :disabled="i === 0" @pointerdown.stop @click="shift(s, -1)">‹</button><button class="ib mv" title="На шаг правее" :disabled="i === order.length - 1" @pointerdown.stop @click="shift(s, 1)">›</button>
-        <button class="ib pen" :class="{ on: isEdit(s) }" :title="isEdit(s) ? 'Сейчас правите — «Сохранить» внизу экрана' : 'Изменить экран'" @pointerdown.stop @click="isEdit(s) ? save(s) : (editing[s.id] = true)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
+        <template v-if="!readonly"><button class="ib mv" title="На шаг левее" :disabled="i === 0" @pointerdown.stop @click="shift(s, -1)">‹</button><button class="ib mv" title="На шаг правее" :disabled="i === order.length - 1" @pointerdown.stop @click="shift(s, 1)">›</button></template>
+        <button v-if="!readonly" class="ib pen" :class="{ on: isEdit(s) }" :title="isEdit(s) ? 'Сейчас правите — «Сохранить» внизу экрана' : 'Изменить экран'" @pointerdown.stop @click="isEdit(s) ? save(s) : (editing[s.id] = true)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
         <button class="ib cp" title="Копировать экран (Ctrl+C) — потом «Вставить» на любой ветке или Ctrl+V" @pointerdown.stop @click="emit('copy', s)"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2" /><path d="M15.5 8.5V6.7a2.2 2.2 0 0 0-2.2-2.2H6.7a2.2 2.2 0 0 0-2.2 2.2v6.6a2.2 2.2 0 0 0 2.2 2.2h1.8" /></svg></button>
         <button v-if="!isEdit(s)" class="ib rs" title="Сбросить экран — пройти заново" @pointerdown.stop @click="resetStep(s)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></svg></button>
-        <button class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
+        <button v-if="!readonly" class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
       <div class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at }]" @pointerdown.stop="emit('select', s.id)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
@@ -360,8 +361,8 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       <div class="ef"><b>Экранов пока нет</b><span>Добавьте из «Интерактива» внизу или вставьте скопированный (Ctrl+V)</span>
         <div class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">＋ Экран</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
     </div>
-    <button v-if="canPaste && steps.length" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
-    <button class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
+    <button v-if="canPaste && steps.length && !readonly" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
+    <button v-if="!readonly" class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
 
     <!-- Итог урока -->
     <div v-if="steps.length" :ref="watchFrame" class="frame" :style="{ left: cx(order.length) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
@@ -395,7 +396,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .grip { flex: none; width: 16px; height: 16px; fill: #a5a5a5 }
 .ib.mv { font-size: 22px; font-weight: 900; color: var(--hint) } .ib.mv:hover:not(:disabled) { background: var(--blue-l); color: var(--blue-d) } .ib.mv:disabled { opacity: .25; cursor: default }
 .flab { display: flex; align-items: center; gap: 6px; height: 34px; margin-top: 14px; padding: 0 2px; cursor: grab; user-select: none; touch-action: none }
-.flab.fix { cursor: default } .flab b { font-size: 13px; font-weight: 800; color: #555; white-space: nowrap }
+.flab.fix, .flab.ro { cursor: default } .flab b { font-size: 13px; font-weight: 800; color: #555; white-space: nowrap }
 .iss { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-style: normal; font-weight: 800; color: var(--orange-d) }
 /* сам экран — как у ученика на телефоне / планшете */
 .card { display: flex; flex-direction: column; min-height: 330px; box-sizing: border-box; background: #fff; border: 1px solid #e3e3e3; border-radius: 22px; box-shadow: 0 2px 12px rgba(0, 0, 0, .06); cursor: default; user-select: none; overflow: hidden }
