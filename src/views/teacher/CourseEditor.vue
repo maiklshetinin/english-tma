@@ -361,6 +361,11 @@ const tool = ref('select'), space = ref(false)
 const handOn = computed(() => tool.value === 'hand' || space.value)
 const INK_COLORS = ['#1e1e1e', '#f24822', '#ffa629', '#14ae5c', '#0d99ff', '#9747ff']
 const inkColor = ref('#1e1e1e')
+// курсор-карандаш (кончик — цветом маркера, точка рисования — внизу слева)
+const penCursor = computed(() => {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'><path d='M4 22l2.2-6.6L18.6 3a2.3 2.3 0 0 1 3.3 0l1.1 1.1a2.3 2.3 0 0 1 0 3.3L10.6 19.8z' fill='white' stroke='%231e1e1e' stroke-width='1.6' stroke-linejoin='round'/><path d='M4 22l2.2-6.6 4.4 4.4z' fill='${inkColor.value.replace('#', '%23')}' stroke='%231e1e1e' stroke-width='1.2' stroke-linejoin='round'/></svg>`
+  return `url("data:image/svg+xml,${svg.replace(/"/g, "'").replace(/</g, '%3C').replace(/>/g, '%3E')}") 3 23, crosshair`
+})
 function setTool(t) { tool.value = t; noteTool.value = false; tray.value = t === 'pen' ? 'pen' : tray.value === 'pen' ? null : tray.value }
 const inkD = (p) => { if (p.length < 4) return p.length ? `M${p[0]} ${p[1]}h0.1` : ''; let d = `M${p[0]} ${p[1]}`; for (let i = 2; i < p.length; i += 2) d += `L${p[i]} ${p[i + 1]}`; return d }
 let ink = null
@@ -390,7 +395,8 @@ const selBox = computed(() => {
   const ids = new Set(msel.value); if (!ids.size) return null
   const bs = boxOf().filter(o => ids.has(o.id)); if (!bs.length) return null
   const x0 = Math.min(...bs.map(o => o.x0)) - 8, y0 = Math.min(...bs.map(o => o.y0)) - 8, x1 = Math.max(...bs.map(o => o.x1)) + 8, y1 = Math.max(...bs.map(o => o.y1)) + 8
-  return { left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', '--z': 1 / view.z }
+  const a = toScreen({ x: x0, y: y0 }), b = toScreen({ x: x1, y: y1 })       // рамка — на экране (поверх холста): линии и квадратики всегда чёткие
+  return { left: Math.round(a.x) + 'px', top: Math.round(a.y) + 'px', width: Math.round(b.x - a.x) + 'px', height: Math.round(b.y - a.y) + 'px' }
 })
 const isM = (id) => msel.value.includes(id)
 async function delSelected() {
@@ -601,8 +607,11 @@ function boardDown(e) {
   pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, moved: false }
   board.value.setPointerCapture?.(e.pointerId)
 }
+const ghost = ref(null)                                   // выбран стикер — его «призрак» под курсором (как в FigJam)
+watch(() => noteTool.value, (v) => { if (!v) ghost.value = null })
 function boardMove(e) {
   sendCursor(e)
+  if (noteTool.value && e.pointerType !== 'touch') { const w = toWorld(e.clientX, e.clientY); ghost.value = { x: Math.round(w.x - 95), y: Math.round(w.y - 95) } }
   if (ink) return inkMove(e)
   if (mq.value) return mqMove(e)
   if (touches.has(e.pointerId)) {
@@ -763,12 +772,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
 <template>
   <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
     <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
-    <div ref="board" class="board" :class="{ placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="dots" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @wheel="onWheel">
+    <div ref="board" class="board" :class="{ placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="[dots, tool === 'pen' && !handOn && !noteTool ? { cursor: penCursor } : null]" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @pointerleave="ghost = null" @wheel="onWheel">
       <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
+        <div v-if="noteTool && ghost" class="note ghost" :style="{ left: ghost.x + 'px', top: ghost.y + 'px', background: noteColor }" />
         <!-- Рисунки маркером -->
         <svg class="ink"><path v-for="k in doc.ink ?? []" :key="k.id" :d="inkD(k.p)" :stroke="k.c" :stroke-width="k.w" :class="{ on: isM(k.id) }" /></svg>
-        <!-- Рамка вокруг выделенного, с квадратиками по углам -->
-        <div v-if="selBox" class="selbox" :style="selBox"><i /><i /><i /><i /></div>
         <!-- Сводка, как увидит ученик -->
         <div class="sum" @pointerdown.stop>
           <div class="sh"><span><i class="dt" />Юнит {{ curUnitNo }} из {{ unitsCount }}</span><b class="pp">{{ pct }}%</b></div>
@@ -818,6 +826,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div v-if="noteSel === n.id" class="nbar" @pointerdown.stop><button v-for="c in NOTE_COLORS" :key="c" :style="{ background: c }" :class="{ on: n.color === c }" @click="n.color = c; save()" /><button class="nd" title="Удалить" @click="delNote(n.id)">✕</button></div>
         </div>
       </div>
+      <!-- Рамка вокруг выделенного, с квадратиками по углам -->
+      <div v-if="selBox" class="selbox" :style="selBox"><i /><i /><i /><i /></div>
       <div v-if="mq" class="mq" :style="mqStyle" />
     </div>
 
@@ -884,19 +894,19 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl tools" role="toolbar">
       <!-- Стрелка и рука, как в FigJam -->
       <div class="mode">
-        <button class="md" :class="{ on: tool === 'select' && !space }" title="Выделение (V): тяните по пустому месту — рамка; Delete — удалить выделенное" @click="setTool('select')"><svg viewBox="0 0 24 24"><path d="M5.5 3.8l12.6 6.6-5.6 1.7-2.4 5.6z" /></svg></button>
+        <button class="md" :class="{ on: tool === 'select' && !space && !noteTool }" title="Выделение (V): тяните по пустому месту — рамка; Delete — удалить выделенное" @click="setTool('select')"><svg viewBox="0 0 24 24"><path d="M5.5 3.8l12.6 6.6-5.6 1.7-2.4 5.6z" /></svg></button>
         <button class="md" :class="{ on: handOn }" title="Рука (H или зажатый пробел): двигать холст" @click="setTool('hand')"><svg viewBox="0 0 24 24"><path d="M8 12.5V6.2a1.4 1.4 0 0 1 2.8 0V11M10.8 10.5V4.9a1.4 1.4 0 0 1 2.8 0v5.6M13.6 10.5V5.9a1.4 1.4 0 0 1 2.8 0V12M16.4 9.4a1.4 1.4 0 0 1 2.8 0v4.8a6.3 6.3 0 0 1-6.3 6.3h-.6a6 6 0 0 1-4.7-2.3l-3-3.9a1.5 1.5 0 0 1 2.2-2l1.2 1.1" /></svg></button>
       </div>
       <i class="tsep" />
       <!-- Маркер: выезжает, как в FigJam -->
       <button class="marker" :class="{ on: tool === 'pen' }" title="Маркер (P): рисовать на холсте" @click="setTool(tool === 'pen' ? 'select' : 'pen')"><span class="mk"><i :style="{ background: inkColor }" /></span></button>
-      <button class="tb" :title="'Юнит — тяните на рельс или нажмите'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Юнит</small></button>
-      <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
-      <i class="tsep" />
       <!-- Стикер, как в FigJam: выезжает при наведении, выбран — стоит выше -->
       <button class="sticky" :class="{ on: noteTool || tray === 'note' }" title="Стикер — выберите цвет и нажмите на холст" @click="tray = tray === 'note' ? null : 'note'; noteTool = tray === 'note'; if (tool === 'pen') tool = 'select'">
-        <span class="sk back" :style="{ background: noteColor }" /><span class="sk" :style="{ background: noteColor }"><i /></span>
+        <span class="sk back" :style="{ background: noteColor }" /><span class="sk" :style="{ background: noteColor }" />
       </button>
+      <i class="tsep" />
+      <button class="tb" :title="'Юнит — тяните на рельс или нажмите'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Юнит</small></button>
+      <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
     </div>
   </div>
 </template>
@@ -908,25 +918,25 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .board { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab; background-image: radial-gradient(circle, #cfcfcf 1px, transparent 1.3px) }
 .board:active { cursor: grabbing }
 .board.hand, .board.hand:active { cursor: grab } .board.hand:active { cursor: grabbing } .board.hand .world { pointer-events: none }
-.board.pen { cursor: crosshair } .board.pen .world { pointer-events: none }
+.board.pen .world { pointer-events: none }
 .board:not(.hand):not(.placing):not(.pen) { cursor: default }
 .ink { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; z-index: 5 }
 .ink path { fill: none; stroke-linecap: round; stroke-linejoin: round } .ink path.on { filter: drop-shadow(0 0 2px #0d99ff) drop-shadow(0 0 1px #0d99ff) }
-.mq { position: absolute; z-index: 20; border: 1px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }
-.selbox { position: absolute; z-index: 8; box-sizing: border-box; border: calc(1.5px * var(--z)) solid #0d99ff; pointer-events: none }
-.selbox i { position: absolute; width: calc(9px * var(--z)); height: calc(9px * var(--z)); margin: calc(-4.5px * var(--z)) 0 0 calc(-4.5px * var(--z)); box-sizing: border-box; border: calc(1.5px * var(--z)) solid #0d99ff; border-radius: calc(2px * var(--z)); background: #fff }
-.selbox i:nth-child(1) { left: 0; top: 0 } .selbox i:nth-child(2) { left: 100%; top: 0 } .selbox i:nth-child(3) { left: 0; top: 100% } .selbox i:nth-child(4) { left: 100%; top: 100% }
+.mq { position: absolute; z-index: 20; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }
+.selbox { position: absolute; z-index: 19; border: 2px solid #0d99ff; pointer-events: none }
+.selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: #fff }
+.selbox i:nth-child(1) { left: -7px; top: -7px } .selbox i:nth-child(2) { right: -7px; top: -7px } .selbox i:nth-child(3) { left: -7px; bottom: -7px } .selbox i:nth-child(4) { right: -7px; bottom: -7px }
 /* стрелка и рука на панели */
 .mode { display: flex; gap: 4px; padding: 0 2px }
 .md { display: grid; place-items: center; width: 48px; height: 48px; border: 0; border-radius: 12px; background: none; color: #2c2c2c; cursor: pointer; padding: 0 } .md:hover { background: #f2f2f2 }
 .md svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
 .md.on { background: #9747ff; color: #fff } .md.on:first-child svg { fill: #fff }
 /* маркер, как в FigJam: торчит из панели, выбран — выше */
-.marker { position: relative; align-self: stretch; width: 60px; border: 0; background: none; padding: 0; cursor: pointer; overflow: hidden }
-.mk { position: absolute; left: 50%; top: 26px; width: 24px; height: 90px; margin-left: -12px; border-radius: 6px 6px 3px 3px; background: linear-gradient(90deg, #fafafa, #fff 40%, #e9e9e9); box-shadow: 0 2px 6px rgba(0, 0, 0, .18); transition: top .18s ease }
+.marker { position: relative; align-self: stretch; width: 60px; border: 0; background: none; padding: 0; cursor: pointer; clip-path: inset(-80px -20px 0 -20px) }   /* сверху вылезает на холст, снизу прячется в панель */
+.mk { position: absolute; left: 50%; top: 26px; width: 24px; height: 130px; margin-left: -12px; border-radius: 6px 6px 3px 3px; background: linear-gradient(90deg, #fafafa, #fff 40%, #e9e9e9); box-shadow: 0 2px 6px rgba(0, 0, 0, .18); transition: top .18s ease }
 .mk::before { content: ''; position: absolute; left: 3px; right: 3px; top: -14px; height: 16px; background: #2b2b2b; clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%) }
 .mk i { position: absolute; left: 50%; top: -20px; width: 6px; height: 8px; margin-left: -3px; border-radius: 3px 3px 0 0 }
-.marker:hover .mk { top: 18px } .marker.on .mk { top: 12px }
+.marker:hover .mk { top: 10px } .marker.on .mk { top: -14px }
 .sw.pen { border-radius: 50% }
 .world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0 }
 /* Рельс: серая дорога, пройденное — зелёным поверх */
@@ -1077,28 +1087,29 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .runov { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
 .runbox { width: min(560px, 100%); height: min(820px, 96vh); border-radius: 22px; overflow: hidden; background: #fff }
 /* Стикеры */
-.note { position: absolute; z-index: 4; width: 190px; min-height: 190px; display: flex; box-sizing: border-box; padding: 14px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, .12); cursor: grab; touch-action: none }
+.note { position: absolute; z-index: 4; width: 190px; min-height: 190px; display: flex; box-sizing: border-box; padding: 16px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .06); cursor: grab; touch-action: none }
+.note.ghost { opacity: .6; pointer-events: none; z-index: 9; box-shadow: none }
 .note.on { outline: 2px solid #0d99ff; outline-offset: 2px }
-.note textarea { flex: 1; min-height: 160px; margin: 0; padding: 0; border: 0; background: none; resize: none; outline: none; font: inherit; font-size: 16px; font-weight: 700; color: #2b2b2b; line-height: 1.3; cursor: inherit; pointer-events: none }
+.note textarea { flex: 1; min-height: 160px; margin: 0; padding: 0; border: 0; background: none; resize: none; outline: none; font: inherit; font-size: 16px; font-weight: 500; color: #2b2b2b; line-height: 1.3; cursor: inherit; pointer-events: none }
 .note.edit textarea { pointer-events: auto; cursor: text } .note.edit { cursor: default }
 .nbar { position: absolute; left: 0; top: -46px; display: flex; gap: 4px; padding: 5px; border-radius: 10px; background: #2c2c2c; box-shadow: 0 4px 12px rgba(0, 0, 0, .2) }
 .nbar button { width: 22px; height: 22px; border: 2px solid transparent; border-radius: 50%; cursor: pointer; padding: 0 } .nbar button.on { border-color: #fff }
 .nbar .nd { background: none; color: #fff; font-size: 12px }
 /* Нижняя панель как в FigJam — крупно */
-.tools { height: 84px; padding: 0 10px; gap: 4px; border-radius: 20px; overflow: hidden }
+.tools { height: 84px; padding: 0 10px; gap: 4px; border-radius: 20px }
 .tb { display: grid; justify-items: center; gap: 4px; width: 92px; padding: 10px 0 8px; border: 0; border-radius: 14px; background: none; font: inherit; color: #2c2c2c; cursor: pointer; touch-action: none }
 .tb:hover { background: #f2f2f2 } .tb.on { background: #e5f4ff; color: #0d99ff }
 .tb svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
 .tb small { font-size: 13px; font-weight: 800 }
 .tsep { width: 1px; height: 50px; margin: 0 6px; background: #e6e6e6 }
 /* стикер на панели: торчит снизу, при наведении выезжает */
-.sticky { position: relative; align-self: stretch; width: 96px; border: 0; background: none; padding: 0; cursor: pointer }
-.sk { position: absolute; left: 14px; top: 22px; width: 66px; height: 74px; border-radius: 2px 2px 3px 3px; box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 6px 14px rgba(0, 0, 0, .22); transform: rotate(-4deg); transition: top .18s ease, transform .18s ease }
-.sk.back { left: 24px; top: 30px; transform: rotate(5deg); filter: brightness(.93); box-shadow: 0 4px 10px rgba(0, 0, 0, .18) }
-.sk i { position: absolute; right: 0; top: 0; width: 18px; height: 18px; background: linear-gradient(225deg, #fff 50%, rgba(0, 0, 0, .14) 50%); box-shadow: -1px 1px 2px rgba(0, 0, 0, .12) }
-.sticky:hover .sk.back { top: 24px; transform: rotate(7deg) } .sticky.on .sk.back { top: 20px; transform: rotate(6deg) }
-.sticky:hover .sk { top: 12px; transform: rotate(-2deg) } .sticky.on .sk { top: 8px; transform: rotate(0) }
-.board.placing { cursor: crosshair }
+.sticky { position: relative; align-self: stretch; width: 96px; border: 0; background: none; padding: 0; cursor: pointer; clip-path: inset(-80px -20px 0 -20px) }
+.sticky::before { content: ''; position: absolute; left: 6px; right: 6px; top: 8px; bottom: 8px; border-radius: 12px; background: transparent; transition: background .15s }
+.sticky:hover::before { background: #f2f2f2 } .sticky.on::before { background: #ececec }
+.sk { position: absolute; left: 20px; top: 24px; width: 56px; height: 56px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .1), 0 4px 10px rgba(0, 0, 0, .12); transform: rotate(-3deg); transition: top .18s ease, transform .18s ease }
+.sk.back { left: 26px; top: 30px; transform: rotate(4deg); filter: brightness(.95) }
+.sticky:hover .sk { top: 16px } .sticky:hover .sk.back { top: 22px } .sticky.on .sk { top: 12px; transform: rotate(-1deg) } .sticky.on .sk.back { top: 18px; transform: rotate(5deg) }
+.board.placing, .board.placing * { cursor: none !important }
 .tray { left: 50%; bottom: 116px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 18px; animation: tray .14s ease-out; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none }
 @keyframes tray { from { opacity: 0; transform: translate(-50%, 6px) } }
 .ti { display: grid; justify-items: center; gap: 5px; width: 92px; padding: 8px 0 6px; border: 0; border-radius: 12px; background: none; font: inherit; cursor: pointer; touch-action: none; flex: none }
@@ -1142,7 +1153,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .sw { flex: none; width: 30px; height: 30px; margin: 4px; border: 1px solid rgba(0, 0, 0, .12); border-radius: 50%; cursor: pointer; padding: 0 } .sw:hover { transform: scale(1.1) }
 .sw.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #7b61ff }
 @media (max-width: 719px) {
-  .tools { left: 8px; right: 8px; transform: none; height: 72px; justify-content: center } .tb { width: 64px } .tb svg { width: 26px; height: 26px } .tb small { font-size: 11px } .sticky { width: 72px } .sk { left: 10px; width: 52px; height: 60px } .tray { bottom: 92px } .tsep { display: none }
+  .tools { left: 8px; right: 8px; transform: none; height: 72px; justify-content: center } .tb { width: 64px } .tb svg { width: 26px; height: 26px } .tb small { font-size: 11px } .sticky { width: 72px } .sk { left: 12px; width: 48px; height: 48px } .sk.back { left: 17px } .tray { bottom: 92px } .tsep { display: none }
 }
 .rin { pointer-events: auto; width: 100%; margin: 0; padding: 2px 6px; border: 2px solid #0d99ff; border-radius: 6px; background: #fff; font: inherit; font-size: 15px; font-weight: 800; color: #252a31; outline: none; user-select: text }
 .uh.ren { display: grid; gap: 4px } .rin.big { font-size: 20px; font-weight: 900 }
