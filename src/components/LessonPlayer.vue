@@ -22,7 +22,7 @@ const props = defineProps({
   start: { type: Number, default: 0 },
   single: Boolean,                                        // просмотр одного экрана в конструкторе
   name: { type: String, default: '' },
-  closable: Boolean,
+  closable: Boolean, closeText: { type: String, default: '' },   // closeText — вместо ✕ кнопка с подписью («‹ К курсу»)
   embedded: Boolean, pct: { type: Number, default: null }, stats: { type: Object, default: null },
 })
 const emit = defineEmits(['close', 'done', 'next', 'restart', 'full'])
@@ -145,7 +145,8 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 <template>
   <div class="lp" :class="{ single, embedded }">
     <div class="top">
-      <button v-if="closable" class="x" title="Закрыть" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+      <button v-if="closable && closeText" class="back" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>{{ closeText }}</button>
+      <button v-else-if="closable" class="x" title="Закрыть" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
       <div class="pb"><i :style="{ width: (isFinal ? 100 : pct) + '%' }" /></div>
     </div>
 
@@ -305,6 +306,8 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .top { display: flex; align-items: center; gap: 12px; padding: 18px 22px 6px; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box }
 .x { flex: none; width: 32px; height: 32px; border: 0; background: none; border-radius: 8px; cursor: pointer; display: grid; place-items: center } .x:hover { background: var(--surface) }
 .x svg { width: 20px; height: 20px; stroke: var(--hint); stroke-width: 2.6; stroke-linecap: round }
+.back { flex: none; display: flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px 0 6px; border: 0; border-radius: 17px; background: var(--surface); font: inherit; font-size: 14px; font-weight: 800; color: var(--text); cursor: pointer; white-space: nowrap }
+.back:hover { background: #e9e9e9 } .back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
 .pb { flex: 1; height: 10px; border-radius: 6px; background: #e8e8e8; overflow: hidden } .pb i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .3s }
 .body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: stretch; gap: 14px; width: 100%; max-width: 520px; margin: 0 auto; padding: 14px 22px 24px; box-sizing: border-box }
 .hd { margin: 8px 0 4px; text-align: center; font-size: 15px; font-weight: 800 }

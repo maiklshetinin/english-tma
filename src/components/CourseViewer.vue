@@ -120,9 +120,9 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
       <div v-if="open" class="full">
-        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" @close="open = null" />
         <div v-else class="sh">
-          <button class="x" title="Закрыть (Esc)" @click="open = null"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+          <button class="x" title="Вернуться к курсу (Esc)" @click="open = null"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>К курсу</button>
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>
           <template v-else-if="open.type === 'photo'"><img v-if="fileOf(open)" class="ph" :src="fileOf(open)" alt="" /><p v-else>Фото ещё не загружено</p><b>{{ open.title }}</b></template>
           <template v-else>
@@ -176,8 +176,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .full :deep(.lp) { height: 100% }
 .sh { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 30px 24px; text-align: center }
 .sh p { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px } .sh b { font-size: 18px }
-.x { position: absolute; left: 18px; top: 18px; width: 36px; height: 36px; border: 0; background: none; border-radius: 8px; cursor: pointer; display: grid; place-items: center } .x:hover { background: var(--surface) }
-.x svg { width: 22px; height: 22px; stroke: var(--hint); stroke-width: 2.6; stroke-linecap: round }
+.x { position: absolute; left: 18px; top: 18px; display: flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px 0 6px; border: 0; border-radius: 17px; background: var(--surface); font: inherit; font-size: 14px; font-weight: 800; color: var(--text); cursor: pointer } .x:hover { background: #e9e9e9 }
+.x svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
+/* на компьютере меню приложения слева остаётся видно поверх урока — в любой момент можно уйти в другой раздел */
+@media (min-width: 1024px) { .full { z-index: 9; padding-left: 116px } .x { left: 134px } }
 .kr { width: min(360px, 80vw); height: min(360px, 80vw); border-radius: 50%; object-fit: cover; background: #000 }
 .ph { max-width: min(900px, 92vw); max-height: 75vh; border-radius: 14px }
 .bi { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; background: var(--c); color: #fff }
