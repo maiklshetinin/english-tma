@@ -23,7 +23,7 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import LessonPlayer from '../../components/LessonPlayer.vue'
-import { INTERACTIVE, KINDS, KIND_LIST, STEPS_MAX, RAIL_H, fishStep, fishLesson, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, fishLesson, stepsOut, keepLocalFiles, stepRefs } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -175,7 +175,7 @@ async function uploadLocal() {
     if (b) await upload(x, b instanceof File ? b : new File([b], x.type === 'photo' ? 'photo.jpg' : 'kruzhok.mp4', { type: b.type || (x.type === 'photo' ? 'image/jpeg' : 'video/mp4') }))
   }
   for (const x of [...doc.items, ...doc.loose]) for (const s of x.steps ?? []) {          // файлы экранов уроков
-    const slots = [...['image', 'audio', 'video'].map(f => [f, null]), ...(s.opts ?? []).flatMap((_, k) => [['image', k], ['audio', k]])]
+    const slots = [...['image', 'audio', 'video', 'exAudio'].map(f => [f, null]), ...(s.opts ?? []).flatMap((_, k) => [['image', k], ['audio', k]])]
     for (const [f, k] of slots) {
       const v = (k == null ? s : s.opts[k])?.[f]; if (!v?.startsWith('idb:')) continue
       const b = await mediaOp('readonly', st => st.get(v.slice(4))).catch(() => null)
@@ -258,12 +258,13 @@ const activeLesson = computed(() => pick.lesson ?? (selItem.value && INTERACTIVE
 const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (x.steps?.length || x.id === activeLesson.value)))
 function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; pick.step = stepId; if (stepId) sel.value = null }
 // «Интерактив» на панели: экран — в выбранный урок; ничего не выбрано — новый урок в конец рельса
-// Экран добавляется «рыбой» — готовым образцом, который сразу можно пройти, а потом поправить (карандаш); kind 'lesson' — целый урок-образец
-function addScreen(kind) {
+// Экран добавляется «рыбой» — готовым образцом, который сразу можно пройти, а потом поправить (карандаш); 'lesson' — целый урок-образец
+const TPL = [...TEMPLATES, { id: 'lesson', kind: 'intro', t: 'Готовый урок', d: '7 экранов-образцов' }]
+function addScreen(id) {
   let L = activeLesson.value ? findAny(activeLesson.value) : null
   if (!L) { L = it('lesson', 'Урок', { steps: [] }); doc.items.push(L) }
   if (!Array.isArray(L.steps)) L.steps = []
-  const add = kind === 'lesson' ? fishLesson() : [fishStep(kind)]
+  const add = id === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === id).make()]
   if (L.steps.length + add.length > STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
   L.steps.push(...add); const st = add[0]; tray.value = null
   selectStep(L.id, st.id); setProgress(doc.progress)
@@ -724,21 +725,28 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl zoom"><button title="Отдалить" @click="zoomBtn(1 / 1.25)">−</button><b title="100%" @click="zoomAt(1 / view.z, W / 2, H / 2)">{{ Math.round(view.z * 100) }}%</b><button title="Приблизить" @click="zoomBtn(1.25)">+</button><i class="vs" /><button class="all" title="Показать весь курс" @click="fit()">Весь курс</button></div>
 
     <!-- Снизу: панель как в FigJam — группа, над ней ряд элементов -->
-    <div v-if="tray" class="fl tray" role="toolbar" @pointerdown.stop>
+    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop>
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
         <span class="tt2">{{ activeLesson ? 'В урок «' + (findAny(activeLesson)?.title || 'Урок') + '»' : 'Новый урок в конце' }}</span>
         <!-- мини-окошки: как выглядит экран -->
-        <button v-for="k in [...KIND_LIST, 'lesson']" :key="k" class="mi" :title="k === 'lesson' ? 'Сразу 5 экранов-образцов: два новых слова, два выбора, пары' : KINDS[k].d" @click="addScreen(k)">
-          <span class="mini" :class="k"><i class="mp" />
-            <template v-if="k === 'intro'"><i class="mh" /><i class="mm" /><i class="mw" /><i class="ml" /></template>
-            <template v-else-if="k === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
-            <template v-else-if="k === 'pairs'"><i class="mh" /><span class="mq"><i class="g" /><i class="g" /><i /><i /><i /><i /></span></template>
+        <button v-for="t in TPL" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @click="addScreen(t.id)">
+          <span class="mini" :class="t.id"><i class="mp" />
+            <template v-if="t.id === 'intro'"><i class="mh" /><span class="mm"><i class="ma" /></span><i class="mw" /><i class="ml" /></template>
+            <template v-else-if="t.id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
+            <template v-else-if="t.id === 'audiotest'"><i class="mh" /><span class="mm sm"><i class="ma" /></span><span class="mr"><i /><i class="g" /><i /></span></template>
+            <template v-else-if="t.id === 'pairs'"><i class="mh" /><span class="mq"><i class="g" /><i class="g" /><i /><i /><i /><i /></span></template>
+            <template v-else-if="t.id === 'order'"><i class="mh" /><i class="ma" /><span class="mc ln"><i /><i /></span><span class="mc"><i /><i /><i /></span></template>
+            <template v-else-if="t.id === 'tip'"><i class="mh" /><i class="ml" /><i class="ml s" /><span class="mq t"><i /><i /><i /><i /></span></template>
+            <template v-else-if="t.id === 'speak'"><i class="mh" /><span class="mm"><b class="cp" /></span><span class="mk"><i /><i class="b" /><i /></span></template>
+            <template v-else-if="t.id === 'type'"><i class="mh" /><i class="ma" /><span class="mg"><i /><i class="d" /></span></template>
+            <template v-else-if="t.id === 'fill'"><i class="mh" /><span class="mm sm" /><span class="mg"><i class="d" /></span><span class="mc"><i /><i class="o" /></span></template>
+            <template v-else-if="t.id === 'answer'"><i class="mh" /><span class="mm sm" /><i class="mw" /><span class="mn"><i /><i /></span></template>
             <template v-else><span class="ms"><i /><i /><i /></span></template>
             <i class="mb" />
           </span>
-          <small><b>{{ k === 'lesson' ? 'Готовый урок' : KINDS[k].t }}</b>{{ k === 'lesson' ? '5 экранов-образцов' : { intro: 'видео, фото, звук, слово', choice: 'выбрать верный ответ', pairs: 'соединить пары' }[k] }}</small>
+          <small><b>{{ t.t }}</b>{{ t.d }}</small>
         </button>
       </template>
       <template v-else-if="tray === 'note'"><button v-for="c in NOTE_COLORS" :key="c" class="sw" :class="{ on: noteColor === c }" :style="{ background: c }" title="Цвет стикера — потом нажмите на холст" @click="noteColor = c; noteTool = true" /></template>
@@ -938,6 +946,19 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tc svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round }
 .ti small { font-size: 13px; font-weight: 800; color: #2c2c2c; white-space: nowrap }
 .tt2 { padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--hint); max-width: 130px; line-height: 1.25 }
+.tray.inter { display: grid; grid-template-columns: auto repeat(6, 124px); gap: 2px 4px; overflow: visible } .tray.inter .tt2 { grid-row: span 2 }
+.tray.inter .mini { width: 112px; height: 86px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 124px; gap: 5px; padding: 6px 4px 4px; align-self: start }
+.tray.inter .mini .mb { right: 6px; bottom: 5px; width: 26px; height: 7px } .tray.inter .mini.lesson { overflow: visible } .tray.inter .mini .ms { transform: scale(.82); transform-origin: top center }
+.tray.inter .mi small { font-size: 10.5px; line-height: 1.2 } .tray.inter .mi small b { font-size: 12.5px }
+.mini .mm { position: relative; display: block } .mini .mm .ma { position: absolute; left: 8%; right: 8%; bottom: 3px; width: auto; height: 5px; background: #1a73e8 } .mini .mm.sm { height: 24px }
+.mini .mr { display: grid; gap: 3px; width: 100% } .mini .mr i { height: 7px; border: 1px solid #e3e3e3; background: #fff } .mini .mr i.g { background: #8ff0c8; border-color: #5fe0aa }
+.mini .mc { display: flex; gap: 3px; justify-content: center; width: 100% } .mini .mc i { width: 18px; height: 8px; border: 1px solid #d5d5d5; background: #fff } .mini .mc i.o { border-color: #1a73e8 }
+.mini .mc.ln { justify-content: flex-start; padding-bottom: 3px; border-bottom: 1.5px solid #e3e3e3 }
+.mini .ml.s { width: 60% } .mini .mq.t { gap: 0 } .mini .mq.t i { height: 7px; border-radius: 0 }
+.mini .cp { position: absolute; left: 50%; bottom: 3px; width: 26px; height: 5px; margin-left: -13px; border-radius: 2px; background: rgba(0, 0, 0, .55) }
+.mini .mk { display: flex; gap: 6px; align-items: center } .mini .mk i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #c9dcfb; background: #fff } .mini .mk i.b { width: 13px; height: 13px; background: #1a73e8; border-color: #1a73e8 }
+.mini .mg { display: flex; gap: 4px; align-items: flex-end; justify-content: center; width: 100%; margin-top: 3px } .mini .mg i { width: 28px; height: 5px; background: #cfcfcf } .mini .mg i.d { width: 26px; height: 2px; background: none; border-bottom: 2px dotted #1a73e8; border-radius: 0 }
+.mini .mn { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; width: 100% } .mini .mn i { height: 8px; border: 1px solid #1a73e8; border-radius: 5px; background: #fff }
 .mi { flex: none; display: grid; justify-items: center; gap: 7px; width: 168px; padding: 8px 6px 6px; border: 0; border-radius: 14px; background: none; font: inherit; cursor: pointer }
 .mi:hover { background: #f2f2f2 } .mi:hover .mini { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0, 0, 0, .12) }
 .mi small { display: grid; gap: 1px; font-size: 12px; font-weight: 600; color: var(--hint); text-align: center } .mi small b { font-size: 14px; font-weight: 800; color: #2c2c2c }

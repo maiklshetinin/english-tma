@@ -14,7 +14,7 @@ import { isMediaUrl } from './media.js'
 export interface CoursesDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 export const COURSE_TYPES = ['unit', 'video', 'photo', 'lesson', 'words', 'hw', 'test', 'tutor', 'reward']
 export const COURSE_ITEMS_MAX = 500, COURSES_MAX = 100
-export const INTERACTIVE = ['lesson', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs'], STEPS_MAX = 40
+export const INTERACTIVE = ['lesson', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer'], STEPS_MAX = 40
 const ID = /^[\w-]{1,64}$/
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
@@ -36,7 +36,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (!ID.test(String(r.id)) || !STEP_KINDS.includes(kind)) throw fail(400, 'bad step')
     const o: Step = { id: String(r.id), kind }
     if (kind === 'intro') { for (const k of ['word', 'tr']) put(o, k, str(r[k], 120)); for (const k of ['ex', 'exTr']) put(o, k, str(r[k], 300)) }
-    for (const k of ['image', 'audio', 'video']) put(o, k, ref(r[k]))
+    for (const k of ['image', 'audio', 'video', 'exAudio']) put(o, k, ref(r[k]))
     if (kind === 'choice') {
       o.ask = r.ask === 'tr' ? 'tr' : 'audio'; o.show = r.show === 'text' ? 'text' : 'pics'
       o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 4).map((x) => {
@@ -46,6 +46,14 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       })
       o.ans = Math.max(0, Math.min((o.opts as unknown[]).length - 1, num(r.ans)))
     }
+    if (kind === 'tip') {
+      put(o, 'text', str(r.text, 1500))
+      o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120) }; put(out, 't', str(q.t, 120)); put(out, 'audio', ref(q.audio)); return out })
+    }
+    if (kind === 'order') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)); put(o, 'note', str(r.note, 600)) }
+    if (kind === 'speak' || kind === 'gap') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)) }
+    if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 4).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))
+    if (kind === 'answer') { put(o, 'text', str(r.text, 300)); put(o, 'note', str(r.note, 600)); put(o, 'tr', str(r.tr, 300)) }
     if (kind === 'pairs') o.pairs = (Array.isArray(r.pairs) ? r.pairs : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>; return { a: str(q.a, 120), b: str(q.b, 120) } })
     return o
   }
@@ -107,7 +115,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     async remove(rawId: unknown) { const id = checkId(rawId); await found(id); await col().doc(id).delete() },
     /** Ключи файлов курса (кружки, фото, файлы экранов уроков) — чтобы после удаления курса почистить хранилище */
     filesOf: (c: Pick<Course, 'items' | 'loose'>) => [...c.items, ...c.loose].flatMap((x) => [x.file, ...(x.steps ?? []).flatMap((s) =>
-      [s.image, s.audio, s.video, ...((s.opts as Record<string, unknown>[] | undefined) ?? []).flatMap((o) => [o.image, o.audio])])])
+      [s.image, s.audio, s.video, s.exAudio, ...((s.opts as Record<string, unknown>[] | undefined) ?? []).flatMap((o) => [o.image, o.audio])])])
       .filter((k): k is string => typeof k === 'string' && isOurKey(k)),
   }
 }

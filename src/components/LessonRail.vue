@@ -11,7 +11,7 @@ import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
 import LessonPlayer from './LessonPlayer.vue'
 import { useDecksStore } from '../stores/decks'
-import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair } from '../utils/lesson'
+import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, gapParts } from '../utils/lesson'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -72,15 +72,15 @@ const fileIn = ref(null), accept = ref('')
 let target = null
 const kindOf = (f) => (/^video\//.test(f.type) || /\.(mp4|webm|mov|m4v)$/i.test(f.name) ? 'video' : /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic)$/i.test(f.name) ? 'image'
   : /^audio\//.test(f.type) || /\.(mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i.test(f.name) ? 'audio' : null)
-function pick(s, fields, opt = null) { target = { s, fields, opt }; accept.value = fields.map(f => f + '/*').join(','); fileIn.value.value = ''; nextTick(() => fileIn.value.click()) }
-function take(s, fields, opt, f) {
+function pick(s, fields, opt = null, as = null) { target = { s, fields, opt, as }; accept.value = fields.map(f => f + '/*').join(','); fileIn.value.value = ''; nextTick(() => fileIn.value.click()) }
+function take(s, fields, opt, f, as = null) {
   const k = kindOf(f)
   if (!k || !fields.includes(k)) return say(fields.includes('audio') ? 'Нужен звук' : 'Нужно видео или фото', { text: fields.includes('audio') ? 'MP3, M4A, OGG или WAV.' : 'MP4, MOV, WebM — или JPG, PNG, WebP.' })
   if (f.size > 200 * 1024 * 1024) return say('Файл слишком большой', { text: 'Можно до 200 МБ.' })
-  props.putFile(s.id, k, f, opt)
+  props.putFile(s.id, as ?? k, f, opt)
 }
-const onFile = (e) => { const f = e.target.files?.[0]; if (f && target) take(target.s, target.fields, target.opt, f) }
-const onDrop = (e, s, fields, opt = null) => { const f = e.dataTransfer?.files?.[0]; if (f) take(s, fields, opt, f) }
+const onFile = (e) => { const f = e.target.files?.[0]; if (f && target) take(target.s, target.fields, target.opt, f, target.as) }
+const onDrop = (e, s, fields, opt = null, as = null) => { const f = e.dataTransfer?.files?.[0]; if (f) take(s, fields, opt, f, as) }
 function clear(obj, field) { const v = obj[field]; delete obj[field]; if (v && !v.startsWith('https://')) props.dropFiles([v]); changed() }
 const pct = (s, field, opt) => props.upPct[`${s.id}:${field}:${opt ?? ''}`]
 
@@ -111,6 +111,14 @@ function delOpt(s, k) {
   const o = s.opts[k]; props.dropFiles([o.image, o.audio].filter(f => f && !f.startsWith('https://')))
   s.opts.splice(k, 1); if (s.ans >= s.opts.length || s.ans === k) s.ans = 0; else if (s.ans > k) s.ans--
   changed()
+}
+const addTipRow = (s) => { if ((s.opts ??= []).length < 6) { s.opts.push({ w: '', t: '' }); changed() } }
+const gapEl = {}                                   // поле фразы пропуска каждого экрана (не в данных экрана)
+// «Заполни пропуск»: выделенный текст фразы → [пропуск]
+function markGap(s, el) {
+  const p = (s.phrase ?? '').replace(/[\[\]]/g, ''), a = el?.selectionStart ?? 0, b = el?.selectionEnd ?? 0
+  if (b <= a) return say('Выделите слово в фразе', { text: 'Выделенное станет пропуском — его ученик впишет или выберет.' })
+  s.phrase = p.slice(0, a) + '[' + p.slice(a, b).trim() + ']' + p.slice(b); changed()
 }
 const addPair = (s) => { if ((s.pairs ??= []).length < PAIRS_MAX) { s.pairs.push({ a: '', b: '' }); changed() } }
 const qAudio = (s) => s.audio || s.opts?.[s.ans ?? 0]?.audio || ''
@@ -215,12 +223,20 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <div class="word"><input v-model="s.word" placeholder="слово" @input="changed" /><input v-model="s.tr" class="tr" placeholder="перевод" @input="changed" /></div>
         <textarea v-model="s.ex" class="ex" rows="2" placeholder="Пример: He said it’s fine." @input="changed" />
         <textarea v-model="s.exTr" class="ex tr" rows="1" placeholder="перевод примера" @input="changed" />
+        <div class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'], null, 'exAudio')">
+          <AudioWave v-if="s.exAudio" :key="s.exAudio" :src="resolve(s.exAudio, 'audio')" small />
+          <button v-else class="add sm" @click="pick(s, ['audio'], null, 'exAudio')">＋ Озвучка примера</button>
+          <button v-if="s.exAudio" class="x in" title="Убрать озвучку примера" @click="clear(s, 'exAudio')">✕</button>
+          <em v-if="pct(s, 'exAudio') != null" class="up">{{ pct(s, 'exAudio') }}%</em>
+        </div>
         <button class="add deck" @click="openPk(s, 'intro')">Взять из карточек</button>
       </div>
 
       <!-- Выбери ответ -->
       <div v-else-if="s.kind === 'choice'" class="cb">
         <div class="hd">{{ KINDS.choice.head }}</div>
+        <div v-if="s.image" class="media" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])"><img :src="resolve(s.image, 'image')" alt="" draggable="false" /><button class="x" title="Убрать фото вопроса" @click.stop="clear(s, 'image')">✕</button></div>
+        <button v-else class="add sm" @click="pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">＋ Фото к вопросу</button>
         <div class="tg"><button :class="{ on: s.ask === 'audio' }" @click="s.ask = 'audio'; changed()">На слух</button><button :class="{ on: s.ask === 'tr' }" @click="s.ask = 'tr'; changed()">Переводом</button></div>
         <div v-if="s.ask === 'audio'" class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
           <AudioWave v-if="qAudio(s)" :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" small />
@@ -241,6 +257,65 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
           <button v-if="(s.opts?.length ?? 0) < OPTS_MAX" class="op plus" @click="addOpt(s)">＋</button>
         </div>
         <button class="add deck" @click="openPk(s, 'opts')">Варианты из карточек</button>
+      </div>
+
+      <!-- Собери фразу, Подсказка, Повтори за диктором, Заполни пропуск, Ответь на вопрос -->
+      <div v-else-if="s.kind !== 'pairs'" class="cb">
+        <div class="hd">{{ KINDS[s.kind].head }}</div>
+        <!-- видео / фото -->
+        <div v-if="['speak', 'gap', 'answer'].includes(s.kind)" class="media" :class="{ empty: !s.video && !s.image }" @click="!s.video && !s.image && pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">
+          <video v-if="s.video" :src="resolve(s.video, 'video')" controls playsinline preload="metadata" />
+          <img v-else-if="s.image" :src="resolve(s.image, 'image')" alt="" draggable="false" />
+          <span v-else class="ph">＋ Видео или фото<small>нажмите или перетащите файл</small></span>
+          <button v-if="s.video || s.image" class="x" title="Убрать" @click.stop="clear(s, s.video ? 'video' : 'image')">✕</button>
+          <em v-if="pct(s, 'video') != null || pct(s, 'image') != null" class="up">{{ pct(s, 'video') ?? pct(s, 'image') }}%</em>
+        </div>
+        <!-- звук -->
+        <div v-if="['order', 'speak', 'gap'].includes(s.kind) && !s.video" class="aud" :class="{ over: s.image }" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
+          <AudioWave v-if="s.audio" :key="s.audio" :src="resolve(s.audio, 'audio')" small />
+          <button v-else class="add" @click="pick(s, ['audio'])">＋ Аудио — нажмите или перетащите</button>
+          <button v-if="s.audio" class="x in" title="Убрать звук" @click="clear(s, 'audio')">✕</button>
+          <em v-if="pct(s, 'audio') != null" class="up">{{ pct(s, 'audio') }}%</em>
+        </div>
+        <!-- собери фразу -->
+        <template v-if="s.kind === 'order'">
+          <input v-model="s.phrase" class="big" placeholder="See you later!" @input="changed" />
+          <div class="chips"><span v-for="(w, k) in phraseWords(s.phrase)" :key="k">{{ w }}</span><small v-if="phraseWords(s.phrase).length">← ученик увидит вразброс</small></div>
+          <input v-model="s.tr" class="tr" placeholder="перевод фразы" @input="changed" />
+          <textarea v-model="s.note" class="ex tr" rows="2" placeholder="Пояснение после ответа (необязательно)" @input="changed" />
+        </template>
+        <!-- подсказка -->
+        <template v-if="s.kind === 'tip'">
+          <textarea v-model="s.text" class="ex" rows="3" placeholder="Правило. **Жирным** — в двух звёздочках" @input="changed" />
+          <div v-for="(o, k) in s.opts" :key="k" class="trw">
+            <button class="sn" :class="{ on: o.audio }" :title="o.audio ? 'Заменить озвучку' : 'Добавить озвучку'" @click="pick(s, ['audio'], k)" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'], k)">🔈</button>
+            <input v-model="o.w" placeholder="See you later!" @input="changed" /><input v-model="o.t" class="tr" placeholder="Увидимся!" @input="changed" />
+            <button class="x in" title="Убрать строку" @click="delOpt(s, k)">✕</button>
+          </div>
+          <button v-if="(s.opts?.length ?? 0) < 6" class="add" @click="addTipRow(s)">＋ Строка таблицы</button>
+        </template>
+        <!-- повтори за диктором -->
+        <template v-if="s.kind === 'speak'">
+          <input v-model="s.phrase" class="big" placeholder="Hello!" @input="changed" />
+          <input v-model="s.tr" class="tr" placeholder="перевод (по кнопке «Перевести»)" @input="changed" />
+        </template>
+        <!-- заполни пропуск -->
+        <template v-if="s.kind === 'gap'">
+          <textarea :ref="(el) => (gapEl[s.id] = el)" v-model="s.phrase" class="ex big" rows="1" placeholder="And [you]? — пропуск в [скобках]" @input="changed" />
+          <div class="gp"><span v-if="gapParts(s.phrase).gap">Пропуск: <b>{{ gapParts(s.phrase).gap }}</b></span><button class="add sm" @click="markGap(s, gapEl[s.id])">Выделенное → пропуск</button></div>
+          <input v-model="s.tr" class="tr" placeholder="перевод фразы" @input="changed" />
+          <div class="tg"><button :class="{ on: !s.opts?.length }" @click="s.opts = []; changed()">Вписать</button><button :class="{ on: s.opts?.length }" @click="!s.opts?.length && (s.opts = [{ w: gapParts(s.phrase).gap }, { w: '' }]); changed()">Варианты</button></div>
+          <div v-if="s.opts?.length" class="chips ed">
+            <span v-for="(o, k) in s.opts" :key="k" :class="{ right: o.w && o.w.trim().toLowerCase() === gapParts(s.phrase).gap.toLowerCase() }"><input v-model="o.w" :size="Math.max(4, o.w.length)" placeholder="слово" @input="changed" /><button class="xx" title="Убрать" @click="s.opts.splice(k, 1); changed()">✕</button></span>
+            <button v-if="s.opts.length < OPTS_MAX" class="add sm" @click="s.opts.push({ w: '' }); changed()">＋</button>
+          </div>
+        </template>
+        <!-- ответь на вопрос -->
+        <template v-if="s.kind === 'answer'">
+          <input v-model="s.text" class="big" placeholder="What’s your name?" @input="changed" />
+          <input v-model="s.note" class="tr" placeholder="Подсказка (по ссылке «Показать подсказку»)" @input="changed" />
+          <input v-model="s.tr" class="tr" placeholder="Пример ответа — ученик увидит после своего" @input="changed" />
+        </template>
       </div>
 
       <!-- Пары -->
@@ -350,6 +425,14 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .opts.text .ok, .opts.text .x { position: static; margin-right: 4px }
 .op.plus { place-items: center; min-height: 36px; border-style: dashed; color: var(--blue-d); font-size: 18px; cursor: pointer; font: inherit }
 .opts.pics .op.plus { min-height: 90px } .opts.text .op.plus { display: grid; width: 100% }
+.big { text-align: center; font-size: 17px; font-weight: 800 } .cb > input.tr { text-align: center; font-size: 12px; font-weight: 700; color: var(--hint) }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px } .chips > span { padding: 4px 9px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-weight: 600; background: #fff }
+.chips small { font-size: 10px; color: var(--hint-2); font-weight: 600 }
+.chips.ed > span { display: flex; align-items: center; padding: 0 2px 0 0 } .chips.ed > span.right { border-color: #1fbe78; background: #e3fbef } .chips.ed input { text-align: center; font-size: 13px; font-weight: 700 }
+.xx { border: 0; background: none; color: var(--hint-2); font-size: 10px; cursor: pointer; padding: 2px }
+.gp { display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 12px; color: var(--hint); font-weight: 600 } .gp b { color: #1a73e8 }
+.trw { display: grid; grid-template-columns: auto 1fr 1fr auto; align-items: center; gap: 4px; border-bottom: 1px solid #efefef } .trw input { font-size: 13px; font-weight: 600 } .trw input.tr { color: var(--hint) }
+.sn { border: 0; background: none; cursor: pointer; font-size: 13px; opacity: .35; padding: 2px } .sn.on { opacity: 1 }
 .pr { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center }
 .pr input { height: 44px; border: 1px solid #dcdcdc; border-radius: 9px; background: #fff; text-align: center; font-size: 14px; font-weight: 600 }
 .pr:first-of-type input { background: #8ff0c8; border-color: #5fe0aa }

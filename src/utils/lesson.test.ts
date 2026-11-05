@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs } from './lesson'
+import { TEMPLATES, gapParts, sameAnswer, newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs } from './lesson'
 
 describe('интерактивный урок', () => {
   it('новые экраны — с пустыми полями своего типа', () => {
@@ -29,8 +29,15 @@ describe('интерактивный урок', () => {
     expect(stepRefs(s)).toEqual(['https://x/p.jpg', 'idb:m1'])
   })
   it('«рыба» — сразу готова к прохождению', () => {
-    for (const k of ['intro', 'choice', 'pairs'] as const) expect(stepIssue(fishStep(k))).toBe('')
-    const L = fishLesson(); expect(L).toHaveLength(5); expect(new Set(L.map(s => s.id)).size).toBe(5); expect(L.every(s => !stepIssue(s))).toBe(true)
+    for (const k of ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer'] as const) expect(stepIssue(fishStep(k))).toBe('')
+    for (const t of TEMPLATES) expect(stepIssue(t.make())).toBe('')
+    const L = fishLesson(); expect(L).toHaveLength(7); expect(new Set(L.map(s => s.id)).size).toBe(7); expect(L.every(s => !stepIssue(s))).toBe(true)
+  })
+  it('пропуск в фразе и проверка ответа', () => {
+    expect(gapParts('And [you]?')).toEqual({ a: 'And ', gap: 'you', b: '?' })
+    expect(gapParts('нет скобок').gap).toBe('')
+    expect(sameAnswer(' You ', 'you')).toBe(true); expect(sameAnswer('it\'s', 'it’s')).toBe(true); expect(sameAnswer('yo', 'you')).toBe(false); expect(sameAnswer('', '')).toBe(false)
+    expect(stepIssue({ ...newStep('gap'), phrase: '[Hello]!', opts: [{ w: 'Halo' }] })).toMatch(/нет верного/)
   })
   it('перемешивание не теряет элементы', () => {
     expect(shuffle([1, 2, 3, 4]).sort()).toEqual([1, 2, 3, 4])
