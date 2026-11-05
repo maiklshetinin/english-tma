@@ -12,7 +12,8 @@ import { INTERACTIVE, stepIssue } from '../utils/lesson'
 const router = useRouter()
 const online = !isDemo && !!API && !!fb
 const LOCAL = 'tma.courseRail.v1'
-const list = ref(null), sel = ref(null), course = ref(null), err = ref(''), loading = ref(false)
+const props = defineProps({ id: { type: String, default: null } })          // выбранный курс (из списка курсов)
+const course = ref(null), err = ref(''), loading = ref(false)
 const onEsc = (e) => { if (e.key === 'Escape' && open.value) open.value = null }
 onMounted(() => addEventListener('keydown', onEsc)); onUnmounted(() => removeEventListener('keydown', onEsc))
 
@@ -31,15 +32,6 @@ const T = {
 const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'экрана' : 'экранов'}`
 const state = (x) => (x.n < done.value ? 'done' : x.n === done.value ? 'current' : 'todo')
 
-async function loadList() {
-  if (!online) {
-    try { const d = JSON.parse(localStorage.getItem(LOCAL)); list.value = d?.items ? [{ id: d.id || 'local', title: d.title || 'Курс' }] : [] } catch { list.value = [] }
-  } else {
-    try { const r = await apiRequest('/courses'); if (!r.ok) throw new Error(`(${r.status})`); list.value = (await r.json()).courses; err.value = '' }
-    catch (e) { err.value = e.message; list.value ??= [] }
-  }
-  if (!sel.value && list.value.length) sel.value = list.value[0].id
-}
 async function loadCourse(id) {
   open.value = null; course.value = null; if (!id) return
   loading.value = true
@@ -48,8 +40,6 @@ async function loadCourse(id) {
     else { const r = await apiRequest(`/courses/${id}`); if (!r.ok) throw new Error(`(${r.status})`); course.value = await r.json() }
   } catch (e) { err.value = e.message } finally { loading.value = false }
 }
-onMounted(loadList)
-watch(sel, loadCourse)
 
 // путь: юниты с заданиями; прогресс курса — сколько заданий уже пройдено (как его видит ученик)
 const units = computed(() => {
@@ -95,19 +85,16 @@ function resolve(v, kind) {
   return kind === 'audio' ? audSrc(v) : kind === 'image' ? imgSrc(v) : v
 }
 const fileOf = (x) => (x.file ? resolve(x.file) : x.media ? local(x.media) : '')
-const edit = () => router.push({ name: 'courses', query: { id: sel.value } })
+// всё объявлено — можно грузить выбранный курс (immediate)
+watch(() => props.id, loadCourse, { immediate: true })
+const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 </script>
 
 <template>
   <div class="cv">
-    <div class="vh">
-      <h3>Как видит ученик <small>нажмите на урок — он запустится во весь экран</small></h3>
-      <button class="btn sm" :disabled="!sel" @click="edit">Открыть в редакторе</button>
-    </div>
-    <div v-if="list?.length > 1" class="seg tabs"><button v-for="c in list" :key="c.id" :class="{ on: c.id === sel }" @click="sel = c.id">{{ c.title }}</button></div>
+    <h3 class="vh">Как видит ученик <small>нажмите на задание — урок запустится во весь экран</small></h3>
     <p v-if="err" class="hint">Не удалось загрузить курс {{ err }}</p>
-    <div v-if="list && !list.length" class="card hint none">Курсов пока нет — создайте курс выше, и он появится здесь.</div>
-    <div v-else-if="loading || !course" class="card hint none">Загрузка…</div>
+    <div v-if="loading || !course" class="card hint none">{{ loading ? 'Загрузка…' : 'Выберите курс выше' }}</div>
 
     <!-- курс тем же рельсом, что в редакторе -->
     <div v-else class="card cr">
@@ -152,8 +139,7 @@ const edit = () => router.push({ name: 'courses', query: { id: sel.value } })
 
 <style scoped>
 .cv { display: grid; gap: 10px; margin-bottom: 22px }
-.vh { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap }
-.vh h3 { margin: 0; font-size: 15px } .vh small { font-size: 12px; font-weight: 600; color: var(--hint) }
+.vh { margin: 0; font-size: 15px } .vh small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .tabs { flex-wrap: wrap; justify-self: start }
 .none { text-align: center; margin: 0 }
 /* курс — как рельс в редакторе */

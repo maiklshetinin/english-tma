@@ -10,7 +10,6 @@ import { TABS } from './store/app'
 import { createAppRouter } from './router'
 import { useAuthStore } from './stores/auth'
 import { useDecksStore } from './stores/decks'
-import { usePathStore } from './stores/path'
 
 describe('все экраны в демо-режиме', () => {
   it('ни одна вкладка и ни одна карточка не выдаёт предупреждений или ошибок', async () => {
@@ -40,8 +39,8 @@ describe('все экраны в демо-режиме', () => {
     expect(w.text()).toContain('Unit 1')                       // путь ученика отрисован
     await go('students')
 
-    // Вкладка «Путь» преподавателя с пресетами и «Слова» с колодами
-    await go('path'); await visit('presets'); expect(w.text()).toContain('Базовый курс')
+    // Вкладка «Курсы» преподавателя (список и просмотр курса) и «Слова» с колодами
+    await go('path'); await visit('courses'); expect(w.text()).toContain('Как видит ученик')
     await go('words'); await visit('words'); expect(w.text()).toContain('Business Basics')
 
     // Ученик: все вкладки
@@ -53,7 +52,6 @@ describe('все экраны в демо-режиме', () => {
     // Правка в сторе отражается на экране
     auth.setRole('teacher'); await flushPromises(); await go('words')      // дать App.vue увести со вкладки ученика, потом открыть «Слова»
     useDecksStore().list[0].title = 'Переименовано'; await visit('rename'); expect(w.text()).toContain('Переименовано')
-    await go('path'); usePathStore().presets[0].name = 'Другой пресет'; await visit('rename preset'); expect(w.text()).toContain('Другой пресет')
 
     expect(problems).toEqual([])
     w.unmount()

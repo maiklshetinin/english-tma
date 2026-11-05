@@ -45,6 +45,9 @@ ok('неизвестный экран — 400', await code(C.put(me, 'k3', { ite
 await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
 const nt = store.get('courses/k4').notes[0]
 ok('стикеры: координаты округлены, текст обрезан, чужой цвет заменён', nt.x === 1 && nt.text.length === 1000 && nt.color === '#ffe99a' && !('junk' in nt))
+await C.put(me, 'k5', { ...course, ink: [{ id: 'k1', c: 'javascript:x', w: 99, p: [1.6, 2, 3], junk: 1 }] })
+const ik = store.get('courses/k5').ink[0]
+ok('рисунки: цвет только #rrggbb, толщина ≤ 20, точки парами и целые', ik.c === '#1e1e1e' && ik.w === 20 && ik.p.join() === '2,2' && !('junk' in ik))
 ok('удалить, потом — 404', (await C.remove('k1'), !store.has('courses/k1')) && await code(C.get('k1')) === 404)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')

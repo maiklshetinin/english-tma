@@ -81,17 +81,6 @@ async function archive() {                                    // два нажа
   catch (e) { notify(e.message) }
 }
 
-// Пресеты пути: добавить в путь ученика / сохранить его путь как новый пресет
-const pid = ref(pathStore.presets[0]?.id ?? null), pname = ref('')
-const addToPath = () => {
-  const p = pathStore.presets.find(x => x.id === pid.value); if (!p) return
-  const { from, count } = pathStore.applyPreset(props.id, p); haptic('light')
-  showToast(`Пресет «${p.name}» добавлен в путь`, () => pathStore.of(props.id).splice(from, count))
-}
-const saveAsPreset = () => {
-  const p = pathStore.presetFromPath(pname.value.trim() || `Путь: ${s.value.name}`, pathStore.of(props.id))
-  pid.value = p.id; pname.value = ''; showToast(`Сохранено как пресет «${p.name}»`)
-}
 const zoom = ref(false)      // фото ученика крупно (как в Telegram — нажатие на аватарку)
 </script>
 <template>
@@ -143,11 +132,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
     <StudentDecks :student-id="s.id" />
     <div class="card">
       <h3>Путь ученика</h3>
-      <p class="hint" style="margin:0 0 10px">Добавьте готовый пресет или соберите путь вручную ниже: режим «Правка» — кружки (ДЗ, слова, слова + ДЗ) и юниты.</p>
-      <div class="row2"><select v-model="pid" style="flex:1;min-width:140px;margin:0"><option v-for="p in pathStore.presets" :key="p.id" :value="p.id">{{ p.name }}</option></select>
-        <button class="btn" :disabled="!pid" @click="addToPath">Добавить пресет</button></div>
-      <div class="row2" style="margin-top:10px"><input v-model="pname" placeholder="Название нового пресета" style="flex:1;min-width:140px;margin:0" />
-        <button class="btn ghost" @click="saveAsPreset">Сохранить путь как пресет</button></div>
+      <p class="hint" style="margin:0">Соберите путь ниже: режим «Правка» — кружки (ДЗ, слова, слова + ДЗ) и юниты.</p>
     </div>
     <PathEditor :units="pathStore.of(s.id)" :student-id="s.id" />
     </template>

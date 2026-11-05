@@ -77,14 +77,15 @@ const save = () => {
 // побеждает последняя — поэтому выбранное коллегой подсвечено его цветом.
 let remote = false, shareT = 0
 const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), text: n.text ?? '', color: n.color })
-const payload = () => ({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote) })
+const cleanInk = (k) => ({ id: k.id, c: k.c, w: k.w, p: k.p.map(Math.round) })
+const payload = () => ({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk) })
 function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
   const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   remote = true
-  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], dirty: false })
+  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], ink: d.ink ?? [], dirty: false })
   nextTick(() => { remote = false })
   clearTimeout(pt); if (online) sync.value = 'saved'       // коллега сам сохранил это в базу
   try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ }
@@ -135,11 +136,11 @@ onUnmounted(() => {
 // Открыли редактор (из «Курсов»: #/courses?id=<курс> или ?id=new). В браузере — копия последнего открытого курса:
 // если в ней несохранённые правки другого курса — сначала отправляем их, потом открываем нужный.
 const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'line',
-  items: [it('unit', 'Юнит 1', { sub: 'Тема юнита' })], loose: [], notes: [], dirty: false })
+  items: [it('unit', 'Юнит 1', { sub: 'Тема юнита' })], loose: [], notes: [], ink: [], dirty: false })
 const fromServer = (c) => {
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
   const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
-  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], dirty: false })
+  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], dirty: false })
   localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'
 }
 const flush = () => apiRequest(`/courses/${doc.id}`, { method: 'PUT', body: JSON.stringify(payload()) }).then(r => { if (r.ok) doc.dirty = false })
@@ -352,6 +353,61 @@ function noteDown(e, n) {
 function noteMove(e) { if (!nm) return; sendCursor(e); const w = toWorld(e.clientX, e.clientY); nm.n.x = Math.round(w.x - nm.dx); nm.n.y = Math.round(w.y - nm.dy); nm.moved = true }
 function noteUp() { removeEventListener('pointermove', noteMove); if (nm?.moved) save(); nm = null }
 function delNote(id) { const i = doc.notes.findIndex(n => n.id === id); if (i >= 0) doc.notes.splice(i, 1); noteSel.value = noteEdit.value = null; save() }
+
+// ---------- Инструменты, как в FigJam: стрелка (выделение рамкой), рука (двигать холст), маркер (рисовать) ----------
+// Стрелка: тянуть по пустому месту — рамка выделения; выделенное — с квадратиками по углам, Delete — удалить всё сразу.
+// Рука (или зажатый пробел): тянуть где угодно — двигать холст. Маркер: рисовать поверх холста (штрихи — doc.ink).
+const tool = ref('select'), space = ref(false)
+const handOn = computed(() => tool.value === 'hand' || space.value)
+const INK_COLORS = ['#1e1e1e', '#f24822', '#ffa629', '#14ae5c', '#0d99ff', '#9747ff']
+const inkColor = ref('#1e1e1e')
+function setTool(t) { tool.value = t; noteTool.value = false; tray.value = t === 'pen' ? 'pen' : tray.value === 'pen' ? null : tray.value }
+const inkD = (p) => { if (p.length < 4) return p.length ? `M${p[0]} ${p[1]}h0.1` : ''; let d = `M${p[0]} ${p[1]}`; for (let i = 2; i < p.length; i += 2) d += `L${p[i]} ${p[i + 1]}`; return d }
+let ink = null
+function inkStart(e) { const w = toWorld(e.clientX, e.clientY); ink = { id: 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), c: inkColor.value, w: 4, p: [Math.round(w.x), Math.round(w.y)] }; (doc.ink ??= []).push(ink) }
+function inkMove(e) { if (!ink) return; const w = toWorld(e.clientX, e.clientY), n = ink.p.length; if (Math.hypot(w.x - ink.p[n - 2], w.y - ink.p[n - 1]) * view.z < 2.5 || n >= 4000) return; ink.p.push(Math.round(w.x), Math.round(w.y)) }
+function inkEnd() { if (ink) save(); ink = null }
+
+// Выделение рамкой: id выделенного (задания на рельсе и черновики, стикеры, штрихи)
+const msel = ref([]), mq = ref(null)              // mq — рамка на экране { x0, y0, x1, y1 }
+const boxOf = () => {                              // всё, что можно выделить, с рамкой в координатах холста
+  const out = []
+  order.value.forEach((x, i) => { const p = pos(i); out.push(x.type === 'unit' ? { id: x.id, k: 'item', x0: p.x - 46, y0: p.y - 40, x1: p.x + 400, y1: p.y + 20 } : { id: x.id, k: 'item', x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) })   // юнит — заголовок с полоской справа
+  for (const x of doc.loose) out.push({ id: x.id, k: 'item', x0: x.x - 34, y0: x.y - 34, x1: x.x + 34, y1: x.y + 34 })
+  for (const n of doc.notes ?? []) out.push({ id: n.id, k: 'note', x0: n.x, y0: n.y, x1: n.x + 190, y1: n.y + (noteH[n.id] ?? 190) })
+  for (const k of doc.ink ?? []) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (let i = 0; i < k.p.length; i += 2) { x0 = Math.min(x0, k.p[i]); x1 = Math.max(x1, k.p[i]); y0 = Math.min(y0, k.p[i + 1]); y1 = Math.max(y1, k.p[i + 1]) } out.push({ id: k.id, k: 'ink', x0: x0 - k.w, y0: y0 - k.w, x1: x1 + k.w, y1: y1 + k.w }) }
+  return out
+}
+const noteH = reactive({})
+function mqMove(e) {
+  mq.value.x1 = e.clientX; mq.value.y1 = e.clientY
+  const a = toWorld(Math.min(mq.value.x0, e.clientX), Math.min(mq.value.y0, e.clientY)), b = toWorld(Math.max(mq.value.x0, e.clientX), Math.max(mq.value.y0, e.clientY))
+  msel.value = boxOf().filter(o => o.x0 < b.x && o.x1 > a.x && o.y0 < b.y && o.y1 > a.y).map(o => o.id)
+}
+const mqStyle = computed(() => { const m = mq.value, r = board.value?.getBoundingClientRect() ?? { left: 0, top: 0 }; return m && { left: Math.min(m.x0, m.x1) - r.left + 'px', top: Math.min(m.y0, m.y1) - r.top + 'px', width: Math.abs(m.x1 - m.x0) + 'px', height: Math.abs(m.y1 - m.y0) + 'px' } })
+// рамка вокруг выделенного (с квадратиками по углам) — в координатах холста
+const selBox = computed(() => {
+  const ids = new Set(msel.value); if (!ids.size) return null
+  const bs = boxOf().filter(o => ids.has(o.id)); if (!bs.length) return null
+  const x0 = Math.min(...bs.map(o => o.x0)) - 8, y0 = Math.min(...bs.map(o => o.y0)) - 8, x1 = Math.max(...bs.map(o => o.x1)) + 8, y1 = Math.max(...bs.map(o => o.y1)) + 8
+  return { left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', '--z': 1 / view.z }
+})
+const isM = (id) => msel.value.includes(id)
+async function delSelected() {
+  const ids = new Set(msel.value); if (!ids.size) return
+  const items = [...doc.items, ...doc.loose].filter(x => ids.has(x.id)), notes = (doc.notes ?? []).filter(n => ids.has(n.id)), inks = (doc.ink ?? []).filter(k => ids.has(k.id))
+  const n = items.length + notes.length + inks.length
+  const what = [items.length && `заданий: ${items.length}`, notes.length && `стикеров: ${notes.length}`, inks.length && `рисунков: ${inks.length}`].filter(Boolean).join(', ')
+  if (!(await ask(`Удалить выделенное (${n})?`, { text: what + (items.some(x => x.file || x.steps?.length) ? '. Файлы и экраны уроков удалятся из хранилища.' : '.'), ok: 'Удалить', danger: true }))) return
+  for (const x of items) {
+    dropRefs((x.steps ?? []).flatMap(stepRefs))
+    if (x.media) mediaOp('readwrite', st => st.delete(x.media)).catch(() => {})
+    if (x.file && online) apiRequest('/media/delete', { method: 'POST', body: JSON.stringify({ key: x.file }) }).catch(() => {})
+  }
+  doc.items = doc.items.filter(x => !ids.has(x.id)); doc.loose = doc.loose.filter(x => !ids.has(x.id))
+  doc.notes = (doc.notes ?? []).filter(n => !ids.has(n.id)); doc.ink = (doc.ink ?? []).filter(k => !ids.has(k.id))
+  msel.value = []; sel.value = null; selectStep(null, null); noteSel.value = null; setProgress(doc.progress); save()
+}
 const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'экрана' : 'экранов'}`
 
 // ---------- Холст: сдвиг и масштаб ----------
@@ -534,12 +590,21 @@ function showRailEnd() { const p = toScreen(pos(order.value.length - 1)); if (p.
 // ---------- Пустое место: двигать холст; два пальца — масштаб ----------
 const touches = new Map(); let pan = null, pinch = null
 function boardDown(e) {
+  if (e.button === 0 && !handOn.value && e.pointerType !== 'touch') {
+    if (tool.value === 'pen' && !noteTool.value) { inkStart(e); board.value.setPointerCapture?.(e.pointerId); return }
+    if (!noteTool.value) {                                    // стрелка: рамка выделения
+      msel.value = []; sel.value = null; selectStep(null, null); noteSel.value = noteEdit.value = null; tray.value = null
+      mq.value = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }; board.value.setPointerCapture?.(e.pointerId); return
+    }
+  }
   if (e.pointerType === 'touch') { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 }; pan = null; return } }
   pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, moved: false }
   board.value.setPointerCapture?.(e.pointerId)
 }
 function boardMove(e) {
   sendCursor(e)
+  if (ink) return inkMove(e)
+  if (mq.value) return mqMove(e)
   if (touches.has(e.pointerId)) {
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (pinch && touches.size === 2) {
@@ -552,9 +617,11 @@ function boardMove(e) {
   view.x = pan.vx + e.clientX - pan.sx; view.y = pan.vy + e.clientY - pan.sy
 }
 function boardUp(e) {
+  if (ink) return inkEnd()
+  if (mq.value) { mq.value = null; return }
   touches.delete(e.pointerId); if (touches.size < 2) pinch = null
   if (pan && !pan.moved && noteTool.value) { addNote(noteColor.value, toWorld(e.clientX, e.clientY)); pan = null; return }
-  if (pan && !pan.moved) { sel.value = null; selectStep(null, null); noteSel.value = noteEdit.value = null; tray.value = null }
+  if (pan && !pan.moved) { sel.value = null; selectStep(null, null); noteSel.value = noteEdit.value = null; msel.value = []; if (tray.value !== 'pen') tray.value = null }
   pan = null
 }
 
@@ -637,7 +704,7 @@ const play = (e, on) => { const v = e.currentTarget.querySelector('video'); if (
 
 // ---------- Карточка выбранного ----------
 const sel = ref(null), editing = ref(false)
-watch(sel, (id) => liveSend({ t: 'sel', id }))
+watch(sel, (id) => { liveSend({ t: 'sel', id }); if (id) msel.value = [] })
 const selItem = computed(() => findAny(sel.value))
 const selLoose = computed(() => !!doc.loose.find(v => v.id === sel.value))
 async function remove() {
@@ -665,19 +732,27 @@ const onKey = (e) => {
   if (dialog.open) return                                       // открыто окно подтверждения — клавиши его
   if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName)) { if (e.key === 'Escape') e.target.blur(); return }
   if (e.key === 'Enter' && sel.value && !run.value) { e.preventDefault(); return rename(selItem.value) }
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && !run.value) {          // V — стрелка, H — рука, P — маркер (как в Figma)
+    if (e.code === 'KeyV') return setTool('select')
+    if (e.code === 'KeyH') return setTool('hand')
+    if (e.code === 'KeyP') return setTool('pen')
+    if (e.code === 'Space') { e.preventDefault(); space.value = true; return }
+  }
   if ((e.ctrlKey || e.metaKey) && !run.value && (e.code === 'KeyC' || e.code === 'KeyV')) {
     if (window.getSelection()?.toString()) return                  // выделен текст — обычное копирование
     e.preventDefault()
     if (e.code === 'KeyC') { const L = findAny(pick.lesson); return copyStep(L?.steps?.find(v => v.id === pick.step)) }
     return pasteStep(pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) ? selItem.value.id : activeLesson.value))
   }
-  if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null } }
+  if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null; msel.value = []; if (tool.value === 'pen') tool.value = 'select' } }
   if (run.value || !(e.key === 'Delete' || e.key === 'Backspace')) return
+  if (msel.value.length) return delSelected()
   if (noteSel.value) delNote(noteSel.value)
   else if (pick.step && pick.step !== 'final') removeStepKey()
   else if (sel.value) remove()
 }
-onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEventListener('keydown', onKey))
+const onKeyUp = (e) => { if (e.code === 'Space') space.value = false }
+onMounted(() => { addEventListener('keydown', onKey); addEventListener('keyup', onKeyUp) }); onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp) })
 
 function exportJson() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
@@ -688,8 +763,12 @@ async function reset() { if (!(await ask('Вернуть пример курса
 <template>
   <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
     <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
-    <div ref="board" class="board" :class="{ placing: noteTool }" :style="dots" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @wheel="onWheel">
+    <div ref="board" class="board" :class="{ placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="dots" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @wheel="onWheel">
       <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
+        <!-- Рисунки маркером -->
+        <svg class="ink"><path v-for="k in doc.ink ?? []" :key="k.id" :d="inkD(k.p)" :stroke="k.c" :stroke-width="k.w" :class="{ on: isM(k.id) }" /></svg>
+        <!-- Рамка вокруг выделенного, с квадратиками по углам -->
+        <div v-if="selBox" class="selbox" :style="selBox"><i /><i /><i /><i /></div>
         <!-- Сводка, как увидит ученик -->
         <div class="sum" @pointerdown.stop>
           <div class="sh"><span><i class="dt" />Юнит {{ curUnitNo }} из {{ unitsCount }}</span><b class="pp">{{ pct }}%</b></div>
@@ -704,7 +783,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           :can-paste="!!clip && clip.course === doc.id" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
         <!-- Рельс -->
-        <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id, rsel: !!selColor[x.id] }]"
+        <div v-for="(x, i) in order" :key="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]"
           :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'">
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Юнит" @keydown.enter="renameDone" @keydown.esc="renameDone" @input="save" /><input v-model="x.sub" class="rin" placeholder="тема юнита" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></div>
@@ -721,7 +800,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           </template>
         </div>
         <!-- Черновики на холсте: ещё не на рельсе -->
-        <div v-for="x in looseShown" :key="x.id" class="bead loose" :class="[x.type, { on: sel === x.id, rsel: !!selColor[x.id] }]" :style="beadStyle(x, x, colorOf(x))"
+        <div v-for="x in looseShown" :key="x.id" class="bead loose" :class="[x.type, { on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]" :style="beadStyle(x, x, colorOf(x))"
           @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
           <template v-else>
@@ -733,12 +812,13 @@ async function reset() { if (!(await ask('Вернуть пример курса
           </template>
         </div>
         <!-- Стикеры, как в FigJam -->
-        <div v-for="n in doc.notes" :key="n.id" class="note" :data-note="n.id" :class="{ on: noteSel === n.id, edit: noteEdit === n.id }" :style="{ left: n.x + 'px', top: n.y + 'px', background: n.color }"
+        <div v-for="n in doc.notes" :key="n.id" class="note" :data-note="n.id" :class="{ on: noteSel === n.id || isM(n.id), edit: noteEdit === n.id }" :ref="(el) => { if (el) noteH[n.id] = el.offsetHeight }" :style="{ left: n.x + 'px', top: n.y + 'px', background: n.color }"
           @pointerdown.stop="noteDown($event, n)" @dblclick.stop="editNote(n.id)" @wheel="noteEdit === n.id && !$event.ctrlKey && !$event.metaKey && $event.stopPropagation()">
           <textarea v-model="n.text" placeholder="Заметка…" :readonly="noteEdit !== n.id" @input="save" @blur="noteEdit = null" />
           <div v-if="noteSel === n.id" class="nbar" @pointerdown.stop><button v-for="c in NOTE_COLORS" :key="c" :style="{ background: c }" :class="{ on: n.color === c }" @click="n.color = c; save()" /><button class="nd" title="Удалить" @click="delNote(n.id)">✕</button></div>
         </div>
       </div>
+      <div v-if="mq" class="mq" :style="mqStyle" />
     </div>
 
     <!-- Курсоры коллег: стрелка их цвета и имя -->
@@ -798,15 +878,24 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <small><b>{{ t.t }}</b>{{ t.d }}</small>
         </button>
       </template>
+      <template v-else-if="tray === 'pen'"><button v-for="c in INK_COLORS" :key="c" class="sw pen" :class="{ on: inkColor === c }" :style="{ background: c }" title="Цвет маркера" @click="inkColor = c" /></template>
       <template v-else-if="tray === 'note'"><button v-for="c in NOTE_COLORS" :key="c" class="sw" :class="{ on: noteColor === c }" :style="{ background: c }" title="Цвет стикера — потом нажмите на холст" @click="noteColor = c; noteTool = true" /></template>
     </div>
     <div class="fl tools" role="toolbar">
+      <!-- Стрелка и рука, как в FigJam -->
+      <div class="mode">
+        <button class="md" :class="{ on: tool === 'select' && !space }" title="Выделение (V): тяните по пустому месту — рамка; Delete — удалить выделенное" @click="setTool('select')"><svg viewBox="0 0 24 24"><path d="M5.5 3.8l12.6 6.6-5.6 1.7-2.4 5.6z" /></svg></button>
+        <button class="md" :class="{ on: handOn }" title="Рука (H или зажатый пробел): двигать холст" @click="setTool('hand')"><svg viewBox="0 0 24 24"><path d="M8 12.5V6.2a1.4 1.4 0 0 1 2.8 0V11M10.8 10.5V4.9a1.4 1.4 0 0 1 2.8 0v5.6M13.6 10.5V5.9a1.4 1.4 0 0 1 2.8 0V12M16.4 9.4a1.4 1.4 0 0 1 2.8 0v4.8a6.3 6.3 0 0 1-6.3 6.3h-.6a6 6 0 0 1-4.7-2.3l-3-3.9a1.5 1.5 0 0 1 2.2-2l1.2 1.1" /></svg></button>
+      </div>
+      <i class="tsep" />
+      <!-- Маркер: выезжает, как в FigJam -->
+      <button class="marker" :class="{ on: tool === 'pen' }" title="Маркер (P): рисовать на холсте" @click="setTool(tool === 'pen' ? 'select' : 'pen')"><span class="mk"><i :style="{ background: inkColor }" /></span></button>
       <button class="tb" :title="'Юнит — тяните на рельс или нажмите'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Юнит</small></button>
-      <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
+      <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
       <i class="tsep" />
       <!-- Стикер, как в FigJam: выезжает при наведении, выбран — стоит выше -->
-      <button class="sticky" :class="{ on: noteTool || tray === 'note' }" title="Стикер — выберите цвет и нажмите на холст" @click="tray = tray === 'note' ? null : 'note'; noteTool = tray === 'note'">
-        <span class="sk" :style="{ background: noteColor }"><i /></span>
+      <button class="sticky" :class="{ on: noteTool || tray === 'note' }" title="Стикер — выберите цвет и нажмите на холст" @click="tray = tray === 'note' ? null : 'note'; noteTool = tray === 'note'; if (tool === 'pen') tool = 'select'">
+        <span class="sk back" :style="{ background: noteColor }" /><span class="sk" :style="{ background: noteColor }"><i /></span>
       </button>
     </div>
   </div>
@@ -818,6 +907,27 @@ async function reset() { if (!(await ask('Вернуть пример курса
 /* Холст: бесконечное поле в точку; содержимое — в координатах холста (центр рельса — x = 0) */
 .board { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab; background-image: radial-gradient(circle, #cfcfcf 1px, transparent 1.3px) }
 .board:active { cursor: grabbing }
+.board.hand, .board.hand:active { cursor: grab } .board.hand:active { cursor: grabbing } .board.hand .world { pointer-events: none }
+.board.pen { cursor: crosshair } .board.pen .world { pointer-events: none }
+.board:not(.hand):not(.placing):not(.pen) { cursor: default }
+.ink { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; z-index: 5 }
+.ink path { fill: none; stroke-linecap: round; stroke-linejoin: round } .ink path.on { filter: drop-shadow(0 0 2px #0d99ff) drop-shadow(0 0 1px #0d99ff) }
+.mq { position: absolute; z-index: 20; border: 1px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }
+.selbox { position: absolute; z-index: 8; box-sizing: border-box; border: calc(1.5px * var(--z)) solid #0d99ff; pointer-events: none }
+.selbox i { position: absolute; width: calc(9px * var(--z)); height: calc(9px * var(--z)); margin: calc(-4.5px * var(--z)) 0 0 calc(-4.5px * var(--z)); box-sizing: border-box; border: calc(1.5px * var(--z)) solid #0d99ff; border-radius: calc(2px * var(--z)); background: #fff }
+.selbox i:nth-child(1) { left: 0; top: 0 } .selbox i:nth-child(2) { left: 100%; top: 0 } .selbox i:nth-child(3) { left: 0; top: 100% } .selbox i:nth-child(4) { left: 100%; top: 100% }
+/* стрелка и рука на панели */
+.mode { display: flex; gap: 4px; padding: 0 2px }
+.md { display: grid; place-items: center; width: 48px; height: 48px; border: 0; border-radius: 12px; background: none; color: #2c2c2c; cursor: pointer; padding: 0 } .md:hover { background: #f2f2f2 }
+.md svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.md.on { background: #9747ff; color: #fff } .md.on:first-child svg { fill: #fff }
+/* маркер, как в FigJam: торчит из панели, выбран — выше */
+.marker { position: relative; align-self: stretch; width: 60px; border: 0; background: none; padding: 0; cursor: pointer; overflow: hidden }
+.mk { position: absolute; left: 50%; top: 26px; width: 24px; height: 90px; margin-left: -12px; border-radius: 6px 6px 3px 3px; background: linear-gradient(90deg, #fafafa, #fff 40%, #e9e9e9); box-shadow: 0 2px 6px rgba(0, 0, 0, .18); transition: top .18s ease }
+.mk::before { content: ''; position: absolute; left: 3px; right: 3px; top: -14px; height: 16px; background: #2b2b2b; clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%) }
+.mk i { position: absolute; left: 50%; top: -20px; width: 6px; height: 8px; margin-left: -3px; border-radius: 3px 3px 0 0 }
+.marker:hover .mk { top: 18px } .marker.on .mk { top: 12px }
+.sw.pen { border-radius: 50% }
 .world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0 }
 /* Рельс: серая дорога, пройденное — зелёным поверх */
 .rail { position: absolute; left: 0; top: 0; width: 1px; overflow: visible; pointer-events: none }
@@ -983,8 +1093,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tsep { width: 1px; height: 50px; margin: 0 6px; background: #e6e6e6 }
 /* стикер на панели: торчит снизу, при наведении выезжает */
 .sticky { position: relative; align-self: stretch; width: 96px; border: 0; background: none; padding: 0; cursor: pointer }
-.sk { position: absolute; left: 14px; top: 22px; width: 66px; height: 74px; border-radius: 3px; box-shadow: 0 2px 6px rgba(0, 0, 0, .16); transform: rotate(-4deg); transition: top .18s ease, transform .18s ease }
-.sk i { position: absolute; right: 0; top: 0; width: 18px; height: 18px; background: linear-gradient(225deg, #f5f5f5 50%, rgba(0, 0, 0, .1) 50%) }
+.sk { position: absolute; left: 14px; top: 22px; width: 66px; height: 74px; border-radius: 2px 2px 3px 3px; box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 6px 14px rgba(0, 0, 0, .22); transform: rotate(-4deg); transition: top .18s ease, transform .18s ease }
+.sk.back { left: 24px; top: 30px; transform: rotate(5deg); filter: brightness(.93); box-shadow: 0 4px 10px rgba(0, 0, 0, .18) }
+.sk i { position: absolute; right: 0; top: 0; width: 18px; height: 18px; background: linear-gradient(225deg, #fff 50%, rgba(0, 0, 0, .14) 50%); box-shadow: -1px 1px 2px rgba(0, 0, 0, .12) }
+.sticky:hover .sk.back { top: 24px; transform: rotate(7deg) } .sticky.on .sk.back { top: 20px; transform: rotate(6deg) }
 .sticky:hover .sk { top: 12px; transform: rotate(-2deg) } .sticky.on .sk { top: 8px; transform: rotate(0) }
 .board.placing { cursor: crosshair }
 .tray { left: 50%; bottom: 116px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 18px; animation: tray .14s ease-out; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none }

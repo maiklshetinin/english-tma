@@ -1,5 +1,5 @@
 // Курсы (редактор «рельс»): courses/<id> — { teacherId, title, mode, progress, items, loose, notes, updatedAt }.
-//  • notes — стикеры-заметки на холсте: { id, x, y, text, color }.
+//  • notes — стикеры-заметки на холсте: { id, x, y, text, color }; ink — рисунки маркером: { id, c, w, p: [x0, y0, x1, y1, …] }.
 //  • items — задания по порядку на рельсе; loose — черновики на холсте (с x, y); у кружка и фото — file: ключ файла в S3.
 //  • У урока (и «Слова», «Домашка», «Тест») — steps: экраны интерактивного урока (src/utils/lesson.ts). Файлы экранов — ключи
 //    файлов курса в S3 или https-ссылки (фото и озвучка карточек); остальное (файлы, которые пока только в браузере) выкидываем.
@@ -22,7 +22,9 @@ const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.
 export interface Step { id: string; kind: string; [k: string]: unknown }
 export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; x?: number; y?: number; steps?: Step[] }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
-export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; updatedAt?: number }
+export interface Ink { id: string; c: string; w: number; p: number[] }
+export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number }
+export const INK_MAX = 300, INK_POINTS = 4000
 export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 
 export function makeCourses({ db, FieldValue }: CoursesDeps) {
@@ -76,7 +78,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     return out
   }
   const pub = (id: string, d: Record<string, any>): Course => ({ id, title: d.title ?? '', mode: d.mode === 'line' ? 'line' : 'wave', progress: d.progress ?? 0,
-    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined })
+    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], ink: d.ink ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined })
   const found = async (id: string) => {
     const s = await col().doc(id).get()
     if (!s.exists) throw fail(404, 'course not found')
@@ -104,11 +106,18 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
         if (!ID.test(String(r.id))) throw fail(400, 'bad note')
         return { id: String(r.id), x: num(r.x), y: num(r.y), text: str(r.text, 1000), color: NOTE_COLORS.includes(String(r.color)) ? String(r.color) : '#ffe99a' }
       })
+      // Рисунки маркером: цвет #rrggbb, толщина 1–20, до 4000 чисел (2000 точек) в штрихе
+      const ink = (Array.isArray(b.ink) ? b.ink : []).slice(0, INK_MAX).map((raw) => {
+        const r = (raw ?? {}) as Record<string, unknown>
+        if (!ID.test(String(r.id))) throw fail(400, 'bad ink')
+        const p = (Array.isArray(r.p) ? r.p : []).slice(0, INK_POINTS).map(num)
+        return { id: String(r.id), c: /^#[0-9a-f]{6}$/i.test(String(r.c)) ? String(r.c) : '#1e1e1e', w: Math.max(1, Math.min(20, num(r.w) || 4)), p: p.length % 2 ? p.slice(0, -1) : p }
+      })
       const ref = col().doc(id), s = await ref.get()
       if (!s.exists && (await col().get()).size >= COURSES_MAX) throw fail(413, 'too many courses')
       const tasks = items.filter((x) => x.type !== 'unit').length
       const doc = { updatedBy: uid, title: str(b.title, 120) || 'Без названия', mode: b.mode === 'line' ? 'line' : 'wave',
-        progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, notes, updatedAt: FieldValue.serverTimestamp() }
+        progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, notes, ink, updatedAt: FieldValue.serverTimestamp() }
       await ref.set(s.exists ? doc : { ...doc, teacherId: uid, createdAt: FieldValue.serverTimestamp() }, { merge: true })
       return { id, ok: true }
     },

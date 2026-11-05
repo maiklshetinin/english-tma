@@ -1,14 +1,16 @@
 <script setup>
 // Вкладка «Курсы» преподавателя: список курсов (общий для всех преподавателей) и «+ Новый курс».
-// Нажатие на курс — редактор (холст + рельс, #/courses?id=…). Курс хранится на сервере (server/courses.ts);
+// Как в Figma: одно нажатие — выбрать курс (он показывается ниже, в «Как видит ученик»), двойное или «›» — редактор (холст + рельс, #/courses?id=…). Курс хранится на сервере (server/courses.ts);
 // без сервера (демо) — один курс из этого браузера.
 import { ask } from '../composables/useDialog'
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
 const router = useRouter()
+const props = defineProps({ selected: { type: String, default: null } })
+const emit = defineEmits(['update:selected'])
 const online = !isDemo && !!API && !!fb
 const list = ref(null), err = ref('')
 const LOCAL = 'tma.courseRail.v1'
@@ -21,6 +23,8 @@ async function load() {
   catch (e) { err.value = e.message; list.value ??= [] }
 }
 onMounted(load)
+// выбран первый курс, пока не выбрали другой
+watch(list, (l) => { if (l?.length && !l.some(c => c.id === props.selected)) emit('update:selected', l[0].id) })
 const open = (id) => router.push({ name: 'courses', query: { id } })
 const ago = (t) => {
   if (!t) return ''
@@ -46,11 +50,12 @@ async function remove(c) {
       <button class="btn" @click="open('new')">Создать первый курс</button>
     </div>
     <div v-else class="grid">
-      <div v-for="c in list" :key="c.id" class="card cc" role="button" tabindex="0" @click="open(c.id)" @keydown.enter="open(c.id)">
+      <div v-for="c in list" :key="c.id" class="card cc" :class="{ on: c.id === selected }" role="button" tabindex="0" title="Нажмите — посмотреть ниже, дважды — открыть в редакторе"
+        @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
         <span class="ic"><AppIcon name="route" :size="24" /></span>
         <span class="tx"><b>{{ c.title }}</b><small>{{ c.count }} {{ word(c.count) }}<template v-if="c.updatedAt"> · изменён {{ ago(c.updatedAt) }}</template></small></span>
         <button class="del" title="Удалить курс" @click.stop="remove(c)"><AppIcon name="trash" :size="18" /></button>
-        <span class="go">›</span>
+        <button class="go" title="Открыть в редакторе" @click.stop="open(c.id)">›</button>
       </div>
     </div>
   </div>
@@ -59,14 +64,15 @@ async function remove(c) {
 .cl { display: grid; gap: 10px; margin-bottom: 18px }
 .ch { display: flex; align-items: center; justify-content: space-between; gap: 10px } .ch h2 { margin: 0 }
 .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) }
-.cc { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0; cursor: pointer; transition: border-color .1s }
+.cc { user-select: none; display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0; cursor: pointer; transition: border-color .1s }
 .cc:hover { border-color: var(--blue) }
 .ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--purple); color: #fff }
 .tx { flex: 1; display: grid; min-width: 0 } .tx b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tx small { font-size: 13px; font-weight: 600; color: var(--hint) }
 .del { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--hint-2); cursor: pointer; opacity: 0; transition: opacity .1s }
 .cc:hover .del, .del:focus-visible { opacity: 1 } .del:hover { background: var(--red-l); color: var(--red-d) }
 @media (hover: none) { .del { opacity: 1 } }
-.go { font-size: 24px; color: var(--hint-2) }
+.go { flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; font-size: 24px; line-height: 1; color: var(--hint-2); cursor: pointer; padding: 0 0 3px } .go:hover { background: var(--blue-l); color: var(--blue-d) }
+.cc.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) }
 .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 24px } .empty span { max-width: 420px; color: var(--hint); font-size: 14px }
 .sk { height: 74px; opacity: .5 }
 </style>
