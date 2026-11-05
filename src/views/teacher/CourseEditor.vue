@@ -1164,7 +1164,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .bead.tutor { border-radius: 20px }
 /* Кружок: само видео в круге, с голубым кольцом как в Telegram; при наведении играет без звука */
 .bead.video { width: 76px; height: 76px; margin: -38px 0 0 -38px; overflow: visible }
-.vid { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--c); pointer-events: none; background: #000 }
+.vid { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--c); pointer-events: none; background: #000 }
 .bead.video.todo .vid { filter: grayscale(1); opacity: .6; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #d6d6d6 }
 .ic.badge { position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; padding: 3px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px #fff; box-sizing: border-box; stroke-width: 3 }
 .bead.video:has(.vid) { background: transparent; box-shadow: none }

@@ -168,7 +168,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .bead.current { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }
 .bead.photo { border-radius: 16px }
 .ic { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
-.vid { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #000 } .vid.img { border-radius: 16px }
+.vid { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #000 } .vid.img { border-radius: 16px }
 .bead.todo .vid { filter: grayscale(1); opacity: .6 }
 .ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
