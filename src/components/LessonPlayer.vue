@@ -14,6 +14,7 @@
 // прогресс (pct) и итог (stats) приходят от ветки; на итоге — «Заново» и «Во весь экран».
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
+import BackButton from './BackButton.vue'
 import { KINDS, shuffle, phraseWords, tipParts, gapParts, sameAnswer } from '../utils/lesson'
 
 const props = defineProps({
@@ -22,7 +23,7 @@ const props = defineProps({
   start: { type: Number, default: 0 },
   single: Boolean,                                        // просмотр одного экрана в конструкторе
   name: { type: String, default: '' },
-  closable: Boolean, closeText: { type: String, default: '' },   // closeText — вместо ✕ кнопка с подписью («‹ К курсу»)
+  closable: Boolean, closeText: { type: String, default: '' },   // closeText — вместо ✕ наша кнопка «назад» (стрелка), подпись — в подсказке
   embedded: Boolean, pct: { type: Number, default: null }, stats: { type: Object, default: null },
 })
 const emit = defineEmits(['close', 'done', 'next', 'restart', 'full'])
@@ -145,7 +146,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 <template>
   <div class="lp" :class="{ single, embedded }">
     <div class="top">
-      <button v-if="closable && closeText" class="back" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>{{ closeText }}</button>
+      <BackButton v-if="closable && closeText" :to="closeText" @click="emit('close')" />
       <button v-else-if="closable" class="x" title="Закрыть" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
       <div class="pb"><i :style="{ width: (isFinal ? 100 : pct) + '%' }" /></div>
     </div>
@@ -306,8 +307,6 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .top { display: flex; align-items: center; gap: 12px; padding: 18px 22px 6px; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box }
 .x { flex: none; width: 32px; height: 32px; border: 0; background: none; border-radius: 8px; cursor: pointer; display: grid; place-items: center } .x:hover { background: var(--surface) }
 .x svg { width: 20px; height: 20px; stroke: var(--hint); stroke-width: 2.6; stroke-linecap: round }
-.back { flex: none; display: flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px 0 6px; border: 0; border-radius: 17px; background: var(--surface); font: inherit; font-size: 14px; font-weight: 800; color: var(--text); cursor: pointer; white-space: nowrap }
-.back:hover { background: #e9e9e9 } .back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
 .pb { flex: 1; height: 10px; border-radius: 6px; background: #e8e8e8; overflow: hidden } .pb i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .3s }
 .body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: stretch; gap: 14px; width: 100%; max-width: 520px; margin: 0 auto; padding: 14px 22px 24px; box-sizing: border-box }
 .hd { margin: 8px 0 4px; text-align: center; font-size: 15px; font-weight: 800 }
@@ -396,8 +395,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .single .top { padding-top: 14px }
 /* Во весь экран на компьютере — крупно, как в Busuu */
 @media (min-width: 900px) {
-  .lp:not(.embedded):not(.single) .top { max-width: 760px; padding-top: 22px }
-  .lp:not(.embedded):not(.single) .pb { height: 12px }
+  /* как в Busuu: полоска прогресса по центру, 500px; «назад» — у края экрана */
+  .lp:not(.embedded):not(.single) .top { position: relative; max-width: none; justify-content: center; padding: 28px 24px 6px }
+  .lp:not(.embedded):not(.single) .top > :first-child:not(.pb) { position: absolute; left: 24px; top: 50%; margin-top: 11px; translate: 0 -50% }
+  .lp:not(.embedded):not(.single) .pb { flex: none; width: 500px; max-width: calc(100% - 140px); height: 12px }
   .lp:not(.embedded):not(.single) .body { max-width: 760px; gap: 18px; padding-top: 22px }
   .lp:not(.embedded):not(.single) .hd { font-size: 19px; margin-bottom: 6px }
   .lp:not(.embedded):not(.single) .nw, .lp:not(.embedded):not(.single) .ex, .lp:not(.embedded):not(.single) .two, .lp:not(.embedded):not(.single) .wr2 { max-width: 700px }
@@ -418,7 +419,6 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
   .lp:not(.embedded):not(.single) .tip { font-size: 18px } .lp:not(.embedded):not(.single) .tr { font-size: 16px; padding: 14px 16px }
   .lp:not(.embedded):not(.single) .foot { padding: 18px max(24px, calc(50% - 560px)) } .lp:not(.embedded):not(.single) .fb { font-size: 16px }
   .lp:not(.embedded):not(.single) .go { min-width: 200px; padding: 15px 34px; font-size: 17px; border-radius: 26px }
-  .lp:not(.embedded):not(.single) .back { height: 38px; font-size: 15px }
 }
 .embedded { height: auto; border-radius: inherit } .embedded .body { flex: none; overflow: visible; padding: 10px 40px 20px } .embedded .top { padding: 16px 110px 4px } .embedded .foot { padding: 10px 14px }
 .embedded .go { padding: 9px 22px; font-size: 14px } .go.ghost { background: var(--surface); color: var(--text); margin-right: auto }

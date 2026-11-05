@@ -277,6 +277,7 @@ function copyStep(s, course = doc.id) {
 }
 async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = pick.lesson === lessonId ? pick.step : null) {
   if (!clip.value) return
+  if (clip.value.items) return pasteItems()
   const L = lessonId ? findAny(lessonId) : null
   if (!L || !INTERACTIVE.includes(L.type)) return say('Куда вставить?', { text: 'Выберите урок или экран на ветке урока — копия встанет после него.' })
   if (!Array.isArray(L.steps)) L.steps = []
@@ -286,6 +287,29 @@ async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = p
   let s = null
   for (const src of clip.value.steps) { s = { ...JSON.parse(JSON.stringify(src)), id: stepId() }; L.steps.splice(at++, 0, s); await localCopies(s) }
   selectStep(L.id, s.id); setProgress(doc.progress); save()
+}
+// Задания (свои или соседнего курса) — копировать и вставлять на рельс: новые id у задания и его экранов, файлы общие
+function copyItems(list, course) {
+  if (!list.length) return
+  clip.value = { course, items: JSON.parse(JSON.stringify(list)) }
+  showToast(`Скопировано заданий: ${list.length} — нажмите Ctrl+V, они встанут после выбранного задания (или в конец рельса)`)
+}
+const freshId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+async function pasteItems() {
+  const list = clip.value.items.map(x => ({ ...JSON.parse(JSON.stringify(x)), id: freshId('i') }))
+  if (doc.items.length + doc.loose.length + list.length > 500) return say('В курсе не больше 500 заданий')
+  for (const x of list) {
+    delete x.x; delete x.y
+    if (x.steps) x.steps = x.steps.map(st => ({ ...st, id: stepId() }))
+    if (x.media && clip.value.course === doc.id) {                 // свой кружок, который пока только в браузере, — своя копия файла
+      const b = await mediaOp('readonly', st => st.get(x.media)).catch(() => null)
+      if (b) { const id = 'm' + x.id; await mediaOp('readwrite', st => st.put(b, id)).catch(() => {}); urls[id] = URL.createObjectURL(b); x.media = id } else delete x.media
+    } else delete x.media
+    for (const st of x.steps ?? []) await localCopies(st)
+  }
+  const after = sel.value ? doc.items.findIndex(v => v.id === sel.value) : -1
+  doc.items.splice(after >= 0 ? after + 1 : doc.items.length, 0, ...list)
+  msel.value = list.map(x => x.id); sel.value = null; setProgress(doc.progress); save()
 }
 async function localCopies(s) {
   // файлы, которые пока только в этом браузере, — своя копия (иначе после загрузки в хранилище у одной из копий файл пропадёт)
@@ -438,6 +462,9 @@ const boxOf = () => {                              // всё, что можно 
   order.value.forEach((x, i) => { const p = pos(i); out.push(x.type === 'unit' ? { id: x.id, k: 'item', x0: p.x - 46, y0: p.y - 40, x1: p.x + 400, y1: p.y + 20 } : { id: x.id, k: 'item', x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) })   // юнит — заголовок с полоской справа
   for (const x of doc.loose) out.push({ id: x.id, k: 'item', x0: x.x - 34, y0: x.y - 34, x1: x.x + 34, y1: x.y + 34 })
   for (const n of doc.notes ?? []) out.push({ id: n.id, k: 'note', x0: n.x, y0: n.y, x1: n.x + 240, y1: n.y + (noteH[n.id] ?? 240) })
+  // задания соседних курсов (кружки, фото, уроки, юниты) — их тоже можно выделить и скопировать к себе
+  for (const o of othersL.value) (o.items ?? []).forEach((x, i) => { const p = { x: o.ox + o.L[i].x, y: o.L[i].y }
+    out.push({ id: 'oi:' + o.id + ':' + x.id, k: 'oitem', course: o.id, item: x, ...(x.type === 'unit' ? { x0: p.x - 46, y0: p.y - 40, x1: p.x + 400, y1: p.y + 20 } : { x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) }) })
   // экраны уроков (свои и соседних курсов) — чтобы рамкой выделить и скопировать сразу несколько
   const rails = [...lessonRails.value.map(r => ({ course: doc.id, x: r.x, p: r.p, key: '' })),
     ...othersL.value.flatMap(o => (o.items ?? []).map((x, i) => ({ course: o.id, x, p: { x: o.ox + o.L[i].x, y: o.L[i].y }, key: 'o' + o.id })).filter(r => INTERACTIVE.includes(r.x.type)))]
@@ -819,6 +846,14 @@ const onKey = (e) => {
   if ((e.ctrlKey || e.metaKey) && !run.value && (e.code === 'KeyC' || e.code === 'KeyV')) {
     if (window.getSelection()?.toString()) return                  // выделен текст — обычное копирование
     e.preventDefault()
+    const itemsSel = msel.value.filter(id => !id.startsWith('st:'))
+    if (e.code === 'KeyC' && (itemsSel.some(id => id.startsWith('oi:')) || itemsSel.some(id => findAny(id)))) {     // выделены задания — копируем их (с экранами)
+      const boxes = boxOf().filter(o => (o.k === 'oitem' || o.k === 'item') && itemsSel.includes(o.id)).sort((a, b) => a.y0 - b.y0)
+      const other = boxes.find(o => o.k === 'oitem')
+      return copyItems(boxes.filter(o => (other ? o.k === 'oitem' && o.course === other.course : o.k === 'item')).map(o => o.item ?? findAny(o.id)), other ? other.course : doc.id)
+    }
+    if (e.code === 'KeyC' && !msel.value.length && sel.value && findAny(sel.value)) return copyItems([findAny(sel.value)], doc.id)
+    if (e.code === 'KeyV' && clip.value?.items) return pasteItems()
     if (e.code === 'KeyC' && msel.value.some(id => id.startsWith('st:'))) {          // рамкой выделены экраны — копируем все (по порядку на холсте)
       const sel = boxOf().filter(o => o.k === 'step' && msel.value.includes(o.id)).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)
       return copyStep(sel.map(o => o.s), sel[0].course)
@@ -861,7 +896,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
-          :can-paste="!!clip" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
+          :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
         <!-- «Все курсы»: соседние курсы справа (только смотреть, проходить и копировать) -->
         <template v-for="o in othersL" :key="'oc' + o.id">
@@ -871,10 +906,13 @@ async function reset() { if (!(await ask('Вернуть пример курса
             :sel="opick?.lesson === x.id ? opick.s.id : null" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly
             @copy="copyStep($event, o.id)" @select="(sid) => { opick = sid && sid !== 'final' ? { course: o.id, lesson: x.id, s: x.steps.find(v => v.id === sid) } : null; if (sid) selectStep(null, null) }"
             @height="railHs['o' + o.id + x.id] = $event" @focus="showPoint" />
-          <div v-for="(x, i) in o.items" :key="'ob' + o.id + x.id" class="bead ro" :class="[x.type, o.st[i], 's-' + o.L[i].side]" :style="beadStyle(x, { x: o.ox + o.L[i].x, y: o.L[i].y }, colorOf(x, null))" @pointerdown.stop @dblclick.stop="openOther(o.id)">
+          <div v-for="(x, i) in o.items" :key="'ob' + o.id + x.id" class="bead ro" :class="[x.type, o.st[i], 's-' + o.L[i].side, { on: isM('oi:' + o.id + ':' + x.id) }]" :style="beadStyle(x, { x: o.ox + o.L[i].x, y: o.L[i].y }, colorOf(x, null))" @pointerdown.stop="msel = [($event.shiftKey ? msel : []), 'oi:' + o.id + ':' + x.id].flat(); sel = null; selectStep(null, null)" @dblclick.stop="openOther(o.id)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
             <div v-if="x.type === 'unit'" class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b></div>
             <template v-else>
-              <svg viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
+              <!-- кружок и фото соседнего курса — тоже видно (файлы курса в хранилище) -->
+              <video v-if="x.type === 'video' && x.file && mediaUrl({ file: x.file })" :src="mediaUrl({ file: x.file })" class="vid" muted loop playsinline preload="metadata" />
+              <img v-else-if="x.type === 'photo' && x.file && mediaUrl({ file: x.file })" :src="mediaUrl({ file: x.file })" class="vid img" alt="" draggable="false" />
+              <svg v-if="!MEDIA.includes(x.type) || !x.file || !mediaUrl({ file: x.file })" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
               <em class="cap">{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></em>
             </template>
           </div>
