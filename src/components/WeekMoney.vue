@@ -1,12 +1,12 @@
 <script setup>
-// Деньги недели — две цифры: факт (проведённые уроки) и план (все уроки недели); под ними мелко красным — сколько потеряно из-за отмен учеников.
+// Деньги недели — две цифры: факт (проведённые уроки) и план (все уроки недели); под ними мелко красным — сколько потеряно из-за отмен учеников и какая это доля уроков недели.
 import { fmtMoney } from '../utils/price'
-defineProps({ m: { type: Object, required: true } })      // { real, plan, lost }
+defineProps({ m: { type: Object, required: true } })      // { real, plan, lost, offPct, off, all }
 </script>
 <template>
-  <div v-if="m.plan || m.lost" class="wm" :title="`Факт ${fmtMoney(m.real)} из ${fmtMoney(m.plan)}${m.lost ? `, потеряно ${fmtMoney(m.lost)}` : ''}`">
+  <div v-if="m.plan || m.lost" class="wm" :title="`Факт ${fmtMoney(m.real)} из ${fmtMoney(m.plan)}${m.lost ? `, потеряно ${fmtMoney(m.lost)}` : ''}${m.off ? `, отменено ${m.off} из ${m.all} (${m.offPct}%)` : ''}`">
     <span class="top"><b>{{ fmtMoney(m.real) }}</b><small>из {{ fmtMoney(m.plan) }}</small></span>
-    <span v-if="m.lost" class="lost">−{{ fmtMoney(m.lost) }} отмены</span>
+    <span v-if="m.lost || m.off" class="lost">−{{ fmtMoney(m.lost) }} отмены<template v-if="m.off"> · {{ m.offPct }}%</template></span>
   </div>
 </template>
 <style scoped>

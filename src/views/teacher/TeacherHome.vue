@@ -27,7 +27,13 @@ const { haptic } = useTelegram()
 // Без листания: сверху всегда текущая неделя, под ней следующая; даты подставляются сами (и обновляются при смене недели)
 const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (nowTick.value, weekDates(1)))
 // Деньги недели: факт (проведённые) и план (все уроки) — utils/price.ts; меняются сразу при отметке «проведён»
-const weekMoney = (dates) => sumMoney(scheduleStore.lessons.filter(l => dates.includes(l.date)), studentStore.byId)
+// Деньги недели + доля отмен: сколько мест учеников на уроках недели отменено (в группе — по каждому ученику), в процентах
+const weekMoney = (dates) => {
+  const ls = scheduleStore.lessons.filter(l => dates.includes(l.date))
+  let all = 0, off = 0
+  for (const l of ls) for (const id of l.studentIds) { all++; if (l.canceled?.[id]) off++ }
+  return { ...sumMoney(ls, studentStore.byId), offPct: all ? Math.round(off / all * 100) : 0, off, all }
+}
 const m1 = computed(() => weekMoney(w1.value)), m2 = computed(() => weekMoney(w2.value))
 // Одна таблица: «Эта неделя», «Следующая» или прошлые — кнопкой «‹» слева от переключателя (week < 0, по неделе назад за нажатие).
 // На прошлой неделе «Следующая» прячется: в переключателе всегда две кнопки, и шапка не прыгает.
