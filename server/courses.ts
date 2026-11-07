@@ -1,6 +1,6 @@
 // Курсы (редактор «рельс»): courses/<id> — { teacherId, title, mode, progress, items, loose, notes, updatedAt }.
 //  • notes — стикеры-заметки на холсте: { id, x, y, text, color, by?, sz?, font?, b?, st?, list?, nob? }; ink — рисунки маркером: { id, c, w, p: [x0, y0, x1, y1, …] }.
-//  • items — задания по порядку на рельсе; loose — черновики на холсте (с x, y); у кружка и фото — file: ключ файла в S3.
+//  • items — задания по порядку на рельсе; loose — черновики на холсте (с x, y), среди них type 'screen' — экран урока прямо на доске (steps: [один]); у кружка и фото — file: ключ файла в S3.
 //  • У урока (и «Слова», «Домашка», «Тест») — steps: экраны интерактивного урока (src/utils/lesson.ts). Файлы экранов — ключи
 //    файлов курса в S3 или https-ссылки (фото и озвучка карточек); остальное (файлы, которые пока только в браузере) выкидываем.
 //  • Общее рабочее пространство: все преподаватели (TEACHER_IDS) видят и правят все курсы — как учеников и расписание.
@@ -64,7 +64,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
   // Чистим всё, что пришло с сайта: лишние поля выкидываем, длину режем, видео — только свои ключи
   const item = (uid: string, raw: unknown, loose: boolean): CourseItem => {
     const r = (raw ?? {}) as Record<string, unknown>, type = String(r.type)
-    if (!ID.test(String(r.id)) || !COURSE_TYPES.includes(type)) throw fail(400, 'bad item')
+    // screen — экран урока, положенный прямо на доску (только среди черновиков, один экран)
+    if (!ID.test(String(r.id)) || !(COURSE_TYPES.includes(type) || (type === 'screen' && loose))) throw fail(400, 'bad item')
     const out: CourseItem = { id: String(r.id), type, title: str(r.title, 120) }
     if (type === 'unit') out.sub = str(r.sub, 120)
     if ((type === 'video' || type === 'photo') && r.file != null) {
@@ -72,8 +73,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       if (!isOurKey(v)) throw fail(403, 'foreign file')
       out.file = v
     }
-    if (INTERACTIVE.includes(type) && Array.isArray(r.steps)) {
-      out.steps = r.steps.slice(0, STEPS_MAX).map(step)
+    if ((INTERACTIVE.includes(type) || type === 'screen') && Array.isArray(r.steps)) {
+      out.steps = r.steps.slice(0, type === 'screen' ? 1 : STEPS_MAX).map(step)
       if (new Set(out.steps.map((x) => x.id)).size !== out.steps.length) throw fail(400, 'duplicate step id')
     }
     if (loose) { out.x = num(r.x); out.y = num(r.y) }

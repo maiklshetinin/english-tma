@@ -21,9 +21,11 @@ const props = defineProps({
   upPct: { type: Object, default: () => ({}) },
   toWorld: { type: Function, required: true },
   canPaste: Boolean,
-  readonly: Boolean,                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
+  readonly: Boolean,
+  free: Boolean,                                          // экран сам по себе на доске (не на ветке урока): x, y — левый верх карточки
+  dim: { type: Array, default: () => [] },                 // экраны, которые сейчас тащат (редактор курса) — бледнее                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
 })
-const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus', 'copy', 'paste'])
+const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus', 'copy', 'paste', 'grab'])
 const decks = useDecksStore()
 const changed = () => emit('change')
 const steps = computed(() => props.item.steps ?? [])
@@ -36,30 +38,14 @@ const order = computed(() => {
   if (mv.on) list.splice(mv.to, 0, steps.value.find(s => s.id === mv.id))
   return list
 })
-const cx = (i) => props.x + X0 + i * STEP
+const cx = (i) => props.x + (props.free ? 0 : X0) + i * STEP
 const endX = computed(() => (steps.value.length ? cx(order.value.length) + CW / 2 : cx(0) - GAP / 2))                   // до итога
-// Шапка карточки: тянуть вдоль рельса — переставить
-function down(e, s) {
-  const w = props.toWorld(e.clientX, e.clientY)
-  Object.assign(mv, { id: s.id, sx: w.x, dx: 0, on: false, to: steps.value.indexOf(s) })
-  addEventListener('pointermove', move); addEventListener('pointerup', up, { once: true }); addEventListener('pointercancel', up, { once: true })
-}
-function move(e) {
-  const w = props.toWorld(e.clientX, e.clientY); mv.dx = w.x - mv.sx
-  if (!mv.on && Math.abs(mv.dx) < 6) return
-  mv.on = true
-  const from = steps.value.findIndex(s => s.id === mv.id)
-  mv.to = Math.max(0, Math.min(steps.value.length - 1, from + Math.round(mv.dx / STEP)))
-}
-function up() {
-  removeEventListener('pointermove', move)
-  if (mv.on) { props.item.steps.splice(0, props.item.steps.length, ...order.value); changed() }
-  Object.assign(mv, { id: null, on: false, dx: 0 })
-}
+// Шапка карточки: тянуть — переставить на ветке, унести на другую ветку или на доску (тащит редактор курса, с выделенными вместе)
+function down(e, s) { if (e.button === 0) emit('grab', { e, s }) }
 const cardStyle = (s, i) => {
   const lift = mv.on && s.id === mv.id
   const left = lift ? cx(steps.value.findIndex(v => v.id === s.id)) + mv.dx : cx(i)
-  return { left: left + 'px', top: props.y - TOP + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: lift ? 7 : 3, transition: lift ? 'none' : undefined }
+  return { left: left + 'px', top: (props.free ? props.y : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: lift ? 7 : 3, transition: lift ? 'none' : undefined }
 }
 
 async function removeStep(s) {
@@ -192,21 +178,21 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
   <div class="lr" @pointerdown.stop>
     <input ref="fileIn" type="file" :accept="accept" hidden @change="onFile" />
     <!-- Рельс урока: от урока вправо, через все экраны к итогу -->
-    <svg class="line" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="steps.length && doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
+    <svg v-if="!free" class="line" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="steps.length && doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
 
     <!-- Пока тянем экран — пунктирное место, куда он встанет -->
     <div v-if="mv.on" class="slot" :style="{ left: cx(mv.to) + 'px', top: y - TOP + 48 + 'px', width: CW + 'px', height: (frameH[mv.id] ?? 380) - 48 + 'px' }" />
 
     <!-- Экраны — открытые карточки, висят на ветке урока -->
-    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: mv.on && mv.id === s.id }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
+    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: mv.on && mv.id === s.id, dim: dim.includes(s.id), free }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
       <!-- станция на ветке с номером и ножка к экрану; за станцию тоже можно тянуть -->
-      <span class="stem" /><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span>
+      <template v-if="!free"><span class="stem" /><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span></template>
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
-      <div class="flab" :class="{ ro: readonly }" :title="readonly ? 'Экран другого курса — скопируйте и вставьте в свой' : 'Тяните, чтобы переставить'" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
+      <div class="flab" :class="{ ro: readonly }" :title="readonly ? 'Экран другого курса — скопируйте и вставьте в свой' : 'Тяните: переставить, унести на другой урок или на доску'" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
         <svg class="grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
-        <span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[s.kind].ic" /></span><b>{{ i + 1 }} · {{ KINDS[s.kind].t }}</b><span class="tm" :title="'Примерно столько ученик потратит на экран — из таких времён складывается время урока'">≈ {{ fmtMin(stepMin(s)) }} мин</span>
+        <span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[s.kind].ic" /></span><b>{{ free ? '' : i + 1 + ' · ' }}{{ KINDS[s.kind].t }}</b><span class="tm" :title="'Примерно столько ученик потратит на экран — из таких времён складывается время урока'">≈ {{ fmtMin(stepMin(s)) }} мин</span>
         <i v-if="stepIssue(s)" class="iss" :title="stepIssue(s)">{{ stepIssue(s) }}</i>
-        <template v-if="!readonly"><button class="ib mv" title="На шаг левее" :disabled="i === 0" @pointerdown.stop @click="shift(s, -1)">‹</button><button class="ib mv" title="На шаг правее" :disabled="i === order.length - 1" @pointerdown.stop @click="shift(s, 1)">›</button></template>
+        <template v-if="!readonly && !free"><button class="ib mv" title="На шаг левее" :disabled="i === 0" @pointerdown.stop @click="shift(s, -1)">‹</button><button class="ib mv" title="На шаг правее" :disabled="i === order.length - 1" @pointerdown.stop @click="shift(s, 1)">›</button></template>
         <button v-if="!readonly" class="ib pen" :class="{ on: isEdit(s) }" :title="isEdit(s) ? 'Сейчас правите — «Сохранить» внизу экрана' : 'Изменить экран'" @pointerdown.stop @click="isEdit(s) ? save(s) : (editing[s.id] = true)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
         <button class="ib cp" title="Копировать экран (Ctrl+C) — потом «Вставить» на любой ветке или Ctrl+V" @pointerdown.stop @click="emit('copy', s)"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2" /><path d="M15.5 8.5V6.7a2.2 2.2 0 0 0-2.2-2.2H6.7a2.2 2.2 0 0 0-2.2 2.2v6.6a2.2 2.2 0 0 0 2.2 2.2h1.8" /></svg></button>
         <button v-if="!isEdit(s)" class="ib rs" title="Сбросить экран — пройти заново" @pointerdown.stop @click="resetStep(s)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></svg></button>
@@ -234,7 +220,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <div class="media" :class="{ empty: !s.video && !s.image }" @click="!s.video && !s.image && pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">
           <video v-if="s.video" :src="resolve(s.video, 'video')" controls playsinline preload="metadata" />
           <img v-else-if="s.image" :src="resolve(s.image, 'image')" alt="" draggable="false" />
-          <span v-else class="ph">＋ Видео или фото<small>нажмите или перетащите файл</small></span>
+          <span v-else class="ph">＋ Видео или фото<small>16:9 — как в Busuu, фото лучше от 1280×720 (обрежем и сожмём сами)</small><small>нажмите или перетащите файл</small></span>
           <button v-if="s.video || s.image" class="x" title="Убрать" @click.stop="clear(s, s.video ? 'video' : 'image')">✕</button>
           <em v-if="pct(s, 'video') != null || pct(s, 'image') != null" class="up">{{ pct(s, 'video') ?? pct(s, 'image') }}%</em>
         </div>
@@ -260,7 +246,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       <div v-else-if="s.kind === 'choice'" class="cb">
         <div class="hd">{{ KINDS.choice.head }}</div>
         <div v-if="s.image" class="media" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])"><img :src="resolve(s.image, 'image')" alt="" draggable="false" /><button class="x" title="Убрать фото вопроса" @click.stop="clear(s, 'image')">✕</button></div>
-        <button v-else class="add sm" @click="pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">＋ Фото к вопросу</button>
+        <button v-else class="add sm" title="Фото 16:9, лучше от 1280×720 — обрежем и сожмём сами" @click="pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">＋ Фото к вопросу</button>
         <div class="tg"><button :class="{ on: s.ask === 'audio' }" @click="s.ask = 'audio'; changed()">На слух</button><button :class="{ on: s.ask === 'tr' }" @click="s.ask = 'tr'; changed()">Переводом</button></div>
         <div v-if="s.ask === 'audio'" class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
           <AudioWave v-if="qAudio(s)" :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" small />
@@ -271,7 +257,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <div class="tg"><button :class="{ on: s.show === 'pics' }" @click="s.show = 'pics'; changed()">Картинки</button><button :class="{ on: s.show === 'text' }" @click="s.show = 'text'; changed()">Текст</button></div>
         <div class="opts" :class="s.show">
           <div v-for="(o, k) in s.opts" :key="k" class="op" :class="{ right: (s.ans ?? 0) === k }">
-            <div v-if="s.show === 'pics'" class="oi" title="Фото варианта: нажмите или перетащите" @click="pick(s, ['image'], k)" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'], k)">
+            <div v-if="s.show === 'pics'" class="oi" title="Фото варианта 3:2, лучше от 600×400 — обрежем по центру и сожмём. Нажмите или перетащите" @click="pick(s, ['image'], k)" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'], k)">
               <img v-if="o.image" :src="resolve(o.image, 'image')" alt="" draggable="false" /><span v-else>＋ фото</span>
             </div>
             <input v-model="o.w" placeholder="слово" @input="changed" />
@@ -290,7 +276,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <div v-if="['speak', 'gap', 'answer'].includes(s.kind)" class="media" :class="{ empty: !s.video && !s.image }" @click="!s.video && !s.image && pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">
           <video v-if="s.video" :src="resolve(s.video, 'video')" controls playsinline preload="metadata" />
           <img v-else-if="s.image" :src="resolve(s.image, 'image')" alt="" draggable="false" />
-          <span v-else class="ph">＋ Видео или фото<small>нажмите или перетащите файл</small></span>
+          <span v-else class="ph">＋ Видео или фото<small>16:9 — как в Busuu, фото лучше от 1280×720 (обрежем и сожмём сами)</small><small>нажмите или перетащите файл</small></span>
           <button v-if="s.video || s.image" class="x" title="Убрать" @click.stop="clear(s, s.video ? 'video' : 'image')">✕</button>
           <em v-if="pct(s, 'video') != null || pct(s, 'image') != null" class="up">{{ pct(s, 'video') ?? pct(s, 'image') }}%</em>
         </div>
@@ -357,16 +343,16 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 
     <!-- «+» — добавить экран -->
     <!-- Урок без экранов: пустое место под экраны — добавить из «Интерактива» или вставить скопированный -->
-    <div v-if="!steps.length" :ref="watchFrame" class="frame empty-f" :style="{ left: cx(0) + 'px', top: y - TOP + 'px', width: CW + 'px' }">
+    <div v-if="!steps.length && !free" :ref="watchFrame" class="frame empty-f" :style="{ left: cx(0) + 'px', top: y - TOP + 'px', width: CW + 'px' }">
       <span class="stem" />
       <div class="ef"><b>Экранов пока нет</b><span>Добавьте из «Интерактива» внизу или вставьте скопированный (Ctrl+V)</span>
         <div class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">＋ Экран</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
     </div>
-    <button v-if="canPaste && steps.length && !readonly" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
-    <button v-if="!readonly" class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
+    <button v-if="canPaste && steps.length && !readonly && !free" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
+    <button v-if="!readonly && !free" class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
 
     <!-- Итог урока -->
-    <div v-if="steps.length" :ref="watchFrame" class="frame" :style="{ left: cx(order.length) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
+    <div v-if="steps.length && !free" :ref="watchFrame" class="frame" :style="{ left: cx(order.length) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
      <span class="stem" /><span class="node fin-n" :class="{ done: run.at >= steps.length }" title="Итог урока — всегда в конце ветки"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
     <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>Итог урока · всегда в конце</b></div>
     <div class="card fin" :class="{ on: sel === 'final', now: run.at >= steps.length }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
@@ -381,6 +367,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .line { position: absolute; overflow: visible; pointer-events: none; z-index: 1 } .line line { stroke: #e0e0e0; stroke-width: 8; stroke-linecap: round }
 /* экран — открытая карточка на рельсе, как на доске */
 .frame { position: absolute; z-index: 3; transition: left .2s ease }
+.frame.dim { opacity: .35 } .frame.free .flab { margin-top: 0 }
 .frame.lift { z-index: 7 } .frame.lift .card { box-shadow: 0 16px 34px rgba(0, 0, 0, .2) }
 /* подпись над экраном — как имя фрейма в Figma */
 .line line.done { stroke: #1fbe78 }
@@ -434,7 +421,7 @@ textarea { field-sizing: content; overflow: hidden; min-height: 1.6em }
 input, textarea, select { font: inherit; color: var(--text); border: 1px solid transparent; border-radius: 7px; background: none; outline: none; padding: 3px 6px; min-width: 0; resize: none }
 input:hover, textarea:hover { background: var(--surface) } input:focus, textarea:focus { border-color: var(--blue); background: #fff }
 input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 600 }
-.media { position: relative; flex: none; aspect-ratio: 16 / 8; border-radius: 10px; overflow: hidden; background: #000 }
+.media { position: relative; flex: none; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000 }
 .media.empty { background: var(--surface); border: 1px dashed #cfcfcf; cursor: pointer } .media.empty:hover { background: var(--blue-l) }
 .media video, .media img { display: block; width: 100%; height: 100%; object-fit: cover }
 .ph { display: grid; place-items: center; align-content: center; height: 100%; gap: 2px; color: var(--blue-d); font-size: 13px; font-weight: 800 } .ph small { color: var(--hint); font-size: 10px; font-weight: 600 }

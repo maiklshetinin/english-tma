@@ -23,6 +23,7 @@ import { showToast } from '../../composables/useToast'
 import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
+import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
@@ -69,6 +70,7 @@ if (!doc.id) doc.id = 'c' + Date.now().toString(36) + Math.random().toString(36)
 const save = () => {
   if (remote) return                       // это пришло от коллеги — не сохраняем и не пересылаем обратно
   if (!restoring) histMark()
+  if (doc.loose.some(x => x.type === 'screen' && !x.steps?.length)) doc.loose = doc.loose.filter(x => x.type !== 'screen' || x.steps?.length)   // экран на доске удалили — убираем и его место
   doc.dirty = true
   clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250)
   push(); share()
@@ -137,7 +139,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(INTERACTIVE.includes(x.type) && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -249,6 +251,10 @@ const findStep = (sid) => { for (const x of [...doc.items, ...doc.loose]) { cons
 const slotOf = (sid, opt) => { const s = findStep(sid); return opt == null ? s : s?.opts?.[opt] }
 async function putStepFile(sid, field, file, opt = null) {
   const obj = slotOf(sid, opt); if (!obj) return
+  if (field === 'image') {             // фото — как в Busuu: обрезаем под 16:9 (у варианта ответа 3:2) и сжимаем
+    const kind = opt == null ? 'main' : 'opt', r = await shrinkPhoto(file, kind); file = r.file
+    if (r.small) showToast(`Фото маленькое (${r.w}×${r.h}) — на большом экране будет мутным. Лучше ${PHOTO[kind].label.split(', ')[1].replace('лучше ', '')} и больше.`, null, 'bad')
+  }
   const id = `m${sid}_${field}${opt ?? ''}_${Date.now().toString(36)}`
   try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return say('Не удалось сохранить файл', { text: 'В браузере не хватило места.' }) }
   const old = obj[field]
@@ -291,7 +297,7 @@ function resolveRef(v, kind) {
 // ---------- Второй рельс: экраны урока ----------
 // Горизонтальные рельсы видны у всех уроков с экранами и у выбранного урока (чтобы начать собирать).
 const pick = reactive({ lesson: null, step: null })                // открытый экран: урок и экран (или 'final')
-const activeLesson = computed(() => pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
+const activeLesson = computed(() => (pick.lesson && findAny(pick.lesson)?.type !== 'screen' ? pick.lesson : null) ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
 // «Все уроки» — ветки всех уроков курса раскрыты сразу (видно, что где, и экраны удобно копировать между уроками)
 const allRails = ref(false)            // кнопку «Все уроки» убрали (05.11.2026): ветки — у уроков с экранами и у выбранного
 const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (allRails.value || x.steps?.length || x.id === activeLesson.value)))
@@ -308,6 +314,11 @@ async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = p
   if (!clip.value) return
   if (clip.value.items) return pasteItems()
   const L = lessonId ? findAny(lessonId) : null
+  if (L?.type === 'screen') {            // выбран экран на доске — копии ложатся на доску справа от него
+    let k = 1, last = null
+    for (const src of clip.value.steps) { const st = { ...JSON.parse(JSON.stringify(src)), id: stepId() }; await localCopies(st); last = st; doc.loose.push(freeOf(st, L.x + k++ * SCR_STEP, L.y)) }
+    selectStep(doc.loose.at(-1).id, last.id); return save()
+  }
   if (!L || !INTERACTIVE.includes(L.type)) return say('Куда вставить?', { text: 'Выберите урок или экран на ветке урока — копия встанет после него.' })
   if (!Array.isArray(L.steps)) L.steps = []
   if (L.steps.length + clip.value.steps.length > STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
@@ -403,6 +414,98 @@ async function removeStepKey() {
   const files = stepRefs(s)
   L.steps.splice(L.steps.indexOf(s), 1); dropRefs(files); selectStep(null, null); save()
 }
+// ---------- Экраны: тянуть как стикер — на ветку урока (в любое место), на кружок урока (в конец) или просто на доску ----------
+// Тянут: мини-окошко из «Интерактива» (новый экран), экран с ветки или с доски; выделенные рамкой экраны — все вместе.
+const SCR_W = 460, SCR_STEP = 520
+const freeOf = (st, x, y) => ({ id: freshId('f'), type: 'screen', title: '', x: Math.round(x), y: Math.round(y), steps: [st] })
+const sd = reactive({ on: false, list: [], tray: null, ox: 0, oy: 0, w: { x: 0, y: 0 }, to: null })
+let sdP = null
+const sdIds = computed(() => (sd.on && !sd.tray ? sd.list.map(o => o.s.id) : []))
+// где лежит экран: на ветке урока (lesson, i) или на доске (screen); левый верх его карточки
+function whereStep(st) {
+  for (const r of lessonRails.value) { const i = r.x.steps?.indexOf(st) ?? -1; if (i >= 0) return { host: r.x, i, x: r.p.x + 280 + i * SCR_STEP, y: r.p.y + 40 } }
+  for (const f of doc.loose) if (f.type === 'screen' && f.steps?.[0] === st) return { host: f, i: 0, x: f.x, y: f.y }
+  for (const x of [...doc.items, ...doc.loose]) { const i = x.steps?.indexOf(st) ?? -1; if (i >= 0) return { host: x, i, x: 0, y: 0 } }
+  return null
+}
+// куда упадёт: ветка урока и место на ней, кружок урока (в конец) или доска (null)
+function screenTarget(w) {
+  for (const r of lessonRails.value) {
+    const n = r.x.steps?.length ?? 0, h = railHs[r.x.id] ?? 420
+    if (w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h) || w.x < r.p.x + 120 || w.x > r.p.x + 280 + n * SCR_STEP + 260) continue
+    const i = Math.max(0, Math.min(n, Math.floor((w.x - r.p.x - 280 + SCR_STEP / 2) / SCR_STEP)))
+    return { L: r.x, i, mark: { x: r.p.x + 280 + i * SCR_STEP - 32, y: r.p.y - 24, h: Math.min(700, h) + 70 } }
+  }
+  for (const [k, x] of order.value.entries()) {
+    if (!INTERACTIVE.includes(x.type)) continue
+    const p = pos(k); if (Math.hypot(w.x - p.x, w.y - p.y) < 52) return { L: x, i: x.steps?.length ?? 0, bead: p }
+  }
+  return null
+}
+function sdStart(e, list, tray = null) {
+  const w = toWorld(e.clientX, e.clientY)
+  sdP = { sx: e.clientX, sy: e.clientY, list, tray, w }
+  addEventListener('pointermove', sdMove); addEventListener('pointerup', sdUp, { once: true }); addEventListener('pointercancel', sdUp, { once: true })
+}
+// с ветки или с доски: тащим этот экран, а если он среди выделенных рамкой — все выделенные свои экраны
+function grabStep({ e, s: st }) {
+  const key = 'st:' + doc.id + ':' + st.id
+  const sel2 = msel.value.includes(key) ? boxOf().filter(o => o.k === 'step' && o.course === doc.id && msel.value.includes(o.id)).map(o => o.s) : [st]
+  const list = sel2.map(v => ({ s: v, at: whereStep(v) })).filter(o => o.at)
+  if (list.length) sdStart(e, list)
+}
+function trayDown(e, id) { if (e.button === 0) sdStart(e, null, id) }
+function sdMove(e) {
+  if (!sdP) return
+  if (!sd.on) {
+    if (Math.hypot(e.clientX - sdP.sx, e.clientY - sdP.sy) < 6) return
+    const first = sdP.list?.find(o => o.at.x || o.at.y)?.at
+    Object.assign(sd, { on: true, tray: sdP.tray, list: sdP.list ?? [], ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
+    if (sdP.tray) tray.value = null
+  }
+  sd.w = toWorld(e.clientX, e.clientY)
+  sd.to = overToolbar(e.clientY) ? 'cancel' : screenTarget(sd.w)
+}
+async function sdUp(e) {
+  removeEventListener('pointermove', sdMove); removeEventListener('pointercancel', sdUp); removeEventListener('pointerup', sdUp)
+  const P = sdP; sdP = null
+  if (!sd.on) { if (P?.tray) addScreen(P.tray); return }
+  const to = overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
+  const tr = sd.tray, list = sd.list
+  Object.assign(sd, { on: false, list: [], tray: null, to: null })
+  if (to === 'cancel') return
+  const moving = tr ? (tr === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === tr).make()]) : list.map(o => o.s)
+  if (to) {
+    const L = to.L, have = moving.filter(st => L.steps?.includes(st)).length
+    if ((L.steps?.length ?? 0) - have + moving.length > STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
+    let i = to.i
+    if (!tr) for (const o of list) if (o.at.host === L && o.at.i < to.i) i--          // уходят с этой же ветки левее — место сдвигается
+    if (!tr) unhook(list)
+    if (!Array.isArray(L.steps)) L.steps = []
+    L.steps.splice(Math.max(0, Math.min(L.steps.length, i)), 0, ...moving)
+    selectStep(L.id, moving[0].id)
+  } else {
+    if (!tr) unhook(list)
+    const x0 = w.x - sd.ox, y0 = w.y - sd.oy
+    moving.forEach((st, k) => doc.loose.push(freeOf(st, x0 + k * SCR_STEP, y0)))
+    selectStep(doc.loose.at(-1).id, moving.at(-1).id)
+  }
+  msel.value = moving.length > 1 ? moving.map(st => 'st:' + doc.id + ':' + st.id) : []
+  setProgress(doc.progress); save()
+}
+// снять экраны с прежних мест (ветка урока или доска) — файлы не трогаем, экран просто переезжает
+function unhook(list) {
+  for (const o of list) {
+    const h = o.at.host, k = h.steps?.indexOf(o.s) ?? -1; if (k < 0) continue
+    if (h.type === 'screen') doc.loose.splice(doc.loose.indexOf(h), 1); else h.steps.splice(k, 1)
+  }
+}
+const sdGhost = computed(() => {
+  if (!sd.on) return []
+  const kinds = sd.tray ? (sd.tray === 'lesson' ? ['intro', 'intro', 'choice'] : [TEMPLATES.find(t => t.id === sd.tray).kind]) : sd.list.map(o => o.s.kind)
+  const big = !sd.to || sd.to === 'cancel'
+  return kinds.slice(0, 8).map((k, j) => ({ k, left: sd.w.x - (big ? sd.ox : 40) + j * (big ? SCR_STEP : 18), top: sd.w.y - (big ? sd.oy : 20) + (big ? 0 : j * 10), small: !big }))
+})
 const run = ref(null)                                             // «Пройти урок» — урок целиком, как ученик (как «Презентация» в Figma)
 // выбран урок с готовыми экранами (не тянем, не рамка) — под кружком карточка урока, как у ученика
 const peekOf = (x) => { if (sel.value !== x.id || drag.on || msel.value.length > 1 || renaming.value === x.id || !INTERACTIVE.includes(x.type)) return null; const ok = (x.steps ?? []).filter(v => !stepIssue(v)); return ok.length ? ok : null }
@@ -501,7 +604,10 @@ const msel = ref([]), mq = ref(null)              // mq — рамка на эк
 const boxOf = () => {                              // всё, что можно выделить, с рамкой в координатах холста
   const out = []
   order.value.forEach((x, i) => { const p = pos(i); out.push(x.type === 'unit' ? { id: x.id, k: 'item', x0: p.x - 46, y0: p.y - 40, x1: p.x + 400, y1: p.y + 20 } : { id: x.id, k: 'item', x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) })   // юнит — заголовок с полоской справа
-  for (const x of doc.loose) out.push({ id: x.id, k: 'item', x0: x.x - 34, y0: x.y - 34, x1: x.x + 34, y1: x.y + 34 })
+  for (const x of doc.loose) {
+    if (x.type !== 'screen') { out.push({ id: x.id, k: 'item', x0: x.x - 34, y0: x.y - 34, x1: x.x + 34, y1: x.y + 34 }); continue }
+    const st = x.steps?.[0]; if (st) out.push({ id: 'st:' + doc.id + ':' + st.id, k: 'step', course: doc.id, lesson: x.id, s: st, x0: x.x, y0: x.y, x1: x.x + 460, y1: x.y + Math.min(700, railHs[x.id] ?? 420) })
+  }
   for (const n of doc.notes ?? []) out.push({ id: n.id, k: 'note', x0: n.x, y0: n.y, x1: n.x + 240, y1: n.y + (noteH[n.id] ?? 240) })
   // задания соседних курсов (кружки, фото, уроки, юниты) — их тоже можно выделить и скопировать к себе
   for (const o of othersL.value) (o.items ?? []).forEach((x, i) => { const p = { x: o.ox + o.L[i].x, y: o.L[i].y }
@@ -655,7 +761,8 @@ const chapters = computed(() => {
   return out.map(c => ({ ...c, pct: c.tasks ? Math.round(c.done / c.tasks * 100) : 0, style: { left: x0 + 'px', width: x1 - x0 + 'px', top: L[c.i].y - 62 + 'px', height: L[c.last].y - L[c.i].y + 62 + 64 + 'px' } }))
 })
 const chapterOf = (i) => chapters.value.find(c => c.i === i)
-const looseShown = computed(() => doc.loose.filter(l => !(drag.on && l.id === drag.item?.id)))
+const looseShown = computed(() => doc.loose.filter(l => l.type !== 'screen' && !(drag.on && l.id === drag.item?.id)))
+const freeScreens = computed(() => doc.loose.filter(l => l.type === 'screen' && l.steps?.length))
 const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1], ...(selColor.value[x.id] ? { '--rc': selColor.value[x.id] } : {}) })
 const colorOf = (x, i) => (x.type === 'unit' ? (i == null ? UNIT_COLORS[0] : unitColor(i)) : [T[x.type].c, T[x.type].d])
 
@@ -962,7 +1069,15 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
-          @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" />
+          @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :dim="sdIds" @grab="grabStep" />
+        <!-- Экраны прямо на доске (унесли с ветки или положили из «Интерактива») -->
+        <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
+          :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :dim="sdIds"
+          @copy="copyStep" @change="save" @height="railHs[f.id] = $event" @select="selectStep(f.id, $event)" @grab="grabStep" />
+        <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
+        <div v-if="sd.on && sd.to && sd.to !== 'cancel' && sd.to.mark" class="sdmark" :style="{ left: sd.to.mark.x + 'px', top: sd.to.mark.y + 'px', height: sd.to.mark.h + 'px' }" />
+        <div v-if="sd.on && sd.to?.bead" class="sdbead" :style="{ left: sd.to.bead.x + 'px', top: sd.to.bead.y + 'px' }" />
+        <div v-for="(g, j) in sdGhost" :key="'g' + j" class="sdg" :class="{ small: g.small }" :style="{ left: g.left + 'px', top: g.top + 'px', '--c': KINDS[g.k].c }"><span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[g.k].ic" /></span><b>{{ KINDS[g.k].t }}</b></div>
         <!-- «Все курсы»: соседние курсы справа (только смотреть, проходить и копировать) -->
         <template v-for="o in othersL" :key="'oc' + o.id">
           <div class="och" :style="{ left: o.ox - 46 + 'px', top: '-170px' }" title="Дважды — открыть этот курс в редакторе" @pointerdown.stop @dblclick.stop="openOther(o.id)"><b>{{ o.title }}</b><small>другой курс · смотреть и копировать экраны · дважды — открыть</small></div>
@@ -1091,7 +1206,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-else-if="tray === 'inter'">
         <span class="tt2">{{ activeLesson ? 'В урок «' + (findAny(activeLesson)?.title || 'Урок') + '»' : 'Новый урок в конце' }}</span>
         <!-- мини-окошки: как выглядит экран -->
-        <button v-for="t in TPL" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @click="addScreen(t.id)">
+        <button v-for="t in TPL" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <span class="mini" :class="t.id"><i class="mp" />
             <template v-if="t.id === 'intro'"><i class="mh" /><span class="mm"><i class="ma" /></span><i class="mw" /><i class="ml" /></template>
             <template v-else-if="t.id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
@@ -1322,6 +1437,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .lpv b { font-size: 18px; font-weight: 900; line-height: 1.2 } .lpv p { margin: 0 0 6px; font-size: 13px; font-weight: 600; opacity: .9 }
 .pgo { padding: 11px; border: 0; border-radius: 12px; background: #fff; color: var(--d); font: inherit; font-size: 15px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
 .pgo:active { transform: translateY(2px); box-shadow: none }
+.sdmark { position: absolute; z-index: 20; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
+.sdbead { position: absolute; z-index: 20; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
+.sdg { position: absolute; z-index: 25; width: 460px; height: 150px; display: flex; align-items: flex-start; gap: 8px; padding: 14px 16px; border: 2px dashed var(--c); border-radius: 22px; background: rgba(255, 255, 255, .85); box-shadow: 0 16px 34px rgba(0, 0, 0, .16); pointer-events: none; font-size: 15px; color: #444 }
+.sdg.small { width: 190px; height: 54px; align-items: center; border-radius: 14px }
+.sdg .kc { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--c); color: #fff } .sdg .kc svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .runov { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
 .runbox { width: min(560px, 100%); height: min(820px, 96vh); border-radius: 22px; overflow: hidden; background: #fff }
 /* Стикеры */

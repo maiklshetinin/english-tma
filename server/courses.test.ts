@@ -43,6 +43,10 @@ ok('выбор: верный ответ в пределах, плохая ссы
 ok('у урока своего времени нет — только сумма экранов', !('min' in store.get('courses/k3').items[4]))
 ok('время экрана: шаг ½, не больше 60, мусор выкинут', st[0].min === 2.5 && !('min' in st[1]) && st[2].min === 60)
 ok('файлы экранов — в чистку', C.filesOf({ items: store.get('courses/k3').items, loose: [] }).includes('t/tg_1/c/k1/b.jpg'))
+await C.put(me, 'k6', { ...course, loose: [{ id: 'F', type: 'screen', title: '', x: 5, y: 6, steps: [{ id: 'a', kind: 'tip', text: 'x' }, { id: 'b', kind: 'tip' }] }] })
+const fr = store.get('courses/k6').loose[0]
+ok('экран на доске: один экран, с местом', fr.type === 'screen' && fr.steps.length === 1 && fr.x === 5)
+ok('экран на доске — только черновиком', await code(C.put(me, 'k6', { ...course, items: [{ id: 'F', type: 'screen', title: '' }] })) === 400)
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)
 await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
 const nt = store.get('courses/k4').notes[0]

@@ -312,7 +312,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .hd { margin: 8px 0 4px; text-align: center; font-size: 15px; font-weight: 800 }
 .qa { width: 100%; max-width: 420px; align-self: center; height: 34px; border-radius: 17px; margin: 6px 0 10px }
 .nw { width: 100%; max-width: 380px; align-self: center; display: grid }
-.media { position: relative; border-radius: 12px 12px 0 0; overflow: hidden; background: #000; aspect-ratio: 16 / 10 } .media video, .media img { display: block; width: 100%; height: 100%; object-fit: cover }
+.media { position: relative; border-radius: 12px 12px 0 0; overflow: hidden; background: #000; aspect-ratio: 16 / 9 } .media video, .media img { display: block; width: 100%; height: 100%; object-fit: cover }
 .media:last-child { border-radius: 12px }
 .media .over { position: absolute; left: 8%; right: 8%; bottom: 10px }
 .aw { align-self: stretch }
