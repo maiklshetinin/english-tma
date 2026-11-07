@@ -374,7 +374,9 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .lr { position: absolute; left: 0; top: 0; width: 0; height: 0 }
 .line { position: absolute; overflow: visible; pointer-events: none; z-index: 1 } .line line { stroke: #e0e0e0; stroke-width: 8; stroke-linecap: round }
 /* экран — открытая карточка на рельсе, как на доске */
-.frame { position: absolute; z-index: 3; transition: left .2s ease }
+.frame { position: absolute; z-index: 3 }
+/* ветка едет вместе с кружком урока (у кружка на рельсе та же анимация), а не отстаёт от него */
+.line, .plus, .paste, .frame { transition: left .22s ease, top .22s ease }
 .frame.free .flab { margin-top: 0 }
 .card.on:not(.editing) { cursor: grab } .card.on:not(.editing):active { cursor: grabbing }
 .fin0 { display: grid; justify-items: center; gap: 8px; padding: 34px 26px; text-align: center; color: var(--hint); font-size: 13px; font-weight: 600 }
