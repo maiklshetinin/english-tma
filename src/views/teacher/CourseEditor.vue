@@ -67,7 +67,7 @@ const seed = () => ({
     it('unit', 'Глава 2', { sub: 'Past Simple' }),
     it('lesson', 'Правильные глаголы'), it('words', 'Слова: путешествия'), it('lesson', 'Неправильные глаголы'), it('hw', 'Рассказ о выходных'), it('test', 'Тест юнита'),
   ],
-  loose: [it('words', 'Слова: еда', { x: -320, y: 120 }), it('lesson', 'Артикли a / the', { x: -320, y: 250 })], notes: [],
+  loose: [it('words', 'Слова: еда', { x: -320, y: 120 }), it('lesson', 'Артикли a / the', { x: -1500, y: 250 })], notes: [],
 })
 const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], notes: [], ...v } } catch { /* нет */ } return seed() }
 const doc = reactive(load())
@@ -308,7 +308,7 @@ const pick = reactive({ lesson: null, step: null })                // откры
 const activeLesson = computed(() => (pick.lesson && findAny(pick.lesson)?.type !== 'screen' ? pick.lesson : null) ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
 // «Все уроки» — ветки всех уроков курса раскрыты сразу (видно, что где, и экраны удобно копировать между уроками)
 const allRails = ref(false)            // кнопку «Все уроки» убрали (05.11.2026): ветки — у уроков с экранами и у выбранного
-const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && !drag.over && drag.item?.id === x.id) && (BRANCH.includes(x.type) || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом
+const lessonRails = computed(() => [...order.value.map((x, i) => ({ x, p: pos(i) })), ...doc.loose.filter(l => BRANCH.includes(l.type) && !(drag.on && drag.item?.id === l.id)).map(l => ({ x: l, p: { x: l.x, y: l.y } }))].filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && !drag.over && drag.item?.id === x.id) && (BRANCH.includes(x.type) || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом          // и у уроков на доске (не на рельсе) — тоже ветка
 
 // ---------- Копировать / вставить экран (Ctrl+C / Ctrl+V или кнопки на ветке) ----------
 // Копия — с новым id; файлы общие (удалятся, только когда их не останется ни у одного экрана), файлы «только в браузере» — копируются.
@@ -785,6 +785,12 @@ const dots = computed(() => { let s = 20 * view.z; while (s < 10) s *= 4; return
 const mode = computed({ get: () => doc.mode ?? 'wave', set: (v) => { doc.mode = v; save() } })
 const G = { step: 116, unitGap: 160, amp: 84 }
 const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
+// за курсором мимо рельса: элементы структуры и где они лягут (в координатах холста)
+const flyTree = computed(() => {
+  if (!drag.on || drag.over || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
+  const w = toWorld(drag.x, drag.y)
+  return [drag.item, ...(drag.extra ?? [])].map((x, k) => ({ x, p: { x: w.x, y: w.y + (k ? 60 + (k - 1) * (RAIL_H + 110) : 0), side: 'r' } }))
+})
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
 const drag = reactive({ on: false, item: null, extra: null, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
@@ -925,7 +931,7 @@ function drop(where, w) {
     if (from !== 'loose') doc.loose.push(x)
   }
   // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт (на рельсе они уже встали вместе с главой)
-  if (where === 'canvas' && from === 'new' && drag.extra) drag.extra.forEach((v, k) => { v.x = x.x; v.y = x.y + 130 * (k + 1); doc.loose.push(v) })
+  if (where === 'canvas' && from === 'new' && drag.extra) drag.extra.forEach((v, k) => { v.x = x.x; v.y = x.y + 60 + k * (RAIL_H + 110); doc.loose.push(v) })
   Object.assign(drag, { on: false, item: null, extra: null, over: false })
   if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
@@ -1186,6 +1192,16 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="sf"><span>Пройдено: <b>{{ doc.progress }} из {{ tasksCount }}</b></span><span>Осталось {{ tasksCount - doc.progress }}</span></div>
         </div>
         <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
+        <!-- Тянем главу / урок / чекпоинт мимо рельса — за курсором вся структура, как она ляжет (глава с уроком и чекпоинтом, у урока ветка с итогом) -->
+        <div v-if="flyTree" class="ftree">
+          <div v-for="g in flyTree" :key="'ft' + g.x.id">
+            <div class="bead" :class="[g.x.type, 'todo', 's-r']" :style="beadStyle(g.x, g.p, colorOf(g.x))">
+              <template v-if="g.x.type === 'unit'"><div class="uh"><b>{{ g.x.title }}<template v-if="g.x.sub">: {{ g.x.sub }}</template></b></div><div class="ubar"><em>0%</em></div></template>
+              <template v-else><svg viewBox="0 0 24 24" class="ic" v-html="T[g.x.type].ic" /><em class="cap">{{ g.x.title }}<small>{{ T[g.x.type].t }}</small></em></template>
+            </div>
+            <LessonRail v-if="g.x.type !== 'unit'" :item="g.x" :x="g.p.x" :y="g.p.y" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly />
+          </div>
+        </div>
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
@@ -1314,7 +1330,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <svg viewBox="0 0 16 16"><path d="M1 1l5.2 13.5 2-5.6L14 7z" /></svg><span>{{ c.u.name }}</span>
     </div>
     <!-- Взятое — за пальцем в масштабе холста; мимо рельса — полупрозрачное -->
-    <div v-if="drag.on" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x + 'px', top: drag.y + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d, transform: `scale(${view.z * 1.06})` }">
+    <div v-if="drag.on && !flyTree" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x + 'px', top: drag.y + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d, transform: `scale(${view.z * 1.06})` }">
       <video v-if="drag.item.type === 'video' && mediaUrl(drag.item)" :src="mediaUrl(drag.item)" class="vid" muted />
       <img v-else-if="drag.item.type === 'photo' && mediaUrl(drag.item)" :src="mediaUrl(drag.item)" class="vid img" alt="" />
       <b v-else-if="drag.item.type === 'unit'" class="no">+</b><svg v-else viewBox="0 0 24 24" class="ic" v-html="T[drag.item.type].ic" />
@@ -1579,6 +1595,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
 .ubar { position: relative; width: 446px; height: 10px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
 .ubar em { position: absolute; right: 0; top: 50%; transform: translateY(-50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
+.ftree { opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
 .bead.unit.lift { outline: 2px dashed #1fbe78; background: #fff !important }
 .fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px; background: #1fbe78; box-shadow: 0 10px 20px rgba(0, 0, 0, .2) }
 /* сводка курса — плоско */
