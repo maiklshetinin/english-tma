@@ -386,7 +386,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 /* подпись над экраном — как имя фрейма в Figma */
 .line line.done { stroke: #1fbe78 }
 .node.done { background: #1fbe78; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px #9be6c4 }
-.node.now { animation: pulse 1.4s ease-in-out infinite } @keyframes pulse { 50% { box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 11px color-mix(in srgb, var(--c) 30%, transparent) } }
+/* текущий экран на ветке — без пульсации (07.11): в редакторе «дышит» только текущий урок на рельсе */
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
 .card.editing { border: 2px dashed #0d99ff }
 .ib.pen:hover, .ib.pen.on { background: var(--blue-l); color: var(--blue-d) }

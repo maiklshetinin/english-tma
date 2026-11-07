@@ -78,7 +78,6 @@ const save = () => {
   if (remote) return                       // это пришло от коллеги — не сохраняем и не пересылаем обратно
   if (!restoring) histMark()
   boxTick.value++; setTimeout(() => boxTick.value++, 260)          // рамка выбранного экрана — по новому месту (после анимации)
-  if (!doc.items.length && !restoring) ensureChapter(doc)          // всё удалили с рельса — снова глава с уроком и чекпоинтом
   if (doc.loose.some(x => x.type === 'screen' && !x.steps?.length)) doc.loose = doc.loose.filter(x => x.type !== 'screen' || x.steps?.length)   // экран на доске удалили — убираем и его место
   doc.dirty = true
   clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250)
@@ -176,7 +175,10 @@ const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toStrin
   items: [it('unit', 'Глава 1', { sub: 'Тема главы' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })], loose: [], notes: [], ink: [], dirty: false })
 // Курс всегда начинается с главы, как в Busuu: пустой рельс — сразу глава, урок и чекпоинт; рельс начинается с урока — сверху ставим главу
 function ensureChapter(d) {
-  if (!d.items.length) { d.items.push(it('unit', 'Глава 1', { sub: 'Тема главы' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })); return true }
+  if (!d.items.length) {
+    if (d.loose?.some(x => x.type === 'unit')) return false          // главы унесли на доску — рельс пустой нарочно, свою не добавляем
+    d.items.push(it('unit', 'Глава 1', { sub: 'Тема главы' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })); return true
+  }
   if (d.items[0].type !== 'unit') { d.items.unshift(it('unit', 'Глава 1', { sub: 'Тема главы' })); return true }
   return false
 }
@@ -803,7 +805,7 @@ const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
 // за курсором мимо рельса: элементы структуры и где они лягут (в координатах холста)
 const flyTree = computed(() => {
   if (!drag.on || drag.over || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
-  const w = toWorld(drag.x, drag.y)
+  const c = toWorld(drag.x, drag.y), w = { x: c.x - drag.ox, y: c.y - drag.oy }
   const u = drag.item, rel = drag.from === 'loose' && u.x != null
   const dy = kidDy(drag.extra ?? [])
   return [u, ...(drag.extra ?? [])].map((x, k) => ({ x, p: rel && k ? { x: w.x + x.x - u.x, y: w.y + x.y - u.y, side: 'r' } : { x: w.x, y: w.y + (k ? dy[k - 1] : 0), side: 'r' } }))
@@ -822,7 +824,7 @@ const flyBox = computed(() => {
   return { light: hc === '#ffffff', style: { '--hc': hc, '--ho': hlOp(t[0].x) + '%', left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', transition: 'none' } }
 })
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
-const drag = reactive({ on: false, item: null, extra: null, from: null, over: false, to: 0, x: 0, y: 0 })
+const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
 const hasRail = (x, key = '') => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && BRANCH.includes(x.type)))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
 const layoutOf = (list, m = mode.value, key = '') => {
@@ -932,6 +934,13 @@ const rowHl = computed(() => {
   const x = order.value[i]; if (!x || x.type === 'unit') return null
   const p = pos(i); return { left: p.x + CH_X0 + 10 + 'px', top: p.y - 54 + 'px', width: CH_X1 - CH_X0 - 20 + 'px', height: '108px' }
 })
+const lessonBox = computed(() => {
+  if (!sel.value || drag.on || msel.value.length) return null
+  const r = lessonRails.value.find(v => v.x.id === sel.value); if (!r) return null
+  const n = r.x.steps?.length ?? 0, k = 1 / view.z
+  const x0 = r.p.x - 44, y0 = r.p.y - 50, x1 = r.p.x + RAIL_X0 + Math.max(1, n) * 520 + SCR_W + 14, y1 = r.p.y + 40 + Math.min(900, railHs[r.x.id] ?? RAIL_H) + 14
+  return { x: r.x, from: doc.items.includes(r.x) ? 'rail' : 'loose', style: { left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', '--k': k } }
+})
 const chMenu = ref(null)                 // открытый список в меню главы: 'color'
 // вид подсветки: 'rail' — рельс главы, 'wide' — с ветками, 'none' — без подсветки; цвет — отдельно
 function setHl(u, how) { delete u.hl; delete u.hlw; if (how === 'none') u.hl = 'none'; if (how === 'wide') u.hlw = true; save() }
@@ -949,7 +958,7 @@ function nearest(w) {
   // место вставки — по высоте (сколько заданий выше точки); «на рельсе» — если близко к самой линии рельса по горизонтали.
   // Раньше мерили до середины промежутка: между уроками с ветками промежутки большие, и на рельс было не попасть.
   const keep = doc.items.filter(v => v.id !== drag.item?.id && !(drag.extra ?? []).includes(v)), P = layoutOf(keep), n = keep.length
-  if (!n) return { i: 0, near: Math.hypot(w.x, w.y) < 140 }
+  if (!n) return { i: 0, near: Math.abs(w.x) < 200 && Math.abs(w.y) < 260 }          // рельс пустой — «на рельсе» у его начала
   let i = 0; while (i < n && P[i].y < w.y) i++
   const a = P[i - 1], b = P[i], rx = a && b ? a.x + (b.x - a.x) * Math.min(1, Math.max(0, (w.y - a.y) / Math.max(1, b.y - a.y))) : (a ?? b).x
   const inY = w.y > P[0].y - 140 && w.y < P[n - 1].y + 180
@@ -968,6 +977,9 @@ function move(e) {
     if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return
     sel.value = null
     Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : pending.from === 'loose' && pending.item?.type === 'unit' ? kidsOf(pending.item) : pending.from === 'rail' && pending.item?.type === 'unit' ? railKids(pending.item) : null, from: pending.type ? 'new' : pending.from })
+    // за какое место взяли — так и держим: задание не «прыгает» под курсор своим углом
+    const sw = toWorld(pending.sx, pending.sy), src = pending.from === 'rail' ? pos(doc.items.indexOf(pending.item)) : pending.from === 'loose' ? pending.item : null
+    drag.ox = src ? sw.x - src.x : 0; drag.oy = src ? sw.y - src.y : 0
   }
   if (!drag.on) return
   drag.x = e.clientX; drag.y = e.clientY
@@ -988,7 +1000,7 @@ function up(e) {
 // Нажали задание на панели (не тянули): оно едет за курсором, нажатие ставит — на рельс (если рядом) или на холст; Esc — отмена
 let placingItem = false
 function itemPlaceStart(type, e) {
-  Object.assign(drag, { on: true, item: newItem(type), extra: type === 'unit' ? chapterKids() : null, from: 'new', x: e.clientX, y: e.clientY, over: false })
+  Object.assign(drag, { on: true, item: newItem(type), extra: type === 'unit' ? chapterKids() : null, ox: 0, oy: 0, from: 'new', x: e.clientX, y: e.clientY, over: false })
   tray.value = null; placingItem = true
   addEventListener('pointermove', itemPlaceMove); addEventListener('pointerdown', itemPlaceDown, true)
 }
@@ -997,7 +1009,7 @@ function itemPlaceMove(e) {
   const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
 }
 function itemPlaceEnd() { placingItem = false; removeEventListener('pointermove', itemPlaceMove); removeEventListener('pointerdown', itemPlaceDown, true) }
-function itemPlaceCancel() { itemPlaceEnd(); Object.assign(drag, { on: false, item: null, extra: null, over: false }) }
+function itemPlaceCancel() { itemPlaceEnd(); Object.assign(drag, { on: false, item: null, extra: null, over: false, ox: 0, oy: 0 }) }
 function itemPlaceDown(e) {
   e.stopPropagation(); e.preventDefault(); itemPlaceEnd()
   if (e.button !== 0) return itemPlaceCancel()
@@ -1018,6 +1030,7 @@ function drop(where, w) {
       const out = new Set([x.id, ...kids.map(v => v.id)]); doc.items = doc.items.filter(v => !out.has(v.id))
       const dy = kidDy(kids); kids.forEach((v, k) => { v.x = Math.round(w.x); v.y = Math.round(w.y) + dy[k]; v.grp = x.id; doc.loose.push(v) })      // глава с рельса — на доску блоком
     }
+    w = { x: w.x - drag.ox, y: w.y - drag.oy }                       // место — с учётом, за какое место взяли
     const dx = from === 'loose' ? Math.round(w.x) - x.x : 0, dy = from === 'loose' ? Math.round(w.y) - x.y : 0
     x.x = Math.round(w.x); x.y = Math.round(w.y)
     if (from !== 'loose') doc.loose.push(x)
@@ -1025,9 +1038,36 @@ function drop(where, w) {
   }
   // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт (на рельсе они уже встали вместе с главой; на доске — блоком)
   if (where === 'canvas' && from === 'new' && kids.length) { const dy = kidDy(kids); kids.forEach((v, k) => { v.x = x.x; v.y = x.y + dy[k]; v.grp = x.id; doc.loose.push(v) }) }
-  Object.assign(drag, { on: false, item: null, extra: null, over: false })
+  if (where === 'canvas' && x.type === 'unit') keepApart(x)
+  Object.assign(drag, { on: false, item: null, extra: null, over: false, ox: 0, oy: 0 })
   if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
+}
+// Глава на доске не налезает на рельс и другие главы (вместе с ветками экранов): если легла поверх — сдвигаем левее, с зазором
+const branchEnd = (x, px) => (BRANCH.includes(x.type) || x.steps?.length ? px + RAIL_X0 + Math.max(1, x.steps?.length ?? 0) * 520 + SCR_W : px + CH_X1)
+function blockOf(u, ks) {
+  let x0 = u.x + CH_X0, x1 = u.x + CH_X1, y1 = u.y + 70
+  for (const k of ks) { x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, branchEnd(k, k.x)); y1 = Math.max(y1, k.y + 56 + (BRANCH.includes(k.type) ? 40 + (railHs[k.id] ?? RAIL_H) : 0)) }
+  return { x0, y0: u.y - 70, x1, y1 }
+}
+function obstacles(self) {
+  const L = layout.value, out = []
+  chapters.value.forEach((c, k) => {          // главы на рельсе — с ветками своих уроков
+    const next = chapters.value[k + 1], last = order.value[c.last]
+    let x1 = CH_X1; for (let i = c.i + 1; i <= c.last; i++) x1 = Math.max(x1, branchEnd(order.value[i], L[i].x))
+    out.push({ x0: L[c.i].x + CH_X0, y0: L[c.i].y - 70, x1, y1: next ? L[next.i].y - 70 : L[c.last].y + 56 + (hasRail(last) ? 40 + (railHs[last.id] ?? RAIL_H) : 0) })
+  })
+  for (const u of doc.loose) if (u.type === 'unit' && u.id !== self.id) out.push(blockOf(u, doc.loose.filter(l => l.grp === u.id)))
+  return out
+}
+function keepApart(u) {
+  const ks = doc.loose.filter(l => l.grp === u.id), obs = obstacles(u), GAPX = 60
+  for (let n = 0; n < 12; n++) {
+    const b = blockOf(u, ks), hit = obs.filter(o => o.x0 < b.x1 + GAPX && o.x1 > b.x0 - GAPX && o.y0 < b.y1 + 40 && o.y1 > b.y0 - 40)
+    if (!hit.length) return
+    const dx = Math.min(...hit.map(o => o.x0)) - GAPX - b.x1          // левее всего, на что легла
+    for (const v of [u, ...ks]) v.x = Math.round(v.x + dx)
+  }
 }
 function newItem(type) {
   const nUnits = doc.items.filter(x => x.type === 'unit').length
@@ -1140,7 +1180,7 @@ function fileOver(e) {
   e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
   if (!drag.on) {        // тип видно по первому файлу ещё до броска (картинка → «Фото», иначе — кружок)
     const t = e.dataTransfer.items?.[0]?.type ?? ''
-    sel.value = null; Object.assign(drag, { on: true, item: newItem(t.startsWith('image/') ? 'photo' : 'video'), from: 'file' })
+    sel.value = null; Object.assign(drag, { on: true, item: newItem(t.startsWith('image/') ? 'photo' : 'video'), ox: 0, oy: 0, from: 'file' })
   }
   drag.x = e.clientX; drag.y = e.clientY
   const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
@@ -1286,6 +1326,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
         <!-- выбранный урок — светлая строка во всю ширину плашки главы, как текущий урок в Busuu -->
         <div v-if="rowHl" class="rowhl" :style="rowHl" />
+        <!-- выбранный урок — весь объект (кружок, ветка экранов, итог) в синей рамке; за пустое место рамки урок тянется целиком -->
+        <div v-if="lessonBox" class="lsel" :style="lessonBox.style" @pointerdown.stop="startDrag($event, { item: lessonBox.x, from: lessonBox.from })"><i /><i /><i /><i /></div>
         <!-- Главы — блоками (подсветка из меню главы) -->
         <!-- нажали на плашку главы — выделяется вся глава (как объект); тянуть — едет целиком -->
         <div v-for="c in chapterBoxes" :key="'cb' + c.id" class="chapbox" :class="{ light: c.light, wide: c.w, off: findAny(c.id)?.hl === 'none', still: c.from === 'loose' }" :style="c.style" @pointerdown.stop="chapDown($event, c)" />
@@ -1456,7 +1498,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <svg viewBox="0 0 16 16"><path d="M1 1l5.2 13.5 2-5.6L14 7z" /></svg><span>{{ c.u.name }}</span>
     </div>
     <!-- Взятое — за пальцем в масштабе холста; мимо рельса — полупрозрачное -->
-    <div v-if="drag.on && !flyTree" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x + 'px', top: drag.y + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d, transform: `scale(${view.z * 1.06})` }">
+    <div v-if="drag.on && !flyTree" class="fly" :class="[drag.item.type, { out: !drag.over }]" :style="{ left: drag.x - drag.ox * view.z + 'px', top: drag.y - drag.oy * view.z + 'px', '--c': T[drag.item.type].c, '--d': T[drag.item.type].d, transform: `scale(${view.z * 1.06})` }">
       <video v-if="drag.item.type === 'video' && mediaUrl(drag.item)" :src="mediaUrl(drag.item)" class="vid" muted />
       <img v-else-if="drag.item.type === 'photo' && mediaUrl(drag.item)" :src="mediaUrl(drag.item)" class="vid img" alt="" />
       <b v-else-if="drag.item.type === 'unit'" class="no">+</b><svg v-else viewBox="0 0 24 24" class="ic" v-html="T[drag.item.type].ic" />
@@ -1698,6 +1740,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 /* ===== Стиль как в Busuu: тонкая линия, кружки с кольцом и галочкой снизу, юнит — светлая «глава» с прогрессом ===== */
 .r0 { stroke: #dedede; stroke-width: 4 } .r1 { stroke: #1fbe78; stroke-width: 4 }
 .chapbox { position: absolute; z-index: 0; box-sizing: border-box; border-radius: 26px; pointer-events: none; transition: left .22s ease, top .22s ease, width .22s ease, height .22s ease }
+.lsel { position: absolute; z-index: 1; box-sizing: border-box; border: calc(2px * var(--k)) solid #0d99ff; cursor: grab; background: rgba(13, 153, 255, .03) } .lsel:active { cursor: grabbing }
+.lsel i { position: absolute; width: calc(12px * var(--k)); height: calc(12px * var(--k)); box-sizing: border-box; border: calc(2px * var(--k)) solid #0d99ff; border-radius: calc(3px * var(--k)); background: #fff }
+.lsel i:nth-child(1) { left: calc(-7px * var(--k)); top: calc(-7px * var(--k)) } .lsel i:nth-child(2) { right: calc(-7px * var(--k)); top: calc(-7px * var(--k)) } .lsel i:nth-child(3) { left: calc(-7px * var(--k)); bottom: calc(-7px * var(--k)) } .lsel i:nth-child(4) { right: calc(-7px * var(--k)); bottom: calc(-7px * var(--k)) }
 .rowhl { position: absolute; z-index: 1; border-radius: 22px; background: #eef4fd; pointer-events: none }
 .chapbox { pointer-events: auto; cursor: default } .chapbox.still, .board.moving .chapbox { transition: none } .chapbox.off { background: none !important; box-shadow: none !important }
 .chapbox { background: color-mix(in srgb, var(--hc) var(--ho, 8%), transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hc) 38%, transparent) }
