@@ -42,12 +42,18 @@ const T = {
   tutor:  { t: 'С репетитором', c: 'var(--purple)', d: 'var(--purple-d)', ic: '<rect x="3.5" y="6.5" width="12" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/>' },
   video:  { t: 'Кружок', c: '#2aabee', d: '#1a8bc9', ic: '<circle cx="12" cy="12" r="8.5"/><path d="M10.3 9.2v5.6l4.6-2.8z" fill="currentColor"/>' },
   photo:  { t: 'Фото', c: '#ff6fb1', d: '#e0478f', ic: '<rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-8.5 8"/>' },
+  checkpoint: { t: 'Чекпоинт', c: '#ff9f1a', d: '#e07f00', ic: '<path d="M6 21V4"/><path d="M6 4.5h11l-2.2 3.7L17 12H6"/>' },
   reward: { t: 'Награда', c: 'var(--yellow)', d: 'var(--yellow-d)', ic: '<path d="M8 4.5h8v5.5a4 4 0 0 1-8 0z"/><path d="M8 6.5H4.5v.8A3.7 3.7 0 0 0 8 11M16 6.5h3.5v.8A3.7 3.7 0 0 1 16 11"/><path d="M12 14v4M8.5 20h7"/>' },
 }
 const CHECK = '<path d="M6 12.5l4 4 8-9"/>'
-const PALETTE = ['unit', 'video', 'photo', 'lesson', 'words', 'hw', 'test', 'tutor', 'reward']
+const PALETTE = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw', 'test', 'tutor', 'reward']
 const MEDIA = ['video', 'photo']                         // задания с файлом (кружок, фото) — файл в S3, ключ в поле file
-const TASKS = PALETTE.filter(k => k !== 'unit' && !MEDIA.includes(k))
+// На панели — только «Урок» и «Чекпоинт» (как в Busuu). Старые типы (слова, домашка, тест, кружок, фото…) в курсах остаются и показываются.
+const TASKS = ['lesson', 'checkpoint']
+const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Проверка навыков перед следующим юнитом' }
+const BRANCH = ['lesson', 'checkpoint']            // у них ветка экранов видна всегда, даже пустая
+// Обложка урока, как в Busuu: фото или кружок в самом кружке урока (поле file / media, вид — ck)
+const covK = (x) => (MEDIA.includes(x.type) ? x.type : x.ck ?? null)
 const UNIT_COLORS = [['var(--green)', 'var(--green-d)'], ['var(--purple)', 'var(--purple-d)'], ['var(--blue)', 'var(--blue-d)'], ['var(--orange)', 'var(--orange-d)']]
 
 let seq = Date.now() % 100000
@@ -141,7 +147,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -202,9 +208,9 @@ onMounted(async () => {
 // Видео, которые лежат только в браузере (добавлены до S3 или без сети), — догружаем в S3
 async function uploadLocal() {
   for (const x of [...doc.items, ...doc.loose]) {
-    if (!MEDIA.includes(x.type) || x.file || !x.media) continue
+    if (!covK(x) || x.file || !x.media) continue
     const b = await mediaOp('readonly', s => s.get(x.media)).catch(() => null)
-    if (b) await upload(x, b instanceof File ? b : new File([b], x.type === 'photo' ? 'photo.jpg' : 'kruzhok.mp4', { type: b.type || (x.type === 'photo' ? 'image/jpeg' : 'video/mp4') }))
+    if (b) await upload(x, b instanceof File ? b : new File([b], covK(x) === 'photo' ? 'photo.jpg' : 'kruzhok.mp4', { type: b.type || (covK(x) === 'photo' ? 'image/jpeg' : 'video/mp4') }))
   }
   for (const x of [...doc.items, ...doc.loose]) for (const s of x.steps ?? []) {          // файлы экранов уроков
     const slots = [...['image', 'audio', 'video', 'exAudio'].map(f => [f, null]), ...(s.opts ?? []).flatMap((_, k) => [['image', k], ['audio', k]])]
@@ -302,7 +308,7 @@ const pick = reactive({ lesson: null, step: null })                // откры
 const activeLesson = computed(() => (pick.lesson && findAny(pick.lesson)?.type !== 'screen' ? pick.lesson : null) ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
 // «Все уроки» — ветки всех уроков курса раскрыты сразу (видно, что где, и экраны удобно копировать между уроками)
 const allRails = ref(false)            // кнопку «Все уроки» убрали (05.11.2026): ветки — у уроков с экранами и у выбранного
-const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (x.type === 'lesson' || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом
+const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (BRANCH.includes(x.type) || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом
 
 // ---------- Копировать / вставить экран (Ctrl+C / Ctrl+V или кнопки на ветке) ----------
 // Копия — с новым id; файлы общие (удалятся, только когда их не останется ни у одного экрана), файлы «только в браузере» — копируются.
@@ -564,7 +570,6 @@ const runLesson = computed(() => (run.value ? findAny(run.value) : null))
 const tray = ref(null)                                            // открытая группа: 'tasks' | 'media' | 'inter' | 'note'
 const GROUPS = [
   { k: 'tasks', t: 'Задания', ic: T.lesson.ic, c: 'var(--green)' },
-  { k: 'media', t: 'Медиа', ic: T.video.ic, c: '#2aabee' },
   { k: 'inter', t: 'Интерактив', ic: KINDS.choice.ic, c: 'var(--purple)' },
   { k: 'note', t: 'Стикер', ic: '<path d="M5 4.5h14v10l-4.5 4.5H5z"/><path d="M14.5 19v-4.5H19"/>', c: '#f5b400' },
 ]
@@ -640,12 +645,18 @@ function inkEnd() { if (ink) { (doc.ink ??= []).push(ink); save() } ink = null; 
 
 // Выделение рамкой: id выделенного (задания на рельсе и черновики, стикеры, штрихи)
 const msel = ref([]), mq = ref(null)              // mq — рамка на экране { x0, y0, x1, y1 }
+// рамка экрана — по самой карточке на экране (высота у каждого своя), в координатах холста
+function cardBox(id) {
+  const el = typeof document !== 'undefined' && document.querySelector(`.frame[data-id="${id}"] .card`); if (!el || !board.value) return null
+  const r = el.getBoundingClientRect(), a = toWorld(r.left, r.top), b = toWorld(r.right, r.bottom)
+  return { x0: a.x, y0: a.y, x1: b.x, y1: b.y }
+}
 const boxOf = () => {                              // всё, что можно выделить, с рамкой в координатах холста
   const out = []
   order.value.forEach((x, i) => { const p = pos(i); out.push(x.type === 'unit' ? { id: x.id, k: 'item', x0: p.x - 46, y0: p.y - 40, x1: p.x + 400, y1: p.y + 20 } : { id: x.id, k: 'item', x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) })   // юнит — заголовок с полоской справа
   for (const x of doc.loose) {
     if (x.type !== 'screen') { out.push({ id: x.id, k: 'item', x0: x.x - 34, y0: x.y - 34, x1: x.x + 34, y1: x.y + 34 }); continue }
-    const st = x.steps?.[0]; if (st) out.push({ id: 'st:' + doc.id + ':' + st.id, k: 'step', course: doc.id, lesson: x.id, s: st, x0: x.x, y0: x.y, x1: x.x + 460, y1: x.y + Math.min(700, railHs[x.id] ?? 420) })
+    const st = x.steps?.[0]; if (st) out.push({ id: 'st:' + doc.id + ':' + st.id, k: 'step', course: doc.id, lesson: x.id, s: st, x0: x.x, y0: x.y, x1: x.x + 460, y1: x.y + Math.min(700, railHs[x.id] ?? 420), ...cardBox(st.id) })
   }
   for (const n of doc.notes ?? []) out.push({ id: n.id, k: 'note', x0: n.x, y0: n.y, x1: n.x + 240, y1: n.y + (noteH[n.id] ?? 240) })
   // задания соседних курсов (кружки, фото, уроки, юниты) — их тоже можно выделить и скопировать к себе
@@ -656,7 +667,7 @@ const boxOf = () => {                              // всё, что можно 
     ...othersL.value.flatMap(o => (o.items ?? []).map((x, i) => ({ course: o.id, x, p: { x: o.ox + o.L[i].x, y: o.L[i].y }, key: 'o' + o.id })).filter(r => INTERACTIVE.includes(r.x.type)))]
   for (const r of rails) (r.x.steps ?? []).forEach((st, i) => {
     const x0 = r.p.x + 280 + i * 520, y0 = r.p.y + 40
-    out.push({ id: 'st:' + r.course + ':' + st.id, k: 'step', course: r.course, lesson: r.x.id, s: st, x0, y0, x1: x0 + 460, y1: y0 + Math.min(700, railHs[r.key + r.x.id] ?? 420) })
+    out.push({ id: 'st:' + r.course + ':' + st.id, k: 'step', course: r.course, lesson: r.x.id, s: st, x0, y0, x1: x0 + 460, y1: y0 + Math.min(700, railHs[r.key + r.x.id] ?? 420), ...(r.course === doc.id ? cardBox(st.id) : null) })
   })
   for (const k of doc.ink ?? []) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (let i = 0; i < k.p.length; i += 2) { x0 = Math.min(x0, k.p[i]); x1 = Math.max(x1, k.p[i]); y0 = Math.min(y0, k.p[i + 1]); y1 = Math.max(y1, k.p[i + 1]) } out.push({ id: k.id, k: 'ink', x0: x0 - k.w, y0: y0 - k.w, x1: x1 + k.w, y1: y1 + k.w }) }
   return out
@@ -679,8 +690,10 @@ const oneBox = computed(() => {
 })
 const selBox = computed(() => {
   const ids = new Set(msel.value); if (!ids.size || sd.on) return null
+  void (view.x + view.y + view.z + boxTick.value)
   const bs = boxOf().filter(o => ids.has(o.id)); if (!bs.length) return null
-  const x0 = Math.min(...bs.map(o => o.x0)) - 8, y0 = Math.min(...bs.map(o => o.y0)) - 8, x1 = Math.max(...bs.map(o => o.x1)) + 8, y1 = Math.max(...bs.map(o => o.y1)) + 8
+  const pad = 6 / view.z                                     // отступ рамки — 6 px на экране при любом масштабе
+  const x0 = Math.min(...bs.map(o => o.x0)) - pad, y0 = Math.min(...bs.map(o => o.y0)) - pad, x1 = Math.max(...bs.map(o => o.x1)) + pad, y1 = Math.max(...bs.map(o => o.y1)) + pad
   const a = toScreen({ x: x0, y: y0 }), b = toScreen({ x: x1, y: y1 })       // рамка — на экране (поверх холста): линии и квадратики всегда чёткие
   return { left: Math.round(a.x) + 'px', top: Math.round(a.y) + 'px', width: Math.round(b.x - a.x) + 'px', height: Math.round(b.y - a.y) + 'px' }
 })
@@ -753,7 +766,7 @@ const G = { step: 116, unitGap: 160, amp: 84 }
 const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
 const drag = reactive({ on: false, item: null, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
-const hasRail = (x, key = '') => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && x.type === 'lesson'))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
+const hasRail = (x, key = '') => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && BRANCH.includes(x.type)))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
 const layoutOf = (list, m = mode.value, key = '') => {
   let y = 0
   return list.map((x, i) => {
@@ -949,8 +962,14 @@ const kindOf = (f) => (isVideo(f) ? 'video' : isImage(f) ? 'photo' : null)
 const MAX_MB = 200
 async function attach(item, file) {
   if (!item) return
-  const kind = kindOf(file)
-  if (!kind || kind !== item.type) return say(item.type === 'photo' ? 'Это не фото' : 'Это не видео', { text: item.type === 'photo' ? 'Нужна картинка: JPG, PNG или WebP.' : 'Перетащите кружок из Telegram (видеофайл).' })
+  let kind = kindOf(file)
+  const cover = !MEDIA.includes(item.type)
+  if (cover && kind) {                                            // обложка урока: фото — кругом 480×480, сжатое
+    if (kind === 'photo') { file = (await shrinkPhoto(file, 'cover')).file; kind = 'photo' }
+    if (item.ck && (item.file || item.media)) dropRefs([item.file, item.media && 'idb:' + item.media]), delete item.file, delete item.media
+    item.ck = kind
+  }
+  if (!kind || (!cover && kind !== item.type)) return say(item.type === 'photo' ? 'Это не фото' : 'Это не видео', { text: item.type === 'photo' ? 'Нужна картинка: JPG, PNG или WebP.' : 'Перетащите кружок из Telegram (видеофайл).' })
   if (file.size > MAX_MB * 1024 * 1024) return say('Файл слишком большой', { text: `Можно до ${MAX_MB} МБ.` })
   const id = 'm' + item.id
   try { await mediaOp('readwrite', s => s.put(file, id)) } catch { return say('Не удалось сохранить файл', { text: 'В браузере не хватило места.' }) }
@@ -961,6 +980,7 @@ const fileInput = ref(null), pickKind = ref('video'); let pickFor = null
 const pickFile = (item, kind = item?.type ?? 'video') => { pickFor = item; pickKind.value = kind; fileInput.value.value = ''; nextTick(() => fileInput.value.click()) }
 async function onPicked(e) {
   const files = [...e.target.files].filter(f => kindOf(f) === pickKind.value); if (!files.length) return
+  if (pickFor && !MEDIA.includes(pickFor.type)) files.length = 1          // обложка урока — один файл
   let item = pickFor
   for (const f of files) {
     if (!item) { item = newItem(pickKind.value); doc.items.push(item) }
@@ -997,6 +1017,7 @@ async function fileDrop(e) {
   for (let k = 0; k < files.length; k++) await attach(findAny(targets[k].id), files[k])
   sel.value = first.id; setProgress(doc.progress)
 }
+function dropCover(x) { dropRefs([x.file, x.media && 'idb:' + x.media]); delete x.file; delete x.media; delete x.ck; save() }
 const play = (e, on) => { const v = e.currentTarget.querySelector('video'); if (v) on ? v.play().catch(() => {}) : v.pause() }
 
 // ---------- Карточка выбранного ----------
@@ -1158,12 +1179,18 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <div class="ubar"><i :style="{ width: (chapterOf(i)?.pct ?? 0) + '%' }" /><em>{{ chapterOf(i)?.pct ?? 0 }}%</em></div>
           </template>
           <template v-else>
-            <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
-            <img v-else-if="x.type === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" alt="" draggable="false" />
+            <video v-if="covK(x) === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
+            <img v-else-if="covK(x) === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" :class="{ round: x.ck }" alt="" draggable="false" />
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
-            <svg v-if="!MEDIA.includes(x.type) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
+            <svg v-if="!covK(x) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <svg v-if="stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
             <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><input v-if="renaming === x.id" v-model="x.title" :data-ren="x.id" class="rin" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="renameDone" @input="save" /><template v-else>{{ x.title }}</template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
+            <!-- обложка выбранного урока: фото или кружок, как в Busuu -->
+            <div v-if="sel === x.id && BRANCH.includes(x.type) && !drag.on && renaming !== x.id" class="cov" @pointerdown.stop @dblclick.stop>
+              <button title="Фото на кружок урока (обрежем по кругу и сожмём)" @click="pickFile(x, 'photo')"><svg viewBox="0 0 24 24" v-html="T.photo.ic" /></button>
+              <button title="Кружок (видео) на кружок урока" @click="pickFile(x, 'video')"><svg viewBox="0 0 24 24" v-html="T.video.ic" /></button>
+              <button v-if="x.ck" class="rm" title="Убрать обложку" @click="dropCover(x)">✕</button>
+            </div>
             <!-- карточка урока, как её увидит ученик (как в Busuu): тип, примерное время, «Поехали!» — пройти урок целиком -->
             <div v-if="peekOf(x)" class="lpv" @pointerdown.stop @dblclick.stop>
               <small>{{ T[x.type].t }} · ≈ {{ lessonMin(x.steps) }} мин</small>
@@ -1178,8 +1205,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
           @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
           <template v-else>
-            <video v-if="x.type === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
-            <img v-else-if="x.type === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" alt="" draggable="false" />
+            <video v-if="covK(x) === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
+            <img v-else-if="covK(x) === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" :class="{ round: x.ck }" alt="" draggable="false" />
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <em class="cap"><input v-if="renaming === x.id" v-model="x.title" :data-ren="x.id" class="rin" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="renameDone" @input="save" /><template v-else>{{ x.title }}</template><small>не на рельсе</small></em>
@@ -1254,7 +1281,17 @@ async function reset() { if (!(await ask('Вернуть пример курса
 
     <!-- Снизу: панель как в FigJam — группа, над ней ряд элементов -->
     <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop>
-      <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
+      <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
+      <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
+        <svg class="sch" viewBox="0 0 160 70">
+          <line x1="26" y1="22" x2="148" y2="22" class="sl" />
+          <g v-for="j in 2" :key="j"><line :x1="21 + j * 36" y1="22" :x2="21 + j * 36" y2="31" class="st" /><rect :x="8 + j * 36" y="31" width="26" height="32" rx="4" class="sc" /><rect :x="13 + j * 36" y="36" width="16" height="3" rx="1.5" class="sb" /><rect :x="13 + j * 36" y="54" width="16" height="5" rx="2.5" class="sbb" /></g>
+          <g class="sdots"><circle cx="117" cy="47" r="1.8" /><circle cx="123" cy="47" r="1.8" /><circle cx="129" cy="47" r="1.8" /></g>
+          <template v-if="k === 'lesson'"><circle cx="144" cy="22" r="9" class="sf" /><path d="M140.5 19h7v2.6a3.5 3.5 0 0 1-7 0zM144 25v3M141.5 28.5h5" class="sfi" /></template>
+          <template v-else><rect x="133" y="13" width="20" height="18" rx="5" class="slk" /><path d="M139 21v-2.5a4 4 0 0 1 8 0V21" class="slki" /><circle cx="143" cy="25" r="1.6" class="slkd" /></template>
+          <circle cx="16" cy="22" r="13" class="sm" /><g transform="translate(6.5 12.5) scale(.8)" class="smi" v-html="T[k].ic" />
+        </svg>
+        <small><b>{{ T[k].t }}</b>{{ TASK_D[k] }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
         <span class="tt2">Тяните на ветку урока или на доску — или нажмите и поставьте</span>
@@ -1326,7 +1363,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .selbox { position: absolute; z-index: 19; border: 2px solid #0d99ff; pointer-events: none }
 .selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .04) } .selmask:active { cursor: grabbing }
 .selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: #fff }
-.selbox i:nth-child(1) { left: -7px; top: -7px } .selbox i:nth-child(2) { right: -7px; top: -7px } .selbox i:nth-child(3) { left: -7px; bottom: -7px } .selbox i:nth-child(4) { right: -7px; bottom: -7px }
+.selbox i:nth-of-type(1) { left: -7px; top: -7px } .selbox i:nth-of-type(2) { right: -7px; top: -7px } .selbox i:nth-of-type(3) { left: -7px; bottom: -7px } .selbox i:nth-of-type(4) { right: -7px; bottom: -7px }
 /* стрелка и рука на панели */
 .mode { display: flex; gap: 4px; padding: 0 2px }
 .md { display: grid; place-items: center; width: 54px; height: 54px; border: 0; border-radius: 13px; background: none; color: #2c2c2c; cursor: pointer; padding: 0 } .md:hover { background: #f2f2f2 }
@@ -1358,7 +1395,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .bead.video:has(.vid) { background: transparent; box-shadow: none }
 /* Фото: скруглённый квадрат с миниатюрой (кружок — круглый, фото — нет: сразу видно, что где) */
 .bead.photo { width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 20px; overflow: visible }
-.vid.img { border-radius: 18px } .bead.photo:has(.img) { background: transparent; box-shadow: none }
+.vid.img { border-radius: 18px } .vid.img.round { border-radius: 50% } .bead.photo:has(.img) { background: transparent; box-shadow: none }
 .bead.photo.todo .img { filter: grayscale(1); opacity: .6; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #d6d6d6 }
 .bead.photo .upl { inset: -6px } .fly.photo { border-radius: 20px }
 .pbig { display: block; width: 100%; max-height: 220px; object-fit: contain; border-radius: 12px; background: var(--surface) }
@@ -1547,6 +1584,17 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .board.placing, .board.placing * { cursor: none !important }
 .tray { left: 50%; bottom: 116px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 18px; animation: tray .14s ease-out; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none }
 @keyframes tray { from { opacity: 0; transform: translate(-50%, 6px) } }
+.ts { display: grid; justify-items: center; gap: 4px; width: 190px; padding: 10px 8px 8px; border: 0; border-radius: 14px; background: none; font: inherit; cursor: grab; touch-action: none; flex: none } .ts:hover { background: #f2f2f2 }
+.sch { width: 170px; height: 74px; border-radius: 10px; background: #fafafa; box-shadow: inset 0 0 0 1px #ececec }
+.sch .sl { stroke: #dcdcdc; stroke-width: 4; stroke-linecap: round } .sch .st { stroke: #dcdcdc; stroke-width: 1.5 }
+.sch .sdots { fill: #c8c8c8 } .sch .sc { fill: #fff; stroke: #d6d6d6; stroke-width: 1.2 } .sch .sb { fill: #e3e3e3 } .sch .sbb { fill: #9fd3ff }
+.sch .sm { fill: var(--c); stroke: #fff; stroke-width: 2.5 } .sch .smi { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
+.sch .sf { fill: var(--yellow, #ffc800) } .sch .sfi { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round }
+.sch .slk { fill: #c9c9c9 } .sch .slki { fill: none; stroke: #c9c9c9; stroke-width: 2.2 } .sch .slkd { fill: #fff }
+.ts small { display: grid; gap: 1px; font-size: 11.5px; font-weight: 600; color: var(--hint); text-align: center; line-height: 1.25 } .ts small b { font-size: 14px; font-weight: 800; color: #2c2c2c }
+.cov { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #1e1e1e; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); z-index: 31 }
+.cov button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: none; color: #fff; cursor: pointer; font: inherit; font-size: 13px } .cov button:hover { background: #3a3a3a }
+.cov svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .cov .rm { color: #ff8f8f }
 .ti { display: grid; justify-items: center; gap: 5px; width: 92px; padding: 8px 0 6px; border: 0; border-radius: 12px; background: none; font: inherit; cursor: pointer; touch-action: none; flex: none }
 .ti.wide { width: 116px } .ti:hover { background: #f2f2f2 }
 .tc { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #fff; background: var(--c) }

@@ -12,15 +12,15 @@ import { isOurKey } from './storage.js'
 import { isMediaUrl } from './media.js'
 
 export interface CoursesDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
-export const COURSE_TYPES = ['unit', 'video', 'photo', 'lesson', 'words', 'hw', 'test', 'tutor', 'reward']
+export const COURSE_TYPES = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw', 'test', 'tutor', 'reward']
 export const COURSE_ITEMS_MAX = 500, COURSES_MAX = 100
-export const INTERACTIVE = ['lesson', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer'], STEPS_MAX = 40
+export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer'], STEPS_MAX = 40
 const ID = /^[\w-]{1,64}$/
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
 
 export interface Step { id: string; kind: string; [k: string]: unknown }
-export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; x?: number; y?: number; steps?: Step[] }
+export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; x?: number; y?: number; steps?: Step[] }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
 export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number }
@@ -68,7 +68,10 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (!ID.test(String(r.id)) || !(COURSE_TYPES.includes(type) || (type === 'screen' && loose))) throw fail(400, 'bad item')
     const out: CourseItem = { id: String(r.id), type, title: str(r.title, 120) }
     if (type === 'unit') out.sub = str(r.sub, 120)
-    if ((type === 'video' || type === 'photo') && r.file != null) {
+    // обложка урока (фото или кружок, как в Busuu): ck — вид, файл — в file
+    const cover = INTERACTIVE.includes(type) && (r.ck === 'photo' || r.ck === 'video')
+    if (cover) out.ck = r.ck as 'photo' | 'video'
+    if ((type === 'video' || type === 'photo' || cover) && r.file != null) {
       const v = String(r.file)
       if (!isOurKey(v)) throw fail(403, 'foreign file')
       out.file = v

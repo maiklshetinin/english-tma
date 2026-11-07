@@ -32,6 +32,7 @@ const T = {
   tutor: { t: 'С репетитором', c: 'var(--purple)', d: 'var(--purple-d)', ic: '<rect x="3.5" y="6.5" width="12" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/>' },
   video: { t: 'Кружок', c: '#2aabee', d: '#1a8bc9', ic: '<circle cx="12" cy="12" r="8.5"/><path d="M10.3 9.2v5.6l4.6-2.8z" fill="currentColor"/>' },
   photo: { t: 'Фото', c: '#ff6fb1', d: '#e0478f', ic: '<rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-8.5 8"/>' },
+  checkpoint: { t: 'Чекпоинт', c: '#ff9f1a', d: '#e07f00', ic: '<path d="M6 21V4"/><path d="M6 4.5h11l-2.2 3.7L17 12H6"/>' },
   reward: { t: 'Награда', c: 'var(--yellow)', d: 'var(--yellow-d)', ic: '<path d="M8 4.5h8v5.5a4 4 0 0 1-8 0z"/><path d="M8 6.5H4.5v.8A3.7 3.7 0 0 0 8 11M16 6.5h3.5v.8A3.7 3.7 0 0 1 16 11"/><path d="M12 14v4M8.5 20h7"/>' },
 }
 const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'экрана' : 'экранов'}`
@@ -69,8 +70,7 @@ const inline = ref(null)
 const peek = ref(null)
 function tap(x) {
   if (x.type === 'video' || x.type === 'photo') { inline.value = inline.value === x.id ? null : x.id; return }
-  if (ready(x)) { peek.value = peek.value === x.id ? null : x.id; return }
-  open.value = x
+  peek.value = peek.value === x.id ? null : x.id          // всё остальное — карточкой под заданием, без перехода на отдельную страницу
 }
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 function go(x) { peek.value = null; open.value = x }
@@ -127,16 +127,21 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
         </template>
         <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1, peek: peek === x.id }]" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }">
           <button class="bead" :class="[x.type, state(x), { open: inline === x.id }]" @pointerenter="hover($event, true)" @pointerleave="hover($event, false)" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }" :title="(T[x.type] ?? T.lesson).t" @click="tap(x)">
-            <video v-if="x.type === 'video' && fileOf(x)" :src="fileOf(x)" class="vid" muted loop playsinline preload="metadata" />
-            <img v-else-if="x.type === 'photo' && fileOf(x)" :src="fileOf(x)" class="vid img" alt="" />
+            <video v-if="(x.type === 'video' || x.ck === 'video') && fileOf(x)" :src="fileOf(x)" class="vid" muted loop playsinline preload="metadata" />
+            <img v-else-if="(x.type === 'photo' || x.ck === 'photo') && fileOf(x)" :src="fileOf(x)" class="vid img" :class="{ round: x.ck }" alt="" />
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
           <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${lessonMin(okSteps(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
           <!-- карточка урока перед стартом -->
           <div v-if="peek === x.id" class="pv" @click.stop>
-            <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ (T[x.type] ?? T.lesson).t }}</small><small>≈ {{ lessonMin(okSteps(x)) }} мин</small></div>
+            <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ (T[x.type] ?? T.lesson).t }}</small><small v-if="ready(x)">≈ {{ lessonMin(okSteps(x)) }} мин</small></div>
             <b>{{ x.title || (T[x.type] ?? T.lesson).t }}</b>
+            <template v-if="!ready(x)">
+              <p>{{ x.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : x.type === 'reward' ? 'Награда за пройденный юнит.' : 'В этом уроке пока нет экранов — их собирают в редакторе («Интерактив»).' }}</p>
+              <button v-if="INTERACTIVE.includes(x.type)" class="pgo ghost" @click="edit">Открыть в редакторе</button>
+            </template>
+            <template v-else>
             <p>{{ screens(okSteps(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
             <!-- пройденный — как в Busuu: повторить навыки (в разработке) или пройти урок заново -->
             <template v-if="state(x) === 'done'">
@@ -144,6 +149,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
               <button class="pgo ghost" @click="go(x)">Пройти заново</button>
             </template>
             <button v-else class="pgo" @click="go(x)">Поехали!</button>
+            </template>
           </div>
           <!-- открыт прямо тут: кружок крупно со звуком / фото -->
           <div v-if="inline === x.id" class="kin" @click.stop>
@@ -204,7 +210,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .bead.current { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }
 .bead.photo { border-radius: 16px }
 .ic { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
-.vid { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #000 } .vid.img { border-radius: 16px }
+.vid { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #000 } .vid.img { border-radius: 16px } .vid.img.round { border-radius: 50% }
 .bead.todo .vid { filter: grayscale(1); opacity: .6 }
 .ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
