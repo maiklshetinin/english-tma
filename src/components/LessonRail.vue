@@ -39,7 +39,9 @@ const order = computed(() => {
   return list
 })
 const cx = (i) => props.x + (props.free ? 0 : X0) + i * STEP
-const endX = computed(() => (steps.value.length ? cx(order.value.length) + CW / 2 : cx(0) - GAP / 2))                   // до итога
+// до итога; у пустого урока итог — после места под первый экран (ветка и итог видны сразу)
+const finI = computed(() => Math.max(1, order.value.length))
+const endX = computed(() => cx(finI.value) + CW / 2)
 // Шапка карточки: тянуть — переставить на ветке, унести на другую ветку или на доску (тащит редактор курса, с выделенными вместе)
 function down(e, s) { if (e.button === 0) emit('grab', { e, s }) }
 const cardStyle = (s, i) => {
@@ -168,7 +170,7 @@ function resetStep(s) {
   if (run.at > i) { run.at = i; run.t1 = 0 }
 }
 function restart() { Object.assign(run, { at: 0, res: {}, t0: 0, t1: 0, key: run.key + 1 }); emit('focus', { x: cx(0) + CW / 2, y: props.y + 200 }) }
-const doneX = computed(() => (run.at >= steps.value.length ? endX.value : run.at ? cx(run.at - 1) + CW / 2 : props.x))
+const doneX = computed(() => (!steps.value.length ? props.x : run.at >= steps.value.length ? endX.value : run.at ? cx(run.at - 1) + CW / 2 : props.x))
 // Стрелки ‹ › в подписи — переставить экран на шаг
 function shift(s, d) { const a = props.item.steps, i = a.indexOf(s), j = i + d; if (j < 0 || j >= a.length) return; a.splice(i, 1); a.splice(j, 0, s); changed() }
 onUnmounted(() => { ro.disconnect(); ro2.disconnect(); cancelAnimationFrame(hT) })
@@ -354,11 +356,12 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     <button v-if="!readonly && !free" class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
 
     <!-- Итог урока -->
-    <div v-if="steps.length && !free" :ref="watchFrame" class="frame" :style="{ left: cx(order.length) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
-     <span class="stem" /><span class="node fin-n" :class="{ done: run.at >= steps.length }" title="Итог урока — всегда в конце ветки"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
+    <div v-if="!free" :ref="watchFrame" class="frame" :style="{ left: cx(finI) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
+     <span class="stem" /><span class="node fin-n" :class="{ done: steps.length && run.at >= steps.length }" title="Итог урока — всегда в конце ветки"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
     <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>Итог урока · всегда в конце</b></div>
-    <div class="card fin" :class="{ on: sel === 'final', now: run.at >= steps.length }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
-      <LessonPlayer :key="'fin:' + run.key" embedded :steps="steps" :start="steps.length" :pct="pctAt(steps.length)" :stats="stats" :resolve="resolve" @restart="restart" @full="emit('play')" />
+    <div class="card fin" :class="{ on: sel === 'final', now: steps.length && run.at >= steps.length }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
+      <div v-if="!steps.length" class="fin0"><span class="fi"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>Итог урока</b><span>Здесь ученик увидит результат: сколько верных ответов и за сколько времени. Появится, когда в уроке будут экраны.</span></div>
+      <LessonPlayer v-else :key="'fin:' + run.key" embedded :steps="steps" :start="steps.length" :pct="pctAt(steps.length)" :stats="stats" :resolve="resolve" @restart="restart" @full="emit('play')" />
     </div>
     </div>
   </div>
@@ -370,6 +373,9 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 /* экран — открытая карточка на рельсе, как на доске */
 .frame { position: absolute; z-index: 3; transition: left .2s ease }
 .frame.free .flab { margin-top: 0 }
+.fin0 { display: grid; justify-items: center; gap: 8px; padding: 34px 26px; text-align: center; color: var(--hint); font-size: 13px; font-weight: 600 }
+.fin0 b { color: #333; font-size: 17px } .fi { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--yellow); color: #fff }
+.fi svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .frame.lift { z-index: 7 } .frame.lift .card { box-shadow: 0 16px 34px rgba(0, 0, 0, .2) }
 /* подпись над экраном — как имя фрейма в Figma */
 .line line.done { stroke: #1fbe78 }

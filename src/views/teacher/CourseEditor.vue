@@ -300,7 +300,7 @@ const pick = reactive({ lesson: null, step: null })                // откры
 const activeLesson = computed(() => (pick.lesson && findAny(pick.lesson)?.type !== 'screen' ? pick.lesson : null) ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
 // «Все уроки» — ветки всех уроков курса раскрыты сразу (видно, что где, и экраны удобно копировать между уроками)
 const allRails = ref(false)            // кнопку «Все уроки» убрали (05.11.2026): ветки — у уроков с экранами и у выбранного
-const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (allRails.value || x.steps?.length || x.id === activeLesson.value)))
+const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (x.type === 'lesson' || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом
 
 // ---------- Копировать / вставить экран (Ctrl+C / Ctrl+V или кнопки на ветке) ----------
 // Копия — с новым id; файлы общие (удалятся, только когда их не останется ни у одного экрана), файлы «только в браузере» — копируются.
@@ -433,7 +433,7 @@ function whereStep(st) {
 function screenTarget(w) {
   for (const r of lessonRails.value) {
     const n = r.x.steps?.length ?? 0, h = railHs[r.x.id] ?? 420
-    if (w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h) || w.x < r.p.x + 120 || w.x > r.p.x + 280 + n * SCR_STEP + 260) continue
+    if (w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h) || w.x < r.p.x + 120 || w.x > r.p.x + 280 + Math.max(1, n) * SCR_STEP + SCR_W + 40) continue          // до конца «Итога урока»
     const i = Math.max(0, Math.min(n, Math.floor((w.x - r.p.x - 280 + SCR_STEP / 2) / SCR_STEP)))
     return { L: r.x, i, mark: { x: r.p.x + 280 + i * SCR_STEP - 32, y: r.p.y - 24, h: Math.min(700, h) + 70 } }
   }
@@ -475,7 +475,7 @@ function moveExtra(x, dx, dy) {
   for (const v of x.inks) v.o.p = v.p.map((c, i) => Math.round(c + (i % 2 ? dy : dx)))
 }
 function sdMove(e) {
-  if (!sdP) return
+  if (!sdP && !placing) return
   if (!sd.on) {
     if (Math.hypot(e.clientX - sdP.sx, e.clientY - sdP.sy) < 6) return
     const first = sdP.list?.find(o => o.at.x || o.at.y)?.at
@@ -490,7 +490,25 @@ function sdMove(e) {
 async function sdUp(e) {
   removeEventListener('pointermove', sdMove); removeEventListener('pointercancel', sdUp); removeEventListener('pointerup', sdUp)
   const P = sdP; sdP = null
-  if (!sd.on) { if (P?.tray) addScreen(P.tray); else if (P?.extra) msel.value = []; return }     // нажатие по выделению — снять его (дальше можно нажимать внутри)
+  if (!sd.on) { if (P?.tray) placeStart(P.tray, e); else if (P?.extra) msel.value = []; return }     // нажатие по выделению — снять его (дальше можно нажимать внутри)
+  sdDrop(e)
+}
+// Нажали мини-окошко (не тянули) — как стикер в FigJam: экран едет за курсором, нажатие ставит его (на ветку, кружок урока или доску)
+let placing = false
+function placeStart(id, e) {
+  const w = toWorld(e.clientX, e.clientY)
+  Object.assign(sd, { on: true, tray: id, preview: id === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === id).make()], list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
+  tray.value = null; placing = true
+  addEventListener('pointermove', sdMove); addEventListener('pointerdown', placeDown, true)
+}
+function placeEnd() { placing = false; removeEventListener('pointermove', sdMove); removeEventListener('pointerdown', placeDown, true) }
+function placeCancel() { placeEnd(); Object.assign(sd, { on: false, tray: null, preview: [], to: null }) }
+function placeDown(e) {
+  e.stopPropagation(); e.preventDefault(); placeEnd()
+  if (e.button !== 0) return placeCancel()
+  sdDrop(e)
+}
+function sdDrop(e) {
   const to = overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
   const tr = sd.tray, list = sd.list, preview = sd.preview, extra = sd.extra
   Object.assign(sd, { on: false, list: [], tray: null, preview: [], extra: null, to: null })
@@ -725,13 +743,13 @@ const G = { step: 116, unitGap: 160, amp: 84 }
 const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
 const drag = reactive({ on: false, item: null, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
-const hasRail = (x) => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || allRails.value)          // «Все уроки» — место и под пустые ветки
+const hasRail = (x, key = '') => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && x.type === 'lesson'))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
 const layoutOf = (list, m = mode.value, key = '') => {
   let y = 0
   return list.map((x, i) => {
     if (i) {                                     // под урок с экранами — место во всю высоту его экранов (без прокрутки)
       const gap = x.type === 'unit' ? G.unitGap : G.step, prev = list[i - 1]
-      y += hasRail(prev) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
+      y += hasRail(prev, key) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
     }
     const off = m === 'wave' ? K[i % 8] * G.amp : 0
     return { x: off, y, side: off > 0 ? 'l' : 'r' }
@@ -826,7 +844,8 @@ function up(e) {
     else if (p?.item) { sel.value = sel.value === p.item.id ? null : p.item.id; selectStep(null, null); noteSel.value = null }
     return
   }
-  drop(drag.over ? 'rail' : overToolbar(e.clientY) ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))
+  // на ветку урока (место экранов) задание не кладём — только экраны; отпустили там — задание возвращается
+  drop(drag.over ? 'rail' : overToolbar(e.clientY) || screenTarget(toWorld(e.clientX, e.clientY))?.mark ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))
 }
 // Куда легло взятое: на рельс (в промежуток), на холст (где отпустили) или отмена (над панелью)
 function drop(where, w) {
@@ -1008,6 +1027,7 @@ const onKey = (e) => {
     e.preventDefault()
     return e.code === 'KeyC' ? doCopy() : doPaste()
   }
+  if (e.key === 'Escape' && placing) return placeCancel()
   if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null; msel.value = []; if (tool.value === 'pen') tool.value = 'select' } }
   if (run.value || !(e.key === 'Delete' || e.key === 'Backspace')) return
   doDelete()
@@ -1226,7 +1246,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
-        <span class="tt2">{{ activeLesson ? 'В урок «' + (findAny(activeLesson)?.title || 'Урок') + '»' : 'Новый урок в конце' }}</span>
+        <span class="tt2">Тяните на ветку урока или на доску — или нажмите и поставьте</span>
         <!-- мини-окошки: как выглядит экран -->
         <button v-for="t in TPL" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <span class="mini" :class="t.id"><i class="mp" />
