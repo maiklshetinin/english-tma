@@ -24,7 +24,7 @@ onUnmounted(() => { removeEventListener('keydown', onEsc); removeEventListener('
 
 // типы заданий — как в редакторе курса
 const T = {
-  unit: { t: 'Юнит', c: 'var(--green)' },
+  unit: { t: 'Глава', c: 'var(--green)' },
   lesson: { t: 'Урок', c: 'var(--green)', d: 'var(--green-d)', ic: '<circle cx="12" cy="12" r="8"/><path d="M9 12.3l2 2 4-4"/>' },
   words: { t: 'Слова', c: 'var(--blue)', d: 'var(--blue-d)', ic: '<rect x="4" y="7" width="12" height="13" rx="2.5"/><path d="M8 4h9.5A2.5 2.5 0 0 1 20 6.5V16"/>' },
   hw: { t: 'Домашка', c: '#2ec4b6', d: '#1f9e93', ic: '<path d="M14.6 6.1l3.3 3.3"/><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z"/>' },
@@ -139,7 +139,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <b>{{ x.title || (T[x.type] ?? T.lesson).t }}</b>
             <p v-if="x.sub" class="psub">{{ x.sub }}</p>
             <template v-if="!ready(x)">
-              <p>{{ x.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : x.type === 'reward' ? 'Награда за пройденный юнит.' : 'В этом уроке пока нет экранов — их собирают в редакторе («Интерактив»).' }}</p>
+              <p>{{ x.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : x.type === 'reward' ? 'Награда за пройденную главу.' : 'В этом уроке пока нет экранов — их собирают в редакторе («Интерактив»).' }}</p>
               <button v-if="INTERACTIVE.includes(x.type)" class="pgo ghost" @click="edit">Открыть в редакторе</button>
             </template>
             <template v-else>
@@ -174,7 +174,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <template v-else>
             <span class="bi" :style="{ '--c': (T[open.type] ?? T.lesson).c }"><svg viewBox="0 0 24 24" v-html="(T[open.type] ?? T.lesson).ic" /></span>
             <b>{{ open.title || (T[open.type] ?? T.lesson).t }}</b>
-            <p>{{ open.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : open.type === 'reward' ? 'Награда за пройденный юнит.' : 'В этом задании пока нет экранов — соберите их в редакторе («Интерактив»).' }}</p>
+            <p>{{ open.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : open.type === 'reward' ? 'Награда за пройденную главу.' : 'В этом задании пока нет экранов — соберите их в редакторе («Интерактив»).' }}</p>
             <button v-if="INTERACTIVE.includes(open.type)" class="btn primary" @click="edit">Открыть в редакторе</button>
           </template>
         </div>

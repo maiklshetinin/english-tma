@@ -34,7 +34,7 @@ const KEY = 'tma.courseRail.v1'
 
 // ---------- Типы заданий ----------
 const T = {
-  unit:   { t: 'Юнит', c: 'var(--green)', d: 'var(--green-d)' },
+  unit:   { t: 'Глава', c: 'var(--green)', d: 'var(--green-d)' },
   lesson: { t: 'Урок', c: 'var(--green)', d: 'var(--green-d)', ic: '<circle cx="12" cy="12" r="8"/><path d="M9 12.3l2 2 4-4"/>' },
   words:  { t: 'Слова', c: 'var(--blue)', d: 'var(--blue-d)', ic: '<rect x="4" y="7" width="12" height="13" rx="2.5"/><path d="M8 4h9.5A2.5 2.5 0 0 1 20 6.5V16"/>' },
   hw:     { t: 'Домашка', c: '#2ec4b6', d: '#1f9e93', ic: '<path d="M14.6 6.1l3.3 3.3"/><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z"/>' },
@@ -50,7 +50,7 @@ const PALETTE = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw'
 const MEDIA = ['video', 'photo']                         // задания с файлом (кружок, фото) — файл в S3, ключ в поле file
 // На панели — только «Урок» и «Чекпоинт» (как в Busuu). Старые типы (слова, домашка, тест, кружок, фото…) в курсах остаются и показываются.
 const TASKS = ['lesson', 'checkpoint']
-const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Проверка навыков перед следующим юнитом' }
+const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Проверка навыков перед следующей главой' }
 const BRANCH = ['lesson', 'checkpoint']            // у них ветка экранов видна всегда, даже пустая
 // Обложка урока, как в Busuu: фото или кружок в самом кружке урока (поле file / media, вид — ck)
 const covK = (x) => (MEDIA.includes(x.type) ? x.type : x.ck ?? null)
@@ -62,9 +62,9 @@ const it = (type, title, extra = {}) => ({ id: uid(), type, title, ...extra })
 const seed = () => ({
   title: 'Базовый курс A1', progress: 5, mode: 'line',
   items: [
-    it('unit', 'Юнит 1', { sub: 'Present Simple' }),
+    it('unit', 'Глава 1', { sub: 'Present Simple' }),
     it('lesson', 'Глагол to be'), it('words', 'Слова: семья'), it('hw', 'Упражнения 1–5'), it('lesson', 'Отрицания'), it('tutor', 'Разговор с репетитором'), it('test', 'Тест юнита'), it('reward', 'Сундук'),
-    it('unit', 'Юнит 2', { sub: 'Past Simple' }),
+    it('unit', 'Глава 2', { sub: 'Past Simple' }),
     it('lesson', 'Правильные глаголы'), it('words', 'Слова: путешествия'), it('lesson', 'Неправильные глаголы'), it('hw', 'Рассказ о выходных'), it('test', 'Тест юнита'),
   ],
   loose: [it('words', 'Слова: еда', { x: -320, y: 120 }), it('lesson', 'Артикли a / the', { x: -320, y: 250 })], notes: [],
@@ -172,7 +172,7 @@ onUnmounted(() => {
 // Открыли редактор (из «Курсов»: #/courses?id=<курс> или ?id=new). В браузере — копия последнего открытого курса:
 // если в ней несохранённые правки другого курса — сначала отправляем их, потом открываем нужный.
 const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'line',
-  items: [it('unit', 'Юнит 1', { sub: 'Тема юнита' })], loose: [], notes: [], ink: [], dirty: false })
+  items: [it('unit', 'Глава 1', { sub: 'Тема главы' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })], loose: [], notes: [], ink: [], dirty: false })
 const fromServer = (c) => {
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
   const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
@@ -914,13 +914,19 @@ function drop(where, w) {
     x.x = Math.round(w.x); x.y = Math.round(w.y)
     if (from !== 'loose') doc.loose.push(x)
   }
+  // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт
+  if (where !== 'cancel' && from === 'new' && x.type === 'unit') {
+    const add = [newItem('lesson'), newItem('checkpoint')]; add.forEach(v => { v.steps = [] })
+    if (where === 'rail') doc.items.splice(doc.items.indexOf(x) + 1, 0, ...add)
+    else add.forEach((v, k) => { v.x = x.x; v.y = x.y + 130 * (k + 1); doc.loose.push(v) })
+  }
   Object.assign(drag, { on: false, item: null, over: false })
   if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
 }
 function newItem(type) {
   const nUnits = doc.items.filter(x => x.type === 'unit').length
-  return it(type, type === 'unit' ? `Юнит ${nUnits + 1}` : T[type].t, type === 'unit' ? { sub: 'Тема юнита' } : {})
+  return it(type, type === 'unit' ? `Глава ${nUnits + 1}` : T[type].t, type === 'unit' ? { sub: 'Тема главы' } : {})
 }
 const findAny = (id) => doc.items.find(v => v.id === id) ?? doc.loose.find(v => v.id === id)
 function showRailEnd() { const p = toScreen(pos(order.value.length - 1)); if (p.y > H.value - 160 || p.y < 100) animView({ ...view, y: view.y - (p.y - H.value / 2) }, true) }
@@ -1168,7 +1174,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <svg class="ink"><path v-for="k in doc.ink ?? []" :key="k.id" :d="inkD(k.p)" :stroke="k.c" :stroke-width="k.w" :class="{ on: isM(k.id) }" /><path ref="liveInk" stroke-width="4" /></svg>
         <!-- Сводка, как увидит ученик -->
         <div class="sum" @pointerdown.stop>
-          <div class="sh"><span><i class="dt" />Юнит {{ curUnitNo }} из {{ unitsCount }}</span><b class="pp">{{ pct }}%</b></div>
+          <div class="sh"><span><i class="dt" />Глава {{ curUnitNo }} из {{ unitsCount }}</span><b class="pp">{{ pct }}%</b></div>
           <div class="st">{{ curUnit?.sub || curUnit?.title }}</div>
           <div class="bar"><i :style="{ width: pct + '%' }" /></div>
           <div class="sf"><span>Пройдено: <b>{{ doc.progress }} из {{ tasksCount }}</b></span><span>Осталось {{ tasksCount - doc.progress }}</span></div>
@@ -1213,7 +1219,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <div v-for="(x, i) in order" :key="x.id" :data-sel="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]"
           :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'">
-            <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Юнит" @keydown.enter="renameDone" @keydown.esc="renameDone" @input="save" /><input v-model="x.sub" class="rin" placeholder="тема юнита" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></div>
+            <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Глава" @keydown.enter="renameDone" @keydown.esc="renameDone" @input="save" /><input v-model="x.sub" class="rin" placeholder="тема главы" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></div>
             <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
             <div class="ubar"><i :style="{ width: (chapterOf(i)?.pct ?? 0) + '%' }" /><em>{{ chapterOf(i)?.pct ?? 0 }}%</em></div>
           </template>
@@ -1392,7 +1398,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <span class="sk back" :style="{ background: noteColor }" /><span class="sk" :style="{ background: noteColor }" />
       </button>
       <i class="tsep" />
-      <button class="tb" :title="'Юнит — тяните на рельс, или нажмите и поставьте'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Юнит</small></button>
+      <button class="tb" :title="'Глава — сразу с уроком и чекпоинтом; тяните на рельс, или нажмите и поставьте'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Глава</small></button>
       <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
     </div>
   </div>
