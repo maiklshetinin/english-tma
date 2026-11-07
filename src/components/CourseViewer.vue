@@ -132,11 +132,12 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
-          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${lessonMin(okSteps(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
+          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<span v-if="x.sub" class="csub">{{ x.sub }}</span><small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${lessonMin(okSteps(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
           <!-- карточка урока перед стартом -->
           <div v-if="peek === x.id" class="pv" @click.stop>
             <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ (T[x.type] ?? T.lesson).t }}</small><small v-if="ready(x)">≈ {{ lessonMin(okSteps(x)) }} мин</small></div>
             <b>{{ x.title || (T[x.type] ?? T.lesson).t }}</b>
+            <p v-if="x.sub" class="psub">{{ x.sub }}</p>
             <template v-if="!ready(x)">
               <p>{{ x.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : x.type === 'reward' ? 'Награда за пройденный юнит.' : 'В этом уроке пока нет экранов — их собирают в редакторе («Интерактив»).' }}</p>
               <button v-if="INTERACTIVE.includes(x.type)" class="pgo ghost" @click="edit">Открыть в редакторе</button>
@@ -220,6 +221,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .pbig { display: block; max-width: 100%; max-height: 420px; border-radius: 16px }
 .bead.open { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }
 .cap { flex: 0 1 auto; display: grid; justify-items: start; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 17px; font-weight: 800; color: #252a31; cursor: pointer }
+.csub { font-size: 15px; font-weight: 500; color: #3b4048 } .pv .psub { margin: -2px 0 0; font-size: 16px; font-weight: 500; opacity: 1 }
 .cap small { font-size: 14px; font-weight: 500; color: #4b5563 }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; font-weight: 900; text-transform: uppercase }
 /* карточка урока перед стартом (как в Busuu) */

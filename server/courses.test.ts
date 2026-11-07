@@ -47,9 +47,9 @@ await C.put(me, 'k6', { ...course, loose: [{ id: 'F', type: 'screen', title: '',
 const fr = store.get('courses/k6').loose[0]
 ok('экран на доске: один экран, с местом', fr.type === 'screen' && fr.steps.length === 1 && fr.x === 5)
 ok('экран на доске — только черновиком', await code(C.put(me, 'k6', { ...course, items: [{ id: 'F', type: 'screen', title: '' }] })) === 400)
-await C.put(me, 'k7', { ...course, items: [{ id: 'cp', type: 'checkpoint', title: 'Чекпоинт', ck: 'photo', file: 't/tg_1/c/k7/a.jpg', steps: [] }, { id: 'l2', type: 'lesson', title: '', ck: 'zzz', file: 't/tg_1/c/k7/b.jpg' }] })
+await C.put(me, 'k7', { ...course, items: [{ id: 'cp', type: 'checkpoint', title: 'Чекпоинт', ck: 'photo', file: 't/tg_1/c/k7/a.jpg', steps: [] }, { id: 'l2', type: 'lesson', title: '', sub: 'Знакомство', ck: 'zzz', file: 't/tg_1/c/k7/b.jpg' }] })
 const k7 = store.get('courses/k7').items
-ok('чекпоинт и обложка урока: фото/кружок; без вида обложки файл не берём', k7[0].type === 'checkpoint' && k7[0].ck === 'photo' && k7[0].file === 't/tg_1/c/k7/a.jpg' && !('file' in k7[1]) && !('ck' in k7[1]))
+ok('чекпоинт и обложка урока: фото/кружок; без вида обложки файл не берём', k7[0].type === 'checkpoint' && k7[0].ck === 'photo' && k7[0].file === 't/tg_1/c/k7/a.jpg' && !('file' in k7[1]) && !('ck' in k7[1]) && k7[1].sub === 'Знакомство')
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)
 await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
 const nt = store.get('courses/k4').notes[0]

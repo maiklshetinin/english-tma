@@ -1184,9 +1184,12 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <svg v-if="!covK(x) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <svg v-if="stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
-            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><input v-if="renaming === x.id" v-model="x.title" :data-ren="x.id" class="rin" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="renameDone" @input="save" /><template v-else>{{ x.title }}</template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
+            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><template v-if="renaming === x.id"><input v-model="x.title" :data-ren="x.id" class="rin" placeholder="Название урока" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /><input v-if="INTERACTIVE.includes(x.type)" v-model="x.sub" class="rin sub" placeholder="о чём урок, например: знакомство и приветствия" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></template>
+              <template v-else>{{ x.title }}<span v-if="x.sub" class="csub">{{ x.sub }}</span></template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
             <!-- обложка выбранного урока: фото или кружок, как в Busuu -->
             <div v-if="sel === x.id && BRANCH.includes(x.type) && !drag.on && renaming !== x.id" class="cov" @pointerdown.stop @dblclick.stop>
+              <button title="Переименовать (Enter или двойной щелчок)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
+              <i class="cvs" />
               <button title="Фото на кружок урока (обрежем по кругу и сожмём)" @click="pickFile(x, 'photo')"><svg viewBox="0 0 24 24" v-html="T.photo.ic" /></button>
               <button title="Кружок (видео) на кружок урока" @click="pickFile(x, 'video')"><svg viewBox="0 0 24 24" v-html="T.video.ic" /></button>
               <button v-if="x.ck" class="rm" title="Убрать обложку" @click="dropCover(x)">✕</button>
@@ -1194,7 +1197,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <!-- карточка урока, как её увидит ученик (как в Busuu): тип, примерное время, «Поехали!» — пройти урок целиком -->
             <div v-if="peekOf(x)" class="lpv" @pointerdown.stop @dblclick.stop>
               <small>{{ T[x.type].t }} · ≈ {{ lessonMin(x.steps) }} мин</small>
-              <b>{{ x.title || T[x.type].t }}</b>
+              <b class="lpt" title="Нажмите, чтобы переименовать" @click="rename(x)">{{ x.title || T[x.type].t }}<svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></b>
+              <p v-if="x.sub" class="lps">{{ x.sub }}</p>
               <p>{{ screens(x.steps.length) }}<template v-if="x.steps.length > peekOf(x).length"> · не готово: {{ x.steps.length - peekOf(x).length }}</template></p>
               <button class="pgo" @click="goLesson(x)">Поехали!</button>
             </div>
@@ -1505,6 +1509,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
 .cap { left: calc(100% + 22px); width: 190px; gap: 2px; font-size: 15px; font-weight: 800; color: #252a31 }
 .cap small { font-size: 12.5px; font-weight: 600; color: #6b7280 }
+.csub { font-size: 13.5px; font-weight: 500; color: #3b4048; line-height: 1.3 }      /* описание урока — как в Busuu: под жирным названием обычным шрифтом */
+.rin.sub { font-size: 13px; font-weight: 500 } .lpv .lps { margin: -2px 0 0; font-size: 15px; font-weight: 500; opacity: 1 }
 .bead.s-l .cap { right: calc(100% + 22px) }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; box-shadow: none }
 /* юнит: заголовок главы и полоска прогресса */
@@ -1594,7 +1600,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ts small { display: grid; gap: 1px; font-size: 11.5px; font-weight: 600; color: var(--hint); text-align: center; line-height: 1.25 } .ts small b { font-size: 14px; font-weight: 800; color: #2c2c2c }
 .cov { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #1e1e1e; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); z-index: 31 }
 .cov button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: none; color: #fff; cursor: pointer; font: inherit; font-size: 13px } .cov button:hover { background: #3a3a3a }
-.cov svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .cov .rm { color: #ff8f8f }
+.cov svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .cov .rm { color: #ff8f8f } .cvs { width: 1px; margin: 6px 2px; background: #444 }
+.lpt { display: flex; align-items: center; gap: 6px; cursor: text } .lpt svg { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .7 } .lpt:hover svg { opacity: 1 }
 .ti { display: grid; justify-items: center; gap: 5px; width: 92px; padding: 8px 0 6px; border: 0; border-radius: 12px; background: none; font: inherit; cursor: pointer; touch-action: none; flex: none }
 .ti.wide { width: 116px } .ti:hover { background: #f2f2f2 }
 .tc { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #fff; background: var(--c) }

@@ -67,7 +67,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     // screen — экран урока, положенный прямо на доску (только среди черновиков, один экран)
     if (!ID.test(String(r.id)) || !(COURSE_TYPES.includes(type) || (type === 'screen' && loose))) throw fail(400, 'bad item')
     const out: CourseItem = { id: String(r.id), type, title: str(r.title, 120) }
-    if (type === 'unit') out.sub = str(r.sub, 120)
+    if (type === 'unit' || (INTERACTIVE.includes(type) && typeof r.sub === 'string' && r.sub)) out.sub = str(r.sub, 120)          // у урока — описание под названием
     // обложка урока (фото или кружок, как в Busuu): ck — вид, файл — в file
     const cover = INTERACTIVE.includes(type) && (r.ck === 'photo' || r.ck === 'video')
     if (cover) out.ck = r.ck as 'photo' | 'video'
