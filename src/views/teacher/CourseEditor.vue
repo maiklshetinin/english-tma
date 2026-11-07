@@ -406,6 +406,16 @@ async function removeStepKey() {
 const run = ref(null)                                             // «Пройти урок» — урок целиком, как ученик (как «Презентация» в Figma)
 // выбран урок с готовыми экранами (не тянем, не рамка) — под кружком карточка урока, как у ученика
 const peekOf = (x) => { if (sel.value !== x.id || drag.on || msel.value.length > 1 || renaming.value === x.id || !INTERACTIVE.includes(x.type)) return null; const ok = (x.steps ?? []).filter(v => !stepIssue(v)); return ok.length ? ok : null }
+// «Поехали!» в редакторе — не окно, а переход к самому уроку: первый экран ветки выбран и по центру
+function goLesson(x) {
+  const st = (x.steps ?? []).find(v => !stepIssue(v)) ?? x.steps?.[0]; if (!st) return
+  selectStep(x.id, st.id)
+  nextTick(() => {
+    const el = document.querySelector(`.frame[data-id="${st.id}"]`); if (!el) return
+    const r = el.getBoundingClientRect(), box = board.value.getBoundingClientRect()
+    animView({ ...view, x: view.x - (r.left - box.left - (W.value - r.width) / 2), y: view.y - (r.top - box.top - 110) }, true)
+  })
+}
 const runLesson = computed(() => (run.value ? findAny(run.value) : null))
 
 // ---------- Нижняя панель как в FigJam: группа → ряд элементов над панелью ----------
@@ -992,7 +1002,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <small>{{ T[x.type].t }} · ≈ {{ lessonMin(x.steps) }} мин</small>
               <b>{{ x.title || T[x.type].t }}</b>
               <p>{{ screens(x.steps.length) }}<template v-if="x.steps.length > peekOf(x).length"> · не готово: {{ x.steps.length - peekOf(x).length }}</template></p>
-              <button class="pgo" @click="run = x.id">Поехали!</button>
+              <button class="pgo" @click="goLesson(x)">Поехали!</button>
             </div>
           </template>
         </div>
