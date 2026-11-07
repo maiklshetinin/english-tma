@@ -531,7 +531,7 @@ function placeDown(e) {
 }
 function sdDrop(e) {
   const to = overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
-  const tr = sd.tray, list = sd.list, preview = sd.preview, extra = sd.extra
+  const tr = sd.tray, list = sd.list, preview = sd.preview, extra = sd.extra, s0 = sd.s0
   Object.assign(sd, { on: false, list: [], tray: null, preview: [], extra: null, to: null })
   if (to === 'cancel') return moveExtra(extra, 0, 0)
   if (!tr && !list.length) return save()                    // ехали только стикеры, рисунки и черновики
@@ -548,7 +548,9 @@ function sdDrop(e) {
   } else {
     if (!tr) unhook(list)
     const x0 = w.x - sd.ox, y0 = w.y - sd.oy
-    moving.forEach((st, k) => doc.loose.push(freeOf(st, x0 + k * SCR_STEP, y0)))
+    // свои экраны сохраняют расположение друг относительно друга (сдвиг как у курсора); новые из «Интерактива» — в ряд
+    if (tr) moving.forEach((st, k) => doc.loose.push(freeOf(st, x0 + k * SCR_STEP, y0)))
+    else list.forEach(o => doc.loose.push(freeOf(o.s, o.at.x + w.x - s0.x, o.at.y + w.y - s0.y)))
     selectStep(doc.loose.at(-1).id, moving.at(-1).id)
   }
   msel.value = extra ? [...moving.map(st => 'st:' + doc.id + ':' + st.id), ...extra.notes.map(v => v.o.id), ...extra.loose.map(v => v.o.id), ...extra.inks.map(v => v.o.id)]
