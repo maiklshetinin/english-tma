@@ -477,9 +477,10 @@ const maskItem = computed(() => {
   const L = doc.items.find(v => v.id === own[0]), mine = new Set((L.steps ?? []).map(v => 'st:' + doc.id + ':' + v.id))
   return msel.value.every(id => id === L.id || mine.has(id)) ? L : null
 })
-const canMask = computed(() => msel.value.length > 0 && !sd.on && (!!maskItem.value || boxOf().some(o => msel.value.includes(o.id) && (o.k === 'note' || o.k === 'ink' || (o.k === 'step' && o.course === doc.id) || (o.k === 'item' && doc.loose.some(l => l.id === o.id))))))
+const canMask = computed(() => !!chapSel.value || msel.value.length > 0 && !sd.on && (!!maskItem.value || boxOf().some(o => msel.value.includes(o.id) && (o.k === 'note' || o.k === 'ink' || (o.k === 'step' && o.course === doc.id) || (o.k === 'item' && doc.loose.some(l => l.id === o.id))))))
 function maskDown(e) {
   if (e.button !== 0) return
+  if (chapSel.value) { const u = findAny(chapSel.value.id); return startDrag(e, { item: u, from: chapSel.value.from }) }
   if (maskItem.value) return startDrag(e, { item: maskItem.value, from: 'rail' })
   const ids = new Set(msel.value), bs = boxOf().filter(o => ids.has(o.id))
   const steps = bs.filter(o => o.k === 'step' && o.course === doc.id).map(o => ({ s: o.s, at: whereStep(o.s) })).filter(o => o.at)
@@ -705,6 +706,11 @@ const oneBox = computed(() => {
   return { left: Math.round(a.x - 6) + 'px', top: Math.round(a.y - 6) + 'px', width: Math.round(b.x - a.x + 12) + 'px', height: Math.round(b.y - a.y + 12) + 'px' }
 })
 const selBox = computed(() => {
+  if (chapSel.value && !sd.on) {             // выбрана глава — рамка вокруг всей главы
+    void (view.x + view.y + view.z)
+    const b = chapSel.value.box, a = toScreen({ x: b.x0, y: b.y0 }), c = toScreen({ x: b.x1, y: b.y1 })
+    return { left: Math.round(a.x) + 'px', top: Math.round(a.y) + 'px', width: Math.round(c.x - a.x) + 'px', height: Math.round(c.y - a.y) + 'px' }
+  }
   const ids = new Set(msel.value); if (!ids.size || sd.on) return null
   void (view.x + view.y + view.z + boxTick.value)
   const bs = boxOf().filter(o => ids.has(o.id)); if (!bs.length) return null
@@ -790,9 +796,12 @@ const flyTree = computed(() => {
   if (!drag.on || drag.over || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
   const w = toWorld(drag.x, drag.y)
   const u = drag.item, rel = drag.from === 'loose' && u.x != null
-  return [u, ...(drag.extra ?? [])].map((x, k) => ({ x, p: rel && k ? { x: w.x + x.x - u.x, y: w.y + x.y - u.y, side: 'r' } : { x: w.x, y: w.y + (k ? 60 + (k - 1) * (RAIL_H + 110) : 0), side: 'r' } }))
+  const dy = kidDy(drag.extra ?? [])
+  return [u, ...(drag.extra ?? [])].map((x, k) => ({ x, p: rel && k ? { x: w.x + x.x - u.x, y: w.y + x.y - u.y, side: 'r' } : { x: w.x, y: w.y + (k ? dy[k - 1] : 0), side: 'r' } }))
 })
 // глава на доске — блок: её урок и чекпоинт помнят главу (grp) и ездят вместе с ней
+// где под главой на доске лягут её задания: столбиком, под уроком с веткой — место во всю ветку (как на рельсе)
+const kidDy = (ks) => { let y = 60; return ks.map(v => { const d = y; y += BRANCH.includes(v.type) ? RAIL_H + 110 : 130; return d }) }
 const kidsOf = (u) => { const ks = doc.loose.filter(l => l.grp === u.id).sort((a, b) => a.y - b.y); return ks.length ? ks : null }
 const dragIds = computed(() => new Set(drag.on ? [drag.item?.id, ...(drag.extra ?? []).map(v => v.id)] : []))
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
@@ -812,7 +821,7 @@ const layoutOf = (list, m = mode.value, key = '') => {
 }
 // Порядок на рельсе: взятое (если целимся в рельс) уже стоит на месте прицела
 const order = computed(() => {
-  const list = doc.items.filter(x => !(drag.on && x.id === drag.item?.id))
+  const list = doc.items.filter(x => !dragIds.value.has(x.id))
   if (drag.on && drag.over) list.splice(Math.min(drag.to, list.length), 0, drag.item, ...(drag.extra ?? []))      // новая глава — сразу с уроком и чекпоинтом
   return list
 })
@@ -861,18 +870,19 @@ const HL_DEF = '#1fbe78'
 const chapterBoxes = computed(() => {
   const L = layout.value, out = [], rails = new Map(lessonRails.value.map(r => [r.x.id, r]))
   chapters.value.forEach((c, k) => {
-    const u = order.value[c.i]; if (!u || u.hl === 'none') return
+    const u = order.value[c.i]; if (!u) return
     const next = chapters.value[k + 1], lastIt = order.value[c.last]
     const bottom = next ? L[next.i].y - 84 : L[c.last].y + 56 + (hasRail(lastIt) ? 40 + (railHs[lastIt.id] ?? RAIL_H) : 0)
     let x0 = mode.value === 'wave' ? -330 : -78, x1 = mode.value === 'wave' ? 330 : 470
     if (u.hlw) for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) x1 = Math.max(x1, r.p.x + 280 + Math.max(1, r.x.steps?.length ?? 0) * 520 + 460 + 36) }
     const top = L[c.i].y - 70
     const hc = u.hlc ?? HL_DEF
-    out.push({ id: u.id, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: Math.max(120, bottom - top) + 'px' } })
+    const y1 = top + Math.max(120, bottom - top)
+    out.push({ id: u.id, from: 'rail', box: { x0, y0: top, x1, y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
   })
   // главы на доске — блоком вокруг своих урока и чекпоинта
   for (const u of doc.loose) {
-    if (u.type !== 'unit' || u.hl === 'none' || dragIds.value.has(u.id)) continue
+    if (u.type !== 'unit' || dragIds.value.has(u.id)) continue
     const ks = doc.loose.filter(l => l.grp === u.id && !dragIds.value.has(l.id))
     let x0 = u.x - 78, x1 = u.x + 470, y1 = u.y + 70
     for (const k of ks) {
@@ -880,10 +890,14 @@ const chapterBoxes = computed(() => {
       y1 = Math.max(y1, k.y + 56 + (BRANCH.includes(k.type) ? 40 + Math.min(700, railHs[k.id] ?? RAIL_H) : 0))
     }
     const hc = u.hlc ?? HL_DEF, top = u.y - 70
-    out.push({ id: u.id, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
+    out.push({ id: u.id, from: 'loose', box: { x0, y0: top, x1, y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
   }
   return out
 })
+// глава — жёсткий блок: на рельсе её задания — всё, что после неё до следующей главы; на доске — её урок и чекпоинт (grp)
+const railKids = (u) => { const i = doc.items.indexOf(u); if (i < 0) return null; const out = []; for (let k = i + 1; k < doc.items.length && doc.items[k].type !== 'unit'; k++) out.push(doc.items[k]); return out.length ? out : null }
+const chapSel = computed(() => (sel.value && !msel.value.length && !drag.on ? chapterBoxes.value.find(c => c.id === sel.value) : null))
+function chapDown(e, c) { if (e.button === 2) return; const u = findAny(c.id); if (u) startDrag(e, { item: u, from: c.from }) }
 const chMenu = ref(null)                 // открытый список в меню главы: 'color'
 // вид подсветки: 'rail' — рельс главы, 'wide' — с ветками, 'none' — без подсветки; цвет — отдельно
 function setHl(u, how) { delete u.hl; delete u.hlw; if (how === 'none') u.hl = 'none'; if (how === 'wide') u.hlw = true; save() }
@@ -919,7 +933,7 @@ function move(e) {
   if (pending && !drag.on) {
     if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return
     sel.value = null
-    Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : pending.from === 'loose' && pending.item?.type === 'unit' ? kidsOf(pending.item) : null, from: pending.type ? 'new' : pending.from })
+    Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : pending.from === 'loose' && pending.item?.type === 'unit' ? kidsOf(pending.item) : pending.from === 'rail' && pending.item?.type === 'unit' ? railKids(pending.item) : null, from: pending.type ? 'new' : pending.from })
   }
   if (!drag.on) return
   drag.x = e.clientX; drag.y = e.clientY
@@ -966,14 +980,17 @@ function drop(where, w) {
     for (const v of [x, ...kids]) { delete v.x; delete v.y; delete v.grp }
     doc.items.splice(0, doc.items.length, ...order.value)          // глава с доски встаёт на рельс вместе со своим уроком и чекпоинтом
   } else if (where === 'canvas') {
-    if (from === 'rail') doc.items.splice(doc.items.findIndex(v => v.id === x.id), 1)
+    if (from === 'rail') {
+      const out = new Set([x.id, ...kids.map(v => v.id)]); doc.items = doc.items.filter(v => !out.has(v.id))
+      const dy = kidDy(kids); kids.forEach((v, k) => { v.x = Math.round(w.x); v.y = Math.round(w.y) + dy[k]; v.grp = x.id; doc.loose.push(v) })      // глава с рельса — на доску блоком
+    }
     const dx = from === 'loose' ? Math.round(w.x) - x.x : 0, dy = from === 'loose' ? Math.round(w.y) - x.y : 0
     x.x = Math.round(w.x); x.y = Math.round(w.y)
     if (from !== 'loose') doc.loose.push(x)
     if (from === 'loose') for (const v of kids) { v.x += dx; v.y += dy }          // глава на доске едет вместе со своим блоком
   }
   // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт (на рельсе они уже встали вместе с главой; на доске — блоком)
-  if (where === 'canvas' && from === 'new' && kids.length) kids.forEach((v, k) => { v.x = x.x; v.y = x.y + 60 + k * (RAIL_H + 110); v.grp = x.id; doc.loose.push(v) })
+  if (where === 'canvas' && from === 'new' && kids.length) { const dy = kidDy(kids); kids.forEach((v, k) => { v.x = x.x; v.y = x.y + dy[k]; v.grp = x.id; doc.loose.push(v) }) }
   Object.assign(drag, { on: false, item: null, extra: null, over: false })
   if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
@@ -1234,7 +1251,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="sf"><span>Пройдено: <b>{{ doc.progress }} из {{ tasksCount }}</b></span><span>Осталось {{ tasksCount - doc.progress }}</span></div>
         </div>
         <!-- Главы — блоками (подсветка из меню главы) -->
-        <div v-for="c in chapterBoxes" :key="'cb' + c.id" class="chapbox" :class="{ light: c.light, wide: c.w }" :style="c.style" />
+        <!-- нажали на плашку главы — выделяется вся глава (как объект); тянуть — едет целиком -->
+        <div v-for="c in chapterBoxes" :key="'cb' + c.id" class="chapbox" :class="{ light: c.light, wide: c.w, off: findAny(c.id)?.hl === 'none' }" :style="c.style" @pointerdown.stop="chapDown($event, c)" />
         <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
         <!-- Тянем главу / урок / чекпоинт мимо рельса — за курсором вся структура, как она ляжет (глава с уроком и чекпоинтом, у урока ветка с итогом) -->
         <div v-if="flyTree" class="ftree">
@@ -1639,6 +1657,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 /* ===== Стиль как в Busuu: тонкая линия, кружки с кольцом и галочкой снизу, юнит — светлая «глава» с прогрессом ===== */
 .r0 { stroke: #dedede; stroke-width: 4 } .r1 { stroke: #1fbe78; stroke-width: 4 }
 .chapbox { position: absolute; z-index: 0; box-sizing: border-box; border-radius: 26px; pointer-events: none; transition: left .22s ease, top .22s ease, width .22s ease, height .22s ease }
+.chapbox { pointer-events: auto; cursor: default } .chapbox.off { background: none !important; box-shadow: none !important }
 .chapbox { background: color-mix(in srgb, var(--hc) 8%, transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hc) 38%, transparent) }
 .chapbox.light { background: rgba(255, 255, 255, .85); box-shadow: inset 0 0 0 1.5px #e3e3e3, 0 2px 10px rgba(0, 0, 0, .04) }
 .hlsw { grid-template-columns: repeat(8, 32px) } .hlsw button[style*="#ffffff"] { box-shadow: inset 0 0 0 1.5px #ccc }
