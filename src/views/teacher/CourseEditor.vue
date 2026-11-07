@@ -1416,6 +1416,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <template v-if="x.type === 'unit'">
             <!-- меню главы, как в Figma: подсветка блока главы -->
             <div v-if="sel === x.id && !drag.on && renaming !== x.id" class="nbar chbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
+              <button class="nb-i" title="Переименовать главу (Enter или двойной щелчок)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
+              <i class="nb-s" />
               <div class="nb-g"><button class="nb-c" :class="{ open: chMenu === 'color' }" title="Цвет главы" @click="chMenu = chMenu === 'color' ? null : 'color'"><i :style="{ background: x.hlc ?? HL_DEF }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
                 <div v-if="chMenu === 'color'" class="nb-pop sw hlsw"><button v-for="c in HL_COLORS" :key="c" :style="{ background: c }" :class="{ on: (x.hlc ?? HL_DEF) === c }" @click="setHlc(x, c)" /></div></div>
               <div class="nb-g"><button class="nb-t" :class="{ open: chMenu === 'op' }" title="Прозрачность плашки" @click="chMenu = chMenu === 'op' ? null : 'op'"><svg viewBox="0 0 24 24" class="opi"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" /></svg><small class="opv">{{ hlOp(x) }}%</small><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
@@ -1426,7 +1428,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <button class="cbw" :class="{ on: hlHow(x) === 'none' }" title="Без подсветки" @click="setHl(x, 'none')">Без</button>
             </div>
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Глава" @keydown.enter="renameDone" @keydown.esc="renameDone" @input="save" /><input v-model="x.sub" class="rin" placeholder="тема главы" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></div>
-            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
+            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><button class="upen" title="Переименовать главу" @pointerdown.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
             <div class="ubar"><i :style="{ width: (chapterOf(i)?.pct ?? 0) + '%' }" /><em :style="badge(chapterOf(i)?.pct ?? 0)">{{ chapterOf(i)?.pct ?? 0 }}%</em></div>
           </template>
           <template v-else>
@@ -1468,6 +1470,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <template v-if="x.type === 'unit'">
             <!-- меню главы, как в Figma: подсветка блока главы -->
             <div v-if="sel === x.id && !drag.on && renaming !== x.id" class="nbar chbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
+              <button class="nb-i" title="Переименовать главу (Enter или двойной щелчок)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
+              <i class="nb-s" />
               <div class="nb-g"><button class="nb-c" :class="{ open: chMenu === 'color' }" title="Цвет главы" @click="chMenu = chMenu === 'color' ? null : 'color'"><i :style="{ background: x.hlc ?? HL_DEF }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
                 <div v-if="chMenu === 'color'" class="nb-pop sw hlsw"><button v-for="c in HL_COLORS" :key="c" :style="{ background: c }" :class="{ on: (x.hlc ?? HL_DEF) === c }" @click="setHlc(x, c)" /></div></div>
               <div class="nb-g"><button class="nb-t" :class="{ open: chMenu === 'op' }" title="Прозрачность плашки" @click="chMenu = chMenu === 'op' ? null : 'op'"><svg viewBox="0 0 24 24" class="opi"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" /></svg><small class="opv">{{ hlOp(x) }}%</small><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
@@ -1478,7 +1482,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <button class="cbw" :class="{ on: hlHow(x) === 'none' }" title="Без подсветки" @click="setHl(x, 'none')">Без</button>
             </div>
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Глава" @keydown.enter="renameDone" @keydown.esc="renameDone" @input="save" /><input v-model="x.sub" class="rin" placeholder="тема главы" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></div>
-            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><small class="nor">не на рельсе</small></div>
+            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><button class="upen" title="Переименовать главу" @pointerdown.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button><small class="nor">не на рельсе</small></div>
             <!-- прогресс главы, как в Busuu: сразу видна полоска (пока глава на доске — 0%) -->
             <div class="ubar"><i style="width: 0" /><em :style="badge(0)">0%</em></div>
           </template>
@@ -1790,6 +1794,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .chapbox { background: color-mix(in srgb, var(--hc) var(--ho, 8%), transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hc) 38%, transparent) }
 .chapbox.light { background: color-mix(in srgb, #fff var(--ho, 85%), transparent); box-shadow: inset 0 0 0 1.5px #e3e3e3, 0 2px 10px rgba(0, 0, 0, .04) }
 .chbar .nb-pop:not(.sw) { top: auto; bottom: calc(100% + 8px) }          /* списки меню главы открываются вверх — внизу выделение главы */
+.upen { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: none; color: #8a9099; cursor: pointer; opacity: 0; transition: opacity .15s } .upen svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.bead.unit:hover .upen, .bead.unit.on .upen { opacity: 1 } .upen:hover { background: rgba(0, 0, 0, .06); color: #252a31 }
+.uh.ren { display: grid; gap: 4px } .uh.ren .rin { border: 0; border-bottom: 2px solid #0d99ff; border-radius: 0; background: transparent; padding: 0 2px } .uh.ren .rin.big { font-size: 20px; font-weight: 900 } .uh.ren .rin:not(.big) { font-size: 14px; font-weight: 600; color: #4b5563 }
 .opi { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 1.8 } .opi path { fill: #fff; stroke: none } .opv { font-size: 13px; font-weight: 700; color: #fff; min-width: 34px; text-align: left }
 .hlsw { grid-template-columns: repeat(8, 32px) } .hlsw button[style*="#ffffff"] { box-shadow: inset 0 0 0 1.5px #ccc }
 .bead.unit.on { z-index: 30; outline: none }          /* выбранная глава — рамка вокруг всей главы, без второй рамки у названия */ .nor { flex: none; padding: 1px 7px; border-radius: 6px; background: #fff4c2; color: #8a6d00; font-size: 11px; font-weight: 800 }          /* меню главы — поверх соседних карточек */
