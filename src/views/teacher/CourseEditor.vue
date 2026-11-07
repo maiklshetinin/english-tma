@@ -316,7 +316,7 @@ const clip = ref(null)                                   // { course, step }
 function copyStep(s, course = doc.id) {
   const list = (Array.isArray(s) ? s : [s]).filter(Boolean); if (!list.length) return
   clip.value = { course, steps: JSON.parse(JSON.stringify(list)) }
-  showToast(`${list.length === 1 ? `Экран «${KINDS[list[0].kind].t}» скопирован` : `Скопировано экранов: ${list.length}`} — выберите урок или экран и нажмите Ctrl+V (или «Вставить» на ветке)`)
+  showToast(`${list.length === 1 ? `Экран «${KINDS[list[0].kind].t}» скопирован` : `Скопировано экранов: ${list.length}`} — Ctrl+V: в выбранный урок (после выбранного экрана) или на доску у курсора`)
 }
 async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = pick.lesson === lessonId ? pick.step : null) {
   if (!clip.value) return
@@ -359,6 +359,12 @@ async function pasteItems(at = null) {           // at — точка холст
   if (at) doc.loose.push(...list)
   else { const after = sel.value ? doc.items.findIndex(v => v.id === sel.value) : -1; doc.items.splice(after >= 0 ? after + 1 : doc.items.length, 0, ...list) }
   msel.value = list.map(x => x.id); sel.value = null; setProgress(doc.progress); save()
+}
+// экраны из буфера — на доску рядом с точкой, по порядку слева направо
+async function pasteFree(w) {
+  const made = []
+  for (const [k, src] of clip.value.steps.entries()) { const st = { ...JSON.parse(JSON.stringify(src)), id: stepId() }; await localCopies(st); made.push(st); doc.loose.push(freeOf(st, w.x - SCR_W / 2 + k * SCR_STEP, w.y - 24)) }
+  selectStep(null, null); msel.value = made.map(st => 'st:' + doc.id + ':' + st.id); save()
 }
 async function localCopies(s) {
   // файлы, которые пока только в этом браузере, — своя копия (иначе после загрузки в хранилище у одной из копий файл пропадёт)
@@ -902,6 +908,7 @@ function boardDown(e) {
     if (tool.value === 'pen' && !noteTool.value) { inkStart(e); board.value.setPointerCapture?.(e.pointerId); return }
     if (!noteTool.value) {                                    // стрелка: рамка выделения
       msel.value = []; sel.value = null; selectStep(null, null); noteSel.value = noteEdit.value = null; tray.value = null
+      window.getSelection()?.removeAllRanges()               // рамка не выделяет текст на экранах (иначе Ctrl+C скопирует текст, а не экраны)
       mq.value = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }; board.value.setPointerCapture?.(e.pointerId); return
     }
   }
@@ -911,8 +918,9 @@ function boardDown(e) {
 }
 const ghost = ref(null)                                   // выбран стикер — его «призрак» под курсором (как в FigJam)
 watch(() => noteTool.value, (v) => { if (!v) ghost.value = null })
+let lastW = null                                          // где мышь на холсте — туда Ctrl+V кладёт экраны, если урок не выбран
 function boardMove(e) {
-  sendCursor(e)
+  sendCursor(e); lastW = toWorld(e.clientX, e.clientY)
   if (noteTool.value && e.pointerType !== 'touch') { const w = toWorld(e.clientX, e.clientY); ghost.value = { x: Math.round(w.x - 120), y: Math.round(w.y - 120) } }
   if (ink) return inkMove(e)
   if (mq.value) return mqMove(e)
@@ -1055,7 +1063,9 @@ const onKey = (e) => {
   }
   if ((e.ctrlKey || e.metaKey) && !run.value && (e.code === 'KeyZ' || e.code === 'KeyY')) { e.preventDefault(); return e.code === 'KeyY' || e.shiftKey ? redo() : undo() }
   if ((e.ctrlKey || e.metaKey) && !run.value && (e.code === 'KeyC' || e.code === 'KeyV')) {
-    if (window.getSelection()?.toString()) return                  // выделен текст — обычное копирование
+    const picked = msel.value.length || sel.value || pick.step       // что-то выделено на холсте — копируем его, а не случайно выделенный текст
+    if (!picked && window.getSelection()?.toString()) return          // выделен текст — обычное копирование
+    window.getSelection()?.removeAllRanges()
     e.preventDefault()
     return e.code === 'KeyC' ? doCopy() : doPaste()
   }
@@ -1083,7 +1093,9 @@ function doCopy() {
 function doPaste(at = null) {
   if (!clip.value) return
   if (clip.value.items) return pasteItems(at)
-  return pasteStep(pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) ? selItem.value.id : activeLesson.value))
+  const L = at ? null : pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) ? selItem.value.id : activeLesson.value)
+  if (!L) return pasteFree(at ?? lastW ?? toWorld(W.value / 2, H.value / 2))      // урок не выбран — экраны ложатся на доску (у мыши или где открыли меню)
+  return pasteStep(L)
 }
 function doDelete() {
   if (msel.value.length) return delSelected()
@@ -1326,7 +1338,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div v-if="cm" class="cmenu" :style="{ left: cm.x + 'px', top: cm.y + 'px' }" @pointerdown.stop @contextmenu.prevent>
       <button :disabled="!canCopy" @click="cmDo(doCopy)">Копировать<kbd>{{ ctrl }}+C</kbd></button>
       <button :disabled="!clip" @click="cmDo(() => doPaste())">Вставить<kbd>{{ ctrl }}+V</kbd></button>
-      <button :disabled="!clip?.items" :title="clip?.items ? 'Задания встанут черновиками там, где открыли меню' : 'Сюда вставляются задания (экраны — в урок)'" @click="cmDo((w) => doPaste(w))">Вставить сюда</button>
+      <button :disabled="!clip" :title="clip?.items ? 'Задания встанут черновиками там, где открыли меню' : 'Экраны лягут на доску там, где открыли меню'" @click="cmDo((w) => doPaste(w))">Вставить сюда</button>
       <i />
       <button :disabled="!canDelete" @click="cmDo(doDelete)">Удалить<kbd>Delete</kbd></button>
       <i />
