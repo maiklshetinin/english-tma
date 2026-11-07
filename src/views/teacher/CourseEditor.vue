@@ -78,6 +78,7 @@ const save = () => {
   if (remote) return                       // это пришло от коллеги — не сохраняем и не пересылаем обратно
   if (!restoring) histMark()
   boxTick.value++; setTimeout(() => boxTick.value++, 260)          // рамка выбранного экрана — по новому месту (после анимации)
+  if (!doc.items.length && !restoring) ensureChapter(doc)          // всё удалили с рельса — снова глава с уроком и чекпоинтом
   if (doc.loose.some(x => x.type === 'screen' && !x.steps?.length)) doc.loose = doc.loose.filter(x => x.type !== 'screen' || x.steps?.length)   // экран на доске удалили — убираем и его место
   doc.dirty = true
   clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250)
@@ -173,14 +174,22 @@ onUnmounted(() => {
 // если в ней несохранённые правки другого курса — сначала отправляем их, потом открываем нужный.
 const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'line',
   items: [it('unit', 'Глава 1', { sub: 'Тема главы' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })], loose: [], notes: [], ink: [], dirty: false })
+// Курс всегда начинается с главы, как в Busuu: пустой рельс — сразу глава, урок и чекпоинт; рельс начинается с урока — сверху ставим главу
+function ensureChapter(d) {
+  if (!d.items.length) { d.items.push(it('unit', 'Глава 1', { sub: 'Тема главы' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })); return true }
+  if (d.items[0].type !== 'unit') { d.items.unshift(it('unit', 'Глава 1', { sub: 'Тема главы' })); return true }
+  return false
+}
 const fromServer = (c) => {
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
   const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], dirty: false })
   localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'; histReset()
+  if (ensureChapter(doc)) save()
 }
 const flush = () => apiRequest(`/courses/${doc.id}`, { method: 'PUT', body: JSON.stringify(payload()) }).then(r => { if (r.ok) doc.dirty = false })
 onMounted(async () => {
+  if (ensureChapter(doc)) save()
   histReset()                                              // история правок — с открытого курса
   const want = String(route.query.id || '')
   if (want === 'new' || (!online && want && want !== doc.id && want !== 'local')) {
