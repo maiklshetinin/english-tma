@@ -123,7 +123,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
       <section v-for="u in units" :key="u.id" class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
         <template v-if="u.title">
           <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b><svg v-if="u.tasks.length && u.pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
-          <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em>{{ u.pct }}%</em></div>
+          <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em :style="{ left: u.pct + '%', transform: `translate(-${u.pct}%, -50%)` }">{{ u.pct }}%</em></div>
         </template>
         <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1, peek: peek === x.id }]" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }">
           <button class="bead" :class="[x.type, state(x), { open: inline === x.id }]" @pointerenter="hover($event, true)" @pointerleave="hover($event, false)" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }" :title="(T[x.type] ?? T.lesson).t" @click="tap(x)">
@@ -199,7 +199,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .uh b { font-size: 24px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
 .ubar { position: relative; width: 100%; height: 10px; margin: 16px 0 12px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78 }
-.ubar em { position: absolute; right: 0; top: 50%; transform: translateY(-50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
+.ubar em { position: absolute; top: 50%; padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 /* строка рельса: линия, кружок, подпись */
 .vrow { position: relative; display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 22px; min-height: 130px; padding-left: 6px }
 .vrow::before { content: ''; position: absolute; left: 45px; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: #e6e6e6; z-index: 0 }
@@ -208,7 +208,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .bead { position: relative; z-index: 1; flex: none; display: grid; place-items: center; width: 68px; height: 68px; padding: 0; border: 0; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1fbe78; cursor: pointer }
 .bead:hover { filter: brightness(1.05) }
 .bead.todo { background: #f1f1f1; color: #b7b7b7; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e2e2e2 }
-.bead.current { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }
+.bead.current { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent); animation: softpulse 2.4s ease-in-out infinite }
+/* текущий урок — мягко «дышит», строка подсвечена, как в Busuu */
+@keyframes softpulse { 0%, 100% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 9px color-mix(in srgb, var(--c) 24%, transparent) } 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 17px color-mix(in srgb, var(--c) 7%, transparent) } }
+.vrow.current:not(.peek) { margin: 0 -14px; padding-left: 20px; padding-right: 14px; border-radius: 18px; background: #eef4fd } .vrow.current:not(.peek)::before { left: 59px }
 .bead.photo { border-radius: 16px }
 .ic { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
 .vid { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #000 } .vid.img { border-radius: 16px } .vid.img.round { border-radius: 50% }

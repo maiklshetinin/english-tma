@@ -356,7 +356,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <div class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">＋ Экран</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
     </div>
     <button v-if="canPaste && steps.length && !readonly && !free" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
-    <button v-if="!readonly && !free" class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
+    <!-- «+» на ветке убрали (07.11): экраны добавляют перетаскиванием из «Интерактива» или «+ Экран» в пустом уроке -->
 
     <!-- Итог урока -->
     <div v-if="!free" :ref="watchFrame" class="frame" :data-id="'fin-' + item.id" :style="{ left: cx(finI) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">

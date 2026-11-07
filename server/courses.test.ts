@@ -50,9 +50,9 @@ ok('экран на доске — только черновиком', await cod
 await C.put(me, 'k7', { ...course, items: [{ id: 'cp', type: 'checkpoint', title: 'Чекпоинт', ck: 'photo', file: 't/tg_1/c/k7/a.jpg', steps: [] }, { id: 'l2', type: 'lesson', title: '', sub: 'Знакомство', ck: 'zzz', file: 't/tg_1/c/k7/b.jpg' }] })
 const k7 = store.get('courses/k7').items
 ok('чекпоинт и обложка урока: фото/кружок; без вида обложки файл не берём', k7[0].type === 'checkpoint' && k7[0].ck === 'photo' && k7[0].file === 't/tg_1/c/k7/a.jpg' && !('file' in k7[1]) && !('ck' in k7[1]) && k7[1].sub === 'Знакомство')
-await C.put(me, 'k8', { ...course, items: [{ id: 'u1', type: 'unit', title: 'Глава', hl: 'none', hlw: true, hlc: '#C4E1FF' }, { id: 'u2', type: 'unit', title: 'Глава 2', hl: 'pink', hlw: 'yes', hlc: 'red' }] })
+await C.put(me, 'k8', { ...course, items: [{ id: 'u1', type: 'unit', title: 'Глава', hl: 'none', hlw: true, hlc: '#C4E1FF', hlo: 40.4 }, { id: 'u2', type: 'unit', title: 'Глава 2', hl: 'pink', hlw: 'yes', hlc: 'red' }] })
 const k8 = store.get('courses/k8').items
-ok('подсветка главы: вид, с ветками, цвет; мусор выкинут', k8[0].hl === 'none' && k8[0].hlw === true && k8[0].hlc === '#c4e1ff' && !('hl' in k8[1]) && !('hlw' in k8[1]) && !('hlc' in k8[1]))
+ok('подсветка главы: вид, с ветками, цвет; мусор выкинут', k8[0].hl === 'none' && k8[0].hlw === true && k8[0].hlc === '#c4e1ff' && k8[0].hlo === 40 && !('hl' in k8[1]) && !('hlw' in k8[1]) && !('hlc' in k8[1]))
 await C.put(me, 'k9', { ...course, loose: [{ id: 'gu', type: 'unit', title: 'Глава', x: 1, y: 2 }, { id: 'gl', type: 'lesson', title: '', x: 1, y: 90, grp: 'gu' }, { id: 'gx', type: 'lesson', title: '', x: 1, y: 90, grp: 'bad id!' }] })
 const k9 = store.get('courses/k9').loose
 ok('глава на доске: урок помнит главу (grp), плохой grp выкинут', k9[1].grp === 'gu' && !('grp' in k9[2]))

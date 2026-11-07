@@ -20,7 +20,7 @@ const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
 
 export interface Step { id: string; kind: string; [k: string]: unknown }
-export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; hlw?: true; hlc?: string; grp?: string; x?: number; y?: number; steps?: Step[] }
+export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; hlw?: true; hlc?: string; hlo?: number; grp?: string; x?: number; y?: number; steps?: Step[] }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
 export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number }
@@ -72,6 +72,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (type === 'unit' && r.hl === 'none') out.hl = 'none'
     if (type === 'unit' && r.hlw === true) out.hlw = true
     if (type === 'unit' && typeof r.hlc === 'string' && /^#[0-9a-f]{6}$/i.test(r.hlc)) out.hlc = r.hlc.toLowerCase()
+    if (type === 'unit' && typeof r.hlo === 'number' && r.hlo >= 0 && r.hlo <= 100) out.hlo = Math.round(r.hlo)          // прозрачность плашки, %
     // обложка урока (фото или кружок, как в Busuu): ck — вид, файл — в file
     const cover = INTERACTIVE.includes(type) && (r.ck === 'photo' || r.ck === 'video')
     if (cover) out.ck = r.ck as 'photo' | 'video'
