@@ -65,11 +65,13 @@ const seed = () => ({
 })
 const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], notes: [], ...v } } catch { /* нет */ } return seed() }
 const doc = reactive(load())
+const boxTick = ref(0)
 let st = 0
 if (!doc.id) doc.id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 const save = () => {
   if (remote) return                       // это пришло от коллеги — не сохраняем и не пересылаем обратно
   if (!restoring) histMark()
+  boxTick.value++; setTimeout(() => boxTick.value++, 260)          // рамка выбранного экрана — по новому месту (после анимации)
   if (doc.loose.some(x => x.type === 'screen' && !x.steps?.length)) doc.loose = doc.loose.filter(x => x.type !== 'screen' || x.steps?.length)   // экран на доске удалили — убираем и его место
   doc.dirty = true
   clearTimeout(st); st = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ } }, 250)
@@ -667,6 +669,14 @@ function mqMove(e) {
 }
 const mqStyle = computed(() => { const m = mq.value, r = board.value?.getBoundingClientRect() ?? { left: 0, top: 0 }; return m && { left: Math.min(m.x0, m.x1) - r.left + 'px', top: Math.min(m.y0, m.y1) - r.top + 'px', width: Math.abs(m.x1 - m.x0) + 'px', height: Math.abs(m.y1 - m.y0) + 'px' } })
 // рамка вокруг выделенного (с квадратиками по углам) — в координатах холста
+// один выбранный экран — рамка с квадратиками по углам, как в Figma (по самой карточке; тянуть — за любое место карточки)
+const oneBox = computed(() => {
+  if (sd.on || msel.value.length || !pick.step || pick.step === 'final' || !board.value) return null
+  void (view.x + view.y + view.z + (railHs[pick.lesson] ?? 0) + boxTick.value)        // пересчёт при сдвиге, масштабе и правках
+  const el = document.querySelector(`.frame[data-id="${pick.step}"] .card`); if (!el) return null
+  const r = el.getBoundingClientRect(), b = board.value.getBoundingClientRect()
+  return { left: Math.round(r.left - b.left - 6) + 'px', top: Math.round(r.top - b.top - 6) + 'px', width: Math.round(r.width + 12) + 'px', height: Math.round(r.height + 12) + 'px' }
+})
 const selBox = computed(() => {
   const ids = new Set(msel.value); if (!ids.size || sd.on) return null
   const bs = boxOf().filter(o => ids.has(o.id)); if (!bs.length) return null
@@ -1205,6 +1215,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
       </div>
       <!-- Рамка вокруг выделенного, с квадратиками по углам -->
+      <div v-if="oneBox" class="selbox" :style="oneBox"><i /><i /><i /><i /></div>
       <div v-if="selBox" class="selbox" :style="selBox"><b v-if="canMask" class="selmask" title="Тяните — выделенное поедет вместе (на ветку, другой урок или по доске)" @pointerdown.stop.prevent="maskDown" /><i /><i /><i /><i /></div>
       <div v-if="mq" class="mq" :style="mqStyle" />
     </div>

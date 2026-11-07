@@ -44,6 +44,9 @@ const finI = computed(() => Math.max(1, order.value.length))
 const endX = computed(() => cx(finI.value) + CW / 2)
 // Шапка карточки: тянуть — переставить на ветке, унести на другую ветку или на доску (тащит редактор курса, с выделенными вместе)
 function down(e, s) { if (e.button === 0) emit('grab', { e, s }) }
+// как в Figma: выбранный экран тянут за любое место карточки — кроме кнопок, полей и плееров (их можно нажимать как обычно)
+const LIVE = 'button, input, textarea, select, a, video, audio, label, [contenteditable], [role="button"], .aw, .wave'
+function cardDown(e, s) { if (!props.readonly && !isEdit(s) && !e.target.closest?.(LIVE)) down(e, s) }
 const cardStyle = (s, i) => {
   const lift = mv.on && s.id === mv.id
   const left = lift ? cx(steps.value.findIndex(v => v.id === s.id)) + mv.dx : cx(i)
@@ -202,7 +205,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <button v-if="!isEdit(s)" class="ib rs" title="Сбросить экран — пройти заново" @pointerdown.stop @click="resetStep(s)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></svg></button>
         <button v-if="!readonly" class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
-      <div class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at }]" @pointerdown.stop="emit('select', s.id)" @wheel="ownWheel">
+      <div class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at }]" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
       <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" @next="advance(s, $event)" />
       <template v-else>
@@ -373,6 +376,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 /* экран — открытая карточка на рельсе, как на доске */
 .frame { position: absolute; z-index: 3; transition: left .2s ease }
 .frame.free .flab { margin-top: 0 }
+.card.on:not(.editing) { cursor: grab } .card.on:not(.editing):active { cursor: grabbing }
 .fin0 { display: grid; justify-items: center; gap: 8px; padding: 34px 26px; text-align: center; color: var(--hint); font-size: 13px; font-weight: 600 }
 .fin0 b { color: #333; font-size: 17px } .fi { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--yellow); color: #fff }
 .fi svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
