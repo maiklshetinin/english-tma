@@ -11,7 +11,7 @@ import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
 import LessonPlayer from './LessonPlayer.vue'
 import { useDecksStore } from '../stores/decks'
-import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, gapParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN } from '../utils/lesson'
+import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, gapParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -31,7 +31,7 @@ const changed = () => emit('change')
 const steps = computed(() => props.item.steps ?? [])
 
 // ---------- Раскладка: карточки на горизонтальном рельсе ----------
-const CW = 460, GAP = 60, STEP = CW + GAP, X0 = 280, TOP = -40      // ширина экрана, промежуток, отступ от урока (под его подпись); экраны висят под линией на «ножке»
+const CW = 460, GAP = 60, STEP = CW + GAP, X0 = RAIL_X0, TOP = -40      // ширина экрана, промежуток, отступ от урока (под его подпись); экраны висят под линией на «ножке»
 const mv = reactive({ id: null, dx: 0, to: 0, sx: 0, on: false })
 const order = computed(() => {
   const list = steps.value.filter(s => !(mv.on && s.id === mv.id))

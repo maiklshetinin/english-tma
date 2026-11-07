@@ -25,7 +25,7 @@ import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -395,7 +395,7 @@ async function loadOthers() {
 }
 watch(allCourses, (v) => { if (v) loadOthers(); else { others.value = []; opick.value = null } })
 // ширина курса на холсте: самая длинная ветка урока
-const widthOf = (items) => Math.max(760, ...items.filter(x => INTERACTIVE.includes(x.type)).map(x => 280 + ((x.steps?.length ?? 0) + 1) * 520 + 120))
+const widthOf = (items) => Math.max(760, ...items.filter(x => INTERACTIVE.includes(x.type)).map(x => RAIL_X0 + ((x.steps?.length ?? 0) + 1) * 520 + 120))
 const othersL = computed(() => {
   let x = widthOf(doc.items) + 260
   return others.value.map((c) => {
@@ -438,7 +438,7 @@ let sdP = null
 const sdMoving = computed(() => (sd.on && !sd.tray ? { ids: sd.list.map(o => o.s.id), dx: sd.w.x - sd.s0.x, dy: sd.w.y - sd.s0.y } : null))
 // где лежит экран: на ветке урока (lesson, i) или на доске (screen); левый верх его карточки
 function whereStep(st) {
-  for (const r of lessonRails.value) { const i = r.x.steps?.indexOf(st) ?? -1; if (i >= 0) return { host: r.x, i, x: r.p.x + 280 + i * SCR_STEP, y: r.p.y + 40 } }
+  for (const r of lessonRails.value) { const i = r.x.steps?.indexOf(st) ?? -1; if (i >= 0) return { host: r.x, i, x: r.p.x + RAIL_X0 + i * SCR_STEP, y: r.p.y + 40 } }
   for (const f of doc.loose) if (f.type === 'screen' && f.steps?.[0] === st) return { host: f, i: 0, x: f.x, y: f.y }
   for (const x of [...doc.items, ...doc.loose]) { const i = x.steps?.indexOf(st) ?? -1; if (i >= 0) return { host: x, i, x: 0, y: 0 } }
   return null
@@ -447,9 +447,9 @@ function whereStep(st) {
 function screenTarget(w) {
   for (const r of lessonRails.value) {
     const n = r.x.steps?.length ?? 0, h = railHs[r.x.id] ?? 420
-    if (w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h) || w.x < r.p.x + 120 || w.x > r.p.x + 280 + Math.max(1, n) * SCR_STEP + SCR_W + 40) continue          // до конца «Итога урока»
-    const i = Math.max(0, Math.min(n, Math.floor((w.x - r.p.x - 280 + SCR_STEP / 2) / SCR_STEP)))
-    return { L: r.x, i, mark: { x: r.p.x + 280 + i * SCR_STEP - 32, y: r.p.y - 24, h: Math.min(700, h) + 70 } }
+    if (w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h) || w.x < r.p.x + 120 || w.x > r.p.x + RAIL_X0 + Math.max(1, n) * SCR_STEP + SCR_W + 40) continue          // до конца «Итога урока»
+    const i = Math.max(0, Math.min(n, Math.floor((w.x - r.p.x - RAIL_X0 + SCR_STEP / 2) / SCR_STEP)))
+    return { L: r.x, i, mark: { x: r.p.x + RAIL_X0 + i * SCR_STEP - 32, y: r.p.y - 24, h: Math.min(700, h) + 70 } }
   }
   for (const [k, x] of order.value.entries()) {
     if (!INTERACTIVE.includes(x.type)) continue
@@ -670,7 +670,7 @@ function cardBox(id) {
 }
 const boxOf = () => {                              // всё, что можно выделить, с рамкой в координатах холста
   const out = []
-  order.value.forEach((x, i) => { const p = pos(i); out.push(x.type === 'unit' ? { id: x.id, k: 'item', x0: p.x - 46, y0: p.y - 40, x1: p.x + 254, y1: p.y + 20 } : { id: x.id, k: 'item', x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) })   // юнит — заголовок с полоской справа
+  order.value.forEach((x, i) => { const p = pos(i); out.push(x.type === 'unit' ? { id: x.id, k: 'item', x0: p.x - 46, y0: p.y - 40, x1: p.x + 324, y1: p.y + 20 } : { id: x.id, k: 'item', x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) })   // юнит — заголовок с полоской справа
   for (const x of doc.loose) {
     if (x.type !== 'screen') { out.push({ id: x.id, k: 'item', x0: x.x - 34, y0: x.y - 34, x1: x.x + 34, y1: x.y + 34 }); continue }
     const st = x.steps?.[0]; if (st) out.push({ id: 'st:' + doc.id + ':' + st.id, k: 'step', course: doc.id, lesson: x.id, s: st, x0: x.x, y0: x.y, x1: x.x + 460, y1: x.y + Math.min(700, railHs[x.id] ?? 420), ...cardBox(st.id) })
@@ -683,7 +683,7 @@ const boxOf = () => {                              // всё, что можно 
   const rails = [...lessonRails.value.map(r => ({ course: doc.id, x: r.x, p: r.p, key: '' })),
     ...othersL.value.flatMap(o => (o.items ?? []).map((x, i) => ({ course: o.id, x, p: { x: o.ox + o.L[i].x, y: o.L[i].y }, key: 'o' + o.id })).filter(r => INTERACTIVE.includes(r.x.type)))]
   for (const r of rails) (r.x.steps ?? []).forEach((st, i) => {
-    const x0 = r.p.x + 280 + i * 520, y0 = r.p.y + 40
+    const x0 = r.p.x + RAIL_X0 + i * 520, y0 = r.p.y + 40
     out.push({ id: 'st:' + r.course + ':' + st.id, k: 'step', course: r.course, lesson: r.x.id, s: st, x0, y0, x1: x0 + 460, y1: y0 + Math.min(700, railHs[r.key + r.x.id] ?? 420), ...(r.course === doc.id ? cardBox(st.id) : null) })
   })
   for (const k of doc.ink ?? []) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (let i = 0; i < k.p.length; i += 2) { x0 = Math.min(x0, k.p[i]); x1 = Math.max(x1, k.p[i]); y0 = Math.min(y0, k.p[i + 1]); y1 = Math.max(y1, k.p[i + 1]) } out.push({ id: k.id, k: 'ink', x0: x0 - k.w, y0: y0 - k.w, x1: x1 + k.w, y1: y1 + k.w }) }
@@ -821,7 +821,9 @@ const layoutOf = (list, m = mode.value, key = '') => {
   return list.map((x, i) => {
     if (i) {                                     // под урок с экранами — место во всю высоту его экранов (без прокрутки)
       const gap = x.type === 'unit' ? G.unitGap : G.step, prev = list[i - 1]
-      y += hasRail(prev, key) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
+      // глава: от низа плашки предыдущей главы — всегда CH_GAP (низ плашки = последнее задание + 56, у урока с веткой — + ветка)
+      if (x.type === 'unit' && m !== 'wave') y += 56 + (hasRail(prev, key) ? 40 + (railHs[key + prev.id] ?? RAIL_H) : 0) + CH_GAP + 70
+      else y += hasRail(prev, key) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
     }
     const off = m === 'wave' ? K[i % 8] * G.amp : 0
     return { x: off, y, side: off > 0 ? 'l' : 'r' }
@@ -880,16 +882,16 @@ const badge = (pct) => ({ left: pct + '%', transform: `translate(-${pct}%, -50%)
 // прозрачность плашки главы (заливка), %: по умолчанию лёгкая; 100 — непрозрачная
 const HL_OP = [8, 20, 40, 70, 100], hlOp = (u) => u.hlo ?? ((u.hlc ?? HL_DEF) === '#ffffff' ? 85 : 8)
 function setHlo(u, v) { if (v === ((u.hlc ?? HL_DEF) === '#ffffff' ? 85 : 8)) delete u.hlo; else u.hlo = v; chMenu.value = null; save() }
-// плашка главы — узкая, только рельс с подписями уроков: ветки экранов (от кружка +280) на неё не заезжают
-const CH_X0 = -70, CH_X1 = 262
+// плашка главы — рельс с названием, полоской и подписями уроков; ветки экранов начинаются правее (RAIL_X0), на неё не заезжают
+const CH_X0 = -70, CH_X1 = 340, CH_GAP = 40
 const chapterBoxes = computed(() => {
   const L = layout.value, out = [], rails = new Map(lessonRails.value.map(r => [r.x.id, r]))
   chapters.value.forEach((c, k) => {
     const u = order.value[c.i]; if (!u) return
     const next = chapters.value[k + 1], lastIt = order.value[c.last]
-    const bottom = next ? L[next.i].y - 84 : L[c.last].y + 56 + (hasRail(lastIt) ? 40 + (railHs[lastIt.id] ?? RAIL_H) : 0)
+    const bottom = L[c.last].y + 56 + (c.last > c.i && hasRail(lastIt) ? 40 + (railHs[lastIt.id] ?? RAIL_H) : 0)          // низ — по последнему заданию главы (тот же отступ, что в раскладке)
     let x0 = mode.value === 'wave' ? -330 : CH_X0, x1 = mode.value === 'wave' ? 330 : CH_X1
-    if (u.hlw) for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) x1 = Math.max(x1, r.p.x + 280 + Math.max(1, r.x.steps?.length ?? 0) * 520 + 460 + 36) }
+    if (u.hlw) for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) x1 = Math.max(x1, r.p.x + RAIL_X0 + Math.max(1, r.x.steps?.length ?? 0) * 520 + 460 + 36) }
     const top = L[c.i].y - 70
     const hc = u.hlc ?? HL_DEF
     const y1 = top + Math.max(120, bottom - top)
@@ -901,7 +903,7 @@ const chapterBoxes = computed(() => {
     const ks = doc.loose.filter(l => l.grp === u.id && !dragIds.value.has(l.id))
     let x0 = u.x + CH_X0, x1 = u.x + CH_X1, y1 = u.y + 70
     for (const k of ks) {
-      x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, u.hlw ? k.x + 280 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + CH_X1)
+      x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, u.hlw ? k.x + RAIL_X0 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + CH_X1)
       y1 = Math.max(y1, k.y + 56 + (BRANCH.includes(k.type) ? 40 + Math.min(700, railHs[k.id] ?? RAIL_H) : 0))
     }
     const hc = u.hlc ?? HL_DEF, top = u.y - 70
@@ -1695,7 +1697,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .opi { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 1.8 } .opi path { fill: #fff; stroke: none } .opv { font-size: 13px; font-weight: 700; color: #fff; min-width: 34px; text-align: left }
 .hlsw { grid-template-columns: repeat(8, 32px) } .hlsw button[style*="#ffffff"] { box-shadow: inset 0 0 0 1.5px #ccc }
 .bead.unit.on { z-index: 30; outline: none }          /* выбранная глава — рамка вокруг всей главы, без второй рамки у названия */ .nor { flex: none; padding: 1px 7px; border-radius: 6px; background: #fff4c2; color: #8a6d00; font-size: 11px; font-weight: 800 }          /* меню главы — поверх соседних карточек */
-.chbar { bottom: calc(100% + 46px); gap: 4px; padding: 0 8px; z-index: 40 }
+.nbar.chbar { bottom: calc(100% + 50px); gap: 4px; padding: 0 8px; z-index: 40 }
 .cbw { height: 34px; padding: 0 10px !important; border-radius: 8px; font-size: 13px !important; font-weight: 700 } .cbw:hover:not(:disabled) { background: #383838 } .cbw.on { background: #383838; box-shadow: inset 0 0 0 1.5px #0d99ff } .cbw:disabled { opacity: .35; cursor: default }
 .chap { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid #e3e3e3; border-radius: 22px; background: #fff; pointer-events: none }
 .chap.full { border-color: #1fbe78; background: #f2fbf7 }
@@ -1718,10 +1720,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 /* юнит: заголовок главы и полоска прогресса */
 .bead.unit { width: auto; height: auto; margin: -40px 0 0 -46px; display: grid; gap: 10px; place-items: stretch; padding: 0; border-radius: 0; background: none !important; box-shadow: none !important; color: #252a31; cursor: grab; outline-offset: 10px }
 .bead.unit.todo { box-shadow: none } .bead.unit .sign, .bead.unit .no { display: none }
-.uh { display: flex; align-items: center; gap: 8px; width: 290px; white-space: nowrap }
+.uh { display: flex; align-items: center; gap: 8px; width: 360px; white-space: nowrap }
 .uh b { font-size: 20px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
-.ubar { position: relative; width: 300px; height: 10px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
+.ubar { position: relative; width: 370px; height: 10px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
 .ubar em { position: absolute; top: 50%; transform: translate(-50%, -50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
 .ftree { opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
