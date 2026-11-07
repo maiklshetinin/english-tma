@@ -11,7 +11,7 @@ import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
 import LessonPlayer from './LessonPlayer.vue'
 import { useDecksStore } from '../stores/decks'
-import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, gapParts } from '../utils/lesson'
+import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, gapParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN } from '../utils/lesson'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -155,6 +155,8 @@ const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.obs
 // ---------- Живая ветка: экраны проходятся прямо здесь, как у ученика ----------
 // Карандаш — экран правится; «Сохранить» — снова живой. Пустой (незаполненный) экран сразу открыт для правки.
 const editing = reactive({})
+// своё время экрана; совпало со временем по типу — не храним
+function setMin(s, m) { if (m === KIND_MIN[s.kind]) delete s.min; else s.min = m; changed() }
 const isEdit = (s) => !props.readonly && (editing[s.id] ?? !!stepIssue(s))
 function save(s) { keepCard(s); editing[s.id] = false; changed() }
 // Прохождение ветки: сколько экранов пройдено, счёт каждого, время — прогресс и итог меняются на ходу
@@ -202,7 +204,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
       <div class="flab" :class="{ ro: readonly }" :title="readonly ? 'Экран другого курса — скопируйте и вставьте в свой' : 'Тяните, чтобы переставить'" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
         <svg class="grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
-        <span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[s.kind].ic" /></span><b>{{ i + 1 }} · {{ KINDS[s.kind].t }}</b>
+        <span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[s.kind].ic" /></span><b>{{ i + 1 }} · {{ KINDS[s.kind].t }}</b><span class="tm" :title="'Примерно столько ученик потратит на экран — из таких времён складывается время урока'">≈ {{ fmtMin(stepMin(s)) }} мин</span>
         <i v-if="stepIssue(s)" class="iss" :title="stepIssue(s)">{{ stepIssue(s) }}</i>
         <template v-if="!readonly"><button class="ib mv" title="На шаг левее" :disabled="i === 0" @pointerdown.stop @click="shift(s, -1)">‹</button><button class="ib mv" title="На шаг правее" :disabled="i === order.length - 1" @pointerdown.stop @click="shift(s, 1)">›</button></template>
         <button v-if="!readonly" class="ib pen" :class="{ on: isEdit(s) }" :title="isEdit(s) ? 'Сейчас правите — «Сохранить» внизу экрана' : 'Изменить экран'" @pointerdown.stop @click="isEdit(s) ? save(s) : (editing[s.id] = true)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
@@ -348,7 +350,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         <button class="add deck" @click="openPk(s, 'pairs')">Пары из карточек</button>
       </div>
 
-      <div class="cf"><span v-if="s.kind === 'choice' && s.opts?.length" class="ca"><b>Верный ответ</b><em>{{ s.opts[s.ans ?? 0]?.w || '…' }}</em></span><button class="go play" @click="save(s)">Сохранить</button></div>
+      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'choice' && s.opts?.length" class="ca"><b>Верный ответ</b><em>{{ s.opts[s.ans ?? 0]?.w || '…' }}</em></span><button class="go play" @click="save(s)">Сохранить</button></div>
       </template>
       </div>
     </div>
@@ -401,6 +403,8 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .card { display: flex; flex-direction: column; min-height: 330px; box-sizing: border-box; background: #fff; border: 1px solid #e3e3e3; border-radius: 22px; box-shadow: 0 2px 12px rgba(0, 0, 0, .06); cursor: default; user-select: none; overflow: hidden }
 .card.on { outline: 3px solid #0d99ff; outline-offset: 3px }
 .pbar { flex: none; height: 8px; margin: 18px 120px 4px; border-radius: 4px; background: #e8e8e8; overflow: hidden } .pbar i { display: block; height: 100%; border-radius: 4px; background: #1fbe78 }
+.tm { flex: none; padding: 1px 6px; border-radius: 6px; background: #f1f1f1; color: #777; font-size: 11px; font-weight: 800; white-space: nowrap }
+.mn { display: flex; align-items: center; gap: 4px; margin-right: auto; font-size: 13px; font-weight: 800; color: #555 } .mn select { padding: 5px 6px; border: 1px solid #dcdcdc; border-radius: 8px; background: #fff; font: inherit }
 .cf { flex: none; display: flex; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid #ececec }
 .ca { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 13px } .ca b { font-weight: 900 } .ca em { padding: 6px 12px; border-radius: 9px; background: #f1f6ff; font-style: normal; font-weight: 700 }
 .go { border: 0; border-radius: 20px; padding: 8px 22px; background: var(--blue); color: #fff; font: inherit; font-size: 13px; font-weight: 800; opacity: .9 }

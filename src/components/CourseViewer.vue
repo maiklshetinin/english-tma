@@ -8,15 +8,18 @@ import { API, apiRequest, fb, isDemo } from '../firebase'
 import { audSrc, imgSrc } from '../composables/useCardMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import BackButton from './BackButton.vue'
-import { INTERACTIVE, stepIssue } from '../utils/lesson'
+import { INTERACTIVE, stepIssue, itemMin } from '../utils/lesson'
 
 const router = useRouter()
 const online = !isDemo && !!API && !!fb
 const LOCAL = 'tma.courseRail.v1'
 const props = defineProps({ id: { type: String, default: null } })          // выбранный курс (из списка курсов)
 const course = ref(null), err = ref(''), loading = ref(false)
-const onEsc = (e) => { if (e.key === 'Escape' && open.value) open.value = null }
-onMounted(() => addEventListener('keydown', onEsc)); onUnmounted(() => removeEventListener('keydown', onEsc))
+const onEsc = (e) => { if (e.key !== 'Escape') return; if (open.value) open.value = null; else peek.value = null }
+// нажали мимо карточки урока — она закрывается
+const onDown = (e) => { if (peek.value && !e.target.closest?.('.pv, .vrow.peek')) peek.value = null }
+onMounted(() => { addEventListener('keydown', onEsc); addEventListener('pointerdown', onDown) })
+onUnmounted(() => { removeEventListener('keydown', onEsc); removeEventListener('pointerdown', onDown) })
 
 // типы заданий — как в редакторе курса
 const T = {
@@ -34,7 +37,7 @@ const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [
 const state = (x) => (x.n < done.value ? 'done' : x.n === done.value ? 'current' : 'todo')
 
 async function loadCourse(id) {
-  open.value = null; course.value = null; if (!id) return
+  open.value = null; peek.value = null; course.value = null; if (!id) return
   loading.value = true
   try {
     if (!online) course.value = JSON.parse(localStorage.getItem(LOCAL))
@@ -61,10 +64,15 @@ const ready = (x) => INTERACTIVE.includes(x.type) && (x.steps ?? []).some(s => !
 const open = ref(null)
 // кружок и фото — открываются прямо тут, под строкой (как в Telegram), остальное — во весь экран
 const inline = ref(null)
+// урок с экранами — сначала карточка, как в Busuu: тип, примерное время (сумма времён экранов), «Поехали!»
+const peek = ref(null)
 function tap(x) {
   if (x.type === 'video' || x.type === 'photo') { inline.value = inline.value === x.id ? null : x.id; return }
+  if (ready(x)) { peek.value = peek.value === x.id ? null : x.id; return }
   open.value = x
 }
+const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
+function go(x) { peek.value = null; open.value = x }
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value?.steps ?? []).filter(s => !stepIssue(s)))
@@ -100,7 +108,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
 <template>
   <div class="cv">
-    <h3 class="vh">Как видит ученик <small>нажмите на задание — урок запустится во весь экран</small></h3>
+    <h3 class="vh">Как видит ученик <small>нажмите на урок — покажется его время и «Поехали!»</small></h3>
     <p v-if="err" class="hint">Не удалось загрузить курс {{ err }}</p>
     <div v-if="loading || !course" class="card hint none">{{ loading ? 'Загрузка…' : 'Выберите курс выше' }}</div>
 
@@ -114,14 +122,21 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b><svg v-if="u.tasks.length && u.pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
           <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em>{{ u.pct }}%</em></div>
         </template>
-        <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1 }]">
+        <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1, peek: peek === x.id }]" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }">
           <button class="bead" :class="[x.type, state(x), { open: inline === x.id }]" @pointerenter="hover($event, true)" @pointerleave="hover($event, false)" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }" :title="(T[x.type] ?? T.lesson).t" @click="tap(x)">
             <video v-if="x.type === 'video' && fileOf(x)" :src="fileOf(x)" class="vid" muted loop playsinline preload="metadata" />
             <img v-else-if="x.type === 'photo' && fileOf(x)" :src="fileOf(x)" class="vid img" alt="" />
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
-          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, x.steps?.length ? screens(x.steps.length) : ''].filter(Boolean).join(' · ') }}</small></div>
+          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${itemMin(x, okSteps(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
+          <!-- карточка урока перед стартом -->
+          <div v-if="peek === x.id" class="pv" @click.stop>
+            <small>{{ (T[x.type] ?? T.lesson).t }} · ≈ {{ itemMin(x, okSteps(x)) }} мин</small>
+            <b>{{ x.title || (T[x.type] ?? T.lesson).t }}</b>
+            <p>{{ screens(okSteps(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
+            <button class="pgo" @click="go(x)">{{ state(x) === 'done' ? 'Пройти ещё раз' : 'Поехали!' }}</button>
+          </div>
           <!-- открыт прямо тут: кружок крупно со звуком / фото -->
           <div v-if="inline === x.id" class="kin" @click.stop>
             <video v-if="x.type === 'video' && fileOf(x)" :src="fileOf(x)" class="kbig" autoplay playsinline @click="$event.target.paused ? $event.target.play() : $event.target.pause()" @ended="$event.target.currentTime = 0" />
@@ -193,6 +208,15 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .cap { flex: 0 1 auto; display: grid; justify-items: start; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 17px; font-weight: 800; color: #252a31; cursor: pointer }
 .cap small { font-size: 14px; font-weight: 500; color: #4b5563 }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; font-weight: 900; text-transform: uppercase }
+/* карточка урока перед стартом (как в Busuu) */
+.vrow.peek { margin: 0 -14px; padding-left: 20px; padding-right: 14px; border-radius: 18px; background: color-mix(in srgb, var(--c) 9%, #fff) }
+.vrow.peek::before { left: 59px }
+.pv { position: relative; z-index: 2; flex: 0 0 100%; display: grid; gap: 6px; margin: -14px 0 18px; padding: 18px 20px 20px; border-radius: 18px; background: var(--c); color: #fff; box-shadow: 0 10px 28px color-mix(in srgb, var(--c) 35%, transparent) }
+.pv::before { content: ''; position: absolute; left: 30px; top: -9px; border: 10px solid transparent; border-top: 0; border-bottom-color: var(--c) }
+.pv small { font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; opacity: .85 }
+.pv b { font-size: 22px; font-weight: 900; line-height: 1.2 } .pv p { margin: 0 0 8px; font-size: 14px; font-weight: 600; opacity: .9 }
+.pgo { width: 100%; padding: 14px; border: 0; border-radius: 14px; background: #fff; color: var(--d); font: inherit; font-size: 16px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
+.pgo:active { transform: translateY(2px); box-shadow: none }
 /* во весь экран */
 .full { position: fixed; inset: 0; z-index: 1000; background: #fff; display: flex; flex-direction: column }
 .full :deep(.lp) { height: 100% }

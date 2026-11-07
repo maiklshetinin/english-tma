@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TEMPLATES, gapParts, sameAnswer, newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs } from './lesson'
+import { TEMPLATES, gapParts, sameAnswer, newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs, stepMin, lessonMin, fmtMin } from './lesson'
 
 describe('интерактивный урок', () => {
   it('новые экраны — с пустыми полями своего типа', () => {
@@ -41,5 +41,16 @@ describe('интерактивный урок', () => {
   })
   it('перемешивание не теряет элементы', () => {
     expect(shuffle([1, 2, 3, 4]).sort()).toEqual([1, 2, 3, 4])
+  })
+})
+
+describe('время урока', () => {
+  it('экран — по типу или своё, урок — сумма вверх до минуты', () => {
+    expect(stepMin({ id: 'a', kind: 'intro' })).toBe(0.5)
+    expect(stepMin({ id: 'a', kind: 'pairs', min: 3 })).toBe(3)
+    expect(lessonMin([])).toBe(0)
+    expect(lessonMin([{ id: 'a', kind: 'intro' }])).toBe(1)
+    expect(lessonMin([{ id: 'a', kind: 'answer' }, { id: 'b', kind: 'pairs' }, { id: 'c', kind: 'gap' }])).toBe(3)
+    expect([fmtMin(0.5), fmtMin(1.5), fmtMin(2)]).toEqual(['½', '1½', '2'])
   })
 })

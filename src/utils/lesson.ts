@@ -23,6 +23,7 @@ export interface Step {
   pairs?: Pair[]                                                     // «Пары»
   phrase?: string; note?: string                                     // «Собери фразу»: фраза (слова через пробел), перевод — в tr, пояснение
   text?: string                                                      // «Подсказка»: текст правила; фразы с переводом и звуком — в opts; «Ответь на вопрос»: вопрос
+  min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
 }
 
 /** Задания курса, в которые можно собрать экраны */
@@ -50,6 +51,16 @@ export const KINDS: Record<StepKind, { t: string; d: string; c: string; dk: stri
     ic: '<path d="M4 5h16v10H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9M12 13.2v.1"/>' },
 }
 export const KIND_LIST = Object.keys(KINDS) as StepKind[]
+
+/** Примерное время экрана по типу, в минутах (как «11 MIN» у урока в Busuu); репетитор может поставить своё */
+export const KIND_MIN: Record<StepKind, number> = { intro: 0.5, choice: 0.5, pairs: 1, order: 1, tip: 1, speak: 1, gap: 0.5, answer: 1.5 }
+export const MIN_CHOICES = [0.5, 1, 1.5, 2, 3, 5, 10]
+export const stepMin = (s: Step) => (typeof s.min === 'number' && s.min > 0 ? s.min : KIND_MIN[s.kind] ?? 1)
+/** Время урока — сумма экранов, округлённая вверх до минуты (пустой урок — 0) */
+export const lessonMin = (steps?: Step[]) => { const m = (steps ?? []).reduce((a, s) => a + stepMin(s), 0); return m ? Math.max(1, Math.ceil(m - 1e-9)) : 0 }
+/** Время урока для ученика: своё (репетитор поставил у урока) или сумма экранов */
+export const itemMin = (x: { min?: number; steps?: Step[] }, steps = x.steps) => (typeof x.min === 'number' && x.min >= 1 ? x.min : lessonMin(steps))
+export const fmtMin = (m: number) => (m < 1 ? '½' : String(m).replace('.5', '½').replace(/^0½/, '½'))
 export const FINAL = { t: 'Итог урока', c: 'var(--yellow)', dk: 'var(--yellow-d)',
   ic: '<path d="M8 4.5h8v5.5a4 4 0 0 1-8 0z"/><path d="M8 6.5H4.5v.8A3.7 3.7 0 0 0 8 11M16 6.5h3.5v.8A3.7 3.7 0 0 1 16 11"/><path d="M12 14v4M8.5 20h7"/>' }
 

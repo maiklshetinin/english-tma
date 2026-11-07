@@ -20,7 +20,7 @@ const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
 
 export interface Step { id: string; kind: string; [k: string]: unknown }
-export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; x?: number; y?: number; steps?: Step[] }
+export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; x?: number; y?: number; steps?: Step[]; min?: number }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
 export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number }
@@ -39,6 +39,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     const o: Step = { id: String(r.id), kind }
     if (kind === 'intro') { for (const k of ['word', 'tr']) put(o, k, str(r[k], 120)); for (const k of ['ex', 'exTr']) put(o, k, str(r[k], 300)) }
     for (const k of ['image', 'audio', 'video', 'exAudio']) put(o, k, ref(r[k]))
+    // примерное время экрана (минуты, шаг ½) — своё, если репетитор поставил
+    if (typeof r.min === 'number' && Number.isFinite(r.min) && r.min > 0) (o as Record<string, unknown>).min = Math.min(60, Math.max(0.5, Math.round(r.min * 2) / 2))
     if (kind === 'choice') {
       o.ask = r.ask === 'tr' ? 'tr' : 'audio'; o.show = r.show === 'text' ? 'text' : 'pics'
       o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 4).map((x) => {
@@ -72,6 +74,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     }
     if (INTERACTIVE.includes(type) && Array.isArray(r.steps)) {
       out.steps = r.steps.slice(0, STEPS_MAX).map(step)
+      // своё время урока (минуты) — вместо суммы времён экранов
+      if (typeof r.min === 'number' && Number.isFinite(r.min) && r.min >= 1) out.min = Math.min(240, Math.round(r.min))
       if (new Set(out.steps.map((x) => x.id)).size !== out.steps.length) throw fail(400, 'duplicate step id')
     }
     if (loose) { out.x = num(r.x); out.y = num(r.y) }
