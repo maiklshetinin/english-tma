@@ -418,9 +418,10 @@ async function removeStepKey() {
 // Тянут: мини-окошко из «Интерактива» (новый экран), экран с ветки или с доски; выделенные рамкой экраны — все вместе.
 const SCR_W = 460, SCR_STEP = 520
 const freeOf = (st, x, y) => ({ id: freshId('f'), type: 'screen', title: '', x: Math.round(x), y: Math.round(y), steps: [st] })
-const sd = reactive({ on: false, list: [], tray: null, ox: 0, oy: 0, w: { x: 0, y: 0 }, to: null })
+const sd = reactive({ on: false, list: [], tray: null, preview: [], extra: null, ox: 0, oy: 0, s0: { x: 0, y: 0 }, w: { x: 0, y: 0 }, to: null })
 let sdP = null
-const sdIds = computed(() => (sd.on && !sd.tray ? sd.list.map(o => o.s.id) : []))
+// тащим сами окна, в полный размер (как в FigJam): сдвиг для экранов на ветках и на доске
+const sdMoving = computed(() => (sd.on && !sd.tray ? { ids: sd.list.map(o => o.s.id), dx: sd.w.x - sd.s0.x, dy: sd.w.y - sd.s0.y } : null))
 // где лежит экран: на ветке урока (lesson, i) или на доске (screen); левый верх его карточки
 function whereStep(st) {
   for (const r of lessonRails.value) { const i = r.x.steps?.indexOf(st) ?? -1; if (i >= 0) return { host: r.x, i, x: r.p.x + 280 + i * SCR_STEP, y: r.p.y + 40 } }
@@ -442,9 +443,9 @@ function screenTarget(w) {
   }
   return null
 }
-function sdStart(e, list, tray = null) {
+function sdStart(e, list, tray = null, extra = null) {
   const w = toWorld(e.clientX, e.clientY)
-  sdP = { sx: e.clientX, sy: e.clientY, list, tray, w }
+  sdP = { sx: e.clientX, sy: e.clientY, list, tray, w, extra }
   addEventListener('pointermove', sdMove); addEventListener('pointerup', sdUp, { once: true }); addEventListener('pointercancel', sdUp, { once: true })
 }
 // с ветки или с доски: тащим этот экран, а если он среди выделенных рамкой — все выделенные свои экраны
@@ -455,26 +456,47 @@ function grabStep({ e, s: st }) {
   if (list.length) sdStart(e, list)
 }
 function trayDown(e, id) { if (e.button === 0) sdStart(e, null, id) }
+// Выделено рамкой — тянуть можно с любого места выделения (как в FigJam): экраны, стикеры, рисунки и черновики-кружки едут вместе
+const canMask = computed(() => msel.value.length > 0 && !sd.on && boxOf().some(o => msel.value.includes(o.id) && (o.k === 'note' || o.k === 'ink' || (o.k === 'step' && o.course === doc.id) || (o.k === 'item' && doc.loose.some(l => l.id === o.id)))))
+function maskDown(e) {
+  if (e.button !== 0) return
+  const ids = new Set(msel.value), bs = boxOf().filter(o => ids.has(o.id))
+  const steps = bs.filter(o => o.k === 'step' && o.course === doc.id).map(o => ({ s: o.s, at: whereStep(o.s) })).filter(o => o.at)
+  const extra = {
+    notes: (doc.notes ?? []).filter(n => ids.has(n.id)).map(n => ({ o: n, x: n.x, y: n.y })),
+    loose: doc.loose.filter(l => l.type !== 'screen' && ids.has(l.id)).map(l => ({ o: l, x: l.x, y: l.y })),
+    inks: (doc.ink ?? []).filter(k => ids.has(k.id)).map(k => ({ o: k, p: [...k.p] })),
+  }
+  sdStart(e, steps, null, extra)
+}
+function moveExtra(x, dx, dy) {
+  if (!x) return
+  for (const v of [...x.notes, ...x.loose]) { v.o.x = Math.round(v.x + dx); v.o.y = Math.round(v.y + dy) }
+  for (const v of x.inks) v.o.p = v.p.map((c, i) => Math.round(c + (i % 2 ? dy : dx)))
+}
 function sdMove(e) {
   if (!sdP) return
   if (!sd.on) {
     if (Math.hypot(e.clientX - sdP.sx, e.clientY - sdP.sy) < 6) return
     const first = sdP.list?.find(o => o.at.x || o.at.y)?.at
-    Object.assign(sd, { on: true, tray: sdP.tray, list: sdP.list ?? [], ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
+    const preview = sdP.tray ? (sdP.tray === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === sdP.tray).make()]) : []
+    Object.assign(sd, { on: true, tray: sdP.tray, preview, list: sdP.list ?? [], extra: sdP.extra, s0: sdP.w, ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
     if (sdP.tray) tray.value = null
   }
   sd.w = toWorld(e.clientX, e.clientY)
-  sd.to = overToolbar(e.clientY) ? 'cancel' : screenTarget(sd.w)
+  moveExtra(sd.extra, sd.w.x - sd.s0.x, sd.w.y - sd.s0.y)
+  sd.to = overToolbar(e.clientY) ? 'cancel' : sd.tray || sd.list.length ? screenTarget(sd.w) : null
 }
 async function sdUp(e) {
   removeEventListener('pointermove', sdMove); removeEventListener('pointercancel', sdUp); removeEventListener('pointerup', sdUp)
   const P = sdP; sdP = null
-  if (!sd.on) { if (P?.tray) addScreen(P.tray); return }
+  if (!sd.on) { if (P?.tray) addScreen(P.tray); else if (P?.extra) msel.value = []; return }     // нажатие по выделению — снять его (дальше можно нажимать внутри)
   const to = overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
-  const tr = sd.tray, list = sd.list
-  Object.assign(sd, { on: false, list: [], tray: null, to: null })
-  if (to === 'cancel') return
-  const moving = tr ? (tr === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === tr).make()]) : list.map(o => o.s)
+  const tr = sd.tray, list = sd.list, preview = sd.preview, extra = sd.extra
+  Object.assign(sd, { on: false, list: [], tray: null, preview: [], extra: null, to: null })
+  if (to === 'cancel') return moveExtra(extra, 0, 0)
+  if (!tr && !list.length) return save()                    // ехали только стикеры, рисунки и черновики
+  const moving = tr ? preview : list.map(o => o.s)
   if (to) {
     const L = to.L, have = moving.filter(st => L.steps?.includes(st)).length
     if ((L.steps?.length ?? 0) - have + moving.length > STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
@@ -490,7 +512,8 @@ async function sdUp(e) {
     moving.forEach((st, k) => doc.loose.push(freeOf(st, x0 + k * SCR_STEP, y0)))
     selectStep(doc.loose.at(-1).id, moving.at(-1).id)
   }
-  msel.value = moving.length > 1 ? moving.map(st => 'st:' + doc.id + ':' + st.id) : []
+  msel.value = extra ? [...moving.map(st => 'st:' + doc.id + ':' + st.id), ...extra.notes.map(v => v.o.id), ...extra.loose.map(v => v.o.id), ...extra.inks.map(v => v.o.id)]
+    : moving.length > 1 ? moving.map(st => 'st:' + doc.id + ':' + st.id) : []
   setProgress(doc.progress); save()
 }
 // снять экраны с прежних мест (ветка урока или доска) — файлы не трогаем, экран просто переезжает
@@ -500,12 +523,8 @@ function unhook(list) {
     if (h.type === 'screen') doc.loose.splice(doc.loose.indexOf(h), 1); else h.steps.splice(k, 1)
   }
 }
-const sdGhost = computed(() => {
-  if (!sd.on) return []
-  const kinds = sd.tray ? (sd.tray === 'lesson' ? ['intro', 'intro', 'choice'] : [TEMPLATES.find(t => t.id === sd.tray).kind]) : sd.list.map(o => o.s.kind)
-  const big = !sd.to || sd.to === 'cancel'
-  return kinds.slice(0, 8).map((k, j) => ({ k, left: sd.w.x - (big ? sd.ox : 40) + j * (big ? SCR_STEP : 18), top: sd.w.y - (big ? sd.oy : 20) + (big ? 0 : j * 10), small: !big }))
-})
+// новый экран из «Интерактива» — сразу в полный размер, как он ляжет
+const sdGhost = computed(() => (sd.on && sd.tray ? sd.preview.map((st, j) => ({ st, left: sd.w.x - sd.ox + j * SCR_STEP, top: sd.w.y - sd.oy })) : []))
 const run = ref(null)                                             // «Пройти урок» — урок целиком, как ученик (как «Презентация» в Figma)
 // выбран урок с готовыми экранами (не тянем, не рамка) — под кружком карточка урока, как у ученика
 const peekOf = (x) => { if (sel.value !== x.id || drag.on || msel.value.length > 1 || renaming.value === x.id || !INTERACTIVE.includes(x.type)) return null; const ok = (x.steps ?? []).filter(v => !stepIssue(v)); return ok.length ? ok : null }
@@ -631,7 +650,7 @@ function mqMove(e) {
 const mqStyle = computed(() => { const m = mq.value, r = board.value?.getBoundingClientRect() ?? { left: 0, top: 0 }; return m && { left: Math.min(m.x0, m.x1) - r.left + 'px', top: Math.min(m.y0, m.y1) - r.top + 'px', width: Math.abs(m.x1 - m.x0) + 'px', height: Math.abs(m.y1 - m.y0) + 'px' } })
 // рамка вокруг выделенного (с квадратиками по углам) — в координатах холста
 const selBox = computed(() => {
-  const ids = new Set(msel.value); if (!ids.size) return null
+  const ids = new Set(msel.value); if (!ids.size || sd.on) return null
   const bs = boxOf().filter(o => ids.has(o.id)); if (!bs.length) return null
   const x0 = Math.min(...bs.map(o => o.x0)) - 8, y0 = Math.min(...bs.map(o => o.y0)) - 8, x1 = Math.max(...bs.map(o => o.x1)) + 8, y1 = Math.max(...bs.map(o => o.y1)) + 8
   const a = toScreen({ x: x0, y: y0 }), b = toScreen({ x: x1, y: y1 })       // рамка — на экране (поверх холста): линии и квадратики всегда чёткие
@@ -1069,15 +1088,18 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
-          @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :dim="sdIds" @grab="grabStep" />
+          @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
         <!-- Экраны прямо на доске (унесли с ветки или положили из «Интерактива») -->
         <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
-          :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :dim="sdIds"
+          :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :moving="sdMoving"
           @copy="copyStep" @change="save" @height="railHs[f.id] = $event" @select="selectStep(f.id, $event)" @grab="grabStep" />
         <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
         <div v-if="sd.on && sd.to && sd.to !== 'cancel' && sd.to.mark" class="sdmark" :style="{ left: sd.to.mark.x + 'px', top: sd.to.mark.y + 'px', height: sd.to.mark.h + 'px' }" />
         <div v-if="sd.on && sd.to?.bead" class="sdbead" :style="{ left: sd.to.bead.x + 'px', top: sd.to.bead.y + 'px' }" />
-        <div v-for="(g, j) in sdGhost" :key="'g' + j" class="sdg" :class="{ small: g.small }" :style="{ left: g.left + 'px', top: g.top + 'px', '--c': KINDS[g.k].c }"><span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[g.k].ic" /></span><b>{{ KINDS[g.k].t }}</b></div>
+        <div v-for="g in sdGhost" :key="'g' + g.st.id" class="sdg" :style="{ left: g.left + 'px', top: g.top + 'px', '--c': KINDS[g.st.kind].c }">
+          <div class="sdl"><span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[g.st.kind].ic" /></span><b>{{ KINDS[g.st.kind].t }}</b></div>
+          <div class="sdc"><LessonPlayer embedded :steps="[g.st]" :start="0" :resolve="resolveRef" /></div>
+        </div>
         <!-- «Все курсы»: соседние курсы справа (только смотреть, проходить и копировать) -->
         <template v-for="o in othersL" :key="'oc' + o.id">
           <div class="och" :style="{ left: o.ox - 46 + 'px', top: '-170px' }" title="Дважды — открыть этот курс в редакторе" @pointerdown.stop @dblclick.stop="openOther(o.id)"><b>{{ o.title }}</b><small>другой курс · смотреть и копировать экраны · дважды — открыть</small></div>
@@ -1163,7 +1185,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
       </div>
       <!-- Рамка вокруг выделенного, с квадратиками по углам -->
-      <div v-if="selBox" class="selbox" :style="selBox"><i /><i /><i /><i /></div>
+      <div v-if="selBox" class="selbox" :style="selBox"><b v-if="canMask" class="selmask" title="Тяните — выделенное поедет вместе (на ветку, другой урок или по доске)" @pointerdown.stop.prevent="maskDown" /><i /><i /><i /><i /></div>
       <div v-if="mq" class="mq" :style="mqStyle" />
     </div>
 
@@ -1271,6 +1293,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ink path { fill: none; stroke-linecap: round; stroke-linejoin: round } .ink path.on { filter: drop-shadow(0 0 2px #0d99ff) drop-shadow(0 0 1px #0d99ff) }
 .mq { position: absolute; z-index: 20; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }
 .selbox { position: absolute; z-index: 19; border: 2px solid #0d99ff; pointer-events: none }
+.selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .04) } .selmask:active { cursor: grabbing }
 .selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: #fff }
 .selbox i:nth-child(1) { left: -7px; top: -7px } .selbox i:nth-child(2) { right: -7px; top: -7px } .selbox i:nth-child(3) { left: -7px; bottom: -7px } .selbox i:nth-child(4) { right: -7px; bottom: -7px }
 /* стрелка и рука на панели */
@@ -1439,9 +1462,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .pgo:active { transform: translateY(2px); box-shadow: none }
 .sdmark { position: absolute; z-index: 20; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
 .sdbead { position: absolute; z-index: 20; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
-.sdg { position: absolute; z-index: 25; width: 460px; height: 150px; display: flex; align-items: flex-start; gap: 8px; padding: 14px 16px; border: 2px dashed var(--c); border-radius: 22px; background: rgba(255, 255, 255, .85); box-shadow: 0 16px 34px rgba(0, 0, 0, .16); pointer-events: none; font-size: 15px; color: #444 }
-.sdg.small { width: 190px; height: 54px; align-items: center; border-radius: 14px }
-.sdg .kc { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--c); color: #fff } .sdg .kc svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.sdg { position: absolute; z-index: 30; width: 460px; pointer-events: none; opacity: .95 }
+.sdl { display: flex; align-items: center; gap: 6px; height: 34px; font-size: 13px; color: #555 } .sdl b { font-weight: 800 }
+.sdl .kc { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #fff } .sdl .kc svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.sdc { overflow: hidden; border-radius: 22px; background: #fff; box-shadow: 0 0 0 2px var(--c), 0 18px 40px rgba(0, 0, 0, .2) }
 .runov { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
 .runbox { width: min(560px, 100%); height: min(820px, 96vh); border-radius: 22px; overflow: hidden; background: #fff }
 /* Стикеры */

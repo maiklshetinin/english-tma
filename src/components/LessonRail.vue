@@ -23,7 +23,7 @@ const props = defineProps({
   canPaste: Boolean,
   readonly: Boolean,
   free: Boolean,                                          // экран сам по себе на доске (не на ветке урока): x, y — левый верх карточки
-  dim: { type: Array, default: () => [] },                 // экраны, которые сейчас тащат (редактор курса) — бледнее                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
+  moving: { type: Object, default: null },                 // экраны, которые сейчас тащат (редактор курса): { ids, dx, dy } — едут за курсором в полный размер                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
 })
 const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus', 'copy', 'paste', 'grab'])
 const decks = useDecksStore()
@@ -45,6 +45,8 @@ function down(e, s) { if (e.button === 0) emit('grab', { e, s }) }
 const cardStyle = (s, i) => {
   const lift = mv.on && s.id === mv.id
   const left = lift ? cx(steps.value.findIndex(v => v.id === s.id)) + mv.dx : cx(i)
+  const mov = props.moving?.ids.includes(s.id)
+  if (mov) return { left: left + 'px', top: (props.free ? props.y : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: 30, transition: 'none', transform: `translate(${props.moving.dx}px, ${props.moving.dy}px)`, pointerEvents: 'none' }
   return { left: left + 'px', top: (props.free ? props.y : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: lift ? 7 : 3, transition: lift ? 'none' : undefined }
 }
 
@@ -184,7 +186,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     <div v-if="mv.on" class="slot" :style="{ left: cx(mv.to) + 'px', top: y - TOP + 48 + 'px', width: CW + 'px', height: (frameH[mv.id] ?? 380) - 48 + 'px' }" />
 
     <!-- Экраны — открытые карточки, висят на ветке урока -->
-    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: mv.on && mv.id === s.id, dim: dim.includes(s.id), free }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
+    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: (mv.on && mv.id === s.id) || moving?.ids.includes(s.id), free }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
       <!-- станция на ветке с номером и ножка к экрану; за станцию тоже можно тянуть -->
       <template v-if="!free"><span class="stem" /><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span></template>
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
@@ -367,7 +369,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .line { position: absolute; overflow: visible; pointer-events: none; z-index: 1 } .line line { stroke: #e0e0e0; stroke-width: 8; stroke-linecap: round }
 /* экран — открытая карточка на рельсе, как на доске */
 .frame { position: absolute; z-index: 3; transition: left .2s ease }
-.frame.dim { opacity: .35 } .frame.free .flab { margin-top: 0 }
+.frame.free .flab { margin-top: 0 }
 .frame.lift { z-index: 7 } .frame.lift .card { box-shadow: 0 16px 34px rgba(0, 0, 0, .2) }
 /* подпись над экраном — как имя фрейма в Figma */
 .line line.done { stroke: #1fbe78 }
