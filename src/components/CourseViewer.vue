@@ -8,6 +8,7 @@ import { API, apiRequest, fb, isDemo } from '../firebase'
 import { audSrc, imgSrc } from '../composables/useCardMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import BackButton from './BackButton.vue'
+import { say } from '../composables/useDialog'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
 
 const router = useRouter()
@@ -73,6 +74,8 @@ function tap(x) {
 }
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 function go(x) { peek.value = null; open.value = x }
+// «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
+const reviewSkills = () => say('Функционал в разработке', { text: '«Повторить навыки» — скоро здесь можно будет быстро повторить слова и правила из этого урока. А пока урок можно пройти заново.' })
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value?.steps ?? []).filter(s => !stepIssue(s)))
@@ -132,10 +135,15 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${lessonMin(okSteps(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
           <!-- карточка урока перед стартом -->
           <div v-if="peek === x.id" class="pv" @click.stop>
-            <small>{{ (T[x.type] ?? T.lesson).t }} · ≈ {{ lessonMin(okSteps(x)) }} мин</small>
+            <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ (T[x.type] ?? T.lesson).t }}</small><small>≈ {{ lessonMin(okSteps(x)) }} мин</small></div>
             <b>{{ x.title || (T[x.type] ?? T.lesson).t }}</b>
             <p>{{ screens(okSteps(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
-            <button class="pgo" @click="go(x)">{{ state(x) === 'done' ? 'Пройти ещё раз' : 'Поехали!' }}</button>
+            <!-- пройденный — как в Busuu: повторить навыки (в разработке) или пройти урок заново -->
+            <template v-if="state(x) === 'done'">
+              <button class="pgo" @click="reviewSkills">Повторить навыки</button>
+              <button class="pgo ghost" @click="go(x)">Пройти заново</button>
+            </template>
+            <button v-else class="pgo" @click="go(x)">Поехали!</button>
           </div>
           <!-- открыт прямо тут: кружок крупно со звуком / фото -->
           <div v-if="inline === x.id" class="kin" @click.stop>
@@ -213,6 +221,9 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .vrow.peek::before { left: 59px }
 .pv { position: relative; z-index: 2; flex: 0 0 100%; display: grid; gap: 6px; margin: -14px 0 18px; padding: 18px 20px 20px; border-radius: 18px; background: var(--c); color: #fff; box-shadow: 0 10px 28px color-mix(in srgb, var(--c) 35%, transparent) }
 .pv::before { content: ''; position: absolute; left: 30px; top: -9px; border: 10px solid transparent; border-top: 0; border-bottom-color: var(--c) }
+.pth { display: flex; justify-content: space-between; align-items: center; gap: 10px }
+.pth small:first-child { display: flex; align-items: center; gap: 6px } .pth svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.pgo.ghost { background: transparent; color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85) }
 .pv small { font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; opacity: .85 }
 .pv b { font-size: 22px; font-weight: 900; line-height: 1.2 } .pv p { margin: 0 0 8px; font-size: 14px; font-weight: 600; opacity: .9 }
 .pgo { width: 100%; padding: 14px; border: 0; border-radius: 14px; background: #fff; color: var(--d); font: inherit; font-size: 16px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
