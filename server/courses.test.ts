@@ -53,6 +53,9 @@ ok('чекпоинт и обложка урока: фото/кружок; без
 await C.put(me, 'k8', { ...course, items: [{ id: 'u1', type: 'unit', title: 'Глава', hl: 'none', hlw: true, hlc: '#C4E1FF' }, { id: 'u2', type: 'unit', title: 'Глава 2', hl: 'pink', hlw: 'yes', hlc: 'red' }] })
 const k8 = store.get('courses/k8').items
 ok('подсветка главы: вид, с ветками, цвет; мусор выкинут', k8[0].hl === 'none' && k8[0].hlw === true && k8[0].hlc === '#c4e1ff' && !('hl' in k8[1]) && !('hlw' in k8[1]) && !('hlc' in k8[1]))
+await C.put(me, 'k9', { ...course, loose: [{ id: 'gu', type: 'unit', title: 'Глава', x: 1, y: 2 }, { id: 'gl', type: 'lesson', title: '', x: 1, y: 90, grp: 'gu' }, { id: 'gx', type: 'lesson', title: '', x: 1, y: 90, grp: 'bad id!' }] })
+const k9 = store.get('courses/k9').loose
+ok('глава на доске: урок помнит главу (grp), плохой grp выкинут', k9[1].grp === 'gu' && !('grp' in k9[2]))
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)
 await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
 const nt = store.get('courses/k4').notes[0]

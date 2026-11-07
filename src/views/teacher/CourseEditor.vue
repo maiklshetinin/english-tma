@@ -147,7 +147,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(loose && x.grp ? { grp: x.grp } : {}), ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -308,7 +308,7 @@ const pick = reactive({ lesson: null, step: null })                // откры
 const activeLesson = computed(() => (pick.lesson && findAny(pick.lesson)?.type !== 'screen' ? pick.lesson : null) ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
 // «Все уроки» — ветки всех уроков курса раскрыты сразу (видно, что где, и экраны удобно копировать между уроками)
 const allRails = ref(false)            // кнопку «Все уроки» убрали (05.11.2026): ветки — у уроков с экранами и у выбранного
-const lessonRails = computed(() => [...order.value.map((x, i) => ({ x, p: pos(i) })), ...doc.loose.filter(l => BRANCH.includes(l.type) && !(drag.on && drag.item?.id === l.id)).map(l => ({ x: l, p: { x: l.x, y: l.y } }))].filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && !drag.over && drag.item?.id === x.id) && (BRANCH.includes(x.type) || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом          // и у уроков на доске (не на рельсе) — тоже ветка
+const lessonRails = computed(() => [...order.value.map((x, i) => ({ x, p: pos(i) })), ...doc.loose.filter(l => BRANCH.includes(l.type) && !dragIds.value.has(l.id)).map(l => ({ x: l, p: { x: l.x, y: l.y } }))].filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && !drag.over && drag.item?.id === x.id) && (BRANCH.includes(x.type) || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом          // и у уроков на доске (не на рельсе) — тоже ветка
 
 // ---------- Копировать / вставить экран (Ctrl+C / Ctrl+V или кнопки на ветке) ----------
 // Копия — с новым id; файлы общие (удалятся, только когда их не останется ни у одного экрана), файлы «только в браузере» — копируются.
@@ -789,8 +789,12 @@ const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
 const flyTree = computed(() => {
   if (!drag.on || drag.over || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
   const w = toWorld(drag.x, drag.y)
-  return [drag.item, ...(drag.extra ?? [])].map((x, k) => ({ x, p: { x: w.x, y: w.y + (k ? 60 + (k - 1) * (RAIL_H + 110) : 0), side: 'r' } }))
+  const u = drag.item, rel = drag.from === 'loose' && u.x != null
+  return [u, ...(drag.extra ?? [])].map((x, k) => ({ x, p: rel && k ? { x: w.x + x.x - u.x, y: w.y + x.y - u.y, side: 'r' } : { x: w.x, y: w.y + (k ? 60 + (k - 1) * (RAIL_H + 110) : 0), side: 'r' } }))
 })
+// глава на доске — блок: её урок и чекпоинт помнят главу (grp) и ездят вместе с ней
+const kidsOf = (u) => { const ks = doc.loose.filter(l => l.grp === u.id).sort((a, b) => a.y - b.y); return ks.length ? ks : null }
+const dragIds = computed(() => new Set(drag.on ? [drag.item?.id, ...(drag.extra ?? []).map(v => v.id)] : []))
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
 const drag = reactive({ on: false, item: null, extra: null, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
@@ -866,6 +870,18 @@ const chapterBoxes = computed(() => {
     const hc = u.hlc ?? HL_DEF
     out.push({ id: u.id, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: Math.max(120, bottom - top) + 'px' } })
   })
+  // главы на доске — блоком вокруг своих урока и чекпоинта
+  for (const u of doc.loose) {
+    if (u.type !== 'unit' || u.hl === 'none' || dragIds.value.has(u.id)) continue
+    const ks = doc.loose.filter(l => l.grp === u.id && !dragIds.value.has(l.id))
+    let x0 = u.x - 78, x1 = u.x + 470, y1 = u.y + 70
+    for (const k of ks) {
+      x0 = Math.min(x0, k.x - 78); x1 = Math.max(x1, u.hlw ? k.x + 280 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + 470)
+      y1 = Math.max(y1, k.y + 56 + (BRANCH.includes(k.type) ? 40 + Math.min(700, railHs[k.id] ?? RAIL_H) : 0))
+    }
+    const hc = u.hlc ?? HL_DEF, top = u.y - 70
+    out.push({ id: u.id, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
+  }
   return out
 })
 const chMenu = ref(null)                 // открытый список в меню главы: 'color'
@@ -873,7 +889,7 @@ const chMenu = ref(null)                 // открытый список в м�
 function setHl(u, how) { delete u.hl; delete u.hlw; if (how === 'none') u.hl = 'none'; if (how === 'wide') u.hlw = true; save() }
 function setHlc(u, c) { if (c === HL_DEF) delete u.hlc; else u.hlc = c; if (u.hl === 'none') delete u.hl; chMenu.value = null; save() }
 const hlHow = (u) => (u.hl === 'none' ? 'none' : u.hlw ? 'wide' : 'rail')
-const looseShown = computed(() => doc.loose.filter(l => l.type !== 'screen' && !(drag.on && l.id === drag.item?.id)))
+const looseShown = computed(() => doc.loose.filter(l => l.type !== 'screen' && !dragIds.value.has(l.id)))
 const freeScreens = computed(() => doc.loose.filter(l => l.type === 'screen' && l.steps?.length))
 const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1], ...(selColor.value[x.id] ? { '--rc': selColor.value[x.id] } : {}) })
 const colorOf = (x, i) => (x.type === 'unit' ? (i == null ? UNIT_COLORS[0] : unitColor(i)) : [T[x.type].c, T[x.type].d])
@@ -882,15 +898,14 @@ const colorOf = (x, i) => (x.type === 'unit' ? (i == null ? UNIT_COLORS[0] : uni
 let pending = null
 // Ближайший промежуток рельса к точке холста; «на рельсе» — если близко к линии
 function nearest(w) {
-  const keep = doc.items.filter(v => v.id !== drag.item?.id), P = layoutOf(keep), n = keep.length
-  let best = n, bd = Infinity
-  for (let i = 0; i <= n; i++) {
-    const a = P[i - 1], b = P[i]
-    const g = a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : b ? { x: b.x, y: b.y - 58 } : { x: a ? a.x : 0, y: a ? a.y + 58 : 0 }
-    const d = ((g.x - w.x) * .7) ** 2 + (g.y - w.y) ** 2
-    if (d < bd) { bd = d; best = i }
-  }
-  return { i: best, near: bd < 95 ** 2 }
+  // место вставки — по высоте (сколько заданий выше точки); «на рельсе» — если близко к самой линии рельса по горизонтали.
+  // Раньше мерили до середины промежутка: между уроками с ветками промежутки большие, и на рельс было не попасть.
+  const keep = doc.items.filter(v => v.id !== drag.item?.id && !(drag.extra ?? []).includes(v)), P = layoutOf(keep), n = keep.length
+  if (!n) return { i: 0, near: Math.hypot(w.x, w.y) < 140 }
+  let i = 0; while (i < n && P[i].y < w.y) i++
+  const a = P[i - 1], b = P[i], rx = a && b ? a.x + (b.x - a.x) * Math.min(1, Math.max(0, (w.y - a.y) / Math.max(1, b.y - a.y))) : (a ?? b).x
+  const inY = w.y > P[0].y - 140 && w.y < P[n - 1].y + 180
+  return { i, near: inY && Math.abs(w.x - rx) < 110 }
 }
 const overToolbar = (cy) => cy > H.value - (phone.value ? 92 : 104)
 function startDrag(e, src) {
@@ -904,7 +919,7 @@ function move(e) {
   if (pending && !drag.on) {
     if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return
     sel.value = null
-    Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : null, from: pending.type ? 'new' : pending.from })
+    Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : pending.from === 'loose' && pending.item?.type === 'unit' ? kidsOf(pending.item) : null, from: pending.type ? 'new' : pending.from })
   }
   if (!drag.on) return
   drag.x = e.clientX; drag.y = e.clientY
@@ -945,17 +960,20 @@ function itemPlaceDown(e) {
 // Куда легло взятое: на рельс (в промежуток), на холст (где отпустили) или отмена (над панелью)
 function drop(where, w) {
   const x = drag.item, from = drag.from
+  const kids = drag.extra ?? []
   if (where === 'rail') {
-    if (from === 'loose') doc.loose.splice(doc.loose.findIndex(l => l.id === x.id), 1)
-    delete x.x; delete x.y
-    doc.items.splice(0, doc.items.length, ...order.value)
+    if (from === 'loose') { const out = new Set([x.id, ...kids.map(v => v.id)]); doc.loose = doc.loose.filter(l => !out.has(l.id)) }
+    for (const v of [x, ...kids]) { delete v.x; delete v.y; delete v.grp }
+    doc.items.splice(0, doc.items.length, ...order.value)          // глава с доски встаёт на рельс вместе со своим уроком и чекпоинтом
   } else if (where === 'canvas') {
     if (from === 'rail') doc.items.splice(doc.items.findIndex(v => v.id === x.id), 1)
+    const dx = from === 'loose' ? Math.round(w.x) - x.x : 0, dy = from === 'loose' ? Math.round(w.y) - x.y : 0
     x.x = Math.round(w.x); x.y = Math.round(w.y)
     if (from !== 'loose') doc.loose.push(x)
+    if (from === 'loose') for (const v of kids) { v.x += dx; v.y += dy }          // глава на доске едет вместе со своим блоком
   }
-  // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт (на рельсе они уже встали вместе с главой)
-  if (where === 'canvas' && from === 'new' && drag.extra) drag.extra.forEach((v, k) => { v.x = x.x; v.y = x.y + 60 + k * (RAIL_H + 110); doc.loose.push(v) })
+  // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт (на рельсе они уже встали вместе с главой; на доске — блоком)
+  if (where === 'canvas' && from === 'new' && kids.length) kids.forEach((v, k) => { v.x = x.x; v.y = x.y + 60 + k * (RAIL_H + 110); v.grp = x.id; doc.loose.push(v) })
   Object.assign(drag, { on: false, item: null, extra: null, over: false })
   if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
@@ -1316,7 +1334,21 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Черновики на холсте: ещё не на рельсе -->
         <div v-for="x in looseShown" :key="x.id" :data-sel="x.id" class="bead loose" :class="[x.type, { on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]" :style="beadStyle(x, x, colorOf(x))"
           @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
-          <template v-if="x.type === 'unit'"><b class="no">+</b><em class="cap">{{ x.title }}<small>не на рельсе</small></em></template>
+          <template v-if="x.type === 'unit'">
+            <!-- меню главы, как в Figma: подсветка блока главы -->
+            <div v-if="sel === x.id && !drag.on && renaming !== x.id" class="nbar chbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
+              <div class="nb-g"><button class="nb-c" :class="{ open: chMenu === 'color' }" title="Цвет главы" @click="chMenu = chMenu === 'color' ? null : 'color'"><i :style="{ background: x.hlc ?? HL_DEF }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
+                <div v-if="chMenu === 'color'" class="nb-pop sw hlsw"><button v-for="c in HL_COLORS" :key="c" :style="{ background: c }" :class="{ on: (x.hlc ?? HL_DEF) === c }" @click="setHlc(x, c)" /></div></div>
+              <i class="nb-s" />
+              <button class="cbw" :class="{ on: hlHow(x) === 'rail' }" title="Подсветить только рельс главы: глава, уроки и чекпоинт" @click="setHl(x, 'rail')">Рельс</button>
+              <button class="cbw" :class="{ on: hlHow(x) === 'wide' }" title="Подсветить всю главу — вместе с ветками экранов уроков" @click="setHl(x, 'wide')">С ветками</button>
+              <button class="cbw" :class="{ on: hlHow(x) === 'none' }" title="Без подсветки" @click="setHl(x, 'none')">Без</button>
+            </div>
+            <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Глава" @keydown.enter="renameDone" @keydown.esc="renameDone" @input="save" /><input v-model="x.sub" class="rin" placeholder="тема главы" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></div>
+            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><small class="nor">не на рельсе</small></div>
+            <!-- прогресс главы, как в Busuu: сразу видна полоска (пока глава на доске — 0%) -->
+            <div class="ubar"><i style="width: 0" /><em>0%</em></div>
+          </template>
           <template v-else>
             <video v-if="covK(x) === 'video' && mediaUrl(x)" :src="mediaUrl(x)" class="vid" muted loop playsinline preload="metadata" />
             <img v-else-if="covK(x) === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" :class="{ round: x.ck }" alt="" draggable="false" />
@@ -1610,7 +1642,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .chapbox { background: color-mix(in srgb, var(--hc) 8%, transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hc) 38%, transparent) }
 .chapbox.light { background: rgba(255, 255, 255, .85); box-shadow: inset 0 0 0 1.5px #e3e3e3, 0 2px 10px rgba(0, 0, 0, .04) }
 .hlsw { grid-template-columns: repeat(8, 32px) } .hlsw button[style*="#ffffff"] { box-shadow: inset 0 0 0 1.5px #ccc }
-.bead.unit.on { z-index: 30 }          /* меню главы — поверх соседних карточек */
+.bead.unit.on { z-index: 30 } .nor { flex: none; padding: 1px 7px; border-radius: 6px; background: #fff4c2; color: #8a6d00; font-size: 11px; font-weight: 800 }          /* меню главы — поверх соседних карточек */
 .chbar { bottom: calc(100% + 18px); gap: 4px; padding: 0 8px; z-index: 40 }
 .cbw { height: 34px; padding: 0 10px !important; border-radius: 8px; font-size: 13px !important; font-weight: 700 } .cbw:hover:not(:disabled) { background: #383838 } .cbw.on { background: #383838; box-shadow: inset 0 0 0 1.5px #0d99ff } .cbw:disabled { opacity: .35; cursor: default }
 .chap { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid #e3e3e3; border-radius: 22px; background: #fff; pointer-events: none }
