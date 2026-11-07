@@ -308,7 +308,7 @@ const pick = reactive({ lesson: null, step: null })                // откры
 const activeLesson = computed(() => (pick.lesson && findAny(pick.lesson)?.type !== 'screen' ? pick.lesson : null) ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) && !selLoose.value ? selItem.value.id : null))
 // «Все уроки» — ветки всех уроков курса раскрыты сразу (видно, что где, и экраны удобно копировать между уроками)
 const allRails = ref(false)            // кнопку «Все уроки» убрали (05.11.2026): ветки — у уроков с экранами и у выбранного
-const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && drag.item?.id === x.id) && (BRANCH.includes(x.type) || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом
+const lessonRails = computed(() => order.value.map((x, i) => ({ x, p: pos(i) })).filter(({ x }) => INTERACTIVE.includes(x.type) && !(drag.on && !drag.over && drag.item?.id === x.id) && (BRANCH.includes(x.type) || x.steps?.length || x.id === activeLesson.value)))   // у каждого урока сразу видна ветка с местом под экраны и итогом
 
 // ---------- Копировать / вставить экран (Ctrl+C / Ctrl+V или кнопки на ветке) ----------
 // Копия — с новым id; файлы общие (удалятся, только когда их не останется ни у одного экрана), файлы «только в браузере» — копируются.
@@ -471,9 +471,16 @@ function grabStep({ e, s: st }) {
 }
 function trayDown(e, id) { if (e.button === 0) sdStart(e, null, id) }
 // Выделено рамкой — тянуть можно с любого места выделения (как в FigJam): экраны, стикеры, рисунки и черновики-кружки едут вместе
-const canMask = computed(() => msel.value.length > 0 && !sd.on && boxOf().some(o => msel.value.includes(o.id) && (o.k === 'note' || o.k === 'ink' || (o.k === 'step' && o.course === doc.id) || (o.k === 'item' && doc.loose.some(l => l.id === o.id)))))
+// выделен один урок (глава, задание) на рельсе — вместе с его экранами: за выделение тянется сам урок, как с рельса
+const maskItem = computed(() => {
+  const own = msel.value.filter(id => doc.items.some(v => v.id === id)); if (own.length !== 1) return null
+  const L = doc.items.find(v => v.id === own[0]), mine = new Set((L.steps ?? []).map(v => 'st:' + doc.id + ':' + v.id))
+  return msel.value.every(id => id === L.id || mine.has(id)) ? L : null
+})
+const canMask = computed(() => msel.value.length > 0 && !sd.on && (!!maskItem.value || boxOf().some(o => msel.value.includes(o.id) && (o.k === 'note' || o.k === 'ink' || (o.k === 'step' && o.course === doc.id) || (o.k === 'item' && doc.loose.some(l => l.id === o.id))))))
 function maskDown(e) {
   if (e.button !== 0) return
+  if (maskItem.value) return startDrag(e, { item: maskItem.value, from: 'rail' })
   const ids = new Set(msel.value), bs = boxOf().filter(o => ids.has(o.id))
   const steps = bs.filter(o => o.k === 'step' && o.course === doc.id).map(o => ({ s: o.s, at: whereStep(o.s) })).filter(o => o.at)
   const extra = {
@@ -776,7 +783,8 @@ const dots = computed(() => { let s = 20 * view.z; while (s < 10) s *= 4; return
 const mode = computed({ get: () => doc.mode ?? 'wave', set: (v) => { doc.mode = v; save() } })
 const G = { step: 116, unitGap: 160, amp: 84 }
 const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
-const drag = reactive({ on: false, item: null, from: null, over: false, to: 0, x: 0, y: 0 })
+const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
+const drag = reactive({ on: false, item: null, extra: null, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
 const hasRail = (x, key = '') => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && BRANCH.includes(x.type)))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
 const layoutOf = (list, m = mode.value, key = '') => {
@@ -793,7 +801,7 @@ const layoutOf = (list, m = mode.value, key = '') => {
 // Порядок на рельсе: взятое (если целимся в рельс) уже стоит на месте прицела
 const order = computed(() => {
   const list = doc.items.filter(x => !(drag.on && x.id === drag.item?.id))
-  if (drag.on && drag.over) list.splice(Math.min(drag.to, list.length), 0, drag.item)
+  if (drag.on && drag.over) list.splice(Math.min(drag.to, list.length), 0, drag.item, ...(drag.extra ?? []))      // новая глава — сразу с уроком и чекпоинтом
   return list
 })
 const layout = computed(() => layoutOf(order.value))
@@ -864,7 +872,7 @@ function move(e) {
   if (pending && !drag.on) {
     if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return
     sel.value = null
-    Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, from: pending.type ? 'new' : pending.from })
+    Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : null, from: pending.type ? 'new' : pending.from })
   }
   if (!drag.on) return
   drag.x = e.clientX; drag.y = e.clientY
@@ -885,7 +893,7 @@ function up(e) {
 // Нажали задание на панели (не тянули): оно едет за курсором, нажатие ставит — на рельс (если рядом) или на холст; Esc — отмена
 let placingItem = false
 function itemPlaceStart(type, e) {
-  Object.assign(drag, { on: true, item: newItem(type), from: 'new', x: e.clientX, y: e.clientY, over: false })
+  Object.assign(drag, { on: true, item: newItem(type), extra: type === 'unit' ? chapterKids() : null, from: 'new', x: e.clientX, y: e.clientY, over: false })
   tray.value = null; placingItem = true
   addEventListener('pointermove', itemPlaceMove); addEventListener('pointerdown', itemPlaceDown, true)
 }
@@ -894,7 +902,7 @@ function itemPlaceMove(e) {
   const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
 }
 function itemPlaceEnd() { placingItem = false; removeEventListener('pointermove', itemPlaceMove); removeEventListener('pointerdown', itemPlaceDown, true) }
-function itemPlaceCancel() { itemPlaceEnd(); Object.assign(drag, { on: false, item: null, over: false }) }
+function itemPlaceCancel() { itemPlaceEnd(); Object.assign(drag, { on: false, item: null, extra: null, over: false }) }
 function itemPlaceDown(e) {
   e.stopPropagation(); e.preventDefault(); itemPlaceEnd()
   if (e.button !== 0) return itemPlaceCancel()
@@ -914,13 +922,9 @@ function drop(where, w) {
     x.x = Math.round(w.x); x.y = Math.round(w.y)
     if (from !== 'loose') doc.loose.push(x)
   }
-  // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт
-  if (where !== 'cancel' && from === 'new' && x.type === 'unit') {
-    const add = [newItem('lesson'), newItem('checkpoint')]; add.forEach(v => { v.steps = [] })
-    if (where === 'rail') doc.items.splice(doc.items.indexOf(x) + 1, 0, ...add)
-    else add.forEach((v, k) => { v.x = x.x; v.y = x.y + 130 * (k + 1); doc.loose.push(v) })
-  }
-  Object.assign(drag, { on: false, item: null, over: false })
+  // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт (на рельсе они уже встали вместе с главой)
+  if (where === 'canvas' && from === 'new' && drag.extra) drag.extra.forEach((v, k) => { v.x = x.x; v.y = x.y + 130 * (k + 1); doc.loose.push(v) })
+  Object.assign(drag, { on: false, item: null, extra: null, over: false })
   if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
 }
