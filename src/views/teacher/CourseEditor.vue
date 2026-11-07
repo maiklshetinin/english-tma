@@ -1639,6 +1639,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ubar em { position: absolute; right: 0; top: 50%; transform: translateY(-50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
 .ftree { opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
+.ftree .bead, .ftree :deep(.lr *) { transition: none !important }          /* призрак главы / урока — ровно за курсором, без подъезда */
 .bead.unit.lift { outline: 2px dashed #1fbe78; background: #fff !important }
 .fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px; background: #1fbe78; box-shadow: 0 10px 20px rgba(0, 0, 0, .2) }
 /* сводка курса — плоско */
