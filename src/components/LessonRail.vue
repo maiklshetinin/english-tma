@@ -359,7 +359,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     <button v-if="!readonly && !free" class="plus" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 'px' }" :disabled="full" :title="full ? `Не больше ${STEPS_MAX} экранов` : 'Добавить экран'" @pointerdown.stop @click="emit('add')">＋</button>
 
     <!-- Итог урока -->
-    <div v-if="!free" :ref="watchFrame" class="frame" :style="{ left: cx(finI) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
+    <div v-if="!free" :ref="watchFrame" class="frame" :data-id="'fin-' + item.id" :style="{ left: cx(finI) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
      <span class="stem" /><span class="node fin-n" :class="{ done: steps.length && run.at >= steps.length }" title="Итог урока — всегда в конце ветки"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
     <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>Итог урока · всегда в конце</b></div>
     <div class="card fin" :class="{ on: sel === 'final', now: steps.length && run.at >= steps.length }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">

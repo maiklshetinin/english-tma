@@ -699,6 +699,11 @@ const selBox = computed(() => {
   const ids = new Set(msel.value); if (!ids.size || sd.on) return null
   void (view.x + view.y + view.z + boxTick.value)
   const bs = boxOf().filter(o => ids.has(o.id)); if (!bs.length) return null
+  // выделен урок с веткой — рамка охватывает и всю его ветку: экраны и «Итог урока»
+  for (const o of [...bs]) {
+    const L = o.k === 'item' && lessonRails.value.find(r => r.x.id === o.id)?.x; if (!L) continue
+    for (const id of [...(L.steps ?? []).map(v => v.id), 'fin-' + L.id]) { const c = cardBox(id); if (c) bs.push(c) }
+  }
   const pad = 6 / view.z                                     // отступ рамки — 6 px на экране при любом масштабе
   const x0 = Math.min(...bs.map(o => o.x0)) - pad, y0 = Math.min(...bs.map(o => o.y0)) - pad, x1 = Math.max(...bs.map(o => o.x1)) + pad, y1 = Math.max(...bs.map(o => o.y1)) + pad
   const a = toScreen({ x: x0, y: y0 }), b = toScreen({ x: x1, y: y1 })       // рамка — на экране (поверх холста): линии и квадратики всегда чёткие
@@ -870,12 +875,32 @@ function up(e) {
   const p = pending; pending = null
   if (!drag.on) {                    // нажатие
     if (MEDIA.includes(p?.type)) return pickFile(null, p.type)
-    if (p?.type) { const x = newItem(p.type); doc.items.push(x); sel.value = x.id; save(); nextTick(() => showRailEnd()) }
+    if (p?.type) return itemPlaceStart(p.type, e)     // нажали «Урок» / «Чекпоинт» / «Юнит» — едет за курсором, нажатие ставит (как стикер)
     else if (p?.item) { sel.value = sel.value === p.item.id ? null : p.item.id; selectStep(null, null); noteSel.value = null }
     return
   }
   // на ветку урока (место экранов) задание не кладём — только экраны; отпустили там — задание возвращается
   drop(drag.over ? 'rail' : overToolbar(e.clientY) || screenTarget(toWorld(e.clientX, e.clientY))?.mark ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))
+}
+// Нажали задание на панели (не тянули): оно едет за курсором, нажатие ставит — на рельс (если рядом) или на холст; Esc — отмена
+let placingItem = false
+function itemPlaceStart(type, e) {
+  Object.assign(drag, { on: true, item: newItem(type), from: 'new', x: e.clientX, y: e.clientY, over: false })
+  tray.value = null; placingItem = true
+  addEventListener('pointermove', itemPlaceMove); addEventListener('pointerdown', itemPlaceDown, true)
+}
+function itemPlaceMove(e) {
+  drag.x = e.clientX; drag.y = e.clientY
+  const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
+}
+function itemPlaceEnd() { placingItem = false; removeEventListener('pointermove', itemPlaceMove); removeEventListener('pointerdown', itemPlaceDown, true) }
+function itemPlaceCancel() { itemPlaceEnd(); Object.assign(drag, { on: false, item: null, over: false }) }
+function itemPlaceDown(e) {
+  e.stopPropagation(); e.preventDefault(); itemPlaceEnd()
+  if (e.button !== 0) return itemPlaceCancel()
+  itemPlaceMove(e)
+  const w = toWorld(e.clientX, e.clientY)
+  drop(drag.over ? 'rail' : overToolbar(e.clientY) || screenTarget(w)?.mark ? 'cancel' : 'canvas', w); save()
 }
 // Куда легло взятое: на рельс (в промежуток), на холст (где отпустили) или отмена (над панелью)
 function drop(where, w) {
@@ -1070,6 +1095,7 @@ const onKey = (e) => {
     return e.code === 'KeyC' ? doCopy() : doPaste()
   }
   if (e.key === 'Escape' && placing) return placeCancel()
+  if (e.key === 'Escape' && placingItem) return itemPlaceCancel()
   if (e.key === 'Escape') { if (run.value) run.value = null; else { noteTool.value = false; sel.value = null; selectStep(null, null); noteSel.value = null; tray.value = null; msel.value = []; if (tool.value === 'pen') tool.value = 'select' } }
   if (run.value || !(e.key === 'Delete' || e.key === 'Backspace')) return
   doDelete()
@@ -1306,7 +1332,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <!-- Снизу: панель как в FigJam — группа, над ней ряд элементов -->
     <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop>
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
-      <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
+      <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
         <svg class="sch" viewBox="0 0 160 70">
           <line x1="26" y1="22" x2="148" y2="22" class="sl" />
           <g v-for="j in 2" :key="j"><line :x1="21 + j * 36" y1="22" :x2="21 + j * 36" y2="31" class="st" /><rect :x="8 + j * 36" y="31" width="26" height="32" rx="4" class="sc" /><rect :x="13 + j * 36" y="36" width="16" height="3" rx="1.5" class="sb" /><rect :x="13 + j * 36" y="54" width="16" height="5" rx="2.5" class="sbb" /></g>
@@ -1316,7 +1342,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <circle cx="16" cy="22" r="13" class="sm" /><g transform="translate(6.5 12.5) scale(.8)" class="smi" v-html="T[k].ic" />
         </svg>
         <small><b>{{ T[k].t }}</b>{{ TASK_D[k] }}</small></button></template>
-      <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс или нажмите'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
+      <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
         <span class="tt2">Тяните на ветку урока или на доску — или нажмите и поставьте</span>
         <!-- мини-окошки: как выглядит экран -->
@@ -1366,7 +1392,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <span class="sk back" :style="{ background: noteColor }" /><span class="sk" :style="{ background: noteColor }" />
       </button>
       <i class="tsep" />
-      <button class="tb" :title="'Юнит — тяните на рельс или нажмите'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Юнит</small></button>
+      <button class="tb" :title="'Юнит — тяните на рельс, или нажмите и поставьте'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Юнит</small></button>
       <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
     </div>
   </div>
