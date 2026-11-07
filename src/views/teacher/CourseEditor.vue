@@ -646,10 +646,11 @@ function inkEnd() { if (ink) { (doc.ink ??= []).push(ink); save() } ink = null; 
 // Выделение рамкой: id выделенного (задания на рельсе и черновики, стикеры, штрихи)
 const msel = ref([]), mq = ref(null)              // mq — рамка на экране { x0, y0, x1, y1 }
 // рамка экрана — по самой карточке на экране (высота у каждого своя), в координатах холста
+// Считаем по раскладке (offset*), а не по экрану: так рамка не зависит от масштаба и не отстаёт, пока холст перерисовывается
 function cardBox(id) {
-  const el = typeof document !== 'undefined' && document.querySelector(`.frame[data-id="${id}"] .card`); if (!el || !board.value) return null
-  const r = el.getBoundingClientRect(), a = toWorld(r.left, r.top), b = toWorld(r.right, r.bottom)
-  return { x0: a.x, y0: a.y, x1: b.x, y1: b.y }
+  const el = typeof document !== 'undefined' && document.querySelector(`.frame[data-id="${id}"] .card`); if (!el) return null
+  const f = el.closest('.frame'), x0 = f.offsetLeft + el.offsetLeft, y0 = f.offsetTop + el.offsetTop
+  return { x0, y0, x1: x0 + el.offsetWidth, y1: y0 + el.offsetHeight }
 }
 const boxOf = () => {                              // всё, что можно выделить, с рамкой в координатах холста
   const out = []
@@ -684,9 +685,9 @@ const mqStyle = computed(() => { const m = mq.value, r = board.value?.getBoundin
 const oneBox = computed(() => {
   if (sd.on || msel.value.length || !pick.step || pick.step === 'final' || !board.value) return null
   void (view.x + view.y + view.z + (railHs[pick.lesson] ?? 0) + boxTick.value)        // пересчёт при сдвиге, масштабе и правках
-  const el = document.querySelector(`.frame[data-id="${pick.step}"] .card`); if (!el) return null
-  const r = el.getBoundingClientRect(), b = board.value.getBoundingClientRect()
-  return { left: Math.round(r.left - b.left - 6) + 'px', top: Math.round(r.top - b.top - 6) + 'px', width: Math.round(r.width + 12) + 'px', height: Math.round(r.height + 12) + 'px' }
+  const w = cardBox(pick.step); if (!w) return null
+  const a = toScreen({ x: w.x0, y: w.y0 }), b = toScreen({ x: w.x1, y: w.y1 })
+  return { left: Math.round(a.x - 6) + 'px', top: Math.round(a.y - 6) + 'px', width: Math.round(b.x - a.x + 12) + 'px', height: Math.round(b.y - a.y + 12) + 'px' }
 })
 const selBox = computed(() => {
   const ids = new Set(msel.value); if (!ids.size || sd.on) return null
