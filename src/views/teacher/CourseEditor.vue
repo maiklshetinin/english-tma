@@ -147,7 +147,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -849,6 +849,30 @@ const chapters = computed(() => {
   return out.map(c => ({ ...c, pct: c.tasks ? Math.round(c.done / c.tasks * 100) : 0, style: { left: x0 + 'px', width: x1 - x0 + 'px', top: L[c.i].y - 62 + 'px', height: L[c.last].y - L[c.i].y + 62 + 64 + 'px' } }))
 })
 const chapterOf = (i) => chapters.value.find(c => c.i === i)
+// Подсветка главы на доске (как блок): по умолчанию — светло-зелёная плашка вокруг рельса главы; в меню главы — светлая, без подсветки,
+// или «с ветками» — плашка охватывает и ветки экранов уроков главы
+// цвета подсветки главы — как цвета секций в Figma
+const HL_COLORS = ['#1fbe78', '#ffffff', '#0d99ff', '#9747ff', '#ff6fb1', '#ff9f1a', '#ffc800', '#8a8f98']
+const HL_DEF = '#1fbe78'
+const chapterBoxes = computed(() => {
+  const L = layout.value, out = [], rails = new Map(lessonRails.value.map(r => [r.x.id, r]))
+  chapters.value.forEach((c, k) => {
+    const u = order.value[c.i]; if (!u || u.hl === 'none') return
+    const next = chapters.value[k + 1], lastIt = order.value[c.last]
+    const bottom = next ? L[next.i].y - 84 : L[c.last].y + 56 + (hasRail(lastIt) ? 40 + (railHs[lastIt.id] ?? RAIL_H) : 0)
+    let x0 = mode.value === 'wave' ? -330 : -78, x1 = mode.value === 'wave' ? 330 : 470
+    if (u.hlw) for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) x1 = Math.max(x1, r.p.x + 280 + Math.max(1, r.x.steps?.length ?? 0) * 520 + 460 + 36) }
+    const top = L[c.i].y - 70
+    const hc = u.hlc ?? HL_DEF
+    out.push({ id: u.id, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: Math.max(120, bottom - top) + 'px' } })
+  })
+  return out
+})
+const chMenu = ref(null)                 // открытый список в меню главы: 'color'
+// вид подсветки: 'rail' — рельс главы, 'wide' — с ветками, 'none' — без подсветки; цвет — отдельно
+function setHl(u, how) { delete u.hl; delete u.hlw; if (how === 'none') u.hl = 'none'; if (how === 'wide') u.hlw = true; save() }
+function setHlc(u, c) { if (c === HL_DEF) delete u.hlc; else u.hlc = c; if (u.hl === 'none') delete u.hl; chMenu.value = null; save() }
+const hlHow = (u) => (u.hl === 'none' ? 'none' : u.hlw ? 'wide' : 'rail')
 const looseShown = computed(() => doc.loose.filter(l => l.type !== 'screen' && !(drag.on && l.id === drag.item?.id)))
 const freeScreens = computed(() => doc.loose.filter(l => l.type === 'screen' && l.steps?.length))
 const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1], ...(selColor.value[x.id] ? { '--rc': selColor.value[x.id] } : {}) })
@@ -1074,7 +1098,7 @@ const play = (e, on) => { const v = e.currentTarget.querySelector('video'); if (
 
 // ---------- Карточка выбранного ----------
 const sel = ref(null), editing = ref(false)
-watch(sel, (id) => { liveSend({ t: 'sel', id }); if (id) msel.value = [] })
+watch(sel, (id) => { liveSend({ t: 'sel', id }); if (id) msel.value = []; chMenu.value = null })
 const selItem = computed(() => findAny(sel.value))
 const selLoose = computed(() => !!doc.loose.find(v => v.id === sel.value))
 async function remove() {
@@ -1191,6 +1215,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="bar"><i :style="{ width: pct + '%' }" /></div>
           <div class="sf"><span>Пройдено: <b>{{ doc.progress }} из {{ tasksCount }}</b></span><span>Осталось {{ tasksCount - doc.progress }}</span></div>
         </div>
+        <!-- Главы — блоками (подсветка из меню главы) -->
+        <div v-for="c in chapterBoxes" :key="'cb' + c.id" class="chapbox" :class="{ light: c.light, wide: c.w }" :style="c.style" />
         <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
         <!-- Тянем главу / урок / чекпоинт мимо рельса — за курсором вся структура, как она ляжет (глава с уроком и чекпоинтом, у урока ветка с итогом) -->
         <div v-if="flyTree" class="ftree">
@@ -1241,6 +1267,15 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <div v-for="(x, i) in order" :key="x.id" :data-sel="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { lift: drag.on && drag.item?.id === x.id, on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]"
           :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'">
+            <!-- меню главы, как в Figma: подсветка блока главы -->
+            <div v-if="sel === x.id && !drag.on && renaming !== x.id" class="nbar chbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
+              <div class="nb-g"><button class="nb-c" :class="{ open: chMenu === 'color' }" title="Цвет главы" @click="chMenu = chMenu === 'color' ? null : 'color'"><i :style="{ background: x.hlc ?? HL_DEF }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
+                <div v-if="chMenu === 'color'" class="nb-pop sw hlsw"><button v-for="c in HL_COLORS" :key="c" :style="{ background: c }" :class="{ on: (x.hlc ?? HL_DEF) === c }" @click="setHlc(x, c)" /></div></div>
+              <i class="nb-s" />
+              <button class="cbw" :class="{ on: hlHow(x) === 'rail' }" title="Подсветить только рельс главы: глава, уроки и чекпоинт" @click="setHl(x, 'rail')">Рельс</button>
+              <button class="cbw" :class="{ on: hlHow(x) === 'wide' }" title="Подсветить всю главу — вместе с ветками экранов уроков" @click="setHl(x, 'wide')">С ветками</button>
+              <button class="cbw" :class="{ on: hlHow(x) === 'none' }" title="Без подсветки" @click="setHl(x, 'none')">Без</button>
+            </div>
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Глава" @keydown.enter="renameDone" @keydown.esc="renameDone" @input="save" /><input v-model="x.sub" class="rin" placeholder="тема главы" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></div>
             <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
             <div class="ubar"><i :style="{ width: (chapterOf(i)?.pct ?? 0) + '%' }" /><em>{{ chapterOf(i)?.pct ?? 0 }}%</em></div>
@@ -1571,6 +1606,13 @@ async function reset() { if (!(await ask('Вернуть пример курса
 }
 /* ===== Стиль как в Busuu: тонкая линия, кружки с кольцом и галочкой снизу, юнит — светлая «глава» с прогрессом ===== */
 .r0 { stroke: #dedede; stroke-width: 4 } .r1 { stroke: #1fbe78; stroke-width: 4 }
+.chapbox { position: absolute; z-index: 0; box-sizing: border-box; border-radius: 26px; pointer-events: none; transition: left .22s ease, top .22s ease, width .22s ease, height .22s ease }
+.chapbox { background: color-mix(in srgb, var(--hc) 8%, transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hc) 38%, transparent) }
+.chapbox.light { background: rgba(255, 255, 255, .85); box-shadow: inset 0 0 0 1.5px #e3e3e3, 0 2px 10px rgba(0, 0, 0, .04) }
+.hlsw { grid-template-columns: repeat(8, 32px) } .hlsw button[style*="#ffffff"] { box-shadow: inset 0 0 0 1.5px #ccc }
+.bead.unit.on { z-index: 30 }          /* меню главы — поверх соседних карточек */
+.chbar { bottom: calc(100% + 18px); gap: 4px; padding: 0 8px; z-index: 40 }
+.cbw { height: 34px; padding: 0 10px !important; border-radius: 8px; font-size: 13px !important; font-weight: 700 } .cbw:hover:not(:disabled) { background: #383838 } .cbw.on { background: #383838; box-shadow: inset 0 0 0 1.5px #0d99ff } .cbw:disabled { opacity: .35; cursor: default }
 .chap { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid #e3e3e3; border-radius: 22px; background: #fff; pointer-events: none }
 .chap.full { border-color: #1fbe78; background: #f2fbf7 }
 .bead { width: 56px; height: 56px; margin: -28px 0 0 -28px; color: #fff; background: var(--c); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1fbe78 }
