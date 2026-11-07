@@ -32,7 +32,7 @@ ok('неизвестный тип / кривой id / повтор id — 400', 
 ok('без items — 400', await code(C.put(me, 'k1', { title: 'x' })) === 400)
 ok('длинное название обрезано', (await C.put(me, 'k1', { ...course, title: 'я'.repeat(500) }), store.get('courses/k1').title.length === 120))
 ok('файлы курса для чистки', C.filesOf(g).length === 2)
-const lesson = { id: 'L', type: 'lesson', title: 'Урок', min: 12.4, steps: [
+const lesson = { id: 'L', type: 'lesson', title: 'Урок', min: 12, steps: [
   { id: 's1', kind: 'intro', word: 'go ahead', tr: 'давай', min: 2.3, video: 't/tg_1/c/k1/v.mp4', image: 'https://x.ru/p.jpg', audio: 'idb:m1', junk: 1 },
   { id: 's2', kind: 'choice', min: 'x', ask: 'zzz', show: 'text', ans: 9, opts: [{ w: 'a', audio: 'javascript:alert(1)' }, { w: 'b', image: 't/tg_1/c/k1/b.jpg' }] },
   { id: 's3', kind: 'pairs', min: 999, pairs: [{ a: 'x', b: 'y' }, ...Array(9).fill({ a: '1', b: '2' })] }] }
@@ -40,7 +40,7 @@ await C.put(me, 'k3', { ...course, items: [...course.items, lesson] })
 const st = store.get('courses/k3').items[4].steps
 ok('экраны урока: лишнее выкинуто, файлы — только свои ключи и https', st.length === 3 && !('junk' in st[0]) && st[0].video === 't/tg_1/c/k1/v.mp4' && st[0].image === 'https://x.ru/p.jpg' && !('audio' in st[0]))
 ok('выбор: верный ответ в пределах, плохая ссылка выкинута; пар не больше 6', st[1].ask === 'audio' && st[1].ans === 1 && !('audio' in st[1].opts[0]) && st[2].pairs.length === 6)
-ok('своё время урока — целые минуты', store.get('courses/k3').items[4].min === 12)
+ok('у урока своего времени нет — только сумма экранов', !('min' in store.get('courses/k3').items[4]))
 ok('время экрана: шаг ½, не больше 60, мусор выкинут', st[0].min === 2.5 && !('min' in st[1]) && st[2].min === 60)
 ok('файлы экранов — в чистку', C.filesOf({ items: store.get('courses/k3').items, loose: [] }).includes('t/tg_1/c/k1/b.jpg'))
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)

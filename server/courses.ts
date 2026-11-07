@@ -20,7 +20,7 @@ const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
 
 export interface Step { id: string; kind: string; [k: string]: unknown }
-export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; x?: number; y?: number; steps?: Step[]; min?: number }
+export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; x?: number; y?: number; steps?: Step[] }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
 export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number }
@@ -74,8 +74,6 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     }
     if (INTERACTIVE.includes(type) && Array.isArray(r.steps)) {
       out.steps = r.steps.slice(0, STEPS_MAX).map(step)
-      // своё время урока (минуты) — вместо суммы времён экранов
-      if (typeof r.min === 'number' && Number.isFinite(r.min) && r.min >= 1) out.min = Math.min(240, Math.round(r.min))
       if (new Set(out.steps.map((x) => x.id)).size !== out.steps.length) throw fail(400, 'duplicate step id')
     }
     if (loose) { out.x = num(r.x); out.y = num(r.y) }

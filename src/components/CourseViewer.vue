@@ -8,7 +8,7 @@ import { API, apiRequest, fb, isDemo } from '../firebase'
 import { audSrc, imgSrc } from '../composables/useCardMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import BackButton from './BackButton.vue'
-import { INTERACTIVE, stepIssue, itemMin } from '../utils/lesson'
+import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
 
 const router = useRouter()
 const online = !isDemo && !!API && !!fb
@@ -129,10 +129,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
-          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${itemMin(x, okSteps(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
+          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${lessonMin(okSteps(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
           <!-- карточка урока перед стартом -->
           <div v-if="peek === x.id" class="pv" @click.stop>
-            <small>{{ (T[x.type] ?? T.lesson).t }} · ≈ {{ itemMin(x, okSteps(x)) }} мин</small>
+            <small>{{ (T[x.type] ?? T.lesson).t }} · ≈ {{ lessonMin(okSteps(x)) }} мин</small>
             <b>{{ x.title || (T[x.type] ?? T.lesson).t }}</b>
             <p>{{ screens(okSteps(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
             <button class="pgo" @click="go(x)">{{ state(x) === 'done' ? 'Пройти ещё раз' : 'Поехали!' }}</button>

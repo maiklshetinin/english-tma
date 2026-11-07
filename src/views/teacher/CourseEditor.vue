@@ -24,7 +24,7 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import LessonPlayer from '../../components/LessonPlayer.vue'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, itemMin } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -137,7 +137,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(INTERACTIVE.includes(x.type) && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(INTERACTIVE.includes(x.type) && x.min >= 1 ? { min: x.min } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(INTERACTIVE.includes(x.type) && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -406,12 +406,6 @@ async function removeStepKey() {
 const run = ref(null)                                             // «Пройти урок» — урок целиком, как ученик (как «Презентация» в Figma)
 // выбран урок с готовыми экранами (не тянем, не рамка) — под кружком карточка урока, как у ученика
 const peekOf = (x) => { if (sel.value !== x.id || drag.on || msel.value.length > 1 || renaming.value === x.id || !INTERACTIVE.includes(x.type)) return null; const ok = (x.steps ?? []).filter(v => !stepIssue(v)); return ok.length ? ok : null }
-// своё время урока; пусто или совпало с суммой экранов — считаем по экранам
-function setLessonMin(x, el) {
-  const v = el ? Math.round(+el.value) : 0, auto = lessonMin((x.steps ?? []).filter(s => !stepIssue(s)))
-  if (v >= 1 && v !== auto) x.min = Math.min(240, v); else { delete x.min; if (el) el.value = auto }
-  save()
-}
 const runLesson = computed(() => (run.value ? findAny(run.value) : null))
 
 // ---------- Нижняя панель как в FigJam: группа → ряд элементов над панелью ----------
@@ -974,7 +968,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <video v-if="x.type === 'video' && x.file && mediaUrl({ file: x.file })" :src="mediaUrl({ file: x.file })" class="vid" muted loop playsinline preload="metadata" />
               <img v-else-if="x.type === 'photo' && x.file && mediaUrl({ file: x.file })" :src="mediaUrl({ file: x.file })" class="vid img" alt="" draggable="false" />
               <svg v-if="!MEDIA.includes(x.type) || !x.file || !mediaUrl({ file: x.file })" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
-              <em class="cap">{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${itemMin(x)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
+              <em class="cap">{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
             </template>
           </div>
         </template>
@@ -992,14 +986,12 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <svg v-if="!MEDIA.includes(x.type) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <svg v-if="stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
-            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><input v-if="renaming === x.id" v-model="x.title" :data-ren="x.id" class="rin" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="renameDone" @input="save" /><template v-else>{{ x.title }}</template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${itemMin(x)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
+            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><input v-if="renaming === x.id" v-model="x.title" :data-ren="x.id" class="rin" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="renameDone" @input="save" /><template v-else>{{ x.title }}</template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
             <!-- карточка урока, как её увидит ученик (как в Busuu): тип, примерное время, «Поехали!» — пройти урок целиком -->
             <div v-if="peekOf(x)" class="lpv" @pointerdown.stop @dblclick.stop>
-              <small class="pt">{{ T[x.type].t }} · ≈
-                <input class="pmin" type="number" min="1" max="240" :value="itemMin(x, peekOf(x))" :title="'Сколько минут на урок. По экранам выходит ≈ ' + lessonMin(peekOf(x)) + ' мин — поставьте своё, если нужно'" @pointerdown.stop @keydown.stop @keydown.enter="$event.target.blur()" @change="setLessonMin(x, $event.target)" /> мин
-                <button v-if="x.min" class="preset" title="Вернуть время по экранам" @click="setLessonMin(x, null)">↺</button></small>
+              <small>{{ T[x.type].t }} · ≈ {{ lessonMin(x.steps) }} мин</small>
               <b>{{ x.title || T[x.type].t }}</b>
-              <p>{{ screens(peekOf(x).length) }}</p>
+              <p>{{ screens(x.steps.length) }}<template v-if="x.steps.length > peekOf(x).length"> · не готово: {{ x.steps.length - peekOf(x).length }}</template></p>
               <button class="pgo" @click="run = x.id">Поехали!</button>
             </div>
           </template>
@@ -1318,10 +1310,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .lpv::before { content: ''; position: absolute; left: 24px; top: -9px; border: 10px solid transparent; border-top: 0; border-bottom-color: var(--c) }
 .lpv small { font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; opacity: .85 }
 .lpv b { font-size: 18px; font-weight: 900; line-height: 1.2 } .lpv p { margin: 0 0 6px; font-size: 13px; font-weight: 600; opacity: .9 }
-.pt { display: flex; align-items: center; gap: 4px }
-.pmin { width: 46px; padding: 2px 4px; border: 0; border-radius: 6px; background: rgba(255, 255, 255, .25); color: #fff; font: inherit; font-size: 12px; text-align: center; -moz-appearance: textfield }
-.pmin:focus { outline: 2px solid #fff; background: rgba(255, 255, 255, .35) } .pmin::-webkit-inner-spin-button { opacity: 1 }
-.preset { padding: 0 4px; border: 0; background: none; color: #fff; font: inherit; font-size: 14px; cursor: pointer; opacity: .85 }
 .pgo { padding: 11px; border: 0; border-radius: 12px; background: #fff; color: var(--d); font: inherit; font-size: 15px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
 .pgo:active { transform: translateY(2px); box-shadow: none }
 .runov { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
