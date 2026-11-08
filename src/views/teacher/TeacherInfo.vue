@@ -67,7 +67,9 @@ function calc(step) {
 const rows = computed(() => calc(by.value))                     // столбики графика
 const byMonth = computed(() => (by.value === 'month' ? rows.value : calc('month')))
 const table = computed(() => [...byMonth.value].reverse())       // таблица — всегда по месяцам, новые сверху
-const total = computed(() => byMonth.value.reduce((a, r) => ({ real: a.real + r.real, ind: a.ind + r.ind, grp: a.grp + r.grp, lost: a.lost + r.lost, cancels: a.cancels + r.cancels, done: a.done + r.done }), { real: 0, ind: 0, grp: 0, lost: 0, cancels: 0, done: 0 }))
+const total = computed(() => byMonth.value.reduce((a, r) => ({ real: a.real + r.real, ind: a.ind + r.ind, grp: a.grp + r.grp, plan: a.plan + r.plan, lost: a.lost + r.lost, cancels: a.cancels + r.cancels, done: a.done + r.done }), { real: 0, ind: 0, grp: 0, plan: 0, lost: 0, cancels: 0, done: 0 }))
+// Доля отмен: сколько денег из всех уроков месяца (проведённые + запланированные + отменённые) ушло на отмены, в процентах
+const lostPct = (r) => { const all = r.real + r.plan + r.lost; return all ? Math.round(r.lost / all * 100) : 0 }
 const label = (r, step = by.value) => (step === 'month' ? MON[r.d.getMonth()] + (r.d.getMonth() === 0 || r === rows.value[0] ? ` ${String(r.d.getFullYear()).slice(2)}` : '') : `${r.d.getDate()} ${MON[r.d.getMonth()]}`)
 const monthName = (r) => `${MONTH[r.d.getMonth()]} ${r.d.getFullYear()}`
 
@@ -179,13 +181,13 @@ function demoLessons(from, to) {
           <span><i class="d ind" />Индивидуальные <em>{{ fmtMoney(bars[hover].r.ind) }}</em></span>
           <span><i class="d grp" />Групповые <em>{{ fmtMoney(bars[hover].r.grp) }}</em></span>
           <span v-if="bars[hover].r.now && bars[hover].r.plan"><i class="d plan" />Ещё запланировано <em>{{ fmtMoney(bars[hover].r.plan) }}</em></span>
-          <span v-if="bars[hover].r.lost" class="r">Отмены <em>−{{ fmtMoney(bars[hover].r.lost) }}</em></span>
+          <span v-if="bars[hover].r.lost" class="r">Отмены ({{ lostPct(bars[hover].r) }}%) <em>−{{ fmtMoney(bars[hover].r.lost) }}</em></span>
         </div>
       </div>
       <div class="legend">
         <div class="lg"><span><i class="d ind" />Индивидуальные</span><b>{{ fmtMoney(total.ind) }}</b></div>
         <div class="lg"><span><i class="d grp" />Групповые</span><b>{{ fmtMoney(total.grp) }}</b></div>
-        <div class="lg"><span><i class="d lost" />Отмены · {{ total.cancels }}</span><b class="r">−{{ fmtMoney(total.lost) }}</b></div>
+        <div class="lg"><span><i class="d lost" />Отмены · {{ total.cancels }}<template v-if="total.lost"> ({{ lostPct(total) }}%)</template></span><b class="r">−{{ fmtMoney(total.lost) }}</b></div>
       </div>
     </div>
 
@@ -198,7 +200,7 @@ function demoLessons(from, to) {
             <td><span class="mn">{{ monthName(r) }}</span><span class="ms">{{ MON[r.d.getMonth()] }} {{ String(r.d.getFullYear()).slice(2) }}</span><small v-if="r.now" class="badge">идёт</small></td>
             <td class="n">{{ r.done }}</td>
             <td class="n">{{ r.people }}</td>
-            <td class="n m">{{ r.lost ? '−' + fmtMoney(r.lost) : '—' }}</td>
+            <td class="n m">{{ r.lost ? '−' + fmtMoney(r.lost) : '—' }}<small v-if="r.lost" class="lp">{{ lostPct(r) }}% от суммы</small></td>
             <td class="n"><b>{{ fmtMoney(r.real) }}</b><small v-if="r.now && r.plan" class="pl">+ {{ fmtMoney(r.plan) }} запланировано</small></td>
           </tr>
         </tbody>
@@ -250,6 +252,7 @@ td { padding: 14px 6px; border-bottom: 1px solid var(--border); font-weight: 600
 .mn, .ms { text-transform: capitalize; font-weight: 800 } .ms { display: none }
 .badge { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 6px; background: var(--blue-l); color: var(--blue); font-size: 11px; font-weight: 800; vertical-align: 1px }
 .pl { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--blue) }
+.lp { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--hint) }
 .exp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding: 2px 4px }
 .ln :deep(svg) { flex: none; width: 18px; height: 18px }
 .ln { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 800; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; cursor: pointer }
