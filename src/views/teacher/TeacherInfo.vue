@@ -180,8 +180,9 @@ function demoLessons(from, to) {
           <b>{{ by === 'month' ? monthName(bars[hover].r) : 'неделя с ' + label(bars[hover].r) }}</b>
           <span><i class="d ind" />Индивидуальные <em>{{ fmtMoney(bars[hover].r.ind) }}</em></span>
           <span><i class="d grp" />Групповые <em>{{ fmtMoney(bars[hover].r.grp) }}</em></span>
-          <span v-if="bars[hover].r.now && bars[hover].r.plan"><i class="d plan" />Ещё запланировано <em>{{ fmtMoney(bars[hover].r.plan) }}</em></span>
+          <span class="tot">Итого <em>{{ fmtMoney(bars[hover].r.real) }}</em></span>
           <span v-if="bars[hover].r.lost" class="r">Отмены ({{ lostPct(bars[hover].r) }}%) <em>−{{ fmtMoney(bars[hover].r.lost) }}</em></span>
+          <span v-if="bars[hover].r.now && bars[hover].r.plan"><i class="d plan" />Ещё запланировано <em>{{ fmtMoney(bars[hover].r.plan) }}</em></span>
         </div>
       </div>
       <div class="legend">
@@ -240,6 +241,9 @@ h2 { margin: 14px 0 0; font-size: 20px; font-weight: 900 }
 .tip { position: absolute; top: 0; transform: translateX(-50%); z-index: 2; display: grid; gap: 3px; min-width: 210px; padding: 10px 12px; border-radius: 12px; background: var(--card); box-shadow: 0 6px 24px rgba(0, 0, 0, .14), 0 0 0 1px var(--border); font-size: 13px; font-weight: 600; pointer-events: none }
 .tip b { font-size: 13px; margin-bottom: 2px } .tip span { display: flex; align-items: center } .tip em { margin-left: auto; padding-left: 14px; font-style: normal; font-weight: 800 }
 .tip .r em { color: var(--red-d) }
+/* Подсказка месяца как чек: индивидуальные и групповые — обычным шрифтом, под ними черта и «Итого» жирнее, ниже — отмены */
+.tip span:not(.tot):not(.r) em { font-weight: 600 } .tip span { white-space: nowrap }
+.tip .tot { margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--border); font-weight: 900 } .tip .tot em { font-weight: 900 }
 .legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px }
 .lg { display: grid; gap: 4px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 12px }
 .lg span { font-size: 13px; font-weight: 700; color: var(--hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .lg b { font-size: 17px; font-weight: 900 }
