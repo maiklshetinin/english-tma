@@ -52,6 +52,8 @@ const remind = (t) => { haptic('medium'); notify(`Отправлено: ${s.valu
 const nick = ref(''), nickBusy = ref(false)
 const NICK = /^[A-Za-z][A-Za-z0-9_]{4,31}$/
 const cleanNick = () => nick.value.trim().replace(/^(https?:\/\/)?(www\.)?(t|telegram)\.me\//i, '').replace(/^@/, '').split(/[/?#\s]/)[0]
+// Ник в Telegram — по нажатию копируется (как в профиле Telegram)
+async function copyNick() { haptic('light'); showToast((await copyText('@' + s.value.username)) ? 'Ник скопирован' : 'Не удалось скопировать') }
 async function saveNick() {
   const u = cleanNick()
   if (!NICK.test(u)) return notify('Ник в Telegram: 5–32 символа, латиница, цифры и _, начинается с буквы')
@@ -91,7 +93,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
         <BackButton :to="backLabel" @click="$emit('back')" />
         <button class="avb" :aria-label="`Фото: ${s.name}`" title="Открыть фото" @click="zoom = true"><Avatar :s="s" :size="56" :online="isOnline(s)" /></button>
         <div class="who"><h2>{{ s.name }}</h2>
-          <div class="sub">{{ s.level }} · <span :class="s.status !== 'active' ? 'wait' : isOnline(s) ? 'on' : ''">{{ s.status !== 'active' ? 'ждёт приглашения' : seenLabel(s) || 'в приложении' }}</span><template v-if="s.username"> · @{{ s.username }}</template></div></div>
+          <div class="sub">{{ s.level }} · <span :class="s.status !== 'active' ? 'wait' : isOnline(s) ? 'on' : ''">{{ s.status !== 'active' ? 'ждёт приглашения' : seenLabel(s) || 'в приложении' }}</span><template v-if="s.username"> · <button class="nick" :title="`Скопировать @${s.username}`" @click="copyNick"><span>@{{ s.username }}</span><AppIcon name="copy" :size="14" /></button></template></div></div>
         <button class="ib" :class="{ on: panel === 'remind' }" aria-label="Напомнить" title="Напомнить" @click="panel = panel === 'remind' ? null : 'remind'"><AppIcon name="bell" :size="24" /></button>
         <button class="ib" :class="{ on: panel === 'edit' }" aria-label="Изменить" title="Изменить" @click="openEdit"><AppIcon name="pencil" :size="23" /></button>
       </div>
@@ -151,6 +153,8 @@ const zoom = ref(false)      // фото ученика крупно (как в 
 .pcard { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden }
 .top { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 4px }
 .who { flex: 1; min-width: 0 } .who h2 { margin: 0; font-size: 19px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.nick { display: inline-flex; align-items: center; gap: 3px; padding: 0 2px; border: 0; border-radius: 6px; background: none; font: inherit; color: var(--blue); cursor: pointer; vertical-align: bottom }
+.nick:hover { background: var(--blue-l) } .nick svg { flex: none; opacity: .8 }
 .sub { font-size: 13px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .sub .on { color: var(--blue) } .sub .wait { color: var(--orange-d) }
 .ib { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 10px; background: none; color: var(--hint); cursor: pointer } .ib:hover { background: var(--surface); color: var(--text) } .ib.on { background: var(--group); color: var(--text) }      /* значки — серые, как во всём приложении */
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border) }
