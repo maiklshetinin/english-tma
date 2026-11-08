@@ -3,6 +3,7 @@
 // Считаем так же, как в расписании (utils/price.ts): заработано — проведённые уроки по зафиксированной цене; запланировано —
 // ещё не отмеченные уроки периода; отмены — ученики, отменившие урок (по их цене). Групповой урок — где больше одного ученика.
 // Данные — GET /lessons/range (все уроки за период). В демо — придуманная история.
+// «За всё время» (months = 0): сервер отдаёт не больше 400 дней за запрос, поэтому грузим по 12 месяцев назад, пока не попадётся год без уроков.
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { apiRequest, isDemo } from '../../firebase'
 import { useStudentsStore } from '../../stores/students'
@@ -13,7 +14,7 @@ const students = useStudentsStore()
 // В демо у учеников нет цен — подставляем придуманные, чтобы были видны и отмены, и запланированное
 const DEMO_PRICE = [1500, 1800, 2000, 1200, 1700, 1500, 2200]
 const find = isDemo ? (id) => { const s = students.findAny(id); return s && { ...s, price: DEMO_PRICE[Number(id) % 7], priceHistory: [] } } : (id) => students.findAny(id)
-const months = ref(6), by = ref('month')            // период и шаг графика
+const months = ref(6), by = ref('month')            // период (6, 12 месяцев или 0 — за всё время) и шаг графика
 const lessons = ref(null), err = ref('')
 
 const pad = (n) => String(n).padStart(2, '0')
@@ -21,19 +22,35 @@ const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate(
 const today = ymd(new Date())
 const MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 const MONTH = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
-const range = computed(() => {
-  const n = new Date(), a = new Date(n.getFullYear(), n.getMonth() - months.value + 1, 1), b = new Date(n.getFullYear(), n.getMonth() + 1, 0)
-  return { from: ymd(a), to: ymd(b) }
+// Отрезок из k месяцев, кончающийся месяцем (текущий − back): [первое число; последнее число]
+const monthsRange = (k, back = 0) => { const n = new Date(); return { from: ymd(new Date(n.getFullYear(), n.getMonth() - back - k + 1, 1)), to: ymd(new Date(n.getFullYear(), n.getMonth() - back + 1, 0)) } }
+const range = computed(() => monthsRange(months.value || 12))
+// Сколько месяцев показывать: 6 / 12, а «за всё время» — с месяца первого урока по текущий
+const span = computed(() => {
+  if (months.value) return months.value
+  const first = (lessons.value ?? []).reduce((m, l) => (l.date < m ? l.date : m), today)
+  const n = new Date(); return Math.max(1, (n.getFullYear() - +first.slice(0, 4)) * 12 + n.getMonth() - (+first.slice(5, 7) - 1) + 1)
 })
+const shown = computed(() => monthsRange(span.value))      // показанный период — для имени файла выгрузки
 
 async function load() {
   lessons.value = null; err.value = ''
-  if (isDemo) { lessons.value = demoLessons(range.value.from, range.value.to); return }
+  if (isDemo) { const r = months.value ? range.value : monthsRange(18); lessons.value = demoLessons(r.from, r.to); return }
   students.loadArchived().catch(() => {})                      // имена учеников из архива — для выгрузки
-  try {
-    const r = await apiRequest(`/lessons/range?from=${range.value.from}&to=${range.value.to}`)
+  const get = async ({ from, to }) => {
+    const r = await apiRequest(`/lessons/range?from=${from}&to=${to}`)
     if (!r.ok) throw new Error(`Не удалось загрузить уроки (${r.status})`)
-    lessons.value = await r.json()
+    return r.json()
+  }
+  try {
+    if (months.value) { lessons.value = await get(range.value); return }
+    const all = []
+    for (let y = 0; y < 15; y++) {                               // по году назад; пустой год — дальше уроков нет
+      const part = await get(monthsRange(12, y * 12))
+      if (!part.length && y) break
+      all.push(...part)
+    }
+    lessons.value = all
   } catch (e) { err.value = e.message; lessons.value = [] }
 }
 onMounted(load); watch(months, load)
@@ -44,7 +61,7 @@ function bucketsOf(step) {
   const out = new Map()
   if (step === 'month') {
     const n = new Date()
-    for (let i = months.value - 1; i >= 0; i--) { const d = new Date(n.getFullYear(), n.getMonth() - i, 1); out.set(ymd(d).slice(0, 7), { key: ymd(d).slice(0, 7), d }) }
+    for (let i = span.value - 1; i >= 0; i--) { const d = new Date(n.getFullYear(), n.getMonth() - i, 1); out.set(ymd(d).slice(0, 7), { key: ymd(d).slice(0, 7), d }) }
   } else {
     let m = monday(today)
     for (let i = 0; i < 12; i++) { out.set(m, { key: m, d: new Date(m + 'T12:00:00') }); const d = new Date(m + 'T12:00:00'); d.setDate(d.getDate() - 7); m = ymd(d) }
@@ -86,6 +103,9 @@ const scale = computed(() => {
   return { top: step * 3, ticks: [0, step, step * 2, step * 3] }
 })
 const y = (v) => TOP + (H - TOP - BOT) * (1 - v / scale.value.top)
+// Подписи под столбиками: если не влезают (много месяцев на узком экране) — через одну / две, последняя (текущая) — всегда
+const labelStep = computed(() => Math.max(1, Math.ceil(bars.value.length * 48 / Math.max(1, W.value))))
+const showLabel = (i) => { const n = bars.value.length, k = labelStep.value; return k === 1 || i === n - 1 || ((n - 1 - i) % k === 0 && n - 1 - i >= k) }
 const bars = computed(() => {
   const n = rows.value.length, slot = (W.value - PADL - PADR) / n, bw = Math.min(46, slot * 0.56)
   return rows.value.map((r, i) => {
@@ -111,7 +131,7 @@ function download(name, lines) {
 }
 const num = (n) => String(Math.round(n * 100) / 100).replace('.', ',')
 function exportMonths() {
-  download(`доходы по месяцам ${range.value.from} — ${range.value.to}.csv`, [['Месяц', 'Проведено уроков', 'Учеников', 'Индивидуальные', 'Групповые', 'Заработано', 'Запланировано', 'Отмен', 'Потеряно на отменах'],
+  download(`доходы по месяцам ${shown.value.from} — ${shown.value.to}.csv`, [['Месяц', 'Проведено уроков', 'Учеников', 'Индивидуальные', 'Групповые', 'Заработано', 'Запланировано', 'Отмен', 'Потеряно на отменах'],
     ...table.value.map(r => [monthName(r), r.done, r.people, num(r.ind), num(r.grp), num(r.real), num(r.plan), r.cancels, num(r.lost)])])
 }
 const nameOf = (l, id) => find(id)?.name ?? l.names?.[id] ?? 'ученик удалён'
@@ -122,7 +142,7 @@ function exportLessons() {
     out.push([l.date.split('-').reverse().join('.'), `${pad(l.hour)}:${pad(l.minute ?? 0)}`, l.studentIds.map(id => nameOf(l, id)).join(', '), l.studentIds.length > 1 ? 'группа' : 'индивидуальный',
       l.done ? 'проведён' : off.length === l.studentIds.length ? 'отменён' : l.date < today ? 'не отмечен' : 'запланирован', num(l.done ? m.real : m.plan), off.map(id => nameOf(l, id)).join(', ')])
   }
-  download(`уроки ${range.value.from} — ${range.value.to}.csv`, out)
+  download(`уроки ${shown.value.from} — ${shown.value.to}.csv`, out)
 }
 
 // ---------- Демо: придуманные уроки за период ----------
@@ -147,19 +167,22 @@ function demoLessons(from, to) {
 
 <template>
   <div class="page wide info">
-    <h1>Информация</h1>
-    <nav class="tabs"><button class="on">Доходы</button></nav>
+    <!-- Заголовок и вкладки — одной строкой, чтобы шапка не съедала высоту -->
+    <div class="hdr">
+      <h1>Информация</h1>
+      <nav class="tabs"><button class="on">Доходы</button></nav>
+    </div>
 
+    <!-- Сумма слева, период — справа в той же строке: шапка короче, график без прокрутки -->
     <div class="top">
-      <div class="seg"><button :class="{ on: months === 6 }" @click="months = 6">6 месяцев</button><button :class="{ on: months === 12 }" @click="months = 12">12 месяцев</button></div>
+      <div class="sum">
+        <span class="cap">Заработано {{ months ? `за ${months} месяцев` : 'за всё время' }}</span>
+        <b class="big">{{ lessons ? fmtMoney(total.real) : '…' }}</b>
+        <span v-if="lessons" class="hint">{{ total.done }} уроков проведено<template v-if="total.lost"> · −{{ fmtMoney(total.lost) }} на отменах</template></span>
+      </div>
+      <div class="seg per"><button :class="{ on: months === 6 }" @click="months = 6">6 месяцев</button><button :class="{ on: months === 12 }" @click="months = 12">12 месяцев</button><button :class="{ on: months === 0 }" @click="months = 0">За всё время</button></div>
     </div>
     <p v-if="err" class="hint bad">{{ err }}</p>
-
-    <div class="sum">
-      <span class="cap">Заработано за {{ months }} месяцев</span>
-      <b class="big">{{ lessons ? fmtMoney(total.real) : '…' }}</b>
-      <span v-if="lessons" class="hint">{{ total.done }} уроков проведено<template v-if="total.lost"> · −{{ fmtMoney(total.lost) }} на отменах</template></span>
-    </div>
 
     <div class="card chart">
       <div class="ch">
@@ -172,7 +195,7 @@ function demoLessons(from, to) {
             <rect :x="b.x - 6" :y="TOP" :width="b.w + 12" :height="H - TOP - BOT" class="hit" />
             <rect v-if="b.plan" :x="b.x + 1" :y="b.plan.y + 1" :width="b.w - 2" :height="Math.max(0, b.plan.h - 1)" rx="5" class="plan" />
             <path v-if="b.ind" :d="b.ind" class="ind" /><path v-if="b.grp" :d="b.grp" class="grp" />
-            <text :x="b.cx" :y="H - 8" class="xl" :class="{ now: b.r.now }">{{ label(b.r) }}</text>
+            <text v-if="showLabel(i)" :x="b.cx" :y="H - 8" class="xl" :class="{ now: b.r.now }">{{ label(b.r) }}</text>
           </g>
         </svg>
         <div v-else class="sk" />
@@ -217,18 +240,19 @@ function demoLessons(from, to) {
 
 <style scoped>
 .info { gap: 12px }
-h1 { margin: 6px 0 0; font-size: 30px; font-weight: 900 }
+h1 { margin: 0; font-size: 26px; font-weight: 900 }
+.hdr { display: flex; align-items: flex-end; gap: 24px; border-bottom: 1px solid var(--border) } .hdr h1 { padding-bottom: 6px } .hdr .tabs { border-bottom: 0 }
 h2 { margin: 14px 0 0; font-size: 20px; font-weight: 900 }
 .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border) }
 .tabs button { padding: 8px 0 10px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--hint); cursor: pointer }
 .tabs button.on { color: var(--blue); border-color: var(--blue) }
-.top { display: flex; align-items: center; gap: 10px }
+.top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 16px } .top .per { margin-top: 2px }
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface) }
 .seg button { border: 0; border-radius: 9px; padding: 7px 14px; background: none; font: inherit; font-size: 14px; font-weight: 800; color: var(--hint); cursor: pointer }
 .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .seg.sm button { padding: 5px 12px; font-size: 13px }
-.sum { display: grid; gap: 2px; margin-top: 4px } .cap { font-size: 15px; font-weight: 800 }
-.big { font-size: 34px; font-weight: 900; letter-spacing: -.5px; color: var(--text) }
+.sum { display: grid; gap: 2px } .cap { font-size: 15px; font-weight: 800 }
+.big { font-size: 30px; font-weight: 900; letter-spacing: -.5px; color: var(--text) }
 .chart { display: grid; gap: 10px; padding: 14px 16px 16px }
 .ch { display: flex; justify-content: flex-end }
 .plot { position: relative } svg { display: block; width: 100%; height: auto; overflow: visible }
@@ -263,7 +287,7 @@ td { padding: 14px 6px; border-bottom: 1px solid var(--border); font-weight: 600
 .ln:disabled { opacity: .4; cursor: default } .exp .hint { font-size: 12px }
 .bad { color: var(--red-d) }
 @media (max-width: 600px) {
-  h1 { font-size: 26px } .big { font-size: 30px }
+  h1 { font-size: 22px } .big { font-size: 26px }
   .legend { grid-template-columns: 1fr 1fr } .legend .lg:last-child { grid-column: 1 / -1 }
   .tbl { padding: 2px 10px } th, td { padding-left: 3px; padding-right: 3px } th:nth-child(3), td:nth-child(3) { display: none }
   .tip { min-width: 190px } .mn { display: none } .ms { display: inline } .badge { margin-left: 4px }
