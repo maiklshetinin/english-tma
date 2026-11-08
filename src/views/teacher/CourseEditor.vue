@@ -1,7 +1,7 @@
 <script setup>
 // ЧЕРНОВИК. Редактор курсов — холст как во FigJam + «рельс».
 //  • Холст: тянуть по пустому месту / колёсико — двигать; Ctrl + колёсико, щипок, кнопки — масштаб; «Весь курс» — показать всё.
-//  • Рельс — одна линия сверху вниз («Волна» или «Прямая»), на ней по порядку задания. Рельс и есть шкала прогресса:
+//  • Рельс — одна прямая линия сверху вниз, на ней по порядку задания. Рельс и есть шкала прогресса:
 //    пройденное закрашено, текущее — «Сейчас». Сверху — сводка, как увидит ученик.
 //  • Задание можно просто положить на холст рядом (черновики), потом перетащить на рельс — встанет в ближайший промежуток,
 //    соседи расступятся. С рельса — оттащить на холст. С панели — тянуть куда угодно или нажать (в конец рельса).
@@ -114,7 +114,7 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 let remote = false, shareT = 0
 const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), text: n.text ?? '', color: n.color, ...(n.by ? { by: n.by } : {}), ...(n.sz && n.sz !== 's' ? { sz: n.sz } : {}), ...(n.font ? { font: n.font } : {}), ...(n.b ? { b: true } : {}), ...(n.st ? { st: true } : {}), ...(n.list ? { list: true } : {}), ...(n.nob ? { nob: true } : {}) })
 const cleanInk = (k) => ({ id: k.id, c: k.c, w: k.w, p: k.p.map(Math.round) })
-const payload = () => ({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk) })
+const payload = () => ({ title: doc.title, mode: 'line', progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk) })
 function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
@@ -388,7 +388,7 @@ async function pasteItems(at = null) {           // at — точка холст
   }
   const hasU = list.some(x => x.type === 'unit')
   if (at && hasU) {                 // глава с уроками — столбиком, как на рельсе; левый верхний угол плашки главы — у курсора
-    const L = layoutOf(list, 'line'), dy = list[0].type === 'unit' ? 70 : 0
+    const L = layoutOf(list), dy = list[0].type === 'unit' ? 70 : 0
     list.forEach((x, k) => { x.x = Math.round(at.x - CH_X0 + L[k].x); x.y = Math.round(at.y + dy + L[k].y) })
   } else if (at) list.forEach((x, k) => { x.x = Math.round(at.x + k * 150); x.y = Math.round(at.y) })
   if (at) doc.loose.push(...list)          // ровно у курсора, как в Figma (не отодвигаем)
@@ -438,7 +438,7 @@ const widthOf = (items) => Math.max(760, ...items.filter(x => INTERACTIVE.includ
 const othersL = computed(() => {
   let x = widthOf(doc.items) + 260
   return others.value.map((c) => {
-    const items = c.items ?? [], L = layoutOf(items, c.mode ?? 'line', 'o' + c.id), ox = x
+    const items = c.items ?? [], L = layoutOf(items, 'o' + c.id), ox = x
     x += widthOf(items) + 260
     let k = 0
     const key = 'o' + c.id, cb = []
@@ -447,7 +447,7 @@ const othersL = computed(() => {
       let last = i; while (last + 1 < items.length && items[last + 1].type !== 'unit') last++
       const lastIt = items[last], top = L[i].y - 70
       const bottom = L[last].y + 56 + (last > i && hasRail(lastIt, key) ? 40 + (railHs[key + lastIt.id] ?? RAIL_H) : 0)
-      let x0 = (c.mode === 'wave' ? -330 : CH_X0), x1 = (c.mode === 'wave' ? 330 : CH_X1)
+      let x0 = CH_X0, x1 = CH_X1
       if (u.hlw) for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key)) x1 = Math.max(x1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps.length) * 520 + 460 + 36)
       const hc = u.hlc ?? HL_DEF, y1 = top + Math.max(120, bottom - top)
       cb.push({ id: u.id, light: hc === '#ffffff', off: u.hl === 'none', box: { x0: ox + x0, y0: top, x1: ox + x1, y1 }, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: ox + x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
@@ -838,9 +838,7 @@ onUnmounted(() => removeEventListener('resize', onResize))
 const dots = computed(() => { let s = 20 * view.z; while (s < 10) s *= 4; return { backgroundSize: `${s}px ${s}px`, backgroundPosition: `${view.x}px ${view.y}px` } })
 
 // ---------- Раскладка рельса (в координатах холста; центр линии — x = 0) ----------
-const mode = computed({ get: () => doc.mode ?? 'wave', set: (v) => { doc.mode = v; save() } })
-const G = { step: 116, unitGap: 160, amp: 84 }
-const K = [0, .7, 1, .7, 0, -.7, -1, -.7]
+const G = { step: 116, unitGap: 160 }          // рельс всегда прямой («Волну» убрали)
 // за курсором мимо рельса: элементы структуры и где они лягут (в координатах холста)
 const flyTree = computed(() => {
   if (!drag.on || (drag.over && drag.item?.type !== 'unit') || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
@@ -867,17 +865,16 @@ const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({
 const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
 const hasRail = (x, key = '') => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && BRANCH.includes(x.type)))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
-const layoutOf = (list, m = mode.value, key = '') => {
+const layoutOf = (list, key = '') => {
   let y = 0
   return list.map((x, i) => {
     if (i) {                                     // под урок с экранами — место во всю высоту его экранов (без прокрутки)
       const gap = x.type === 'unit' ? G.unitGap : G.step, prev = list[i - 1]
       // глава: от низа плашки предыдущей главы — всегда CH_GAP (низ плашки = последнее задание + 56, у урока с веткой — + ветка)
-      if (x.type === 'unit' && m !== 'wave') y += 56 + (hasRail(prev, key) ? 40 + (railHs[key + prev.id] ?? RAIL_H) : 0) + CH_GAP + 70
+      if (x.type === 'unit') y += 56 + (hasRail(prev, key) ? 40 + (railHs[key + prev.id] ?? RAIL_H) : 0) + CH_GAP + 70
       else y += hasRail(prev, key) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
     }
-    const off = m === 'wave' ? K[i % 8] * G.amp : 0
-    return { x: off, y, side: off > 0 ? 'l' : 'r' }
+    return { x: 0, y, side: 'r' }
   })
 }
 // Порядок на рельсе: взятое (если целимся в рельс) уже стоит на месте прицела
@@ -921,7 +918,7 @@ const chapters = computed(() => {
     if (x.type === 'unit') out.push({ id: x.id, i, last: i, tasks: 0, done: 0 })
     else if (out.length) { const c = out[out.length - 1]; c.last = i; c.tasks++; if (stateOf(x, i) === 'done') c.done++ }
   })
-  const [x0, x1] = mode.value === 'wave' ? [-330, 330] : [-70, 420]
+  const [x0, x1] = [-70, 420]
   return out.map(c => ({ ...c, pct: c.tasks ? Math.round(c.done / c.tasks * 100) : 0, style: { left: x0 + 'px', width: x1 - x0 + 'px', top: L[c.i].y - 62 + 'px', height: L[c.last].y - L[c.i].y + 62 + 64 + 'px' } }))
 })
 const chapterOf = (i) => chapters.value.find(c => c.i === i)
@@ -943,7 +940,7 @@ const chapterBoxes = computed(() => {
     const u = order.value[c.i]; if (!u) return
     const next = chapters.value[k + 1], lastIt = order.value[c.last]
     const bottom = L[c.last].y + 56 + (c.last > c.i && hasRail(lastIt) ? 40 + (railHs[lastIt.id] ?? RAIL_H) : 0)          // низ — по последнему заданию главы (тот же отступ, что в раскладке)
-    let x0 = mode.value === 'wave' ? -330 : CH_X0, x1 = mode.value === 'wave' ? 330 : CH_X1
+    let x0 = CH_X0, x1 = CH_X1
     if (u.hlw) for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) x1 = Math.max(x1, r.p.x + RAIL_X0 + Math.max(1, r.x.steps?.length ?? 0) * 520 + 460 + 36) }
     const top = L[c.i].y - 70
     const hc = u.hlc ?? HL_DEF
@@ -969,7 +966,7 @@ const railKids = (u) => { const i = doc.items.indexOf(u); if (i < 0) return null
 const chapSel = computed(() => (sel.value && !msel.value.length && !drag.on ? chapterBoxes.value.find(c => c.id === sel.value) : null))
 function chapDown(e, c) { if (e.button === 2) return; const u = findAny(c.id); if (u) startDrag(e, { item: u, from: c.from }) }
 const rowHl = computed(() => {
-  if (drag.on || mode.value === 'wave') return null
+  if (drag.on) return null
   // выбранный урок, а если ничего не выбрано — текущий («Сейчас»), как в Busuu
   let i = sel.value ? order.value.findIndex(v => v.id === sel.value) : -1
   if (i < 0 && !sel.value) i = order.value.findIndex((v, k) => v.type !== 'unit' && stateOf(v, k) === 'current')
@@ -1604,7 +1601,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
     </div>
     <div class="fl tr-panel">
       <PresenceBar inline /><i v-if="live.on" class="vs" />
-      <div class="seg"><button :class="{ on: mode === 'wave' }" @click="mode = 'wave'">Волна</button><button :class="{ on: mode === 'line' }" @click="mode = 'line'">Прямая</button></div><i class="vs" />
       <button class="allr" :class="{ on: allCourses }" title="Показать рядом остальные курсы — смотреть и копировать их экраны в этот (Ctrl+C / Ctrl+V)" @click="allCourses = !allCourses"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="7" height="16" rx="2" /><rect x="13.5" y="4" width="7" height="16" rx="2" /></svg>Все курсы</button><i class="vs" />
       <span class="pl">Прогресс<small>пример</small></span>
       <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
@@ -1762,7 +1758,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .st { font-size: 18px; font-weight: 900; color: var(--text) }
 .bar { height: 10px; margin: 4px 0 2px; border-radius: 6px; background: #ececec; overflow: hidden } .bar i { display: block; height: 100%; border-radius: 6px; background: var(--green); transition: width .25s }
 .sf { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--hint) } .sf b { color: var(--text) }
-.seg { display: flex; padding: 2px; border-radius: 9px; background: var(--surface) } .seg button { border: 0; border-radius: 7px; padding: 5px 10px; background: none; font: inherit; font-size: 12px; font-weight: 800; color: var(--hint); cursor: pointer } .seg button.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12) } .sign span { font-size: 12px; font-weight: 700; opacity: .85 }
+.sign span { font-size: 12px; font-weight: 700; opacity: .85 }
 /* Карточка выбранного */
 .pop { position: fixed; z-index: 20; display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04); cursor: default; animation: pop .14s ease-out }
 @keyframes pop { from { opacity: 0; transform: translateY(-4px) } }
