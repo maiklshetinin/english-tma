@@ -360,7 +360,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       <span class="stem" />
       <!-- размер не меняется, когда к уроку тянут Exercise (иначе прыгает раскладка и плашка главы): меняется только надпись в плашке -->
       <!-- как плашка «Chapter» в конце рельса: тот же значок, что у кнопки «Exercise» на панели; серая — в покое, синяя — когда к уроку тянут Exercise -->
-      <div class="ef" :class="{ hot }"><span class="xpill"><em class="xn">3</em><svg viewBox="0 0 24 24" v-html="KINDS.choice.ic" /><small>Exercise</small></span><span>Тяните сюда «Exercise» с панели внизу или вставьте скопированный (Ctrl+V)</span>
+      <div class="ef" :class="{ hot }"><span class="xpill"><em class="xn">3</em><svg viewBox="0 0 24 24" v-html="KINDS.choice.ic" /><small>Exercise</small></span><span>{{ readonly ? 'Exercise пока нет' : 'Тяните сюда «Exercise» с панели внизу или вставьте скопированный (Ctrl+V)' }}</span>
         <!-- заметка-план: как чекпоинт должен собираться сам (пока вручную) -->
         <div v-if="isCk" class="cknote"><b>Заметка · чекпоинт соберётся сам (в планах)</b>
           <ul><li>Задания берутся из Exercise уроков этой Chapter: по 1–2 на каждое новое слово, фразу, правило.</li>
@@ -368,7 +368,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
             <li>По ответам ученика: где ошибался в уроках — больше заданий (интервальное повторение), что знает уверенно — меньше.</li>
             <li>Порог — 80 % верных (mastery learning): не набрал — повтор слабых мест, набрал — открывается следующая Chapter.</li>
             <li>Учитель может добавить свои Exercise вручную.</li></ul></div>
-        <div class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">Добавить Exercise</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
+        <div v-if="!readonly" class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">Добавить Exercise</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
     </div>
     <button v-if="canPaste && steps.length && !readonly && !free" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: (up ? y - 60 : y + 26) + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
     <!-- «+» на ветке убрали (07.11): экраны добавляют перетаскиванием из «Интерактива» или «+ Экран» в пустом уроке -->

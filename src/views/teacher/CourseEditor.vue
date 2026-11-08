@@ -431,6 +431,7 @@ async function loadOthers() {
       const list = (await r.json()).courses.filter(c => c.id !== doc.id)
       others.value = (await Promise.all(list.map(c => apiRequest(`/courses/${c.id}`).then(x => (x.ok ? x.json() : null)).catch(() => null)))).filter(Boolean)
     } else others.value = (JSON.parse(localStorage.getItem('tma.demoCourses') ?? '[]') ?? []).filter(c => c.id !== doc.id)   // демо: курсы-образцы
+    others.value = others.value.map(c => ({ ...c, items: (c.items ?? []).map(chName), loose: (c.loose ?? []).map(chName) }))          // «Глава N» → «Chapter N», как в своём
   } catch { others.value = [] }
   if (!others.value.length) showToast('Других курсов пока нет — создайте курс на вкладке «Курсы»')
 }
@@ -451,7 +452,7 @@ const othersL = computed(() => {
       const bottom = L[last].y + 56 + (last > i && hasRail(lastIt, key) ? 40 + (railHs[key + lastIt.id] ?? RAIL_H) : 0)
       let x0 = CH_X0, x1 = CH_X1
       let fx1 = x1
-      for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key) || railUp(items[k], key)) fx1 = Math.max(fx1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps.length) * 520 + 460 + 36)
+      for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key) || railUp(items[k], key)) fx1 = Math.max(fx1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps?.length ?? 0) * 520 + 460 + 36)
       if (u.hlw) x1 = fx1
       const hc = u.hlc ?? HL_DEF, y1 = top + Math.max(120, bottom - top)
       cb.push({ id: u.id, light: hc === '#ffffff', off: u.hl === 'none', box: { x0: ox + x0, y0: top, x1: ox + fx1, y1 }, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: ox + x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
@@ -886,8 +887,9 @@ const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: 
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
 // Чекпоинт — в самом конце главы: его ветка экранов идёт ВВЕРХ (над линией), под ним сразу низ плашки главы — всегда на одном расстоянии,
 // и видно, что после чекпоинта урок не вставить. hasRail — ветка вниз (у уроков), railUp — ветка вверх (у чекпоинта)
-const railUp = (x, key = '') => x?.type === 'checkpoint' && (!!x.steps?.length || !key)
-const hasRail = (x, key = '') => x?.type !== 'checkpoint' && INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && BRANCH.includes(x.type)))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
+// соседние курсы («Все курсы») раскладываются точь-в-точь как свой: и пустые уроки — с веткой (иначе их не видно, а копируются они)
+const railUp = (x) => x?.type === 'checkpoint'
+const hasRail = (x) => x?.type !== 'checkpoint' && INTERACTIVE.includes(x?.type) && (!!x.steps?.length || BRANCH.includes(x.type))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
 const layoutOf = (list, key = '') => {
   let y = 0
   return list.map((x, i) => {
@@ -1567,7 +1569,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="och" :style="{ left: o.ox - 46 + 'px', top: '-170px' }" title="Дважды — открыть этот курс в редакторе" @pointerdown.stop @dblclick.stop="openOther(o.id)"><b>{{ o.title }}</b><small>другой курс · смотреть и копировать экраны · дважды — открыть</small></div>
           <div v-for="c in o.cb" :key="'ocb' + o.id + c.id" class="chapbox still" :class="{ light: c.light, off: c.off }" :style="c.style" @pointerdown.stop="msel = [($event.shiftKey ? msel : []), 'oi:' + o.id + ':' + c.id].flat(); sel = null; selectStep(null, null)" @dblclick.stop="openOther(o.id)" />
           <svg class="rail" :height="o.h"><path :d="o.path" class="r0" /></svg>
-          <LessonRail v-for="(x, i) in o.items.filter(v => INTERACTIVE.includes(v.type) && v.steps?.length)" :key="'olr' + o.id + x.id" :item="x" :up="x.type === 'checkpoint'" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
+          <LessonRail v-for="(x, i) in o.items.filter(v => hasRail(v) || railUp(v))" :key="'olr' + o.id + x.id" :item="x" :up="x.type === 'checkpoint'" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
             :sel="opick?.lesson === x.id ? opick.s.id : null" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly
             @copy="copyStep($event, o.id)" @select="(sid) => { opick = sid && sid !== 'final' ? { course: o.id, lesson: x.id, s: x.steps.find(v => v.id === sid) } : null; if (sid) selectStep(null, null) }"
             @height="railHs['o' + o.id + x.id] = $event" @focus="showPoint" />
