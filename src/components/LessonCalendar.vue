@@ -118,20 +118,20 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
         <i class="dot" /><b>{{ pickedTitle }} · {{ hh(l.hour, l.minute) }}</b>
         <span class="cs">{{ STATUS[statusOf(l)] }}{{ statusOf(l) !== 'off' && priceOf(l) ? ` · ${fmtMoney(priceOf(l))}` : '' }}</span>
       </div>
-      <!-- Итог месяца — чеком, как подсказка в «Информации»: ✓ итого, ✕ отмены (доля), □ ещё запланировано (светлее) -->
-      <div class="rc">
-        <div class="rr tot"><i class="done" /><span class="t">Итого <small>· {{ sum.done }} ур. проведено</small></span><span v-if="teacher" class="v">{{ fmtMoney(sum.paid) }}</span></div>
-        <div v-if="sum.off" class="rr off"><i class="off" /><span class="t">Отмены<template v-if="teacher && lostPct"> ({{ lostPct }}%)</template> <small>· {{ sum.off }} ур.</small></span><span v-if="teacher" class="v">−{{ fmtMoney(sum.lost) }}</span></div>
-        <div v-if="sum.plan" class="rr pl"><i class="plan" /><span class="t">Ещё запланировано <small>· {{ sum.plan }} ур.</small></span><span v-if="teacher" class="v">{{ fmtMoney(sum.expected - sum.paid) }}</span></div>
+      <!-- Итог месяца: слева — чек, справа — «Счёт» карточкой (на узком экране — под чеком во всю ширину) -->
+      <div class="sumw">
+        <div class="rc">
+          <div class="rr tot"><i class="done" /><span class="t">Итого <small>· {{ sum.done }} ур. проведено</small></span><span v-if="teacher" class="v">{{ fmtMoney(sum.paid) }}</span></div>
+          <div v-if="sum.off" class="rr off"><i class="off" /><span class="t">Отмены<template v-if="teacher && lostPct"> ({{ lostPct }}%)</template> <small>· {{ sum.off }} ур.</small></span><span v-if="teacher" class="v">−{{ fmtMoney(sum.lost) }}</span></div>
+          <div v-if="sum.plan" class="rr pl"><i class="plan" /><span class="t">Ещё запланировано <small>· {{ sum.plan }} ур.</small></span><span v-if="teacher" class="v">{{ fmtMoney(sum.expected - sum.paid) }}</span></div>
+        </div>
+        <button v-if="teacher && sum.done" class="rcp" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true">
+          <span class="ri"><AppIcon name="receipt" :size="22" /></span>
+          <span class="rt"><b>Счёт</b><small>за {{ monthName }}</small></span>
+        </button>
       </div>
     </template>
   </div>
-  <!-- Счёт — отдельной кнопкой под календарём: сразу видно, что это действие, а не часть итога -->
-  <button v-if="compact && teacher && sum.done" class="card rcp" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true">
-    <span class="ri"><AppIcon name="receipt" :size="22" /></span>
-    <span class="rt"><b>Счёт за {{ monthName }}</b><small>{{ fmtMoney(sum.paid) }} за {{ sum.done }} ур. · скачать или отправить</small></span>
-    <span class="rch"><AppIcon name="back" :size="20" /></span>
-  </button>
 
   <template v-if="!compact">
   <div v-if="picked" class="dayl">
@@ -224,7 +224,9 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .cl .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c) } .cl .cs { flex: 1; color: var(--hint); font-weight: 600 } .cl.off b { text-decoration: line-through; color: var(--hint) }
 .cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
 .cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { flex: none; border-radius: 50% } .cnt i.plan { width: 14px; height: 14px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }      /* легенда — как дни календаря: ✓ зелёный, ✕ красный, серый квадрат */ .cnt b { color: var(--text); font-weight: 900 }
-.rc { display: grid; gap: 7px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 14px; font-weight: 700 }
+.sumw { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border) }
+@media (max-width: 420px) { .sumw { grid-template-columns: 1fr } }
+.rc { display: grid; gap: 7px; font-size: 14px; font-weight: 700 }
 .rr { display: flex; align-items: center; gap: 8px } .rr .t { flex: 1; min-width: 0 } .rr .t small { font-weight: 700; color: var(--hint) }
 .rr .v { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap }
 .rr i { flex: none; width: 16px; height: 16px; border-radius: 50% } .rr i.plan { width: 14px; height: 14px; margin: 0 1px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
@@ -234,10 +236,9 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
 .cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
 .cmr { gap: 10px } .cmr > span { flex: 1 }
-.rcp { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 1px solid var(--border); text-align: left; font: inherit; color: var(--text); cursor: pointer }
+.rcp { display: flex; align-items: center; gap: 10px; min-width: 150px; padding: 10px 14px 10px 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); text-align: left; font: inherit; color: var(--text); cursor: pointer }
 .rcp:hover { background: var(--blue-l); border-color: transparent }
-.rcp .ri { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--blue-l); color: var(--blue) }
-.rcp .rt { flex: 1; display: grid; gap: 1px; min-width: 0 } .rcp .rt b { font-size: 16px; font-weight: 900 } .rcp .rt small { font-size: 13px; font-weight: 700; color: var(--hint) }
-.rcp .rch { display: grid; color: var(--hint-2) } .rcp .rch svg { transform: scaleX(-1) }
+.rcp .ri { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--blue-l); color: var(--blue) }
+.rcp .rt { display: grid; gap: 1px } .rcp .rt b { font-size: 16px; font-weight: 900 } .rcp .rt small { font-size: 12px; font-weight: 700; color: var(--hint) }
 .cmr .g { color: var(--text) } .cmr .r { color: var(--red-d); font-size: 15px }
 </style>
