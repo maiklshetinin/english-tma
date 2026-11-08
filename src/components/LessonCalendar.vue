@@ -119,7 +119,7 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
       <div class="cnt"><span><i class="done" /><b>{{ sum.done }}</b> проведено</span><span><i class="plan" /><b>{{ sum.plan }}</b> запланировано</span><span><i class="off" /><b>{{ sum.off }}</b> отменено</span></div>
       <div v-if="teacher && (sum.expected || sum.lost)" class="cm">
         <div class="cmr"><span><b class="g">{{ fmtMoney(sum.paid) }}</b> из {{ fmtMoney(sum.expected) }} за месяц</span><b v-if="sum.lost" class="r">−{{ fmtMoney(sum.lost) }}</b>
-          <button v-if="sum.done" class="rcp" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="15" /> Счёт</button></div>
+          <button v-if="sum.done" class="rcp" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="18" /> Счёт</button></div>
         <div class="mbar"><i :style="{ width: (sum.expected ? Math.min(100, sum.paid / sum.expected * 100) : 0) + '%' }" /></div>
       </div>
     </template>
@@ -216,6 +216,7 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
 .cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
 .cmr { gap: 10px } .cmr > span { flex: 1 }
-.rcp { flex: none; align-self: center; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 0; border-radius: 99px; background: var(--surface); color: var(--blue); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .rcp:hover { background: var(--blue-l) }
+/* «Счёт» — заметная кнопка: крупнее, голубая подложка */
+.rcp { flex: none; align-self: center; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 0; border-radius: 12px; background: var(--blue-l); color: var(--blue); font: inherit; font-size: 15px; font-weight: 800; cursor: pointer } .rcp:hover { background: var(--blue); color: #fff }
 .cmr .g { color: var(--text) } .cmr .r { color: var(--red-d); font-size: 15px } .cm .mbar { height: 6px }
 </style>
