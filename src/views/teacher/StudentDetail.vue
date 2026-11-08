@@ -100,8 +100,6 @@ const zoom = ref(false)      // фото ученика крупно (как в 
         <div><b>{{ s.price ? fmtMoney(s.price) : '—' }}</b><small>цена</small></div>
         <div><b :class="'p-' + PAY[s.payment.status][1]">{{ s.payment.lessonsLeft }}</b><small :title="`Оплата: ${PAY[s.payment.status][0]}`">уроков осталось</small></div>
         <div><b>{{ pctOf(pathStore.of(s.id)) }}%</b><small>прогресс</small></div>
-        <div><b>🔥{{ s.streak }}</b><small>серия</small></div>
-        <div><b>{{ s.coins }}</b><small>монет</small></div>
       </div>
 
       <div v-if="panel === 'remind'" class="pan"><span class="pl">Напомнить в Telegram</span>
@@ -155,7 +153,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
 .who { flex: 1; min-width: 0 } .who h2 { margin: 0; font-size: 19px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .sub { font-size: 13px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .sub .on { color: var(--blue) } .sub .wait { color: var(--orange-d) }
 .ib { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 10px; background: none; color: var(--hint); cursor: pointer } .ib:hover { background: var(--surface); color: var(--text) } .ib.on { background: var(--group); color: var(--text) }      /* значки — серые, как во всём приложении */
-.stats { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--border) }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border) }
 .stats div { display: grid; justify-items: center; gap: 1px; padding: 8px 2px; min-width: 0 } .stats div + div { border-left: 1px solid var(--border) }
 .stats b { font-size: 16px; font-weight: 900; white-space: nowrap } .stats small { font-size: 11px; font-weight: 700; color: var(--hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100% }
 .p-ok { color: var(--green-d) } .p-warn { color: var(--orange-d) } .p-bad { color: var(--red-d) }
