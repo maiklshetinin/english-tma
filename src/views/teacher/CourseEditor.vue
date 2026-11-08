@@ -922,6 +922,12 @@ const lessonHints = computed(() => {
     const a = ids[0], cp = list.findIndex((v, i) => i > a && i <= c.last && v.type === 'checkpoint')
     out.push({ k: list[c.i].id, x: L[a].x, y: cp > 0 ? (L[a].y + L[cp].y) / 2 : L[a].y + 150 })
   })
+  for (const u of doc.loose) {          // и у глав на доске
+    if (u.type !== 'unit') continue
+    const ks = kidsOf(u) ?? [], ls = ks.filter(v => v.type !== 'checkpoint'); if (ls.length !== 1) continue
+    const cp = ks.find(v => v.type === 'checkpoint' && v.y > ls[0].y)
+    out.push({ k: u.id, x: ls[0].x, y: cp ? (ls[0].y + cp.y) / 2 : ls[0].y + 150, z: layerZ.value[u.id] })
+  }
   return out
 })
 const railGlow = computed(() => drag.on && drag.from !== 'file' && !!drag.item)
@@ -1466,7 +1472,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
         <span class="rstart" :style="{ left: (layout[0]?.x ?? 0) + 'px', top: railTail.y0 + 'px' }" />
         <!-- тянем Lesson / чекпоинт — на рельсе стыки «Lesson» (серые), куда встанет — синий (вместо старого пунктирного кружка) -->
-        <span v-for="j in lessonHints" :key="'lh' + j.k" class="jnt tile lj hint" :style="{ left: j.x + 'px', top: j.y + 'px' }" title="Сюда можно добавить ещё уроки — тяните «Lesson» с панели"><em class="tn">2</em><svg class="jic" viewBox="0 0 24 24" v-html="T.lesson.ic" /><small>Lesson</small></span>
         <span v-for="j in lessonJoints" :key="'lj' + j.k" class="jnt tile lj" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }"><em class="tn">2</em><svg class="jic" viewBox="0 0 24 24" v-html="T.lesson.ic" /><small>{{ j.t }}</small></span>
         <!-- конец рельса — серый магнит: сюда встанет следующий Chapter; тянем Chapter — он оживает (стыки ниже) -->
         <span v-if="!joints.length" class="jnt tile rend" :style="{ left: (railTail.x ?? 0) + 'px', top: railTail.y1 + 'px' }" title="Сюда встанет следующий Chapter — тяните «Chapter» с панели"><em class="tn">1</em><svg class="jic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Chapter</small></span>
@@ -1487,6 +1492,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Главы — блоками (подсветка из меню главы) -->
         <!-- нажали на плашку главы — выделяется вся глава (как объект); тянуть — едет целиком -->
         <div v-for="c in chapterBoxes" :key="'cb' + c.id" class="chapbox" :class="{ light: c.light, wide: c.w, off: findAny(c.id)?.hl === 'none', still: c.from === 'loose' }" :style="c.style" @pointerdown.stop="chapDown($event, c)" />
+        <!-- подсказка «2 Lesson» — после плашек глав (в том же слое — поверх своей плашки) -->
+        <span v-for="j in lessonHints" :key="'lh' + j.k" class="jnt tile lj hint" :style="{ left: j.x + 'px', top: j.y + 'px', ...(j.z != null ? { zIndex: j.z } : null) }" title="Сюда можно добавить ещё уроки — тяните «Lesson» с панели"><em class="tn">2</em><svg class="jic" viewBox="0 0 24 24" v-html="T.lesson.ic" /><small>Lesson</small></span>
         <svg class="rail" :class="{ glow: railGlow }" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
         <!-- Тянем главу / урок / чекпоинт мимо рельса — за курсором вся структура, как она ляжет (глава с уроком и чекпоинтом, у урока ветка с итогом) -->
         <div v-if="flyTree" class="ftree">
@@ -1937,7 +1944,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .jnt.tile { display: grid; justify-items: center; gap: 4px; width: 92px; height: auto; padding: 10px 0 8px; border: 0; border-radius: 14px; background: #fff; color: #2c2c2c; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }          /* как кнопка на нижней панели: значок, подпись, номер */
 .jnt.tile .jic { width: 32px; height: 32px; stroke-width: 1.7 } .jnt.tile small { font-size: 13px; font-weight: 800 }
 .jnt.tile .tn { position: absolute; top: 6px; left: 16px }
-.jnt.tile.rend, .jnt.tile.lj:not(.hot) { opacity: .75 } .jnt.tile.hint { z-index: 3; transform: translate(-50%, -50%) }          /* подсказка в главе с одним уроком — того же размера, что кнопка панели */ .jnt.tile.lj:not(.hot) { transform: translate(-50%, -50%) scale(.8) }          /* в покое — чуть бледнее; стыки уроков — поменьше, чтобы не налезали на кружки */
+.jnt.tile.rend, .jnt.tile.lj:not(.hot) { opacity: .75 } .jnt.tile.lj.hint:not(.hot) { z-index: 3; transform: translate(-50%, -50%); opacity: 1; background: #fff; color: #2c2c2c }          /* подсказка в главе с одним уроком — того же размера, что кнопка панели */ .jnt.tile.lj:not(.hot) { transform: translate(-50%, -50%) scale(.8) }          /* в покое — чуть бледнее; стыки уроков — поменьше, чтобы не налезали на кружки */
 .jnt.tile.hot { background: #e5f4ff; color: #0d99ff; box-shadow: 0 0 0 2.5px #0d99ff, 0 0 0 9px rgba(13, 153, 255, .2), 0 0 0 16px rgba(13, 153, 255, .08); opacity: 1 } .jnt.tile.hot .tn { background: #0d99ff; color: #fff }
 .jnt.dot { width: 34px; height: 34px; padding: 0; border-radius: 50% }
 .jnt.hot { border: 2.5px solid #0d99ff; background: #0d99ff; color: #fff; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
