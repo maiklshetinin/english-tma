@@ -965,6 +965,8 @@ function railPath(n, L = layout.value, dx = 0) {
 const railTail = computed(() => { const L = layout.value, n = order.value.length; if (!n) return { x: 0, y0: -150, y1: 200 }; const last = order.value[n - 1]; return { x: L[n - 1].x, x0: L[0].x, y0: rawLayout.value[0].y - 150, top: L[0].y, y: L[n - 1].y, y1: L[n - 1].y + 56 + (hasRail(last) ? 40 + (railHs[last.id] ?? RAIL_H) : 0) + CH_GAP + 60 } })
 const rail = computed(() => { const t = railTail.value; return railPath(order.value.length) + (order.value.length ? ` M${t.x0},${t.y0} L${t.x0},${t.top} M${t.x},${t.y} L${t.x},${t.y1}` : ` M0,${t.y0} L0,${t.y1}`) })
 const railBox = computed(() => { const ys = layout.value.map(p => p.y); return { y1: Math.max(railTail.value.y1, ...ys) + 200 } })
+// «Прогресс · пример» убрали из панели: в редакторе — шаблон курса, без пройденного (progress всегда 0; у ученика — свой прогресс)
+watch(() => doc.progress, (v) => { if (v) doc.progress = 0 }, { immediate: true })
 // Прогресс: progress — сколько заданий (станции не в счёт) пройдено
 const taskIdx = computed(() => { let k = 0; return order.value.map(x => (x.type === 'unit' ? null : k++)) })
 const tasksCount = computed(() => doc.items.filter(x => x.type !== 'unit').length)
@@ -1728,8 +1730,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl tr-panel">
       <PresenceBar inline /><i v-if="live.on" class="vs" />
       <button class="allr" :class="{ on: allCourses }" title="Показать рядом остальные курсы — смотреть и копировать их экраны в этот (Ctrl+C / Ctrl+V)" @click="allCourses = !allCourses"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="7" height="16" rx="2" /><rect x="13.5" y="4" width="7" height="16" rx="2" /></svg>Все курсы</button><i class="vs" />
-      <span class="pl">Прогресс<small>пример</small></span>
-      <button class="sb" @click="setProgress(doc.progress - 1)">−</button><b class="pv">{{ doc.progress }} / {{ tasksCount }}</b><button class="sb" @click="setProgress(doc.progress + 1)">+</button>
       <i class="vs dk" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
     </div>
     <!-- Масштаб -->
@@ -1925,9 +1925,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; cursor: pointer } .ib:hover { background: var(--surface) }
 .ib svg { width: 20px; height: 20px; fill: none; stroke: var(--text); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
 .tr-panel { right: 14px; top: 14px; display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px }
-.pl { display: grid; font-size: 12px; font-weight: 800; line-height: 1.15; margin-right: 6px } .pl small { font-size: 10px; color: var(--hint); font-weight: 700 }
-.sb { width: 30px; height: 30px; border: 0; border-radius: 8px; background: var(--surface); font: inherit; font-size: 17px; font-weight: 800; cursor: pointer }
-.pv { min-width: 52px; text-align: center; font-size: 14px; color: var(--green-d) }
 .vs { width: 1px; height: 24px; margin: 0 6px; background: var(--border) }
 .pill { border: 0; border-radius: 9px; padding: 7px 12px; background: var(--blue); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .pill.grey { background: var(--surface); color: var(--hint) }
 .zoom { right: 14px; bottom: 124px; display: flex; align-items: center; padding: 4px } .zoom button { min-width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 18px; font-weight: 700; cursor: pointer } .zoom button:hover { background: var(--surface) }
