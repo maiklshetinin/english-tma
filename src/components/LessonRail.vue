@@ -24,7 +24,8 @@ const props = defineProps({
   readonly: Boolean,
   free: Boolean,                                          // экран сам по себе на доске (не на ветке урока): x, y — левый верх карточки
   hot: { type: Boolean, default: false },
-  up: { type: Boolean, default: false },                   // ветка вверх (чекпоинт в конце главы): экраны над линией, низом к ней                  // тянут Exercise к этому пустому уроку — плашка «Exercise» оживает
+  up: { type: Boolean, default: false },
+  glow: { type: Boolean, default: false },                 // тянут Exercise — ветки уроков подсвечены (куда можно положить); та, над которой держим (hot), — ярче                   // ветка вверх (чекпоинт в конце главы): экраны над линией, низом к ней                  // тянут Exercise к этому пустому уроку — плашка «Exercise» оживает
   moving: { type: Object, default: null },                 // экраны, которые сейчас тащат (редактор курса): { ids, dx, dy } — едут за курсором в полный размер                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
 })
 const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus', 'copy', 'paste', 'grab'])
@@ -144,6 +145,9 @@ const full = computed(() => steps.value.length >= STEPS_MAX)
 // Экраны без прокрутки — во весь рост; редактору курса сообщаем высоту самого высокого, чтобы он раздвинул рельс
 const frames = new Set(); let hT = 0
 const ro = new ResizeObserver(() => { cancelAnimationFrame(hT); hT = requestAnimationFrame(() => emit('height', Math.max(0, ...[...frames].map(el => el.offsetHeight)))) })
+// у чекпоинта в конце — итог всей Chapter, а не урока
+const isCk = computed(() => props.item?.type === 'checkpoint')
+const finName = computed(() => (isCk.value ? 'Итог Chapter' : 'Итог урока'))
 const frameH = reactive({})                     // высота каждого экрана — для пунктирного места при перетаскивании
 const ro2 = new ResizeObserver((es) => { for (const e of es) if (e.target.dataset.id) frameH[e.target.dataset.id] = e.target.offsetHeight })
 const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.observe(el); ro2.observe(el) } }
@@ -187,7 +191,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
   <div class="lr" @pointerdown.stop>
     <input ref="fileIn" type="file" :accept="accept" hidden @change="onFile" />
     <!-- Рельс урока: от урока вправо, через все экраны к итогу -->
-    <svg v-if="!free" class="line" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="steps.length && doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
+    <svg v-if="!free" class="line" :class="{ glow, hot }" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="steps.length && doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
 
     <!-- Пока тянем экран — пунктирное место, куда он встанет -->
     <div v-if="mv.on" class="slot" :style="{ left: cx(mv.to) + 'px', top: (up ? y + TOP - (frameH[mv.id] ?? 380) + 48 : y - TOP + 48) + 'px', width: CW + 'px', height: (frameH[mv.id] ?? 380) - 48 + 'px' }" />
@@ -356,6 +360,13 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       <span class="stem" />
       <!-- как плашка «Chapter» в конце рельса: тот же значок, что у кнопки «Exercise» на панели; серая — в покое, синяя — когда к уроку тянут Exercise -->
       <div class="ef" :class="{ hot }"><span class="xpill"><svg viewBox="0 0 24 24" v-html="KINDS.choice.ic" />Exercise</span><span>{{ hot ? 'Exercise встанет сюда' : 'Тяните сюда «Exercise» с панели внизу или вставьте скопированный (Ctrl+V)' }}</span>
+        <!-- заметка-план: как чекпоинт должен собираться сам (пока вручную) -->
+        <div v-if="isCk && !hot" class="cknote"><b>Заметка · чекпоинт соберётся сам (в планах)</b>
+          <ul><li>Задания берутся из Exercise уроков этой Chapter: по 1–2 на каждое новое слово, фразу, правило.</li>
+            <li>От узнавания к воспроизведению: сначала выбор и пары, потом собрать фразу, написать, сказать.</li>
+            <li>По ответам ученика: где ошибался в уроках — больше заданий (интервальное повторение), что знает уверенно — меньше.</li>
+            <li>Порог — 80 % верных (mastery learning): не набрал — повтор слабых мест, набрал — открывается следующая Chapter.</li>
+            <li>Учитель может добавить свои Exercise вручную.</li></ul></div>
         <div class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">Добавить Exercise</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
     </div>
     <button v-if="canPaste && steps.length && !readonly && !free" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: (up ? y - 60 : y + 26) + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
@@ -363,10 +374,10 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 
     <!-- Итог урока -->
     <div v-if="!free" :ref="watchFrame" class="frame" :class="{ upb: up }" :data-id="'fin-' + item.id" :style="{ left: cx(finI) + 'px', top: (up ? y + TOP : y - TOP) + 'px', width: CW + 'px', '--c': FINAL.c }">
-     <span class="stem" /><span class="node fin-n" :class="{ done: steps.length && run.at >= steps.length }" title="Итог урока — всегда в конце ветки"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
-    <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>Итог урока · всегда в конце</b></div>
+     <span class="stem" /><span class="node fin-n" :class="{ done: steps.length && run.at >= steps.length }" :title="finName + ' — всегда в конце ветки'"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
+    <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>{{ finName }} · всегда в конце</b></div>
     <div class="card fin" :class="{ on: sel === 'final', now: steps.length && run.at >= steps.length }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
-      <div v-if="!steps.length" class="fin0"><span class="fi"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>Итог урока</b><span>Здесь ученик увидит результат: сколько верных ответов и за сколько времени. Появится, когда в уроке будут экраны.</span></div>
+      <div v-if="!steps.length" class="fin0"><span class="fi"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>{{ finName }}</b><span>{{ isCk ? 'Здесь ученик увидит итог всей Chapter: что усвоено, что повторить. Появится, когда в чекпоинте будут экраны.' : 'Здесь ученик увидит результат: сколько верных ответов и за сколько времени. Появится, когда в уроке будут экраны.' }}</span></div>
       <LessonPlayer v-else :key="'fin:' + run.key" embedded :steps="steps" :start="steps.length" :pct="pctAt(steps.length)" :stats="stats" :resolve="resolve" @restart="restart" @full="emit('play')" />
     </div>
     </div>
@@ -389,6 +400,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .frame.lift { z-index: 7 } .frame.lift .card { box-shadow: 0 16px 34px rgba(0, 0, 0, .2) }
 /* подпись над экраном — как имя фрейма в Figma */
 .line line.done { stroke: #1fbe78 }
+.line.glow line { stroke: #cfe8ff } .line.glow.hot line { stroke: #7cc4ff; filter: drop-shadow(0 0 6px rgba(13, 153, 255, .55)) } .line.glow line.done { stroke: #1fbe78 }
 .node.done { background: #1fbe78; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px #9be6c4 }
 /* текущий экран на ветке — без пульсации (07.11): в редакторе «дышит» только текущий урок на рельсе */
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
@@ -427,6 +439,8 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .ib.cp:hover { background: var(--blue-l); color: var(--blue-d) }
 .empty-f .stem { top: -26px } .ef { display: grid; justify-items: center; gap: 4px; margin-top: 14px; padding: 18px; border: 2px dashed #d6d6d6; border-radius: 18px; background: rgba(255, 255, 255, .7); text-align: center }
 .ef b { font-size: 14px; font-weight: 800; color: #555 }
+.cknote { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 4px; background: #fff3b0; text-align: left; box-shadow: 0 2px 6px rgba(0, 0, 0, .08) }          /* как стикер */
+.cknote b { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 900; color: #6b5300 } .cknote ul { margin: 0; padding-left: 16px; display: grid; gap: 3px } .cknote li { font-size: 11.5px; font-weight: 600; line-height: 1.35; color: #4a4020 }
 .xpill { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px 0 16px; box-sizing: border-box; border-radius: 24px; border: 2.5px solid #d6d9dd; background: #ececec; color: #9aa0a8 !important; font-size: 18px !important; font-weight: 900 !important }
 .xpill svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round }
 .ef.hot { border-color: #0d99ff; background: rgba(13, 153, 255, .06) } .ef.hot .xpill { border-color: #0d99ff; background: #0d99ff; color: #fff !important; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }

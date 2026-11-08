@@ -1476,7 +1476,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           </div>
         </div>
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
-        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :glow="sd.on" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
@@ -1490,7 +1490,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <span v-for="g in sd.to.gaps" :key="'g' + g" class="jnt dot" :style="{ left: g + 'px', top: sd.to.mark.y + 24 + 'px' }" />
           <span class="jseg h" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }" />
           <span class="jnt hot" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }">🧲</span>
-          <span class="jtip up" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }">Экран встанет сюда</span>
+          <span class="jtip up" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }">Exercise встанет сюда</span>
         </template>
         <div v-if="sd.on && sd.to?.bead" class="sdbead" :style="{ left: sd.to.bead.x + 'px', top: sd.to.bead.y + 'px' }" />
         <div v-for="g in sdGhost" :key="'g' + g.st.id" class="sdg" :style="{ left: g.left + 'px', top: g.top + 'px', '--c': KINDS[g.st.kind].c }">
