@@ -121,7 +121,7 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
   <div v-if="compact" class="card ml">
     <div v-for="l in monthLessons" :key="l.id" class="mli" :class="[statusOf(l), { hl: picked === l.date }]">
       <i class="st" :class="statusOf(l)" />
-      <span class="d">{{ dayLabel(l.date) }} <small>· {{ hh(l.hour, l.minute) }}{{ statusOf(l) === 'off' ? ' · отменил' : '' }}</small></span>
+      <span class="d">{{ dayLabel(l.date) }} <small>· {{ hh(l.hour, l.minute) }}{{ statusOf(l) === 'off' ? ' · отменил' : '' }}</small></span><i v-if="teacher" class="lead" />
       <span v-if="teacher" class="v">{{ fmtMoney(lessonMoney(l)) }}</span>
     </div>
     <p v-if="!monthLessons.length" class="none">В этом месяце уроков нет</p>
@@ -175,19 +175,21 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
 .day .n { font-size: 14px; font-weight: 800; line-height: 1 } .day.past:not(.has) .n { color: var(--hint-2) }
 /* Сегодня — синим (красный — это «отменён»): синее число и черта под ним; у дня с уроком цвет числа — как у урока, черта остаётся */
 /* Сегодня — серой подложкой, как в расписании */
-.day.today .n { color: var(--blue); font-weight: 900 } .day .tl { font-size: 9px; font-weight: 900; line-height: 1; color: var(--blue) }      /* сегодня — синее число и подпись «сегодня»; серым — только запланированные */      /* сегодня — синее число с чертой; серым — только запланированные */
+.day.today .n { color: var(--blue); font-weight: 900 } .day .tl { position: absolute; left: 0; right: 0; bottom: 1px; text-align: center; font-size: 9px; font-weight: 900; line-height: 1; color: var(--blue) }      /* сегодня — синее число и подпись «сегодня»; серым — только запланированные */      /* сегодня — синее число с чертой; серым — только запланированные */
 
 /* Статусы как в расписании (сборки в GitHub): кружок в углу дня. Проведён — зелёная галочка, отменён — красный крестик, впереди — серая плашка с рамкой */
 /* ✓ и ✕ — как на «Главной» (WeekGrid): кружок 16px, #1f883d / #cf222e, белая обводка */
 .cnt i.done, .cnt i.off, .mli .st.done, .mli .st.off { width: 16px; height: 16px; background: var(--c) center / 11px no-repeat }
-.day.done::after, .day.off::after { content: ''; position: absolute; top: 1px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--c) center / 11px no-repeat; box-shadow: 0 0 0 2px var(--card) }
-.day.done::after, .cnt i.done, .mli .st.done { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
-.day.off::after, .cnt i.off, .mli .st.off { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") }
-.day.plan { background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de } .day.plan .n { color: var(--text) }
+/* Число — в своей коробочке по центру клетки, значок — в углу коробочки (как в счёте): числа стоят ровно, значок рядом с числом */
+.day .n { position: relative; display: grid; place-items: center; width: 30px; height: 28px; border-radius: 8px }
+.day.done .n::after, .day.off .n::after { content: ''; position: absolute; top: -7px; right: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--c) center / 11px no-repeat; box-shadow: 0 0 0 2px var(--card) }
+.day.done .n::after, .cnt i.done, .mli .st.done { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
+.day.off .n::after, .cnt i.off, .mli .st.off { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") }
+.day.plan .n { background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de; color: var(--text) }      /* запланирован — серый квадратик вокруг числа */
 .day.off .n { color: var(--hint-2); text-decoration: line-through }
 .day.picked { outline: 2px solid var(--text); outline-offset: 1px }
 .day.picked:not(.has) { background: var(--surface) }
-.dots { display: flex; gap: 3px; height: 6px } .dots i, .legend i { width: 6px; height: 6px; border-radius: 50% }
+.dots { position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%); display: flex; gap: 3px; height: 6px } .dots i, .legend i { width: 6px; height: 6px; border-radius: 50% }
  .legend i { width: 10px; height: 10px; border-radius: 50% }
 .done { --c: #1f883d } .plan { --c: #afb8c1 } .off { --c: #cf222e }
 .dots i, .legend i { background: var(--c) }
@@ -215,18 +217,20 @@ html[data-theme='dark'] .mrow.lost b { color: var(--red) }
 .sum.t { grid-template-columns: repeat(3, 1fr) }
 html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] .sum .r { color: var(--red) }
 .lc.cmp { max-width: none }
-.lc.cmp .day { max-height: 44px; border-radius: 10px } .lc.cmp .day .n { font-size: 13px }
+.lc.cmp .day { max-height: 46px; border-radius: 10px } .lc.cmp .day .n { font-size: 13px }
 /* Уроки месяца — отдельной карточкой, строки как в счёте */
 .ml { display: grid; padding: 6px 14px 14px }
-.mli { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 800 }
+/* Строки как в счёте: без линий между ними, от даты к цене — точки; над «Итого» — пунктир */
+.mli { display: flex; align-items: center; gap: 10px; padding: 8px 4px; font-size: 14px; font-weight: 800 }
+.mli .lead { flex: 1; min-width: 12px; align-self: flex-end; margin: 0 2px 6px; border-bottom: 2px dotted #cfcfcf }
 .mli.hl { background: var(--blue-l); border-radius: 8px }
-.mli .d { flex: 1; min-width: 0 } .mli .d small { font-weight: 700; color: var(--hint) }
+.mli .d { flex: none; max-width: 75%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .mli .d small { font-weight: 700; color: var(--hint) }
 .mli .v { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap }
 .mli.off { color: var(--red-d) } .mli.off .v { text-decoration: line-through }
 .mli.plan { color: var(--hint) } .mli.plan .v { font-weight: 700 }
 .mli .st { flex: none; width: 16px; height: 16px; border-radius: 50% } .mli .st.plan { width: 14px; height: 14px; margin: 0 1px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
 .ml .none { margin: 10px 0 4px; text-align: center; font-size: 14px; font-weight: 700; color: var(--hint) }
-.mtot { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 4px 10px; font-size: 15px; font-weight: 900 } .mtot b { font-size: 20px }
+.mtot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; padding: 14px 4px 10px; border-top: 1px dashed #d6d6d6; font-size: 15px; font-weight: 900 } .mtot b { font-size: 20px }
 .rcpb { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 0; border-radius: 12px; background: var(--blue-l); color: var(--blue); font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
 .rcpb:hover { background: var(--blue); color: #fff }
 .cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
