@@ -44,7 +44,7 @@ describe('LessonCalendar', () => {
     expect(w.find('.ls').classes()).toContain('off'); expect(w.find('.ls').text()).toContain('Отменён вами')
   })
 
-  it('преподаватель: «Ожидается» и «Факт» за месяц, «Потеряно»; «Проведён» отмечает урок', async () => {
+  it('преподаватель: «Ожидается» и «Факт» за месяц, «Потеряно»; статус урока отсюда не меняется (только на «Главной»)', async () => {
     const s = useScheduleStore()
     s.set([...s.lessons, { id: 'c3', date: `${thisMonth}-21`, hour: 9, studentIds: ['s1'], canceled: { s1: 't' } }])
     const w = mount(LessonCalendar, { props: { studentId: 's1', teacher: true } })
@@ -53,8 +53,7 @@ describe('LessonCalendar', () => {
     expect(money).toContain('Факт — проведённые100')
     expect(money).toContain('−100')                                 // отменил ученик
     await w.findAll('button.day').find(d => d.find('.n').text() === '20')!.trigger('click')
-    await w.find('.ls .btn').trigger('click')
-    expect(s.lessons.find(l => l.id === 'c1')!.done).toBe(true)
+    expect(w.find('.ls .btn').exists()).toBe(false)                 // ни «Проведён», ни «Отменить»
     await w.findAll('button.day').find(d => d.find('.n').text() === '21')!.trigger('click')
     expect(w.find('.ls').text()).toContain('Отменил ученик'); expect(w.find('.ls .btn').exists()).toBe(false)
   })

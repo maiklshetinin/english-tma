@@ -9,7 +9,6 @@ import { DAYS, hh, todayYmd } from '../store/app'
 import { useScheduleStore } from '../stores/schedule'
 import { useStudentsStore } from '../stores/students'
 import { priceAt, fmtMoney } from '../utils/price'
-import { showToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
 import ReceiptSheet from './ReceiptSheet.vue'
 import AppIcon from './AppIcon.vue'
@@ -88,13 +87,7 @@ const receipt = computed(() => ({
   days: Object.fromEntries(Object.keys(byDate.value).filter(d => d.startsWith(month.value)).map(d => [d, dayStatus(d)])),      // календарь месяца в счёте
 }))
 const STATUS = computed(() => ({ done: 'Проведён', plan: 'Запланирован', off: props.teacher ? 'Отменил ученик' : 'Отменён вами' }))
-// Преподаватель: «Проведён» / «Отменить» прямо в календаре (отменённый учеником урок не отмечаем)
-const locked = (l) => l.done && (Object.keys(l.names ?? {}).length > 0 || l.studentIds.some(id => studentStore.findAny(id)?.archived))
-function toggle(l) {
-  const was = !!l.done
-  scheduleStore.setDone(l, !was)
-  showToast(was ? 'Отметка «проведён» снята' : 'Урок отмечен проведённым', () => scheduleStore.setDone(l, was))
-}
+// Календарь только показывает уроки: статус («проведён», отмена) меняют лишь на «Главной», в расписании
 </script>
 
 <template>
@@ -121,7 +114,6 @@ function toggle(l) {
       <div v-for="l in dayLessons" :key="l.id" class="cl" :class="statusOf(l)">
         <i class="dot" /><b>{{ pickedTitle }} · {{ hh(l.hour, l.minute) }}</b>
         <span class="cs">{{ STATUS[statusOf(l)] }}{{ statusOf(l) !== 'off' && priceOf(l) ? ` · ${fmtMoney(priceOf(l))}` : '' }}</span>
-        <button v-if="teacher && statusOf(l) !== 'off'" class="btn sm" :class="{ ghost: l.done }" :disabled="locked(l)" @click="toggle(l)">{{ l.done ? 'Отменить' : 'Проведён' }}</button>
       </div>
       <!-- Итог месяца: легенда = счётчики, ниже деньги одной строкой -->
       <div class="cnt"><span><i class="done" /><b>{{ sum.done }}</b> проведено</span><span><i class="plan" /><b>{{ sum.plan }}</b> запланировано</span><span><i class="off" /><b>{{ sum.off }}</b> отменено</span></div>
@@ -142,7 +134,6 @@ function toggle(l) {
       <div class="info"><b class="tm">{{ hh(l.hour, l.minute) }}</b> · Урок
         <div class="hint">{{ statusOf(l) === 'off' ? 'Без оплаты' : priceOf(l) ? `Цена: ${fmtMoney(priceOf(l))}` : '' }}</div></div>
       <span class="badge" :class="{ done: 'ok', plan: 'warn', off: 'bad' }[statusOf(l)]">{{ STATUS[statusOf(l)] }}</span>
-      <button v-if="teacher && statusOf(l) !== 'off'" class="btn sm" :class="{ ghost: l.done }" :disabled="locked(l)" :title="locked(l) ? 'В уроке ученик из архива или удалённый — отметку не снять' : ''" @click="toggle(l)">{{ l.done ? 'Отменить' : 'Проведён' }}</button>
     </div>
   </div>
 
