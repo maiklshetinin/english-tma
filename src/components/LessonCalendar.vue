@@ -12,6 +12,7 @@ import { priceAt, fmtMoney } from '../utils/price'
 import { useAuthStore } from '../stores/auth'
 import ReceiptSheet from './ReceiptSheet.vue'
 import AppIcon from './AppIcon.vue'
+import { lineDate, receiptTotal, receiptCount } from '../utils/receipt'
 const props = defineProps({ studentId: { type: String, default: null }, teacher: Boolean, compact: Boolean })   // compact — всё в одной карточке, урок дня — по нажатию на день
 const scheduleStore = useScheduleStore(), studentStore = useStudentsStore()
 
@@ -70,11 +71,8 @@ const pickedTitle = computed(() => { if (!picked.value) return ''; const d = new
 // Итог месяца. paid — факт (проведённые, по зафиксированным ценам); expected — ожидается: проведённые + запланированные (по цене на время урока);
 // lost — отменённые учеником (по цене на время урока, без оплаты)
 const lessonsWord = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'урок' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'урока' : 'уроков'}`
-// Уроки месяца по порядку — список под календарём в карточке ученика
-const monthLessons = computed(() => all.value.filter(l => l.date.startsWith(month.value)).sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour || (a.minute || 0) - (b.minute || 0)))
-const dayLabel = (d) => { const x = new Date(d + 'T00:00'); return `${DAYS[(x.getDay() + 6) % 7]}, ${x.getDate()} ${MONTHS_GEN[x.getMonth()]}` }
-// Цена в строке: проведённый / запланированный — цена урока; отменённый — сколько потеряно (зачёркнуто)
-const lessonMoney = (l) => (statusOf(l) === 'off' ? priceAt(studentStore.findAny(props.studentId), l.date, l.hour) : priceOf(l))
+// Ученик и его цена — для строки «Ученик: … · цена» под месяцем
+const who = computed(() => { const st = studentStore.findAny(props.studentId); return { name: st?.name ?? '', price: st?.price || 0 } })
 const sum = computed(() => {
   const s = { done: 0, plan: 0, off: 0, paid: 0, expected: 0, lost: 0 }
   for (const l of all.value) if (l.date.startsWith(month.value)) {
@@ -100,7 +98,17 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
 <template>
   <div class="lc" :class="{ cmp: compact }">
   <div class="cal card">
-    <div class="mh">
+    <!-- Карточка ученика — копия картинки счёта: крупно месяц (стрелки маленькие справа), «Ученик: … · цена», пунктир, календарь, пунктир, строки, пунктир, итог -->
+    <template v-if="compact">
+      <div class="rtop"><b>{{ title }}</b>
+        <button v-if="!isThisMonth" class="today" @click="month = today.slice(0, 7); picked = null">Сегодня</button>
+        <button class="ar" :disabled="prevOff" aria-label="Предыдущий месяц" title="Предыдущий месяц" @click="shift(-1)"><AppIcon name="back" :size="18" /></button>
+        <button class="ar next" :disabled="nextOff" aria-label="Следующий месяц" title="Следующий месяц" @click="shift(1)"><AppIcon name="back" :size="18" /></button>
+      </div>
+      <span class="rsub">Ученик: {{ who.name }}<template v-if="teacher && who.price"> · {{ fmtMoney(who.price) }} за урок</template></span>
+      <div class="dash" />
+    </template>
+    <div v-else class="mh">
       <button class="icon-btn nav" :disabled="prevOff" aria-label="Предыдущий месяц" title="Предыдущий месяц" @click="shift(-1)"><AppIcon name="back" :size="20" /></button>
       <div class="mt"><b>{{ title }}</b><button v-if="!isThisMonth" class="today" @click="month = today.slice(0, 7); picked = today">Сегодня</button></div>
       <button class="icon-btn nav next" :disabled="nextOff" aria-label="Следующий месяц" title="Следующий месяц" @click="shift(1)"><AppIcon name="back" :size="20" /></button>
@@ -116,19 +124,19 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
       </template>
     </div>
     <div v-if="!compact" class="legend"><span><i class="done" />Проведён</span><span><i class="plan" />Запланирован</span><span><i class="off" />Отменён</span></div>
-    <!-- Карточка ученика — всё одним «чеком»: календарь, под пунктиром уроки месяца (значок, дата и время, точки, цена), под пунктиром «Проведено» и «Итого», «Выставить счёт».
-         Нажатие на день подсвечивает его уроки в списке. -->
-    <div v-if="compact" class="ml">
-      <div v-for="l in monthLessons" :key="l.id" class="mli" :class="[statusOf(l), { hl: picked === l.date }]">
-        <i class="st" :class="statusOf(l)" />
-        <span class="d">{{ dayLabel(l.date) }} <small>· {{ hh(l.hour, l.minute) }}{{ statusOf(l) === 'off' ? ' · отменил' : '' }}</small></span><i v-if="teacher" class="lead" />
-        <span v-if="teacher" class="v">{{ fmtMoney(lessonMoney(l)) }}</span>
-      </div>
-      <p v-if="!monthLessons.length" class="none">В этом месяце уроков нет</p>
-      <div v-if="teacher && monthLessons.length" class="mcnt"><span>Проведено</span><span>{{ lessonsWord(sum.done) }}</span></div>
-      <div v-if="teacher && monthLessons.length" class="mtot"><span>Итого за {{ monthName }}</span><b>{{ fmtMoney(sum.paid) }}</b></div>
-      <button v-if="teacher && sum.done" class="rcpb" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="20" /> Выставить счёт</button>
-    </div>
+    <!-- Ниже — ровно то, что уйдёт в счёт: проведённые уроки, «Проведено», «К оплате»; отменённые видны крестиком в календаре -->
+    <template v-if="compact">
+      <div class="dash" />
+      <div v-for="l in receipt.lines" :key="l.date + l.hour + '-' + (l.minute || 0)" class="ln" :class="{ hl: picked === l.date }"><span>{{ lineDate(l) }}</span><i /><b v-if="teacher">{{ fmtMoney(l.price) }}</b></div>
+      <p v-if="!receipt.lines.length" class="none">В этом месяце проведённых уроков пока нет</p>
+      <template v-if="teacher">
+        <div class="dash" />
+        <div class="rcnt"><span>Проведено</span><b>{{ receiptCount(receipt) }}</b></div>
+        <div class="rtot"><span>К оплате</span><b>{{ fmtMoney(receiptTotal(receipt)) }}</b></div>
+        <span v-if="sum.plan" class="ahead">Впереди ещё {{ lessonsWord(sum.plan) }} · {{ fmtMoney(sum.expected - sum.paid) }}</span>
+        <button v-if="sum.done" class="btn primary send" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="20" /> Выставить счёт</button>
+      </template>
+    </template>
   </div>
 
   <template v-if="!compact">
@@ -219,32 +227,32 @@ html[data-theme='dark'] .mrow.lost b { color: var(--red) }
 .sum.t { grid-template-columns: repeat(3, 1fr) }
 html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] .sum .r { color: var(--red) }
 .lc.cmp { max-width: none }
-.lc.cmp .day { max-width: none; aspect-ratio: auto; height: 38px; max-height: none; border-radius: 8px }
-/* ---- Карточка ученика: одна карточка как чек — пунктир под шапкой, компактный календарь, пунктир, строки уроков, пунктир, итог ---- */
-.lc.cmp .cal { padding: 14px 16px 16px; gap: 0 }
-.lc.cmp .mh { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed #d6d6d6 } .lc.cmp .mh .mt b { font-size: 17px }
-.lc.cmp .grid { gap: 0 } .lc.cmp .wd { margin-bottom: 2px } .lc.cmp .wd span { font-size: 11px }
-.lc.cmp .ml { margin-top: 8px; padding: 6px 0 0; border-top: 1px dashed #d6d6d6 }
-.mcnt { display: flex; justify-content: space-between; margin-top: 6px; padding: 12px 4px 0; border-top: 1px dashed #d6d6d6; font-size: 13px; font-weight: 700; color: var(--hint) } .lc.cmp .day .n { font-size: 13px }
-/* Уроки месяца — отдельной карточкой, строки как в счёте */
-.ml { display: grid }
-/* Строки как в счёте: без линий между ними, от даты к цене — точки; над «Итого» — пунктир */
-.mli { display: flex; align-items: center; gap: 10px; padding: 8px 4px; font-size: 14px; font-weight: 800 }
-.mli .lead { flex: 1; min-width: 12px; align-self: flex-end; margin: 0 2px 6px; border-bottom: 2px dotted #cfcfcf }
-.mli.hl { background: var(--blue-l); border-radius: 8px }
-.mli .d { flex: none; max-width: 75%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .mli .d small { font-weight: 700; color: var(--hint) }
-.mli .v { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap }
-.mli.off { color: var(--red-d) } .mli.off .v { text-decoration: line-through }
-.mli.plan { color: var(--hint) } .mli.plan .v { font-weight: 700 }
-.mli .st { flex: none; width: 16px; height: 16px; border-radius: 50% } .mli .st.plan { width: 14px; height: 14px; margin: 0 1px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
-.ml .none { margin: 10px 0 4px; text-align: center; font-size: 14px; font-weight: 700; color: var(--hint) }
-.mtot { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 4px 12px; font-size: 15px; font-weight: 900 } .mtot b { font-size: 20px }
-.rcpb { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 0; border-radius: 12px; background: var(--blue-l); color: var(--blue); font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
-.rcpb:hover { background: var(--blue); color: #fff }
 .cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
 .cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { flex: none; border-radius: 50% } .cnt i.plan { width: 14px; height: 14px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }      /* легенда — как дни календаря: ✓ зелёный, ✕ красный, серый квадрат */ .cnt b { color: var(--text); font-weight: 900 }
 .cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
 .cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
 .cmr { gap: 10px } .cmr > span { flex: 1 }
 .cmr .g { color: var(--text) } .cmr .r { color: var(--red-d); font-size: 15px }
+/* ---- Карточка ученика — как картинка счёта (utils/receipt.ts: ширина 360, поля 24, клетка 34, число в коробочке 28×26) ---- */
+.lc.cmp .cal { padding: 22px 24px 20px; gap: 0 }
+.rtop { display: flex; align-items: center; gap: 4px } .rtop b { flex: 1; font-size: 24px; font-weight: 900; letter-spacing: -.3px }
+.ar { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--text); cursor: pointer }
+.ar:hover:not(:disabled) { background: var(--surface) } .ar:disabled { opacity: .3; cursor: default } .ar.next svg { transform: scaleX(-1) }
+.rsub { margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--hint) }
+.dash { margin: 14px 0 8px; border-top: 1px dashed #d6d6d6 }
+.lc.cmp .grid { gap: 0 } .lc.cmp .wd span { padding: 6px 0 4px; font-size: 11px; color: #9aa0a6 }
+.lc.cmp .day { max-width: none; aspect-ratio: auto; height: 34px; max-height: none; border-radius: 7px }
+.lc.cmp .day .n { width: 28px; height: 26px; border-radius: 7px; font-size: 13px; color: #b8b8b8 }
+.lc.cmp .day.done .n, .lc.cmp .day.plan .n { color: var(--text) } .lc.cmp .day.off .n { color: #b0b0b0 }
+.lc.cmp .day.plan .n { background: #f7f7f7 } .lc.cmp .day.today .n { color: var(--blue) }
+.lc.cmp .day.done .n::after, .lc.cmp .day.off .n::after { top: -4px; right: -5px; width: 12px; height: 12px; background-size: 9px; box-shadow: none }
+.lc.cmp .day .tl { bottom: -1px; font-size: 8px } .lc.cmp .dots { display: none }
+.lc.cmp .day.picked { outline: 0 } .lc.cmp .day.picked .n { outline: 2px solid var(--blue); outline-offset: 1px }
+.ln { display: flex; align-items: baseline; gap: 6px; min-height: 26px; padding: 0 2px; border-radius: 6px; font-size: 14px; font-weight: 700 }
+.ln.hl { background: var(--blue-l) } .ln span { flex: none } .ln i { flex: 1; min-width: 8px; border-bottom: 2px dotted #cfcfcf; transform: translateY(-4px) } .ln b { flex: none; font-weight: 800 }
+.lc.cmp .none { margin: 6px 0 2px; font-size: 13px; font-weight: 700; color: var(--hint) }
+.rcnt { display: flex; justify-content: space-between; margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--hint) } .rcnt b { font-weight: 800 }
+.rtot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; font-size: 18px; font-weight: 900 } .rtot b { font-size: 22px; font-weight: 900 }
+.ahead { margin-top: 10px; font-size: 12px; font-weight: 700; color: #9aa0a6 }
+.send { margin-top: 16px; padding: 13px; font-size: 15px; gap: 8px }
 </style>

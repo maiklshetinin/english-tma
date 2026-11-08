@@ -60,7 +60,7 @@ describe('LessonCalendar', () => {
 
   it('преподаватель (компактно): «Счёт» — проведённые уроки месяца и сумма к оплате', async () => {
     const w = mount(LessonCalendar, { props: { studentId: 's1', teacher: true, compact: true }, attachTo: document.body })
-    await w.find('.rcpb').trigger('click')
+    await w.find('.send').trigger('click')
     const sheet = document.body.querySelector('.rs')!
     expect(sheet.textContent).toContain('Маша · 1 урок')
     expect(sheet.querySelectorAll('.ln').length).toBe(1)                 // только проведённый (запланированный не входит)
@@ -68,17 +68,18 @@ describe('LessonCalendar', () => {
     w.unmount()
   })
 
-  it('преподаватель (компактно): уроки месяца списком — значок, дата и время, цена; итог — проведённые', async () => {
+  it('преподаватель (компактно): как картинка счёта — строки только проведённых, «Проведено» и «К оплате»', async () => {
     const w = mount(LessonCalendar, { props: { studentId: 's1', teacher: true, compact: true } })
-    const rows = w.findAll('.mli')
-    expect(rows.length).toBeGreaterThan(0)
-    expect(rows.every(r => /· \d\d:\d\d/.test(r.text()))).toBe(true)
-    expect(w.find('.mtot').text()).toContain('Итого за')
+    const rows = w.findAll('.ln')
+    expect(rows.length).toBe(1)                                      // в счёт идёт только проведённый урок
+    expect(rows[0].text()).toMatch(/· \d\d:\d\d/)
+    expect(w.find('.rcnt').text()).toContain('1 урок')
+    expect(w.find('.rtot').text()).toContain('К оплате')
   })
 
   it('счёта нет, если в месяце нет проведённых', async () => {
     useScheduleStore().set([{ id: 'c1', date: `${thisMonth}-20`, hour: 18, studentIds: ['s1'] }])
     const w = mount(LessonCalendar, { props: { studentId: 's1', teacher: true, compact: true } })
-    expect(w.find('.rcpb').exists()).toBe(false)
+    expect(w.find('.send').exists()).toBe(false)
   })
 })
