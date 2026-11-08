@@ -1402,7 +1402,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
         <span class="rstart" :style="{ left: (layout[0]?.x ?? 0) + 'px', top: railTail.y0 + 'px' }" />
         <!-- конец рельса — серый магнит: сюда встанет следующий Chapter; тянем Chapter — он оживает (стыки ниже) -->
-        <span v-if="!joints.length" class="jnt rend" :style="{ left: (railTail.x ?? 0) + 'px', top: railTail.y1 + 'px' }" title="Сюда встанет следующий Chapter — тяните «Chapter» с панели">Chapter</span>
+        <span v-if="!joints.length" class="jnt rend" :style="{ left: (railTail.x ?? 0) + 'px', top: railTail.y1 + 'px' }" title="Сюда встанет следующий Chapter — тяните «Chapter» с панели"><svg class="jic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg>Chapter</span>
         <!-- рельс пустой — подсказка, с чего начать -->
         <div v-if="!order.length && !drag.on" class="rhint" :style="{ left: '60px', top: railTail.y0 + 90 + 'px' }">
           <b>Перетащите на рельс Chapter</b>
@@ -1410,7 +1410,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
         <!-- стыки рельса: тянем главу — видно, куда её можно насадить; ближайший «магнитит» -->
         <template v-for="j in joints" :key="'j' + j.b">
-          <span class="jnt" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }">Chapter</span>
+          <span class="jnt" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }"><svg class="jic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg>Chapter</span>
           <span v-if="j.hot" class="jseg" :style="{ left: j.x + 'px', top: j.y + 'px' }" /><span v-if="j.hot" class="jtip" :style="{ left: j.x + 80 + 'px', top: j.y + 'px' }">Chapter встанет сюда</span>
         </template>
         <!-- выбранный урок — светлая строка во всю ширину плашки главы, как текущий урок в Busuu -->
@@ -1861,7 +1861,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .rhint { position: absolute; z-index: 2; display: grid; gap: 8px; width: 420px; padding: 18px 22px; border: 2px dashed #b9c0c8; border-radius: 18px; background: rgba(255, 255, 255, .85); pointer-events: none }
 .rhint b { font-size: 24px; font-weight: 900; color: #252a31 } .rhint span { font-size: 16px; font-weight: 600; line-height: 1.35; color: #6b7280 }
 .rstart { position: absolute; z-index: 1; width: 44px; height: 44px; margin: -22px; border-radius: 50%; background: #d6d6d6; box-shadow: 0 0 0 5px #f4f4f4 }
-.jnt { position: absolute; z-index: 10025; height: 44px; padding: 0 18px; transform: translate(-50%, -50%); box-sizing: border-box; border-radius: 22px; border: 2.5px dashed #aeb5bd; background: #f4f4f4; display: grid; place-items: center; font-size: 17px; font-weight: 900; color: #8a9099; white-space: nowrap; pointer-events: none }          /* стык рельса — надпись «Chapter»: сюда встанет Chapter */
+.jnt { position: absolute; z-index: 10025; height: 48px; padding: 0 20px 0 16px; transform: translate(-50%, -50%); box-sizing: border-box; border-radius: 22px; border: 2.5px dashed #aeb5bd; background: #f4f4f4; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 900; color: #8a9099; white-space: nowrap; pointer-events: none }
+.jic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round }          /* тот же значок, что у кнопки «Chapter» на панели */          /* стык рельса — надпись «Chapter»: сюда встанет Chapter */
 .jnt.rend { z-index: 3; border: 2.5px solid #d6d9dd; background: #ececec; color: #9aa0a8 }          /* в покое — серый */
 .jnt.dot { width: 34px; height: 34px; padding: 0; border-radius: 50% }
 .jnt.hot { border: 2.5px solid #0d99ff; background: #0d99ff; color: #fff; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
