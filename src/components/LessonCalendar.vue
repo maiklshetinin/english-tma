@@ -95,9 +95,9 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
   <div class="lc" :class="{ cmp: compact }">
   <div class="cal card">
     <div class="mh">
-      <button class="nav" :disabled="prevOff" aria-label="Предыдущий месяц" @click="shift(-1)">‹</button>
+      <button class="icon-btn nav" :disabled="prevOff" aria-label="Предыдущий месяц" title="Предыдущий месяц" @click="shift(-1)"><AppIcon name="back" :size="20" /></button>
       <div class="mt"><b>{{ title }}</b><button v-if="!isThisMonth" class="today" @click="month = today.slice(0, 7); picked = today">Сегодня</button></div>
-      <button class="nav" :disabled="nextOff" aria-label="Следующий месяц" @click="shift(1)">›</button>
+      <button class="icon-btn nav next" :disabled="nextOff" aria-label="Следующий месяц" title="Следующий месяц" @click="shift(1)"><AppIcon name="back" :size="20" /></button>
     </div>
     <div class="grid wd"><span v-for="(d, i) in DAYS" :key="d" :class="{ we: i > 4 }">{{ d }}</span></div>
     <div class="grid days">
@@ -127,7 +127,7 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
   <button v-if="compact && teacher && sum.done" class="card rcp" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true">
     <span class="ri"><AppIcon name="receipt" :size="22" /></span>
     <span class="rt"><b>Счёт за {{ monthName }}</b><small>{{ fmtMoney(sum.paid) }} за {{ sum.done }} ур. · скачать или отправить</small></span>
-    <span class="rch">›</span>
+    <span class="rch"><AppIcon name="back" :size="20" /></span>
   </button>
 
   <template v-if="!compact">
@@ -165,7 +165,8 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
 .mh { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px }
 .mt { display: flex; align-items: center; gap: 8px } .mt b { font-size: 18px; font-weight: 900 }
 .today { border: 1px solid var(--border); background: var(--card); color: var(--blue); border-radius: 99px; font: inherit; font-size: 12px; font-weight: 800; padding: 2px 10px; cursor: pointer }
-.nav { width: 40px; height: 40px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; font-size: 22px; font-weight: 900; line-height: 1; cursor: pointer }
+/* Стрелки месяцев — такие же квадратные кнопки, как «назад» (BackButton) */
+.nav { border-color: var(--border) } .nav.next svg { transform: scaleX(-1) }
 .nav:disabled { opacity: .35; cursor: default }
 .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px }
 .wd span { text-align: center; font-size: 12px; font-weight: 800; color: var(--hint-2) }
@@ -178,8 +179,9 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
 .day.today .n { color: var(--blue); font-weight: 900 } .day.today .n::after { content: ''; display: block; width: 14px; height: 2px; margin: 2px auto 0; border-radius: 2px; background: var(--blue) }      /* сегодня — синее число с чертой; серым — только запланированные */
 
 /* Статусы как в расписании (сборки в GitHub): кружок в углу дня. Проведён — зелёная галочка, отменён — красный крестик, впереди — серая плашка с рамкой */
-.cnt i.done, .cnt i.off { width: 14px; height: 14px; background: var(--c) center / 10px no-repeat }
-.day.done::after, .day.off::after { content: ''; position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--c) center / 10px no-repeat }
+/* ✓ и ✕ — как на «Главной» (WeekGrid): кружок 16px, #1f883d / #cf222e, белая обводка */
+.cnt i.done, .cnt i.off { width: 16px; height: 16px; background: var(--c) center / 11px no-repeat }
+.day.done::after, .day.off::after { content: ''; position: absolute; top: 1px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--c) center / 11px no-repeat; box-shadow: 0 0 0 2px var(--card) }
 .day.done::after, .cnt i.done { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
 .day.off::after, .cnt i.off { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") }
 .day.plan { background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de } .day.plan .n { color: var(--text) }
@@ -218,7 +220,7 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .cl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; padding: 8px 10px; border-radius: 12px; background: var(--surface); font-size: 14px }
 .cl .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c) } .cl .cs { flex: 1; color: var(--hint); font-weight: 600 } .cl.off b { text-decoration: line-through; color: var(--hint) }
 .cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
-.cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { flex: none; border-radius: 50% } .cnt i.plan { width: 13px; height: 13px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }      /* легенда — как дни календаря: ✓ зелёный, ✕ красный, серый квадрат */ .cnt b { color: var(--text); font-weight: 900 }
+.cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { flex: none; border-radius: 50% } .cnt i.plan { width: 14px; height: 14px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }      /* легенда — как дни календаря: ✓ зелёный, ✕ красный, серый квадрат */ .cnt b { color: var(--text); font-weight: 900 }
 .cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
 .cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
 .cmr { gap: 10px } .cmr > span { flex: 1 }
@@ -226,6 +228,6 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .rcp:hover { background: var(--blue-l); border-color: transparent }
 .rcp .ri { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--blue-l); color: var(--blue) }
 .rcp .rt { flex: 1; display: grid; gap: 1px; min-width: 0 } .rcp .rt b { font-size: 16px; font-weight: 900 } .rcp .rt small { font-size: 13px; font-weight: 700; color: var(--hint) }
-.rcp .rch { font-size: 24px; font-weight: 700; color: var(--hint-2) }
+.rcp .rch { display: grid; color: var(--hint-2) } .rcp .rch svg { transform: scaleX(-1) }
 .cmr .g { color: var(--text) } .cmr .r { color: var(--red-d); font-size: 15px }
 </style>
