@@ -366,7 +366,7 @@ function copyItems(list, course) {
   list = withKids(list, course)
   clip.value = { course, items: JSON.parse(JSON.stringify(list)) }
   const u = list.filter(x => x.type === 'unit').length
-  showToast(u ? `Скопировано: ${u === 1 ? 'глава' : 'глав — ' + u} и заданий в ней — ${list.length - u}. Ctrl+V — вставить после текущей главы (или в конец рельса)` : `Скопировано заданий: ${list.length} — нажмите Ctrl+V, они встанут после выбранного задания (или в конец рельса)`)
+  showToast(u ? `Скопировано: ${u === 1 ? 'глава' : 'глав — ' + u} и заданий в ней — ${list.length - u}. Ctrl+V — вставить туда, где курсор` : `Скопировано заданий: ${list.length} — Ctrl+V — вставить туда, где курсор`)
 }
 const freshId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 async function pasteItems(at = null) {           // at — точка холста («Вставить сюда»): задания встают черновиками рядом с ней
@@ -387,8 +387,11 @@ async function pasteItems(at = null) {           // at — точка холст
     for (const st of x.steps ?? []) await localCopies(st)
   }
   const hasU = list.some(x => x.type === 'unit')
-  if (at) list.forEach((x, k) => { x.x = Math.round(at.x + (hasU ? 0 : k * 150)); x.y = Math.round(at.y + (hasU ? k * 150 : 0)) })      // глава с уроками — столбиком, как на рельсе
-  if (at) { doc.loose.push(...list); if (hasU) list.filter(x => x.type === 'unit').forEach(u => keepApart(u)) }
+  if (at && hasU) {                 // глава с уроками — столбиком, как на рельсе; левый верхний угол плашки главы — у курсора
+    const L = layoutOf(list, 'line'), dy = list[0].type === 'unit' ? 70 : 0
+    list.forEach((x, k) => { x.x = Math.round(at.x - CH_X0 + L[k].x); x.y = Math.round(at.y + dy + L[k].y) })
+  } else if (at) list.forEach((x, k) => { x.x = Math.round(at.x + k * 150); x.y = Math.round(at.y) })
+  if (at) doc.loose.push(...list)          // ровно у курсора, как в Figma (не отодвигаем)
   else {
     let after = sel.value ? doc.items.findIndex(v => v.id === sel.value) : -1
     if (hasU && after >= 0) while (after + 1 < doc.items.length && doc.items[after + 1].type !== 'unit') after++          // глава встаёт после конца текущей главы, не разрывая её
@@ -1331,7 +1334,7 @@ function doCopy() {
 }
 function doPaste(at = null) {
   if (!clip.value) return
-  if (clip.value.items) return pasteItems(at)
+  if (clip.value.items) return pasteItems(at ?? lastW ?? toWorld(W.value / 2, H.value / 2))          // задания и главы — туда, где курсор (как в Figma)
   const L = at ? null : pick.lesson ?? (selItem.value && INTERACTIVE.includes(selItem.value.type) ? selItem.value.id : activeLesson.value)
   if (!L) return pasteFree(at ?? lastW ?? toWorld(W.value / 2, H.value / 2))      // урок не выбран — экраны ложатся на доску (у мыши или где открыли меню)
   return pasteStep(L)
