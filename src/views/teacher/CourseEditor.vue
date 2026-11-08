@@ -1416,7 +1416,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </template>
         <!-- Рельс -->
         <div v-for="(x, i) in order" :key="x.id" :data-sel="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { ren: renaming === x.id, lift: drag.on && drag.item?.id === x.id, on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]"
-          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick.stop="x.type === 'unit' && rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'">
             <!-- меню главы, как в Figma: подсветка блока главы -->
             <div v-if="sel === x.id && !drag.on && renaming !== x.id" class="nbar chbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
@@ -1445,11 +1445,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <svg v-if="!covK(x) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <svg v-if="stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
-            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><template v-if="renaming === x.id && !peekOf(x)"><input v-model="x.title" :data-ren="x.id" class="rin" placeholder="Название урока" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /><input v-if="INTERACTIVE.includes(x.type)" v-model="x.sub" class="rin sub" placeholder="о чём урок, например: знакомство и приветствия" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" /></template>
-              <template v-else>{{ x.title }}<span v-if="x.sub" class="csub">{{ x.sub }}</span></template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
+            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><template v-if="renaming === x.id && !peekOf(x)"><span class="rrow lren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin" placeholder="Название урока" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click.stop="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></span><input v-if="INTERACTIVE.includes(x.type)" v-model="x.sub" class="rin sub lren" placeholder="о чём урок, например: знакомство и приветствия" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /></template>
+              <template v-else><span class="ctl">{{ x.title }}<button class="upen" title="Переименовать урок" @pointerdown.stop @dblclick.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button></span><span v-if="x.sub" class="csub">{{ x.sub }}</span></template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
             <!-- обложка выбранного урока: фото или кружок, как в Busuu -->
             <div v-if="sel === x.id && BRANCH.includes(x.type) && !drag.on" class="cov" @pointerdown.stop @dblclick.stop>
-              <button title="Переименовать (Enter или двойной щелчок)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
+              <button title="Переименовать (Enter)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
               <i class="cvs" />
               <button title="Фото на кружок урока (обрежем по кругу и сожмём)" @click="pickFile(x, 'photo')"><svg viewBox="0 0 24 24" v-html="T.photo.ic" /></button>
               <button title="Кружок (видео) на кружок урока" @click="pickFile(x, 'video')"><svg viewBox="0 0 24 24" v-html="T.video.ic" /></button>
@@ -1460,12 +1460,12 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <small>{{ T[x.type].t }} · ≈ {{ lessonMin(x.steps) }} мин</small>
               <!-- название и описание правятся прямо в карточке (карточка при этом не пропадает) -->
               <template v-if="renaming === x.id">
-                <input v-model="x.title" :data-ren="x.id" class="rin lin" placeholder="Название урока" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" />
-                <input v-model="x.sub" class="rin lin sub" placeholder="о чём урок, например: знакомство и приветствия" @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="($event.relatedTarget?.classList?.contains('rin')) || renameDone()" @input="save" />
+                <input v-model="x.title" :data-ren="x.id" class="rin lin" placeholder="Название урока" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" />
+                <input v-model="x.sub" class="rin lin sub" placeholder="о чём урок, например: знакомство и приветствия" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" />
               </template>
               <template v-else>
-                <b class="lpt" title="Нажмите, чтобы переименовать" @click="rename(x)">{{ x.title || T[x.type].t }}<svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></b>
-                <p v-if="x.sub" class="lps" title="Нажмите, чтобы изменить" @click="rename(x)">{{ x.sub }}</p>
+                <b class="lpt">{{ x.title || T[x.type].t }}<button class="lpen" title="Переименовать урок" @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button></b>
+                <p v-if="x.sub" class="lps">{{ x.sub }}</p>
               </template>
               <p>{{ screens(x.steps.length) }}<template v-if="x.steps.length > peekOf(x).length"> · не готово: {{ x.steps.length - peekOf(x).length }}</template></p>
               <button class="pgo" @click="goLesson(x)">Поехали!</button>
@@ -1474,7 +1474,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
         <!-- Черновики на холсте: ещё не на рельсе -->
         <div v-for="x in looseShown" :key="x.id" :data-sel="x.id" class="bead loose" :class="[x.type, { ren: renaming === x.id, on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]" :style="beadStyle(x, x, colorOf(x))"
-          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @dblclick.stop="rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
+          @pointerdown.stop="startDrag($event, { item: x, from: 'loose' })" @dblclick.stop="x.type === 'unit' && rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'">
             <!-- меню главы, как в Figma: подсветка блока главы -->
             <div v-if="sel === x.id && !drag.on && renaming !== x.id" class="nbar chbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
@@ -1503,7 +1503,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <img v-else-if="covK(x) === 'photo' && mediaUrl(x)" :src="mediaUrl(x)" class="vid img" :class="{ round: x.ck }" alt="" draggable="false" />
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
-            <em class="cap"><input v-if="renaming === x.id" v-model="x.title" :data-ren="x.id" class="rin" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameDone" @blur="renameDone" @input="save" /><template v-else>{{ x.title }}</template><small>не на рельсе</small></em>
+            <em class="cap"><span v-if="renaming === x.id" class="rrow lren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click.stop="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></span><span v-else class="ctl">{{ x.title }}<button class="upen" title="Переименовать" @pointerdown.stop @dblclick.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button></span><small>не на рельсе</small></em>
           </template>
         </div>
         <!-- Стикеры, как в FigJam -->
@@ -1812,6 +1812,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .uh.ren .rin { width: 100%; border: 0; border-radius: 6px; background: rgba(13, 153, 255, .07); padding: 1px 4px; margin: 0 -4px; outline: none; caret-color: #0d99ff; box-shadow: none }
 .uh.ren .rin:focus { background: rgba(13, 153, 255, .12) } .uh.ren .rin.big { font-size: 20px; font-weight: 900 } .uh.ren .rin:not(.big) { font-size: 14px; font-weight: 600; color: #4b5563 }
 .bead.ren { z-index: 31 } .upen { pointer-events: auto } .rrow .rin { flex: 1; min-width: 0 }
+.ctl { display: inline-flex; align-items: center; gap: 6px } .ctl .upen { width: 24px; height: 24px } .ctl .upen svg { width: 15px; height: 15px }      /* карандаш у названия урока — переименовать только по нему */
+.bead.s-l .ctl { flex-direction: row } .cap .rrow.lren { width: 100%; gap: 6px } .cap .rrow.lren .upen { width: 24px; height: 24px }
+.cap .rin.lren, .cap .lren .rin { border: 0; border-radius: 6px; background: rgba(13, 153, 255, .07); padding: 1px 4px; margin: 0 -4px; caret-color: #0d99ff; box-shadow: none }
+.cap .rin.lren:focus, .cap .lren .rin:focus { background: rgba(13, 153, 255, .12) }
 .upen.fin-ok { opacity: 1; background: #0d99ff; color: #fff } .upen.fin-ok:hover { background: #0b85e0; color: #fff }
 .opi { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 1.8 } .opi path { fill: #fff; stroke: none } .opv { font-size: 13px; font-weight: 700; color: #fff; min-width: 34px; text-align: left }
 .hlsw { grid-template-columns: repeat(8, 32px) } .hlsw button[style*="#ffffff"] { box-shadow: inset 0 0 0 1.5px #ccc }
@@ -1929,8 +1933,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .cov svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .cov .rm { color: #ff8f8f } .cvs { width: 1px; margin: 6px 2px; background: #444 }
 .rin.lin { width: 100%; box-sizing: border-box; padding: 4px 8px; border: 2px solid rgba(255, 255, 255, .75); border-radius: 8px; background: rgba(255, 255, 255, .18); color: #fff; font-size: 18px; font-weight: 900 }
 .rin.lin::placeholder { color: rgba(255, 255, 255, .7) } .rin.lin:focus { border-color: #fff; background: rgba(255, 255, 255, .26) }
-.rin.lin.sub { font-size: 14px; font-weight: 500 } .lpv .lps { cursor: text }
-.lpt { display: flex; align-items: center; gap: 6px; cursor: text } .lpt svg { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .7 } .lpt:hover svg { opacity: 1 }
+.rin.lin.sub { font-size: 14px; font-weight: 500 } 
+.lpt { display: flex; align-items: center; gap: 6px } .lpen { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: rgba(255, 255, 255, .2); color: #fff; cursor: pointer } .lpen:hover { background: rgba(255, 255, 255, .32) } .lpt svg { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .7 } .lpt:hover svg { opacity: 1 }
 .ti { display: grid; justify-items: center; gap: 5px; width: 92px; padding: 8px 0 6px; border: 0; border-radius: 12px; background: none; font: inherit; cursor: pointer; touch-action: none; flex: none }
 .ti.wide { width: 116px } .ti:hover { background: #f2f2f2 }
 .tc { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #fff; background: var(--c) }
