@@ -50,7 +50,7 @@ const PALETTE = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw'
 const MEDIA = ['video', 'photo']                         // задания с файлом (кружок, фото) — файл в S3, ключ в поле file
 // На панели — только «Урок» и «Чекпоинт» (как в Busuu). Старые типы (слова, домашка, тест, кружок, фото…) в курсах остаются и показываются.
 const TASKS = ['lesson', 'checkpoint']
-const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Проверка навыков перед следующим Chapter' }
+const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Конец Chapter, в конце — итог Chapter' }
 const BRANCH = ['lesson', 'checkpoint']            // у них ветка экранов видна всегда, даже пустая
 // Обложка урока, как в Busuu: фото или кружок в самом кружке урока (поле file / media, вид — ck)
 const covK = (x) => (MEDIA.includes(x.type) ? x.type : x.ck ?? null)
@@ -1478,7 +1478,10 @@ const cmClose = () => { cm.value = null }
 onMounted(() => addEventListener('pointerdown', cmClose)); onUnmounted(() => removeEventListener('pointerdown', cmClose))
 const ctrl = isMac ? '⌘' : 'Ctrl'
 const onKeyUp = (e) => { if (e.code === 'Space') space.value = false }
-onMounted(() => { addEventListener('keydown', onKey); addEventListener('keyup', onKeyUp) }); onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp) })
+// Ctrl + колёсико над панелями (меню «Lesson», масштаб, шапка…) — масштаб холста, а не всей страницы браузера
+function onWinWheel(e) { if ((e.ctrlKey || e.metaKey) && board.value && !board.value.contains(e.target)) onWheel(e) }
+onMounted(() => { addEventListener('keydown', onKey); addEventListener('keyup', onKeyUp); addEventListener('wheel', onWinWheel, { passive: false }) })
+onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('wheel', onWinWheel) })
 
 function exportJson() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
@@ -1729,7 +1732,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     </div>
     <div class="fl tr-panel">
       <PresenceBar inline /><i v-if="live.on" class="vs" />
-      <button class="allr" :class="{ on: allCourses }" title="Показать рядом остальные курсы — смотреть и копировать их экраны в этот (Ctrl+C / Ctrl+V)" @click="allCourses = !allCourses"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="7" height="16" rx="2" /><rect x="13.5" y="4" width="7" height="16" rx="2" /></svg>Все курсы</button><i class="vs" />
+      <button class="allr" :class="{ on: allCourses }" title="Показать рядом остальные курсы — смотреть и копировать их экраны в этот (Ctrl+C / Ctrl+V)" @click="allCourses = !allCourses"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="7" height="16" rx="2" /><rect x="13.5" y="4" width="7" height="16" rx="2" /></svg>Все курсы</button>
       <i class="vs dk" /><button class="pill" @click="exportJson">Экспорт</button><button class="pill grey" @click="reset">Сброс</button>
     </div>
     <!-- Масштаб -->
@@ -1739,7 +1742,15 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop>
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
-        <svg class="sch" viewBox="0 0 160 70">
+        <!-- чекпоинт — как на рельсе: экраны НАД линией, линия снизу, в конце — итог Chapter -->
+        <svg v-if="k === 'checkpoint'" class="sch" viewBox="0 0 160 70">
+          <line x1="26" y1="50" x2="148" y2="50" class="sl" />
+          <g v-for="j in 2" :key="j"><line :x1="21 + j * 36" y1="41" :x2="21 + j * 36" y2="50" class="st" /><rect :x="8 + j * 36" y="7" width="26" height="32" rx="4" class="sc" /><rect :x="13 + j * 36" y="12" width="16" height="3" rx="1.5" class="sb" /><rect :x="13 + j * 36" y="30" width="16" height="5" rx="2.5" class="sbb" /></g>
+          <g class="sdots"><circle cx="117" cy="23" r="1.8" /><circle cx="123" cy="23" r="1.8" /><circle cx="129" cy="23" r="1.8" /></g>
+          <circle cx="144" cy="50" r="9" class="sf" /><path d="M140.5 47h7v2.6a3.5 3.5 0 0 1-7 0zM144 53v3M141.5 56.5h5" class="sfi" />
+          <circle cx="16" cy="50" r="13" class="sm" /><g transform="translate(6.5 40.5) scale(.8)" class="smi" v-html="T[k].ic" />
+        </svg>
+        <svg v-else class="sch" viewBox="0 0 160 70">
           <line x1="26" y1="22" x2="148" y2="22" class="sl" />
           <g v-for="j in 2" :key="j"><line :x1="21 + j * 36" y1="22" :x2="21 + j * 36" y2="31" class="st" /><rect :x="8 + j * 36" y="31" width="26" height="32" rx="4" class="sc" /><rect :x="13 + j * 36" y="36" width="16" height="3" rx="1.5" class="sb" /><rect :x="13 + j * 36" y="54" width="16" height="5" rx="2.5" class="sbb" /></g>
           <g class="sdots"><circle cx="117" cy="47" r="1.8" /><circle cx="123" cy="47" r="1.8" /><circle cx="129" cy="47" r="1.8" /></g>
