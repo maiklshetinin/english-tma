@@ -882,7 +882,7 @@ const flyBox = computed(() => {
 })
 const joints = computed(() => (drag.on && drag.item?.type === 'unit' && drag.from !== 'file' ? chapterJoints().map(j => ({ ...j, y: j.y + (!unitGapH.value ? 0 : j.b === drag.to ? unitGapH.value / 2 : j.b > drag.to ? unitGapH.value : 0), hot: drag.over && drag.to === j.b })) : []))
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
-const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0 })
+const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0, lz: null })          // lz — урок целится в главу на доске
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
 // Чекпоинт — в самом конце главы: его ветка экранов идёт ВВЕРХ (над линией), под ним сразу низ плашки главы — всегда на одном расстоянии,
 // и видно, что после чекпоинта урок не вставить. hasRail — ветка вниз (у уроков), railUp — ветка вверх (у чекпоинта)
@@ -914,7 +914,7 @@ const order = computed(() => {
 // тянем задание (урок, чекпоинт…) к рельсу: стыки-магниты между заданиями глав; рельс подсвечен — видно, куда можно положить
 // в Chapter пока один урок — в середине главы (между уроком и чекпоинтом) плашка «2 Lesson»: сюда можно тащить ещё уроки
 const lessonHints = computed(() => {
-  if (drag.on) return []
+  if (drag.on && (drag.over || drag.lz || drag.item?.type === 'unit')) return []          // пока тянем урок — подсказка видна до наведения, у рельса её сменяет магнит
   const L = layout.value, list = order.value, out = []
   chapters.value.forEach((c) => {
     const ids = []; for (let i = c.i + 1; i <= c.last; i++) if (list[i].type !== 'checkpoint') ids.push(i)
@@ -938,6 +938,7 @@ const lessonJoints = computed(() => {
     if (b === 0) return
     if (drag.over && x.id === drag.item.id) return out.push({ k: 'hot', x: L[b].x, y: L[b].y, t, hot: true })
   })
+  if (drag.lz) out.push({ k: 'lz', x: drag.lz.x, y: drag.lz.y, t, hot: true })
   return out          // только магнит там, куда встанет (серых стыков на каждом месте больше нет)
 })
 const unitGapH = computed(() => {
@@ -1027,7 +1028,8 @@ const chapterBoxes = computed(() => {
       y1 = Math.max(y1, k.y + 56 + (hasRail(k) ? 40 + Math.min(700, railHs[k.id] ?? RAIL_H) : 0))
     }
     const hc = u.hlc ?? HL_DEF, top = u.y - 70
-    out.push({ id: u.id, from: 'loose', box: { x0, y0: top, x1, y1 }, full: { x0, y0: top, x1: Math.max(x1, fx1), y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { ...layerSt(u.id), '--hc': hc, '--ho': hlOp(u) + '%', left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
+    const lastY = Math.max(u.y + 140, ...ks.map(k => k.y))
+    out.push({ id: u.id, from: 'loose', rail: { ...layerSt(u.id), left: u.x - 3 + 'px', top: u.y + 30 + 'px', height: lastY - u.y - 30 + 'px', '--hc': hc }, box: { x0, y0: top, x1, y1 }, full: { x0, y0: top, x1: Math.max(x1, fx1), y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { ...layerSt(u.id), '--hc': hc, '--ho': hlOp(u) + '%', left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
   }
   return out
 })
@@ -1099,7 +1101,27 @@ function nearest(w) {
   if (drag.item?.type !== 'checkpoint') while (i > 0 && keep[i - 1].type === 'checkpoint') i--          // после чекпоинта главы урок не встаёт — только перед ним
   const a = P[i - 1], b = P[i], rx = a && b ? a.x + (b.x - a.x) * Math.min(1, Math.max(0, (w.y - a.y) / Math.max(1, b.y - a.y))) : (a ?? b).x
   const inY = w.y > P[0].y - 140 && w.y < P[n - 1].y + 180
-  return { i, near: inY && Math.abs(w.x - rx) < 110 }
+  return { i, near: inY && w.x > rx + CH_X0 - 40 && w.x < rx + CH_X1 + 40 }          // магнит — над всей плашкой главы (не только у самой линии), срабатывает раньше
+}
+// урок (чекпоинт…) над главой на доске — встаёт в неё, как на рельс: место — по высоте среди её уроков
+function looseTarget(w) {
+  if (!drag.item || drag.item.type === 'unit') return null
+  for (const c of chapterBoxes.value) {
+    if (c.from !== 'loose') continue
+    const u = doc.loose.find(l => l.id === c.id); if (!u) continue
+    if (w.x < u.x + CH_X0 - 40 || w.x > u.x + CH_X1 + 40 || w.y < c.box.y0 || w.y > c.box.y1 + 60) continue
+    const ks = doc.loose.filter(l => l.grp === u.id && l.id !== drag.item.id).sort((a, b) => a.y - b.y)
+    let i = 0; while (i < ks.length && ks[i].y < w.y) i++
+    if (drag.item.type !== 'checkpoint') while (i > 0 && ks[i - 1].type === 'checkpoint') i--
+    const y = !ks.length ? u.y + 116 : i === 0 ? (u.y + ks[0].y) / 2 : i < ks.length ? (ks[i - 1].y + ks[i].y) / 2 : ks[i - 1].y + 90
+    return { u: u.id, i, x: u.x, y, at: i < ks.length ? ks[i].y - 1 : (ks[i - 1]?.y ?? u.y) + 1 }
+  }
+  return null
+}
+function aim(e) {
+  const w = toWorld(e.clientX, e.clientY), n = nearest(w), tb = overToolbar(e.clientY)
+  drag.over = n.near && !tb; drag.to = n.i
+  drag.lz = !drag.over && !tb ? looseTarget(w) : null
 }
 const overToolbar = (cy) => cy > H.value - (phone.value ? 92 : 104)
 function startDrag(e, src) {
@@ -1122,7 +1144,7 @@ function move(e) {
   }
   if (!drag.on) return
   drag.x = e.clientX; drag.y = e.clientY
-  const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
+  aim(e)
 }
 function up(e) {
   removeEventListener('pointermove', move)
@@ -1134,7 +1156,7 @@ function up(e) {
     return
   }
   // на ветку урока (место экранов) задание не кладём — только экраны; отпустили там — задание возвращается
-  drop(drag.over ? 'rail' : overToolbar(e.clientY) ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))          // поверх веток уроков — тоже можно: ляжет слоем сверху
+  drop(drag.over ? 'rail' : drag.lz ? 'chapter' : overToolbar(e.clientY) ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))          // поверх веток уроков — тоже можно: ляжет слоем сверху
 }
 // Нажали задание на панели (не тянули): оно едет за курсором, нажатие ставит — на рельс (если рядом) или на холст; Esc — отмена
 let placingItem = false
@@ -1145,7 +1167,7 @@ function itemPlaceStart(type, e) {
 }
 function itemPlaceMove(e) {
   drag.x = e.clientX; drag.y = e.clientY
-  const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
+  aim(e)
 }
 function itemPlaceEnd() { placingItem = false; removeEventListener('pointermove', itemPlaceMove); removeEventListener('pointerdown', itemPlaceDown, true) }
 function itemPlaceCancel() { itemPlaceEnd(); Object.assign(drag, { on: false, item: null, extra: null, over: false, ox: 0, oy: 0 }) }
@@ -1154,7 +1176,7 @@ function itemPlaceDown(e) {
   if (e.button !== 0) return itemPlaceCancel()
   itemPlaceMove(e)
   const w = toWorld(e.clientX, e.clientY)
-  drop(drag.over ? 'rail' : overToolbar(e.clientY) ? 'cancel' : 'canvas', w); save()
+  drop(drag.over ? 'rail' : drag.lz ? 'chapter' : overToolbar(e.clientY) ? 'cancel' : 'canvas', w); save()
 }
 // Куда легло взятое: на рельс (в промежуток), на холст (где отпустили) или отмена (над панелью)
 function drop(where, w) {
@@ -1165,7 +1187,14 @@ function drop(where, w) {
     for (const v of [x, ...kids]) { delete v.x; delete v.y; delete v.grp }
     if (x.type === 'unit') { const list = doc.items.filter(v => !dragIds.value.has(v.id)); list.splice(Math.min(drag.to, list.length), 0, x, ...kids); doc.items.splice(0, doc.items.length, ...list) }
     else doc.items.splice(0, doc.items.length, ...order.value)          // глава с доски встаёт на рельс вместе со своим уроком и чекпоинтом
+  } else if (where === 'chapter') {          // в главу на доске — её уроком (раскладка — как на рельсе)
+    const u = doc.loose.find(l => l.id === drag.lz.u)
+    if (from === 'rail') doc.items = doc.items.filter(v => v.id !== x.id)
+    x.grp = u.id; x.x = u.x; x.y = drag.lz.at
+    if (from !== 'loose') doc.loose.push(x)
+    snapKids(u); toTop([u, ...doc.loose.filter(l => l.grp === u.id)])
   } else if (where === 'canvas') {
+    if (from === 'loose' && x.type !== 'unit') delete x.grp          // унесли урок из главы на доске — он сам по себе
     if (from === 'rail') {
       const out = new Set([x.id, ...kids.map(v => v.id)]); doc.items = doc.items.filter(v => !out.has(v.id))
       const dy = kidDy(kids); kids.forEach((v, k) => { v.x = Math.round(w.x - drag.ox); v.y = Math.round(w.y - drag.oy) + dy[k]; v.grp = x.id; doc.loose.push(v) })      // глава с рельса — на доску блоком
@@ -1179,7 +1208,7 @@ function drop(where, w) {
   // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт (на рельсе они уже встали вместе с главой; на доске — блоком)
   if (where === 'canvas' && from === 'new' && kids.length) { const dy = kidDy(kids); kids.forEach((v, k) => { v.x = x.x; v.y = x.y + dy[k]; v.grp = x.id; doc.loose.push(v) }) }
   if (where === 'canvas') toTop([x, ...kids, ...doc.loose.filter(l => l.grp === x.id)])          // положили куда угодно (можно поверх) — и этот объект теперь верхний слой
-  Object.assign(drag, { on: false, item: null, extra: null, over: false, ox: 0, oy: 0 })
+  Object.assign(drag, { on: false, item: null, extra: null, over: false, ox: 0, oy: 0, lz: null })
   if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
 }
@@ -1323,7 +1352,7 @@ function fileOver(e) {
     sel.value = null; Object.assign(drag, { on: true, item: newItem(t.startsWith('image/') ? 'photo' : 'video'), ox: 0, oy: 0, from: 'file' })
   }
   drag.x = e.clientX; drag.y = e.clientY
-  const n = nearest(toWorld(e.clientX, e.clientY)); drag.over = n.near && !overToolbar(e.clientY); drag.to = n.i
+  aim(e)
 }
 function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.from === 'file') Object.assign(drag, { on: false, item: null }) }
 async function fileDrop(e) {
@@ -1489,7 +1518,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <div v-if="lessonBox" class="lsel" :style="lessonBox.style" @pointerdown.stop="startDrag($event, { item: lessonBox.x, from: lessonBox.from })"><i /><i /><i /><i /></div>
         <!-- Главы — блоками (подсветка из меню главы) -->
         <!-- нажали на плашку главы — выделяется вся глава (как объект); тянуть — едет целиком -->
-        <div v-for="c in chapterBoxes" :key="'cb' + c.id" class="chapbox" :class="{ light: c.light, wide: c.w, off: findAny(c.id)?.hl === 'none', still: c.from === 'loose' }" :style="c.style" @pointerdown.stop="chapDown($event, c)" />
+        <div v-for="c in chapterBoxes" :key="'cb' + c.id" class="chapbox" :class="{ light: c.light, wide: c.w, off: findAny(c.id)?.hl === 'none', still: c.from === 'loose', aim: drag.lz?.u === c.id }" :style="c.style" @pointerdown.stop="chapDown($event, c)" />
+        <!-- у Chapter на доске — свой рельс (цветом главы): уроки нанизаны на него; тянем урок — он подсвечивается, урок встаёт в главу -->
+        <template v-for="c in chapterBoxes" :key="'cr' + c.id"><span v-if="c.rail" class="chrail" :class="{ aim: drag.lz?.u === c.id }" :style="c.rail" /></template>
         <!-- подсказка «2 Lesson» — после плашек глав (в том же слое — поверх своей плашки) -->
         <span v-for="j in lessonHints" :key="'lh' + j.k" class="jnt tile lj hint" :style="{ left: j.x + 'px', top: j.y + 'px', ...(j.z != null ? { zIndex: j.z } : null) }" title="Сюда можно добавить ещё уроки — тяните «Lesson» с панели"><em class="tn">2</em><svg class="jic" viewBox="0 0 24 24" v-html="T.lesson.ic" /><small>Lesson</small></span>
         <svg class="rail" :class="{ glow: railGlow }" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
@@ -1938,6 +1969,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .jnt.rend { z-index: 3; border: 2.5px solid #d6d9dd; background: #ececec; color: #9aa0a8 }          /* в покое — серый */
 .jnt.lj { height: 40px; padding: 0 16px 0 12px; font-size: 15px; z-index: 10024 } .jnt.lj:not(.hot) { border-style: solid; border-color: #d6d9dd; background: #ececec; color: #9aa0a8 }
 .bead.lift:not(.unit) { opacity: 0 !important }          /* место, куда встанет урок, показывает синяя плашка «Lesson» (а не пунктирный кружок) */
+.chapbox.aim { box-shadow: 0 0 0 3px #0d99ff, 0 0 18px rgba(13, 153, 255, .45) }          /* урок целится в эту главу на доске */
+.chrail { position: absolute; width: 6px; border-radius: 3px; background: color-mix(in srgb, var(--hc) 70%, #1a6b45); pointer-events: none }
+.chrail.aim { background: #0d99ff; box-shadow: 0 0 10px rgba(13, 153, 255, .6) }
 .rail.glow .r0 { stroke: #a9d8ff } .rail.glow path { filter: drop-shadow(0 0 6px rgba(13, 153, 255, .45)) }          /* тянем на рельс — рельс подсвечен */
 .jnt.tile { display: grid; justify-items: center; gap: 4px; width: 92px; height: auto; padding: 10px 0 8px; border: 0; border-radius: 14px; background: #fff; color: #2c2c2c; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }          /* как кнопка на нижней панели: значок, подпись, номер */
 .jnt.tile .jic { width: 32px; height: 32px; stroke-width: 1.7 } .jnt.tile small { font-size: 13px; font-weight: 800 }
