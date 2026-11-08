@@ -154,7 +154,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
 <style scoped>
 .avb { flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: zoom-in; transition: transform .08s } .avb:active { transform: scale(.94) }
 /* Одна колонка, ширина как у обычной страницы */
-.sd { max-width: 432px }      /* узкая, по ширине картинки счёта: «Уроки» выглядят ровно как то, что отправляем */
+.sd { max-width: 640px }      /* шапка и вкладки — обычной ширины (ник влезает, «Путь и слова» как раньше); «Уроки» — узкая карточка по центру, как картинка счёта */
 .pcard { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden }
 .top { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 4px }
 .who { flex: 1; min-width: 0 } .who h2 { margin: 0; font-size: 19px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

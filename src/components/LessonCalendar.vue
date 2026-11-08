@@ -234,7 +234,7 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .cmr { gap: 10px } .cmr > span { flex: 1 }
 .cmr .g { color: var(--text) } .cmr .r { color: var(--red-d); font-size: 15px }
 /* ---- Карточка ученика — как картинка счёта (utils/receipt.ts: ширина 360, поля 24, клетка 34, число в коробочке 28×26) ---- */
-.lc.cmp .cal { padding: 22px 24px 20px; gap: 0 }
+.lc.cmp .cal { width: 100%; max-width: 400px; box-sizing: border-box; justify-self: center; padding: 22px 24px 20px; gap: 0 }      /* узкая, по ширине счёта, по центру страницы */
 .rtop { display: flex; align-items: center; gap: 4px } .rtop b { flex: 1; font-size: 24px; font-weight: 900; letter-spacing: -.3px }
 .ar { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--text); cursor: pointer }
 .ar:hover:not(:disabled) { background: var(--surface) } .ar:disabled { opacity: .3; cursor: default } .ar.next svg { transform: scaleX(-1) }
