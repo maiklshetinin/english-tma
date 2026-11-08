@@ -863,7 +863,12 @@ const flyTree = computed(() => {
 })
 // глава на доске — блок: её урок и чекпоинт помнят главу (grp) и ездят вместе с ней
 // где под главой на доске лягут её задания: столбиком, под уроком с веткой — место во всю ветку (как на рельсе)
-const kidDy = (ks) => { let y = 60; return ks.map(v => { if (v.type === 'checkpoint') y += RAIL_H + 80; const d = y; y += hasRail(v) ? RAIL_H + 110 : 130; return d }) }          // чекпоинт — с местом над ним под ветку
+// глава на доске — точь-в-точь как на рельсе: уроки под ней с теми же отступами (та же раскладка), кружки ровно под главой
+const kidDy = (ks) => layoutOf([{ type: 'unit' }, ...ks]).slice(1).map(p => p.y)
+function snapKids(u) {
+  const ks = doc.loose.filter(l => l.grp === u.id).sort((a, b) => a.y - b.y); if (!ks.length) return
+  const dy = kidDy(ks); ks.forEach((v, k) => { const y = Math.round(u.y + dy[k]); if (v.x !== u.x) v.x = u.x; if (v.y !== y) v.y = y })
+}
 const kidsOf = (u) => { const ks = doc.loose.filter(l => l.grp === u.id).sort((a, b) => a.y - b.y); return ks.length ? ks : null }
 const dragIds = computed(() => new Set(drag.on ? [drag.item?.id, ...(drag.extra ?? []).map(v => v.id)] : []))
 // плашка главы у призрака — едет вместе с ним
@@ -926,6 +931,9 @@ const unitGapH = computed(() => {
 const rawLayout = computed(() => layoutOf(order.value))          // без щели — по нему стоят название курса и начало рельса (они не прыгают)
 const layout = computed(() => { const L = rawLayout.value, g = unitGapH.value; return g ? L.map((p, i) => (i >= drag.to ? { ...p, y: p.y + g } : p)) : L })
 const pos = (i) => layout.value[i] ?? { x: 0, y: 0, side: 'r' }
+// высоты веток меряются уже после того, как глава легла, — подравниваем блок, как рельс
+watch(() => doc.loose.filter(l => l.type === 'unit').map(u => u.id + ':' + u.x + ':' + u.y + ':' + doc.loose.filter(l => l.grp === u.id).map(k => k.id + '=' + (railHs[k.id] ?? 0)).join(',')).join('|'),
+  () => { if (!drag.on) for (const u of doc.loose) if (u.type === 'unit') snapKids(u) }, { immediate: true })
 function railPath(n, L = layout.value, dx = 0) {
   if (!n) return ''
   const P = L.slice(0, n).map(p => ({ x: p.x + dx, y: p.y })); let d = `M${P[0].x},${P[0].y}`
@@ -1088,9 +1096,11 @@ function move(e) {
   if (pending && !drag.on) {
     if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return
     sel.value = null
+    // где задание стоит сейчас — считаем ДО начала перетаскивания (потом оно уходит из раскладки рельса и место «съезжает»)
+    const src0 = pending.from === 'rail' ? { ...pos(order.value.indexOf(pending.item)) } : pending.from === 'loose' ? { x: pending.item.x, y: pending.item.y } : null
     Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : pending.from === 'loose' && pending.item?.type === 'unit' ? kidsOf(pending.item) : pending.from === 'rail' && pending.item?.type === 'unit' ? railKids(pending.item) : null, from: pending.type ? 'new' : pending.from })
     // за какое место взяли — так и держим: задание не «прыгает» под курсор своим углом
-    const sw = toWorld(pending.sx, pending.sy), src = pending.from === 'rail' ? pos(doc.items.indexOf(pending.item)) : pending.from === 'loose' ? pending.item : null
+    const sw = toWorld(pending.sx, pending.sy), src = src0
     drag.ox = src ? sw.x - src.x : 0; drag.oy = src ? sw.y - src.y : 0
   }
   if (!drag.on) return
@@ -1107,7 +1117,7 @@ function up(e) {
     return
   }
   // на ветку урока (место экранов) задание не кладём — только экраны; отпустили там — задание возвращается
-  drop(drag.over ? 'rail' : overToolbar(e.clientY) || screenTarget(toWorld(e.clientX, e.clientY))?.mark ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))
+  drop(drag.over ? 'rail' : overToolbar(e.clientY) ? 'cancel' : 'canvas', toWorld(e.clientX, e.clientY))          // поверх веток уроков — тоже можно: ляжет слоем сверху
 }
 // Нажали задание на панели (не тянули): оно едет за курсором, нажатие ставит — на рельс (если рядом) или на холст; Esc — отмена
 let placingItem = false
@@ -1127,7 +1137,7 @@ function itemPlaceDown(e) {
   if (e.button !== 0) return itemPlaceCancel()
   itemPlaceMove(e)
   const w = toWorld(e.clientX, e.clientY)
-  drop(drag.over ? 'rail' : overToolbar(e.clientY) || screenTarget(w)?.mark ? 'cancel' : 'canvas', w); save()
+  drop(drag.over ? 'rail' : overToolbar(e.clientY) ? 'cancel' : 'canvas', w); save()
 }
 // Куда легло взятое: на рельс (в промежуток), на холст (где отпустили) или отмена (над панелью)
 function drop(where, w) {
@@ -1141,7 +1151,7 @@ function drop(where, w) {
   } else if (where === 'canvas') {
     if (from === 'rail') {
       const out = new Set([x.id, ...kids.map(v => v.id)]); doc.items = doc.items.filter(v => !out.has(v.id))
-      const dy = kidDy(kids); kids.forEach((v, k) => { v.x = Math.round(w.x); v.y = Math.round(w.y) + dy[k]; v.grp = x.id; doc.loose.push(v) })      // глава с рельса — на доску блоком
+      const dy = kidDy(kids); kids.forEach((v, k) => { v.x = Math.round(w.x - drag.ox); v.y = Math.round(w.y - drag.oy) + dy[k]; v.grp = x.id; doc.loose.push(v) })      // глава с рельса — на доску блоком
     }
     w = { x: w.x - drag.ox, y: w.y - drag.oy }                       // место — с учётом, за какое место взяли
     const dx = from === 'loose' ? Math.round(w.x) - x.x : 0, dy = from === 'loose' ? Math.round(w.y) - x.y : 0
