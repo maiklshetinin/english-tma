@@ -779,6 +779,7 @@ const selBox = computed(() => {
 const isM = (id) => msel.value.includes(id)
 async function delSelected() {
   const ids = new Set(msel.value); if (!ids.size) return
+  for (const x of [...doc.items, ...doc.loose]) if (ids.has(x.id) && x.type === 'unit') withChapter(x).forEach(v => ids.add(v.id))          // глава — вместе с уроками
   const steps = boxOf().filter(o => o.k === 'step' && o.course === doc.id && ids.has(o.id) && !ids.has(o.lesson))     // свои экраны (чужие курсы не трогаем)
   const items = [...doc.items, ...doc.loose].filter(x => ids.has(x.id)), notes = (doc.notes ?? []).filter(n => ids.has(n.id)), inks = (doc.ink ?? []).filter(k => ids.has(k.id))
   const n = items.length + notes.length + inks.length + steps.length
@@ -1279,11 +1280,13 @@ const sel = ref(null), editing = ref(false)
 watch(sel, (id) => { liveSend({ t: 'sel', id }); if (id) msel.value = []; chMenu.value = null })
 const selItem = computed(() => findAny(sel.value))
 const selLoose = computed(() => !!doc.loose.find(v => v.id === sel.value))
+// глава удаляется целиком — со своими уроками и чекпоинтом (а не сливается с предыдущей главой)
+const withChapter = (x) => (x?.type === 'unit' ? [x, ...((doc.items.includes(x) ? railKids(x) : kidsOf(x)) ?? [])] : [x])
 async function remove() {
   const x = selItem.value; if (!x) return
-  dropRefs([x.file, x.media && 'idb:' + x.media, ...(x.steps ?? []).flatMap(stepRefs)])
-  const a = doc.items.findIndex(v => v.id === x.id); if (a >= 0) doc.items.splice(a, 1)
-  const b = doc.loose.findIndex(v => v.id === x.id); if (b >= 0) doc.loose.splice(b, 1)
+  const all = withChapter(x), ids = new Set(all.map(v => v.id))
+  for (const v of all) dropRefs([v.file, v.media && 'idb:' + v.media, ...(v.steps ?? []).flatMap(stepRefs)])
+  doc.items = doc.items.filter(v => !ids.has(v.id)); doc.loose = doc.loose.filter(v => !ids.has(v.id))
   sel.value = null; setProgress(doc.progress); showToast('Удалено — Ctrl+Z, чтобы вернуть')
 }
 function toRailEnd() { const x = selItem.value; doc.loose.splice(doc.loose.findIndex(v => v.id === x.id), 1); delete x.x; delete x.y; doc.items.push(x); setProgress(doc.progress); nextTick(showRailEnd) }
