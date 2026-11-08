@@ -836,8 +836,17 @@ const onResize = () => { W.value = innerWidth; H.value = innerHeight }
 onMounted(() => {
   addEventListener('resize', onResize)
   // при открытии — начало курса крупно (на телефоне чуть мельче, чтобы влезли подписи)
-  view.z = Math.min(1, W.value / 560); view.x = W.value / 2; view.y = (phone.value ? 120 : 80) + 260 * view.z
+  if (!restoreView()) { view.z = Math.min(1, W.value / 560); view.x = W.value / 2; view.y = (phone.value ? 120 : 80) + 260 * view.z }
 })
+// масштаб и место на холсте запоминаем для каждого курса (localStorage) — после перезагрузки всё там же
+const VKEY = () => 'tma.courseView.' + (doc.id ?? 'local')
+function restoreView() {
+  try { const v = JSON.parse(localStorage.getItem(VKEY()) ?? 'null'); if (v && [v.x, v.y, v.z].every(Number.isFinite) && v.z > 0) { Object.assign(view, { x: v.x, y: v.y, z: v.z }); return true } } catch { /* приватный режим */ }
+  return false
+}
+watch(() => doc.id, () => restoreView())
+let viewT = 0
+watch(() => [view.x, view.y, view.z], () => { clearTimeout(viewT); viewT = setTimeout(() => { try { localStorage.setItem(VKEY(), JSON.stringify({ x: Math.round(view.x), y: Math.round(view.y), z: +view.z.toFixed(3) })) } catch { /* приватный режим */ } }, 300) })
 onUnmounted(() => removeEventListener('resize', onResize))
 // Точки фона двигаются вместе с холстом; при отдалении — реже
 const dots = computed(() => { let s = 20 * view.z; while (s < 10) s *= 4; return { backgroundSize: `${s}px ${s}px`, backgroundPosition: `${view.x}px ${view.y}px` } })
@@ -865,7 +874,7 @@ const flyBox = computed(() => {
   const hc = t[0].x.hlc ?? HL_DEF, x0 = Math.min(...xs) + CH_X0, x1 = Math.max(...xs) + CH_X1
   return { light: hc === '#ffffff', style: { '--hc': hc, '--ho': hlOp(t[0].x) + '%', left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', transition: 'none' } }
 })
-const joints = computed(() => (drag.on && drag.item?.type === 'unit' && drag.from !== 'file' ? chapterJoints().map(j => ({ ...j, hot: drag.over && drag.to === j.b })) : []))
+const joints = computed(() => (drag.on && drag.item?.type === 'unit' && drag.from !== 'file' ? chapterJoints().map(j => ({ ...j, y: j.y + (!unitGapH.value ? 0 : j.b === drag.to ? unitGapH.value / 2 : j.b > drag.to ? unitGapH.value : 0), hot: drag.over && drag.to === j.b })) : []))
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
 const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
@@ -888,7 +897,27 @@ const order = computed(() => {
   if (drag.on && drag.over && drag.item?.type !== 'unit') list.splice(Math.min(drag.to, list.length), 0, drag.item, ...(drag.extra ?? []))      // новая глава — сразу с уроком и чекпоинтом
   return list
 })
-const layout = computed(() => layoutOf(order.value))
+// тянем Chapter над рельсом — на месте будущего стыка раздвигается место во всю высоту главы: нижние главы уезжают вниз, в щели — магнит «Chapter»
+// тянем задание (урок, чекпоинт…) к рельсу: стыки-магниты между заданиями глав; рельс подсвечен — видно, куда можно положить
+const railGlow = computed(() => drag.on && drag.from !== 'file' && !!drag.item)
+const lessonJoints = computed(() => {
+  if (!drag.on || !drag.item || drag.item.type === 'unit' || drag.from === 'file') return []
+  const L = layout.value, list = order.value, out = [], t = drag.item.type === 'checkpoint' ? 'Чекпоинт' : 'Lesson'
+  list.forEach((x, b) => {
+    if (b === 0) return
+    if (drag.over && x.id === drag.item.id) return out.push({ k: 'hot', x: L[b].x, y: L[b].y, t, hot: true })
+    if (x.type !== 'unit' && !dragIds.value.has(x.id) && !(drag.over && list[b - 1]?.id === drag.item.id)) out.push({ k: x.id, x: L[b].x, y: L[b].y - 58, t, hot: false })
+  })
+  const n = list.length; if (n && !(drag.over && list[n - 1].id === drag.item.id)) out.push({ k: 'end', x: L[n - 1].x, y: L[n - 1].y + 58, t, hot: false })
+  return out
+})
+const unitGapH = computed(() => {
+  if (!(drag.on && drag.over && drag.item?.type === 'unit')) return 0
+  const block = [drag.item, ...(drag.extra ?? [])], B = layoutOf(block), last = block[block.length - 1]
+  return B[B.length - 1].y + 56 + (hasRail(last) ? 40 + (railHs[last.id] ?? RAIL_H) : 0) + CH_GAP + 70
+})
+const rawLayout = computed(() => layoutOf(order.value))          // без щели — по нему стоят название курса и начало рельса (они не прыгают)
+const layout = computed(() => { const L = rawLayout.value, g = unitGapH.value; return g ? L.map((p, i) => (i >= drag.to ? { ...p, y: p.y + g } : p)) : L })
 const pos = (i) => layout.value[i] ?? { x: 0, y: 0, side: 'r' }
 function railPath(n, L = layout.value, dx = 0) {
   if (!n) return ''
@@ -900,7 +929,7 @@ function railPath(n, L = layout.value, dx = 0) {
   return d
 }
 // рельс: от названия курса сверху — через все задания — и ещё отрезок после последней главы (туда насаживают следующую)
-const railTail = computed(() => { const L = layout.value, n = order.value.length; if (!n) return { x: 0, y0: -150, y1: 200 }; const last = order.value[n - 1]; return { x: L[n - 1].x, x0: L[0].x, y0: L[0].y - 150, top: L[0].y, y: L[n - 1].y, y1: L[n - 1].y + 56 + (hasRail(last) ? 40 + (railHs[last.id] ?? RAIL_H) : 0) + CH_GAP + 60 } })
+const railTail = computed(() => { const L = layout.value, n = order.value.length; if (!n) return { x: 0, y0: -150, y1: 200 }; const last = order.value[n - 1]; return { x: L[n - 1].x, x0: L[0].x, y0: rawLayout.value[0].y - 150, top: L[0].y, y: L[n - 1].y, y1: L[n - 1].y + 56 + (hasRail(last) ? 40 + (railHs[last.id] ?? RAIL_H) : 0) + CH_GAP + 60 } })
 const rail = computed(() => { const t = railTail.value; return railPath(order.value.length) + (order.value.length ? ` M${t.x0},${t.y0} L${t.x0},${t.top} M${t.x},${t.y} L${t.x},${t.y1}` : ` M0,${t.y0} L0,${t.y1}`) })
 const railBox = computed(() => { const ys = layout.value.map(p => p.y); return { y1: Math.max(railTail.value.y1, ...ys) + 200 } })
 // Прогресс: progress — сколько заданий (станции не в счёт) пройдено
@@ -1023,7 +1052,10 @@ function chapterJoints() {
 function nearest(w) {
   if (drag.item?.type === 'unit') {          // глава — только в стык между главами, «магнитом»
     let best = null
-    for (const j of chapterJoints()) { const d = Math.abs(w.y - j.y); if (Math.abs(w.x - j.x) < 260 && d < 220 && (!best || d < best.d)) best = { ...j, d } }
+    // над колонкой рельса (ширина плашки главы и чуть шире) — всегда ближайший стык по высоте: рельс «магнитит» по всей длине,
+    // а не только у самого стыка — так главы легко поменять местами (верхняя уезжает вниз, на её месте — магнит)
+    const js = chapterJoints()
+    for (const j of js) { const d = Math.abs(w.y - j.y); if (w.x > j.x + CH_X0 - 120 && w.x < j.x + CH_X1 + 120 && w.y > js[0].y - 260 && w.y < js[js.length - 1].y + 260 && (!best || d < best.d)) best = { ...j, d } }
     return best ? { i: best.b, near: true } : { i: 0, near: false }
   }
   // место вставки — по высоте (сколько заданий выше точки); «на рельсе» — если близко к самой линии рельса по горизонтали.
@@ -1401,6 +1433,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ doc.progress }} из {{ tasksCount }}</b><span>·</span><b>{{ pct }}%</b></div>
         </div>
         <span class="rstart" :style="{ left: (layout[0]?.x ?? 0) + 'px', top: railTail.y0 + 'px' }" />
+        <!-- тянем Lesson / чекпоинт — на рельсе стыки «Lesson» (серые), куда встанет — синий (вместо старого пунктирного кружка) -->
+        <span v-for="j in lessonJoints" :key="'lj' + j.k" class="jnt lj" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }"><svg class="jic" viewBox="0 0 24 24" v-html="T.lesson.ic" />{{ j.t }}</span>
         <!-- конец рельса — серый магнит: сюда встанет следующий Chapter; тянем Chapter — он оживает (стыки ниже) -->
         <span v-if="!joints.length" class="jnt rend" :style="{ left: (railTail.x ?? 0) + 'px', top: railTail.y1 + 'px' }" title="Сюда встанет следующий Chapter — тяните «Chapter» с панели"><svg class="jic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg>Chapter</span>
         <!-- рельс пустой — подсказка, с чего начать -->
@@ -1420,7 +1454,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Главы — блоками (подсветка из меню главы) -->
         <!-- нажали на плашку главы — выделяется вся глава (как объект); тянуть — едет целиком -->
         <div v-for="c in chapterBoxes" :key="'cb' + c.id" class="chapbox" :class="{ light: c.light, wide: c.w, off: findAny(c.id)?.hl === 'none', still: c.from === 'loose' }" :style="c.style" @pointerdown.stop="chapDown($event, c)" />
-        <svg class="rail" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
+        <svg class="rail" :class="{ glow: railGlow }" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
         <!-- Тянем главу / урок / чекпоинт мимо рельса — за курсором вся структура, как она ляжет (глава с уроком и чекпоинтом, у урока ветка с итогом) -->
         <div v-if="flyTree" class="ftree">
           <div v-if="flyBox" class="chapbox" :class="{ light: flyBox.light }" :style="flyBox.style" />
@@ -1864,6 +1898,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .jnt { position: absolute; z-index: 10025; height: 48px; padding: 0 20px 0 16px; transform: translate(-50%, -50%); box-sizing: border-box; border-radius: 22px; border: 2.5px dashed #aeb5bd; background: #f4f4f4; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 900; color: #8a9099; white-space: nowrap; pointer-events: none }
 .jic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round }          /* тот же значок, что у кнопки «Chapter» на панели */          /* стык рельса — надпись «Chapter»: сюда встанет Chapter */
 .jnt.rend { z-index: 3; border: 2.5px solid #d6d9dd; background: #ececec; color: #9aa0a8 }          /* в покое — серый */
+.jnt.lj { height: 40px; padding: 0 16px 0 12px; font-size: 15px; z-index: 10024 } .jnt.lj:not(.hot) { border-style: solid; border-color: #d6d9dd; background: #ececec; color: #9aa0a8 }
+.bead.lift:not(.unit) { opacity: 0 !important }          /* место, куда встанет урок, показывает синяя плашка «Lesson» (а не пунктирный кружок) */
+.rail.glow .r0 { stroke: #a9d8ff } .rail.glow path { filter: drop-shadow(0 0 6px rgba(13, 153, 255, .45)) }          /* тянем на рельс — рельс подсвечен */
 .jnt.dot { width: 34px; height: 34px; padding: 0; border-radius: 50% }
 .jnt.hot { border: 2.5px solid #0d99ff; background: #0d99ff; color: #fff; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
 .jseg { position: absolute; z-index: 10024; width: 8px; height: 90px; margin: -45px 0 0 -4px; border-radius: 4px; background: #0d99ff; box-shadow: 0 0 12px rgba(13, 153, 255, .5); pointer-events: none } .jseg.h { width: 90px; height: 8px; margin: -4px 0 0 -45px }
