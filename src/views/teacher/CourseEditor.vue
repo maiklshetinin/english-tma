@@ -50,7 +50,7 @@ const PALETTE = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw'
 const MEDIA = ['video', 'photo']                         // задания с файлом (кружок, фото) — файл в S3, ключ в поле file
 // На панели — только «Урок» и «Чекпоинт» (как в Busuu). Старые типы (слова, домашка, тест, кружок, фото…) в курсах остаются и показываются.
 const TASKS = ['lesson', 'checkpoint']
-const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Конец Chapter, в конце — итог Chapter' }
+const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Конец Chapter, в конце — итог' }
 const BRANCH = ['lesson', 'checkpoint']            // у них ветка экранов видна всегда, даже пустая
 // Обложка урока, как в Busuu: фото или кружок в самом кружке урока (поле file / media, вид — ck)
 const covK = (x) => (MEDIA.includes(x.type) ? x.type : x.ck ?? null)
