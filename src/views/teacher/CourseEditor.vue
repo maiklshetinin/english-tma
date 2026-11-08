@@ -348,14 +348,34 @@ async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = p
   selectStep(L.id, s.id); setProgress(doc.progress); save()
 }
 // Задания (свои или соседнего курса) — копировать и вставлять на рельс: новые id у задания и его экранов, файлы общие
+// глава копируется целиком: со своими уроками и чекпоинтом (на рельсе — всё до следующей главы, на доске — её grp)
+function withKids(list, course) {
+  const out = [], seen = new Set(), add = (x) => { if (x && !seen.has(x.id)) { seen.add(x.id); out.push(x) } }
+  const src = course === doc.id ? null : others.value.find(c => c.id === course)?.items ?? []
+  for (const x of list) {
+    add(x); if (x.type !== 'unit') continue
+    let ks = []
+    if (src) { const i = src.findIndex(v => v.id === x.id); for (let k = i + 1; i >= 0 && k < src.length && src[k].type !== 'unit'; k++) ks.push(src[k]) }
+    else ks = (doc.items.includes(x) ? railKids(x) : kidsOf(x)) ?? []
+    ks.forEach(add)
+  }
+  return out
+}
 function copyItems(list, course) {
   if (!list.length) return
+  list = withKids(list, course)
   clip.value = { course, items: JSON.parse(JSON.stringify(list)) }
-  showToast(`Скопировано заданий: ${list.length} — нажмите Ctrl+V, они встанут после выбранного задания (или в конец рельса)`)
+  const u = list.filter(x => x.type === 'unit').length
+  showToast(u ? `Скопировано: ${u === 1 ? 'глава' : 'глав — ' + u} и заданий в ней — ${list.length - u}. Ctrl+V — вставить после текущей главы (или в конец рельса)` : `Скопировано заданий: ${list.length} — нажмите Ctrl+V, они встанут после выбранного задания (или в конец рельса)`)
 }
 const freshId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 async function pasteItems(at = null) {           // at — точка холста («Вставить сюда»): задания встают черновиками рядом с ней
-  const list = clip.value.items.map(x => ({ ...JSON.parse(JSON.stringify(x)), id: freshId('i') }))
+  const ids = {}, list = clip.value.items.map(x => { const id = freshId('i'); ids[x.id] = id; return { ...JSON.parse(JSON.stringify(x)), id } })
+  let lastU = null
+  for (const x of list) {            // уроки скопированной главы — снова в её блоке (на доске — grp новой главы)
+    if (x.type === 'unit') { lastU = x.id; delete x.grp; continue }
+    if (at && lastU) x.grp = lastU; else delete x.grp
+  }
   if (doc.items.length + doc.loose.length + list.length > 500) return say('В курсе не больше 500 заданий')
   for (const x of list) {
     delete x.x; delete x.y
@@ -366,9 +386,14 @@ async function pasteItems(at = null) {           // at — точка холст
     } else delete x.media
     for (const st of x.steps ?? []) await localCopies(st)
   }
-  if (at) list.forEach((x, k) => { x.x = Math.round(at.x + k * 150); x.y = Math.round(at.y) })
-  if (at) doc.loose.push(...list)
-  else { const after = sel.value ? doc.items.findIndex(v => v.id === sel.value) : -1; doc.items.splice(after >= 0 ? after + 1 : doc.items.length, 0, ...list) }
+  const hasU = list.some(x => x.type === 'unit')
+  if (at) list.forEach((x, k) => { x.x = Math.round(at.x + (hasU ? 0 : k * 150)); x.y = Math.round(at.y + (hasU ? k * 150 : 0)) })      // глава с уроками — столбиком, как на рельсе
+  if (at) { doc.loose.push(...list); if (hasU) list.filter(x => x.type === 'unit').forEach(u => keepApart(u)) }
+  else {
+    let after = sel.value ? doc.items.findIndex(v => v.id === sel.value) : -1
+    if (hasU && after >= 0) while (after + 1 < doc.items.length && doc.items[after + 1].type !== 'unit') after++          // глава встаёт после конца текущей главы, не разрывая её
+    doc.items.splice(after >= 0 ? after + 1 : doc.items.length, 0, ...list)
+  }
   msel.value = list.map(x => x.id); sel.value = null; setProgress(doc.progress); save()
 }
 // экраны из буфера — на доску рядом с точкой, по порядку слева направо
@@ -406,14 +431,25 @@ async function loadOthers() {
 }
 watch(allCourses, (v) => { if (v) loadOthers(); else { others.value = []; opick.value = null } })
 // ширина курса на холсте: самая длинная ветка урока
-const widthOf = (items) => Math.max(760, ...items.filter(x => INTERACTIVE.includes(x.type)).map(x => RAIL_X0 + ((x.steps?.length ?? 0) + 1) * 520 + 120))
+const widthOf = (items) => Math.max(760, ...items.filter(x => INTERACTIVE.includes(x.type)).map(x => RAIL_X0 + (Math.max(1, x.steps?.length ?? 0) + 1) * 520 + 120))          // пустой урок — тоже с веткой («Экранов пока нет» и «Итог урока»)
 const othersL = computed(() => {
   let x = widthOf(doc.items) + 260
   return others.value.map((c) => {
     const items = c.items ?? [], L = layoutOf(items, c.mode ?? 'line', 'o' + c.id), ox = x
     x += widthOf(items) + 260
     let k = 0
-    return { ...c, ox, L, path: railPath(items.length, L, ox), h: Math.max(0, ...L.map(p => p.y)) + 200,
+    const key = 'o' + c.id, cb = []
+    items.forEach((u, i) => {          // плашки глав — как у своего курса (цвет, прозрачность, «С ветками», «Без»)
+      if (u.type !== 'unit') return
+      let last = i; while (last + 1 < items.length && items[last + 1].type !== 'unit') last++
+      const lastIt = items[last], top = L[i].y - 70
+      const bottom = L[last].y + 56 + (last > i && hasRail(lastIt, key) ? 40 + (railHs[key + lastIt.id] ?? RAIL_H) : 0)
+      let x0 = (c.mode === 'wave' ? -330 : CH_X0), x1 = (c.mode === 'wave' ? 330 : CH_X1)
+      if (u.hlw) for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key)) x1 = Math.max(x1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps.length) * 520 + 460 + 36)
+      const hc = u.hlc ?? HL_DEF, y1 = top + Math.max(120, bottom - top)
+      cb.push({ id: u.id, light: hc === '#ffffff', off: u.hl === 'none', box: { x0: ox + x0, y0: top, x1: ox + x1, y1 }, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: ox + x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
+    })
+    return { ...c, ox, L, cb, path: railPath(items.length, L, ox), h: Math.max(0, ...L.map(p => p.y)) + 200,
       st: items.map(it => (it.type === 'unit' ? 'done' : (k++ < (c.progress ?? 0) ? 'done' : 'todo'))) }
   })
 })
@@ -688,8 +724,8 @@ const boxOf = () => {                              // всё, что можно 
   }
   for (const n of doc.notes ?? []) out.push({ id: n.id, k: 'note', x0: n.x, y0: n.y, x1: n.x + 240, y1: n.y + (noteH[n.id] ?? 240) })
   // задания соседних курсов (кружки, фото, уроки, юниты) — их тоже можно выделить и скопировать к себе
-  for (const o of othersL.value) (o.items ?? []).forEach((x, i) => { const p = { x: o.ox + o.L[i].x, y: o.L[i].y }
-    out.push({ id: 'oi:' + o.id + ':' + x.id, k: 'oitem', course: o.id, item: x, ...(x.type === 'unit' ? { x0: p.x - 46, y0: p.y - 40, x1: p.x + 400, y1: p.y + 20 } : { x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) }) })
+  for (const o of othersL.value) (o.items ?? []).forEach((x, i) => { const p = { x: o.ox + o.L[i].x, y: o.L[i].y }, cb = x.type === 'unit' && o.cb.find(c => c.id === x.id)
+    out.push({ id: 'oi:' + o.id + ':' + x.id, k: 'oitem', course: o.id, item: x, ...(cb ? cb.box : x.type === 'unit' ? { x0: p.x - 46, y0: p.y - 40, x1: p.x + 400, y1: p.y + 20 } : { x0: p.x - 34, y0: p.y - 34, x1: p.x + 34, y1: p.y + 34 }) }) })
   // экраны уроков (свои и соседних курсов) — чтобы рамкой выделить и скопировать сразу несколько
   const rails = [...lessonRails.value.map(r => ({ course: doc.id, x: r.x, p: r.p, key: '' })),
     ...othersL.value.flatMap(o => (o.items ?? []).map((x, i) => ({ course: o.id, x, p: { x: o.ox + o.L[i].x, y: o.L[i].y }, key: 'o' + o.id })).filter(r => INTERACTIVE.includes(r.x.type)))]
@@ -1398,6 +1434,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- «Все курсы»: соседние курсы справа (только смотреть, проходить и копировать) -->
         <template v-for="o in othersL" :key="'oc' + o.id">
           <div class="och" :style="{ left: o.ox - 46 + 'px', top: '-170px' }" title="Дважды — открыть этот курс в редакторе" @pointerdown.stop @dblclick.stop="openOther(o.id)"><b>{{ o.title }}</b><small>другой курс · смотреть и копировать экраны · дважды — открыть</small></div>
+          <div v-for="c in o.cb" :key="'ocb' + o.id + c.id" class="chapbox still" :class="{ light: c.light, off: c.off }" :style="c.style" @pointerdown.stop="msel = [($event.shiftKey ? msel : []), 'oi:' + o.id + ':' + c.id].flat(); sel = null; selectStep(null, null)" @dblclick.stop="openOther(o.id)" />
           <svg class="rail" :height="o.h"><path :d="o.path" class="r0" /></svg>
           <LessonRail v-for="(x, i) in o.items.filter(v => INTERACTIVE.includes(v.type) && v.steps?.length)" :key="'olr' + o.id + x.id" :item="x" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
             :sel="opick?.lesson === x.id ? opick.s.id : null" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly
