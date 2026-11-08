@@ -34,7 +34,7 @@ const KEY = 'tma.courseRail.v1'
 
 // ---------- Типы заданий ----------
 const T = {
-  unit:   { t: 'Глава', c: 'var(--green)', d: 'var(--green-d)' },
+  unit:   { t: 'Chapter', c: 'var(--green)', d: 'var(--green-d)' },
   lesson: { t: 'Урок', c: 'var(--green)', d: 'var(--green-d)', ic: '<circle cx="12" cy="12" r="8"/><path d="M9 12.3l2 2 4-4"/>' },
   words:  { t: 'Слова', c: 'var(--blue)', d: 'var(--blue-d)', ic: '<rect x="4" y="7" width="12" height="13" rx="2.5"/><path d="M8 4h9.5A2.5 2.5 0 0 1 20 6.5V16"/>' },
   hw:     { t: 'Домашка', c: '#2ec4b6', d: '#1f9e93', ic: '<path d="M14.6 6.1l3.3 3.3"/><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z"/>' },
@@ -50,7 +50,7 @@ const PALETTE = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw'
 const MEDIA = ['video', 'photo']                         // задания с файлом (кружок, фото) — файл в S3, ключ в поле file
 // На панели — только «Урок» и «Чекпоинт» (как в Busuu). Старые типы (слова, домашка, тест, кружок, фото…) в курсах остаются и показываются.
 const TASKS = ['lesson', 'checkpoint']
-const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Проверка навыков перед следующей главой' }
+const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Проверка навыков перед следующим Chapter' }
 const BRANCH = ['lesson', 'checkpoint']            // у них ветка экранов видна всегда, даже пустая
 // Обложка урока, как в Busuu: фото или кружок в самом кружке урока (поле file / media, вид — ck)
 const covK = (x) => (MEDIA.includes(x.type) ? x.type : x.ck ?? null)
@@ -62,14 +62,16 @@ const it = (type, title, extra = {}) => ({ id: uid(), type, title, ...extra })
 const seed = () => ({
   title: 'Базовый курс A1', progress: 5, mode: 'line',
   items: [
-    it('unit', 'Глава 1', { sub: 'Present Simple' }),
+    it('unit', 'Chapter 1', { sub: 'Present Simple' }),
     it('lesson', 'Глагол to be'), it('words', 'Слова: семья'), it('hw', 'Упражнения 1–5'), it('lesson', 'Отрицания'), it('tutor', 'Разговор с репетитором'), it('test', 'Тест юнита'), it('reward', 'Сундук'),
-    it('unit', 'Глава 2', { sub: 'Past Simple' }),
+    it('unit', 'Chapter 2', { sub: 'Past Simple' }),
     it('lesson', 'Правильные глаголы'), it('words', 'Слова: путешествия'), it('lesson', 'Неправильные глаголы'), it('hw', 'Рассказ о выходных'), it('test', 'Тест юнита'),
   ],
   loose: [it('words', 'Слова: еда', { x: -320, y: 120 }), it('lesson', 'Артикли a / the', { x: -1500, y: 250 })], notes: [],
 })
-const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], notes: [], ...v } } catch { /* нет */ } return seed() }
+// «Глава» теперь называется «Chapter» (как в Busuu): старые названия по умолчанию переименовываем, свои — не трогаем
+const chName = (x) => (x?.type !== 'unit' ? x : { ...x, title: (x.title ?? '').replace(/^Глава(?=\s|$)/, 'Chapter'), ...(x.sub === 'Тема главы' ? { sub: 'Тема' } : {}) })
+const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], notes: [], ...v, items: v.items.map(chName), loose: (v.loose ?? []).map(chName) } } catch { /* нет */ } return seed() }
 const doc = reactive(load())
 const boxTick = ref(0)
 let st = 0
@@ -119,7 +121,7 @@ function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t:
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
-  const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
+  const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   remote = true
   Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], ink: d.ink ?? [], dirty: false })
   nextTick(() => { remote = false })
@@ -172,19 +174,19 @@ onUnmounted(() => {
 // Открыли редактор (из «Курсов»: #/courses?id=<курс> или ?id=new). В браузере — копия последнего открытого курса:
 // если в ней несохранённые правки другого курса — сначала отправляем их, потом открываем нужный.
 const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'line',
-  items: [it('unit', 'Глава 1', { sub: 'Тема главы' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })], loose: [], notes: [], ink: [], dirty: false })
+  items: [it('unit', 'Chapter 1', { sub: 'Тема' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })], loose: [], notes: [], ink: [], dirty: false })
 // Курс всегда начинается с главы, как в Busuu: пустой рельс — сразу глава, урок и чекпоинт; рельс начинается с урока — сверху ставим главу
 function ensureChapter(d) {
   if (!d.items.length) {
     if (d.loose?.some(x => x.type === 'unit')) return false          // главы унесли на доску — рельс пустой нарочно, свою не добавляем
-    d.items.push(it('unit', 'Глава 1', { sub: 'Тема главы' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })); return true
+    d.items.push(it('unit', 'Chapter 1', { sub: 'Тема' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })); return true
   }
-  if (d.items[0].type !== 'unit') { d.items.unshift(it('unit', 'Глава 1', { sub: 'Тема главы' })); return true }
+  if (d.items[0].type !== 'unit') { d.items.unshift(it('unit', 'Chapter 1', { sub: 'Тема' })); return true }
   return false
 }
 const fromServer = (c) => {
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
-  const keep = (x) => ({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
+  const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], dirty: false })
   localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'; histReset()
   if (ensureChapter(doc)) save()
@@ -366,7 +368,7 @@ function copyItems(list, course) {
   list = withKids(list, course)
   clip.value = { course, items: JSON.parse(JSON.stringify(list)) }
   const u = list.filter(x => x.type === 'unit').length
-  showToast(u ? `Скопировано: ${u === 1 ? 'глава' : 'глав — ' + u} и заданий в ней — ${list.length - u}. Ctrl+V — вставить туда, где курсор` : `Скопировано заданий: ${list.length} — Ctrl+V — вставить туда, где курсор`)
+  showToast(u ? `Скопировано: ${u === 1 ? 'Chapter' : 'Chapter — ' + u} и заданий в нём — ${list.length - u}. Ctrl+V — вставить туда, где курсор` : `Скопировано заданий: ${list.length} — Ctrl+V — вставить туда, где курсор`)
 }
 const freshId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 async function pasteItems(at = null) {           // at — точка холста («Вставить сюда»): задания встают черновиками рядом с ней
@@ -818,7 +820,7 @@ function fit(anim = true) {
   const ps = [...layout.value, ...doc.loose.map(l => ({ x: l.x, y: l.y })), ...(doc.notes ?? []).map(n => ({ x: n.x + 120, y: n.y + 120 })),
     ...lessonRails.value.map(({ x, p }) => ({ x: p.x + 230 + ((x.steps?.length ?? 0) + 1) * 92 - 150, y: p.y })),
     ...othersL.value.flatMap(o => [{ x: o.ox, y: -170 }, { x: o.ox + widthOf(o.items ?? []) - 200, y: o.h - 200 }])]          // «Все курсы» — и соседние курсы
-  const xs = [...ps.map(p => p.x - 200), ...ps.map(p => p.x + 200), -230, 230], ys = [...ps.map(p => p.y + 70), -250]
+  const xs = [...ps.map(p => p.x - 200), ...ps.map(p => p.x + 200), -230, 230], ys = [...ps.map(p => p.y + 70), -250, railTail.value.y0 - 300]          // и крупное название курса сверху
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
   const top = phone.value ? 110 : 76, bottom = 110
   const z = Math.min(1.1, (W.value - 24) / (x1 - x0), (H.value - top - bottom) / (y1 - y0))
@@ -1011,10 +1013,10 @@ let pending = null
 function chapterJoints() {
   const keep = doc.items.filter(v => !dragIds.value.has(v.id)), P = layoutOf(keep), n = keep.length, out = []
   const bottom = (i) => P[i].y + 56 + (hasRail(keep[i]) ? 40 + (railHs[keep[i].id] ?? RAIL_H) : 0)
-  if (!n) return [{ b: 0, x: 0, y: 0 }]
+  if (!n) return [{ b: 0, x: 0, y: 200 }]          // пустой рельс — магнит в его конце
   for (let b = 0; b <= n; b++) {
     if (b < n && keep[b].type !== 'unit') continue
-    out.push({ b, x: (P[Math.min(b, n - 1)] ?? P[n - 1]).x, y: b < n ? P[b].y - 70 - CH_GAP / 2 : bottom(n - 1) + CH_GAP / 2 })
+    out.push({ b, x: (P[Math.min(b, n - 1)] ?? P[n - 1]).x, y: b < n ? P[b].y - 70 - CH_GAP / 2 : bottom(n - 1) + CH_GAP + 60 })          // последний — в самом конце рельса (там же серый магнит)
   }
   return out
 }
@@ -1141,7 +1143,7 @@ function keepApart(u) {
 }
 function newItem(type) {
   const nUnits = doc.items.filter(x => x.type === 'unit').length
-  return it(type, type === 'unit' ? `Глава ${nUnits + 1}` : T[type].t, type === 'unit' ? { sub: 'Тема главы' } : {})
+  return it(type, type === 'unit' ? `Chapter ${nUnits + 1}` : T[type].t, type === 'unit' ? { sub: 'Тема' } : {})
 }
 const findAny = (id) => doc.items.find(v => v.id === id) ?? doc.loose.find(v => v.id === id)
 function showRailEnd() { const p = toScreen(pos(order.value.length - 1)); if (p.y > H.value - 160 || p.y < 100) animView({ ...view, y: view.y - (p.y - H.value / 2) }, true) }
@@ -1399,10 +1401,17 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ doc.progress }} из {{ tasksCount }}</b><span>·</span><b>{{ pct }}%</b></div>
         </div>
         <span class="rstart" :style="{ left: (layout[0]?.x ?? 0) + 'px', top: railTail.y0 + 'px' }" />
+        <!-- конец рельса — серый магнит: сюда встанет следующий Chapter; тянем Chapter — он оживает (стыки ниже) -->
+        <span v-if="!joints.length" class="jnt rend" :style="{ left: (railTail.x ?? 0) + 'px', top: railTail.y1 + 'px' }" title="Сюда встанет следующий Chapter — тяните «Chapter» с панели">Chapter</span>
+        <!-- рельс пустой — подсказка, с чего начать -->
+        <div v-if="!order.length && !drag.on" class="rhint" :style="{ left: '60px', top: railTail.y0 + 90 + 'px' }">
+          <b>Перетащите на рельс Chapter</b>
+          <span>Кнопка «Chapter» на панели внизу — тяните сюда или нажмите и поставьте. Chapter придёт сразу с уроком и чекпоинтом.</span>
+        </div>
         <!-- стыки рельса: тянем главу — видно, куда её можно насадить; ближайший «магнитит» -->
         <template v-for="j in joints" :key="'j' + j.b">
-          <span class="jnt" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }">{{ j.hot ? '🧲' : '' }}</span>
-          <span v-if="j.hot" class="jseg" :style="{ left: j.x + 'px', top: j.y + 'px' }" /><span v-if="j.hot" class="jtip" :style="{ left: j.x + 34 + 'px', top: j.y + 'px' }">Глава встанет сюда</span>
+          <span class="jnt" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }">Chapter</span>
+          <span v-if="j.hot" class="jseg" :style="{ left: j.x + 'px', top: j.y + 'px' }" /><span v-if="j.hot" class="jtip" :style="{ left: j.x + 80 + 'px', top: j.y + 'px' }">Chapter встанет сюда</span>
         </template>
         <!-- выбранный урок — светлая строка во всю ширину плашки главы, как текущий урок в Busuu -->
         <div v-if="rowHl" class="rowhl" :style="rowHl" />
@@ -1435,7 +1444,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
         <!-- ветка урока: стыки между экранами; ближайший к экрану «магнитит» -->
         <template v-if="sd.on && sd.to && sd.to !== 'cancel' && sd.to.mark">
-          <span v-for="g in sd.to.gaps" :key="'g' + g" class="jnt" :style="{ left: g + 'px', top: sd.to.mark.y + 24 + 'px' }" />
+          <span v-for="g in sd.to.gaps" :key="'g' + g" class="jnt dot" :style="{ left: g + 'px', top: sd.to.mark.y + 24 + 'px' }" />
           <span class="jseg h" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }" />
           <span class="jnt hot" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }">🧲</span>
           <span class="jtip up" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }">Экран встанет сюда</span>
@@ -1471,23 +1480,23 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <template v-if="x.type === 'unit'">
             <!-- меню главы, как в Figma: подсветка блока главы -->
             <div v-if="sel === x.id && !drag.on && renaming !== x.id" class="nbar chbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
-              <button class="nb-i" title="Переименовать главу (Enter или двойной щелчок)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
+              <button class="nb-i" title="Переименовать Chapter (Enter или двойной щелчок)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
               <i class="nb-s" />
-              <div class="nb-g"><button class="nb-c" :class="{ open: chMenu === 'color' }" title="Цвет главы" @click="chMenu = chMenu === 'color' ? null : 'color'"><i :style="{ background: x.hlc ?? HL_DEF }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
+              <div class="nb-g"><button class="nb-c" :class="{ open: chMenu === 'color' }" title="Цвет Chapter" @click="chMenu = chMenu === 'color' ? null : 'color'"><i :style="{ background: x.hlc ?? HL_DEF }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
                 <div v-if="chMenu === 'color'" class="nb-pop sw hlsw"><button v-for="c in HL_COLORS" :key="c" :style="{ background: c }" :class="{ on: (x.hlc ?? HL_DEF) === c }" @click="setHlc(x, c)" /></div></div>
               <div class="nb-g"><button class="nb-t" :class="{ open: chMenu === 'op' }" title="Прозрачность плашки" @click="chMenu = chMenu === 'op' ? null : 'op'"><svg viewBox="0 0 24 24" class="opi"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" /></svg><small class="opv">{{ hlOp(x) }}%</small><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
                 <div v-if="chMenu === 'op'" class="nb-pop"><button v-for="v in HL_OP" :key="v" :class="{ on: hlOp(x) === v }" @click="setHlo(x, v)">{{ v === 100 ? 'Непрозрачная' : v + '%' }}</button></div></div>
               <i class="nb-s" />
-              <button class="cbw" :class="{ on: hlHow(x) === 'rail' }" title="Подсветить только рельс главы: глава, уроки и чекпоинт" @click="setHl(x, 'rail')">Рельс</button>
-              <button class="cbw" :class="{ on: hlHow(x) === 'wide' }" title="Подсветить всю главу — вместе с ветками экранов уроков" @click="setHl(x, 'wide')">С ветками</button>
+              <button class="cbw" :class="{ on: hlHow(x) === 'rail' }" title="Подсветить только рельс Chapter: заголовок, уроки и чекпоинт" @click="setHl(x, 'rail')">Рельс</button>
+              <button class="cbw" :class="{ on: hlHow(x) === 'wide' }" title="Подсветить весь Chapter — вместе с ветками экранов уроков" @click="setHl(x, 'wide')">С ветками</button>
               <button class="cbw" :class="{ on: hlHow(x) === 'none' }" title="Без подсветки" @click="setHl(x, 'none')">Без</button>
             </div>
             <!-- правка прямо в заголовке: курсор в тексте; ✓ (или Enter, или нажатие мимо) — готово, Esc — вернуть как было -->
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop>
-              <div class="rrow"><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Глава" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></div>
-              <input v-model="x.sub" class="rin" placeholder="тема главы" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" />
+              <div class="rrow"><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Chapter" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></div>
+              <input v-model="x.sub" class="rin" placeholder="тема" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" />
             </div>
-            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><button class="upen" title="Переименовать главу" @pointerdown.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
+            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><button class="upen" title="Переименовать Chapter" @pointerdown.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button><svg v-if="chapterOf(i)?.tasks && chapterOf(i).pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
             <div class="ubar"><i :style="{ width: (chapterOf(i)?.pct ?? 0) + '%' }" /><em :style="badge(chapterOf(i)?.pct ?? 0)">{{ chapterOf(i)?.pct ?? 0 }}%</em></div>
           </template>
           <template v-else>
@@ -1529,23 +1538,23 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <template v-if="x.type === 'unit'">
             <!-- меню главы, как в Figma: подсветка блока главы -->
             <div v-if="sel === x.id && !drag.on && renaming !== x.id" class="nbar chbar" :style="{ transform: `scale(${1 / view.z})` }" @pointerdown.stop @dblclick.stop>
-              <button class="nb-i" title="Переименовать главу (Enter или двойной щелчок)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
+              <button class="nb-i" title="Переименовать Chapter (Enter или двойной щелчок)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
               <i class="nb-s" />
-              <div class="nb-g"><button class="nb-c" :class="{ open: chMenu === 'color' }" title="Цвет главы" @click="chMenu = chMenu === 'color' ? null : 'color'"><i :style="{ background: x.hlc ?? HL_DEF }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
+              <div class="nb-g"><button class="nb-c" :class="{ open: chMenu === 'color' }" title="Цвет Chapter" @click="chMenu = chMenu === 'color' ? null : 'color'"><i :style="{ background: x.hlc ?? HL_DEF }" /><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
                 <div v-if="chMenu === 'color'" class="nb-pop sw hlsw"><button v-for="c in HL_COLORS" :key="c" :style="{ background: c }" :class="{ on: (x.hlc ?? HL_DEF) === c }" @click="setHlc(x, c)" /></div></div>
               <div class="nb-g"><button class="nb-t" :class="{ open: chMenu === 'op' }" title="Прозрачность плашки" @click="chMenu = chMenu === 'op' ? null : 'op'"><svg viewBox="0 0 24 24" class="opi"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" /></svg><small class="opv">{{ hlOp(x) }}%</small><svg viewBox="0 0 24 24" class="dd"><path d="M7 10l5 5 5-5" /></svg></button>
                 <div v-if="chMenu === 'op'" class="nb-pop"><button v-for="v in HL_OP" :key="v" :class="{ on: hlOp(x) === v }" @click="setHlo(x, v)">{{ v === 100 ? 'Непрозрачная' : v + '%' }}</button></div></div>
               <i class="nb-s" />
-              <button class="cbw" :class="{ on: hlHow(x) === 'rail' }" title="Подсветить только рельс главы: глава, уроки и чекпоинт" @click="setHl(x, 'rail')">Рельс</button>
-              <button class="cbw" :class="{ on: hlHow(x) === 'wide' }" title="Подсветить всю главу — вместе с ветками экранов уроков" @click="setHl(x, 'wide')">С ветками</button>
+              <button class="cbw" :class="{ on: hlHow(x) === 'rail' }" title="Подсветить только рельс Chapter: заголовок, уроки и чекпоинт" @click="setHl(x, 'rail')">Рельс</button>
+              <button class="cbw" :class="{ on: hlHow(x) === 'wide' }" title="Подсветить весь Chapter — вместе с ветками экранов уроков" @click="setHl(x, 'wide')">С ветками</button>
               <button class="cbw" :class="{ on: hlHow(x) === 'none' }" title="Без подсветки" @click="setHl(x, 'none')">Без</button>
             </div>
             <!-- правка прямо в заголовке: курсор в тексте; ✓ (или Enter, или нажатие мимо) — готово, Esc — вернуть как было -->
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop>
-              <div class="rrow"><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Глава" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></div>
-              <input v-model="x.sub" class="rin" placeholder="тема главы" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" />
+              <div class="rrow"><input v-model="x.title" :data-ren="x.id" class="rin big" placeholder="Chapter" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></div>
+              <input v-model="x.sub" class="rin" placeholder="тема" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" />
             </div>
-            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><button class="upen" title="Переименовать главу" @pointerdown.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button><small class="nor">не на рельсе</small></div>
+            <div v-else class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b><button class="upen" title="Переименовать Chapter" @pointerdown.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button><small class="nor">не на рельсе</small></div>
             <!-- прогресс главы, как в Busuu: сразу видна полоска (пока глава на доске — 0%) -->
             <div class="ubar"><i style="width: 0" /><em :style="badge(0)">0%</em></div>
           </template>
@@ -1686,7 +1695,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <span class="sk back" :style="{ background: noteColor }" /><span class="sk" :style="{ background: noteColor }" />
       </button>
       <i class="tsep" />
-      <button class="tb" :title="'Глава — сразу с уроком и чекпоинтом; тяните на рельс, или нажмите и поставьте'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Глава</small></button>
+      <button class="tb" :title="'Chapter — сразу с уроком и чекпоинтом; тяните на рельс, или нажмите и поставьте'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Chapter</small></button>
       <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
     </div>
   </div>
@@ -1842,13 +1851,18 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .lsel i { position: absolute; width: calc(12px * var(--k)); height: calc(12px * var(--k)); box-sizing: border-box; border: calc(2px * var(--k)) solid #0d99ff; border-radius: calc(3px * var(--k)); background: #fff }
 .lsel i:nth-child(1) { left: calc(-7px * var(--k)); top: calc(-7px * var(--k)) } .lsel i:nth-child(2) { right: calc(-7px * var(--k)); top: calc(-7px * var(--k)) } .lsel i:nth-child(3) { left: calc(-7px * var(--k)); bottom: calc(-7px * var(--k)) } .lsel i:nth-child(4) { right: calc(-7px * var(--k)); bottom: calc(-7px * var(--k)) }
 .chead { position: absolute; z-index: 2; display: grid; gap: 12px; cursor: default }
+.chead { transform: scale(2.5); transform-origin: 0 100% }          /* название курса и прогресс — крупно (в 2,5 раза), читаются и при «Весь курс» */
 .cht { display: flex; align-items: center; gap: 10px; white-space: nowrap } .cht b { font-size: 34px; font-weight: 900; cursor: text } .cht .rin.big { width: 380px; font-size: 30px }
 .cht small { padding: 2px 8px; border-radius: 7px; background: #ececec; color: #7a7f87; font-size: 12px; font-weight: 800 }
 .cpill { display: flex; align-items: center; gap: 8px; width: 380px; box-sizing: border-box; padding: 11px 14px; border: 1.5px solid #e2e2e2; border-radius: 14px; background: #fff; font-size: 16px }
 .cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
-.rstart { position: absolute; z-index: 1; width: 22px; height: 22px; margin: -11px; border-radius: 50%; background: #d6d6d6; box-shadow: 0 0 0 5px #f4f4f4 }
-.jnt { position: absolute; z-index: 10025; width: 34px; height: 34px; margin: -17px; box-sizing: border-box; border-radius: 50%; border: 2.5px dashed #aeb5bd; background: #f4f4f4; display: grid; place-items: center; font-size: 17px; pointer-events: none }
-.jnt.hot { border: 2.5px solid #0d99ff; background: #0d99ff; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
+.rhint { position: absolute; z-index: 2; display: grid; gap: 8px; width: 420px; padding: 18px 22px; border: 2px dashed #b9c0c8; border-radius: 18px; background: rgba(255, 255, 255, .85); pointer-events: none }
+.rhint b { font-size: 24px; font-weight: 900; color: #252a31 } .rhint span { font-size: 16px; font-weight: 600; line-height: 1.35; color: #6b7280 }
+.rstart { position: absolute; z-index: 1; width: 44px; height: 44px; margin: -22px; border-radius: 50%; background: #d6d6d6; box-shadow: 0 0 0 5px #f4f4f4 }
+.jnt { position: absolute; z-index: 10025; height: 44px; padding: 0 18px; transform: translate(-50%, -50%); box-sizing: border-box; border-radius: 22px; border: 2.5px dashed #aeb5bd; background: #f4f4f4; display: grid; place-items: center; font-size: 17px; font-weight: 900; color: #8a9099; white-space: nowrap; pointer-events: none }          /* стык рельса — надпись «Chapter»: сюда встанет Chapter */
+.jnt.rend { z-index: 3; border: 2.5px solid #d6d9dd; background: #ececec; color: #9aa0a8 }          /* в покое — серый */
+.jnt.dot { width: 34px; height: 34px; padding: 0; border-radius: 50% }
+.jnt.hot { border: 2.5px solid #0d99ff; background: #0d99ff; color: #fff; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
 .jseg { position: absolute; z-index: 10024; width: 8px; height: 90px; margin: -45px 0 0 -4px; border-radius: 4px; background: #0d99ff; box-shadow: 0 0 12px rgba(13, 153, 255, .5); pointer-events: none } .jseg.h { width: 90px; height: 8px; margin: -4px 0 0 -45px }
 .jtip { position: absolute; z-index: 10026; transform: translateY(-50%); padding: 4px 10px; border-radius: 8px; background: #0d99ff; color: #fff; font-size: 13px; font-weight: 800; white-space: nowrap; pointer-events: none } .jtip.up { transform: translate(-50%, -150%) }
 .rowhl { position: absolute; z-index: 1; border-radius: 22px; background: #eef4fd; pointer-events: none }
