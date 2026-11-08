@@ -639,8 +639,8 @@ const runLesson = computed(() => (run.value ? findAny(run.value) : null))
 // ---------- Нижняя панель как в FigJam: группа → ряд элементов над панелью ----------
 const tray = ref(null)                                            // открытая группа: 'tasks' | 'media' | 'inter' | 'note'
 const GROUPS = [
-  { k: 'tasks', t: 'Задания', ic: T.lesson.ic, c: 'var(--green)' },
-  { k: 'inter', t: 'Интерактив', ic: KINDS.choice.ic, c: 'var(--purple)' },
+  { k: 'tasks', t: 'Lesson', ic: T.lesson.ic, c: 'var(--green)' },
+  { k: 'inter', t: 'Exercise', ic: KINDS.choice.ic, c: 'var(--purple)' },
   { k: 'note', t: 'Стикер', ic: '<path d="M5 4.5h14v10l-4.5 4.5H5z"/><path d="M14.5 19v-4.5H19"/>', c: '#f5b400' },
 ]
 const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6']
@@ -1695,8 +1695,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <span class="sk back" :style="{ background: noteColor }" /><span class="sk" :style="{ background: noteColor }" />
       </button>
       <i class="tsep" />
-      <button class="tb" :title="'Chapter — сразу с уроком и чекпоинтом; тяните на рельс, или нажмите и поставьте'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Chapter</small></button>
-      <button v-for="g in GROUPS.filter(g => g.k !== 'note')" :key="g.k" class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button>
+      <!-- порядок курса: 1 Chapter › 2 Lesson › 3 Exercise — номера и стрелки, чтобы не путать -->
+      <button class="tb" :title="'1 · Chapter — сразу с уроком и чекпоинтом; тяните на рельс, или нажмите и поставьте'" @pointerdown.prevent="startDrag($event, { type: 'unit' })"><em class="tn">1</em><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Chapter</small></button>
+      <template v-for="(g, gi) in GROUPS.filter(g => g.k !== 'note')" :key="g.k"><svg class="tarr" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
+        <button class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" :title="gi === 0 ? '2 · Lesson — урок или чекпоинт внутри Chapter' : '3 · Exercise — экраны урока: пары, выбор ответа, порядок слов…'" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><em class="tn">{{ gi + 2 }}</em><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button></template>
     </div>
   </div>
 </template>
@@ -1973,6 +1975,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tb:hover { background: #f2f2f2 } .tb.on { background: #e5f4ff; color: #0d99ff }
 .tb svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
 .tb small { font-size: 13px; font-weight: 800 }
+.tb { position: relative } .tn { position: absolute; top: 6px; left: 16px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #eceef1; color: #6b7280; font-size: 11px; font-style: normal; font-weight: 900 }
+.tb.on .tn { background: #0d99ff; color: #fff }
+.tarr { flex: none; align-self: center; width: 18px; height: 18px; margin: 0 -8px; fill: none; stroke: #c2c7cd; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round }          /* стрелка порядка: Chapter › Lesson › Exercise */
 .tsep { width: 1px; height: 50px; margin: 0 6px; background: #e6e6e6 }
 /* стикер на панели: торчит снизу, при наведении выезжает */
 .sticky { position: relative; align-self: stretch; width: 96px; border: 0; background: none; padding: 0; cursor: pointer; clip-path: inset(-80px -20px 0 -20px) }
