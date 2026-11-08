@@ -73,6 +73,7 @@ function calc(step) {
   const B = bucketsOf(step)
   for (const b of B.values()) Object.assign(b, { ind: 0, grp: 0, plan: 0, lost: 0, cancels: 0, done: 0, people: new Set() })
   for (const l of lessons.value ?? []) {
+    if (l.trial) continue                                        // пробный урок-стикер — не деньги и не урок
     const b = B.get(step === 'month' ? l.date.slice(0, 7) : monday(l.date)); if (!b) continue
     const m = lessonMoney(l, find), group = l.studentIds.length > 1
     if (l.done) { b[group ? 'grp' : 'ind'] += m.real; b.done++; l.studentIds.forEach(id => !l.canceled?.[id] && b.people.add(id)) }
@@ -138,6 +139,7 @@ const nameOf = (l, id) => find(id)?.name ?? l.names?.[id] ?? 'ученик уд�
 function exportLessons() {
   const out = [['Дата', 'Время', 'Ученики', 'Тип', 'Статус', 'Сумма', 'Отменили']]
   for (const l of lessons.value ?? []) {
+    if (l.trial) continue
     const m = lessonMoney(l, find), off = Object.keys(l.canceled ?? {})
     out.push([l.date.split('-').reverse().join('.'), `${pad(l.hour)}:${pad(l.minute ?? 0)}`, l.studentIds.map(id => nameOf(l, id)).join(', '), l.studentIds.length > 1 ? 'группа' : 'индивидуальный',
       l.done ? 'проведён' : off.length === l.studentIds.length ? 'отменён' : l.date < today ? 'не отмечен' : 'запланирован', num(l.done ? m.real : m.plan), off.map(id => nameOf(l, id)).join(', ')])

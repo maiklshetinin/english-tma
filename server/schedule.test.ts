@@ -270,4 +270,17 @@ store.set('lessons/e4', { date: '2026-10-07', hour: 9, weekStart: '2026-10-05', 
 ok('доход: до сброса — из запаса', (await S.earnings()).e1['2026-10'] === 1200)
 S.dropEarnings()
 ok('доход: после сброса — пересчитан', (await S.earnings()).e1['2026-10'] === 1700)
+// --- пробный урок — стикер без учеников ---
+const tr = await S.create({ trial: true, date: '2027-05-05', hour: 11, note: '  Аня, из Instagram  ' }, 'tg:1')
+ok('пробный урок: без учеников, с текстом', tr.trial === true && tr.studentIds.length === 0 && tr.note === 'Аня, из Instagram')
+ok('пробный урок занимает слот', (await code(S.create({ studentId: masha.id, date: '2027-05-05', hour: 11 }, 'tg:1'))) === 409)
+ok('без trial пустой урок по-прежнему 400', (await code(S.create({ date: '2027-05-05', hour: 12 }, 'tg:1'))) === 400)
+ok('пробный урок в неделе — у преподавателя', (await S.week('2027-05-03')).lessons.some(l => l.id === tr.id && l.trial))
+ok('текст стикера правится как заметка', (await S.setDetails(tr.id, { note: 'Аня, B1' })).note === 'Аня, B1')
+const tr2 = await S.create({ trial: true, date: '2027-05-05', hour: 13 }, 'tg:1')
+ok('пробный урок без учеников и бесплатный: состав не меняется → 409', (await code(S.setStudents(tr2.id, { studentIds: [masha.id] }))) === 409
+  && (store.get('lessons/' + tr2.id) as any).studentIds.length === 0)
+await S.remove(tr.id)
+ok('пробный урок убирается', !store.has('lessons/' + tr.id))
+await S.remove(tr2.id)
 process.exit(bad ? 1 : 0)

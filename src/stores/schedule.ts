@@ -116,6 +116,15 @@ export const useScheduleStore = defineStore('schedule', () => {
     sync(async () => { lesson.id = (await post<Lesson>('/lessons', { studentIds: [...lesson.studentIds], date, hour }, 'Не удалось сохранить урок')).id })
     return lesson
   }
+  /** Пробный урок — стикер без учеников: всегда бесплатный, занимает слот, текст пишется прямо в нём (note). В деньгах не участвует, ученикам не виден. */
+  function createTrial(date: string, hour: number, note = ''): Lesson {
+    rev++
+    lessons.value.push({ id: `${TMP}${++tmpSeq}`, date, hour, studentIds: [], trial: true, ...(note ? { note } : {}) })
+    const lesson = lessons.value[lessons.value.length - 1]
+    // правки текста, сделанные пока урок создаётся, стоят в очереди следом и уйдут уже с настоящим id
+    sync(async () => { lesson.id = (await post<Lesson>('/lessons', { trial: true, date, hour, note }, 'Не удалось сохранить пробный урок')).id })
+    return lesson
+  }
   function move(lesson: Lesson, date: string, hour: number) {
     const l = live(lesson) ?? lesson; rev++
     l.date = date; l.hour = hour
@@ -161,5 +170,5 @@ export const useScheduleStore = defineStore('schedule', () => {
     sync(async () => { if (!isTmp(lesson.id)) await call(`/lessons/${encodeURIComponent(lesson.id)}`, { method: 'DELETE' }, 'Не удалось убрать урок') })
   }
 
-  return { lessons, lessonMap, weeks, loadWeek, loadWeeks, history, loadHistory, allOf, load, set, clear, startRefresh, stopRefresh, create, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
+  return { lessons, lessonMap, weeks, loadWeek, loadWeeks, history, loadHistory, allOf, load, set, clear, startRefresh, stopRefresh, create, createTrial, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
 })

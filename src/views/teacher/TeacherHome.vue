@@ -4,7 +4,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { nowTick, weekDates, weekRange, slotKey, fmtSlot, hh, slotPast, nowIn, tz } from '../../store/app'
 import { goUp } from '../../router'
-import { setDropHandler } from '../../composables/useDnd'
+import { setDropHandler, pressStart, dnd } from '../../composables/useDnd'
 import { showToast } from '../../composables/useToast'
 import { useTelegram } from '../../composables/useTelegram'
 import GridStyleButton from '../../components/GridStyleButton.vue'
@@ -79,7 +79,7 @@ function skipGhost(g) {
 const activeOf = (l) => !l.studentIds.length || !l.studentIds.every(id => l.canceled?.[id])
 const sheet = ref(null)                             // { lesson } | { slot }
 const name = (id) => studentStore.findAny(id)?.name
-const names = (l) => l.studentIds.map(name).filter(Boolean).join(', ')
+const names = (l) => (l.trial && !l.studentIds.length ? 'Пробный урок' : l.studentIds.map(name).filter(Boolean).join(', '))
 const known = (l) => l.studentIds.filter(id => studentStore.byId(id))      // без удалённых / архивных: их id сервер не примет
 const occupant = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h))?.[0]
 
@@ -88,7 +88,22 @@ function assign(sid, date, hour) {                  // sid — ученик ил
   const lesson = scheduleStore.create(ids, date, hour); haptic('light')
   showToast(`Урок назначен: ${ids.map(name).join(', ')} · ${fmtSlot(date, hour)}`, () => scheduleStore.remove(lesson))
 }
+// Пробный урок — стикер: тащим «Пробный урок» над таблицей в свободную ячейку → стикер приклеен и сразу открыт для текста
+const freshTrial = ref(null)
+const grabTrial = (e) => pressStart(e, { kind: 'trial' })
+function addTrial(date, hour) {
+  const l = scheduleStore.createTrial(date, hour); haptic('light')
+  freshTrial.value = l.id
+  showToast(`Пробный урок · ${fmtSlot(date, hour)}`, () => scheduleStore.remove(l))
+}
+function saveTrial(l, note) { scheduleStore.setDetails(l, { note }) }
+function removeTrial(l) {
+  const copy = { date: l.date, hour: l.hour, minute: l.minute, note: l.note || '' }
+  scheduleStore.remove(l); haptic('light')
+  showToast('Пробный урок убран', () => { const n = scheduleStore.createTrial(copy.date, copy.hour, copy.note); if (copy.minute) scheduleStore.setDetails(n, { minute: copy.minute }) })
+}
 function unassign(lesson) {
+  if (lesson.trial && !lesson.studentIds.length) return removeTrial(lesson)
   if (lesson.done) return showToast('Урок проведён — сначала снимите отметку', null, 'bad')
   const copy = { studentIds: [...lesson.studentIds], date: lesson.date, hour: lesson.hour }
   scheduleStore.remove(lesson); sheet.value = null; haptic('light')
@@ -108,6 +123,11 @@ function onDrop(p, t) {
   if (t.kind === 'panel' || t.kind === 'out') return p.kind === 'lesson' ? unassign(p.lesson) : undefined      // на панель учеников или просто за таблицу — урок снят
   if (t.kind !== 'cell') return
   const occ = occupant(t.date, t.hour)
+  if (p.kind === 'trial') {                           // стикер «Пробный урок» — только на свободное время, не в прошлое
+    if (occ) return showToast('Это время занято — приклейте стикер в свободную ячейку', null, 'bad')
+    if (slotPast(t.date, t.hour)) return showToast('Это время уже прошло', null, 'bad')
+    return addTrial(t.date, t.hour)
+  }
   if (p.kind === 'student') {                         // ученик или группа из панели (ids): только на свободную ячейку
     const ids = p.ids ?? [p.id]
     if (!occ) return assign(ids, t.date, t.hour)
@@ -176,11 +196,13 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
             </div>
             <WeekLoad :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <GridStyleButton />
+            <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Перетащите в свободную ячейку — приклеится стикер пробного урока" aria-label="Пробный урок: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i />Пробный урок</button>
             <button v-if="week === 1 && ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i>Укажите статус · {{ noStatus.length }}</button>
             <WeekMoney class="money" :m="money" />
           </div>
-          <WeekGrid :dates="dates" :ghosts="week === 1 ? ghosts : []" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" />
+          <WeekGrid :dates="dates" :ghosts="week === 1 ? ghosts : []" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost"
+            :fresh-trial="freshTrial" @trial-edited="freshTrial = null" @trial-save="saveTrial" @trial-remove="removeTrial" />
         </div>
       </div>
     </section>
@@ -203,6 +225,10 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 .wcol { display: grid; gap: 6px; min-width: 0 }
 .wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh .money { margin-left: auto }
+/* «Пробный урок» — жёлтая подушечка стикеров: тащим её в ячейку */
+.trial-pad { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 12px 0 10px; border: 1px solid #e9d27a; border-radius: 12px; background: #fff6c7; color: #6b5400; font: inherit; font-size: 13px; font-weight: 800; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none }
+.trial-pad i { width: 16px; height: 16px; border-radius: 2px; background: #ffe36e; box-shadow: 0 1px 2px rgba(120, 90, 0, .3), 3px 3px 0 -1px #f3d24f; transform: rotate(-6deg) }
+.trial-pad:hover { background: #fff0a8 } .trial-pad.held { opacity: .55 }
 @media (min-width: 1024px) { .wh { flex-wrap: nowrap } .wh > * { flex: none } }      /* на компьютере шапка всегда в одну строку — таблица не съезжает */
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
 .gall { position: relative; border-color: var(--border); color: var(--blue) } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }

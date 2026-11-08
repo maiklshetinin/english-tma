@@ -33,11 +33,11 @@ export const slotKey = (date: string, hour: number) => `${date}_${pad(hour)}`
 const canceledOf = (x: Pick<LessonDoc, 'studentIds' | 'canceled'>) => Object.fromEntries(Object.entries(x.canceled ?? {}).filter(([k]) => x.studentIds.includes(k)))   // только ученики этого урока
 export const MINUTES = [0, 15, 30, 45]
 const NOTE_MAX = 300
-const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names' | 'canceled' | 'minute' | 'note'>): Lesson => {
+const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names' | 'canceled' | 'minute' | 'note' | 'trial'>): Lesson => {
   const canceled = canceledOf(x)
   return { id, date: x.date, hour: x.hour, studentIds: [...x.studentIds], done: !!x.done, ...(x.done ? { prices: { ...(x.prices ?? {}) } } : {}),
     ...(x.names && Object.keys(x.names).length ? { names: { ...x.names } } : {}), ...(Object.keys(canceled).length ? { canceled } : {}),
-    ...(x.minute ? { minute: x.minute } : {}), ...(x.note ? { note: x.note } : {}) }
+    ...(x.minute ? { minute: x.minute } : {}), ...(x.note ? { note: x.note } : {}), ...(x.trial ? { trial: true } : {}) }
 }
 const byTime = (a: Lesson, b: Lesson) => a.date.localeCompare(b.date) || a.hour - b.hour
 /** Урок глазами ученика: только он сам, только его цена и отметка «отменил»; без заметки преподавателя и чужих имён. */
@@ -212,12 +212,15 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
     },
 
     // Новый урок в слот. studentIds — один ученик (обычный урок) или несколько (группа).
+    // trial: true — пробный урок-стикер: всегда бесплатный, без учеников, только текст (note); занимает слот, в деньгах не участвует, ученикам не виден.
     async create(input: Partial<LessonInput> | undefined, by: string): Promise<Lesson> {
       const raw = Array.isArray(input?.studentIds) ? input.studentIds : input?.studentId != null ? [input.studentId] : []
       const slot = slotOf(input)
-      const ids = await studentIdsOf(raw)
+      const trial = input?.trial === true
+      const ids = trial ? [] : await studentIdsOf(raw)
+      const note = trial && typeof input?.note === 'string' ? input.note.trim().slice(0, NOTE_MAX) : ''
       const minute = MINUTES.includes(input?.minute as number) ? (input!.minute as number) : 0           // можно сразу указать начало внутри часа
-      const ref = lessons().doc(), data = { date: slot.date, hour: slot.hour, studentIds: ids, ...(minute ? { minute } : {}) }
+      const ref = lessons().doc(), data = { date: slot.date, hour: slot.hour, studentIds: ids, ...(minute ? { minute } : {}), ...(trial ? { trial: true } : {}), ...(note ? { note } : {}) }
       await db.runTransaction(async (tx) => {
         const W = weekLoader(tx), w = await W.get(slot.ws)
         if (w.slots[slot.key]) throw fail(409, 'slot busy')
@@ -257,6 +260,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
         if (l.get('done')) throw fail(409, 'lesson already conducted')
+        if (l.get('trial')) throw fail(409, 'trial lesson has no students')                 // пробный урок всегда бесплатный и без учеников
         const canceled = canceledOf({ studentIds: ids, canceled: l.get('canceled') })      // убранный из урока — и его отметка «отменил» уходит
         tx.update(ref, { studentIds: ids, canceled })
         out = pub(id, { ...(l.data() as LessonDoc), studentIds: ids, canceled })
@@ -335,7 +339,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
           const st = await tx.get(students().doc(sid)); if (!st.exists || st.get('archived')) throw fail(409, 'lesson has archived students')
         }
         const off = canceledOf(d)
-        if (done && d.studentIds.every((sid) => off[sid])) throw fail(409, 'all students canceled')     // отменили все — проводить нечего
+        if (done && !d.trial && d.studentIds.every((sid) => off[sid])) throw fail(409, 'all students canceled')     // отменили все — проводить нечего (пробный урок — можно, он без учеников)
         const prices: Record<string, number> = {}
         // отменившие ученики не платят: их цены в урок не попадают
         if (done) for (const sid of d.studentIds.filter((x) => !off[x])) { const st = await tx.get(students().doc(sid)); prices[sid] = st.exists ? priceAt(st.data() as any, d.date, d.hour) : 0 }

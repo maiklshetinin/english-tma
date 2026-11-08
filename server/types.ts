@@ -131,7 +131,8 @@ export interface LessonDoc {
   date: string                 // 'YYYY-MM-DD'
   hour: number                 // 8–22
   weekStart: string            // понедельник той недели, где лежит дата
-  studentIds: string[]         // один ученик или группа (до 12)
+  studentIds: string[]         // один ученик или группа (до 12); у пробного урока — пусто
+  trial?: boolean              // пробный урок (стикер в расписании): учеников нет, текст стикера — в note; не деньги
   done?: boolean               // «урок проведён» (отмечает преподаватель; на всех учеников урока сразу)
   doneAt?: ServerTime | null
   prices?: Record<string, number>   // цена урока по ученикам, зафиксированная в момент отметки «проведён»: потом не меняется
@@ -160,7 +161,8 @@ export interface Lesson {
   names?: Record<string, string>    // имена удалённых навсегда учеников этого урока (только преподавателю)
   canceled?: Record<string, string> // кто из учеников отменил урок (id → ISO-время); ученик видит только свою отметку
   minute?: number                   // минута начала: 0 | 15 | 30 | 45 (видят все)
-  note?: string                     // заметка преподавателя (только преподавателю)
+  note?: string                     // заметка преподавателя (только преподавателю); у пробного урока — текст стикера
+  trial?: boolean                   // пробный урок — стикер: studentIds пустой (только преподавателю, ученику не виден)
 }
 
 export interface LessonInput {             // POST /lessons
@@ -169,6 +171,8 @@ export interface LessonInput {             // POST /lessons
   date: string
   hour: number
   minute?: number                          // начало внутри часа: 0 | 15 | 30 | 45
+  trial?: boolean                          // пробный урок-стикер: учеников не нужно (studentId(s) не передаются)
+  note?: string                            // текст стикера пробного урока (до 300 символов)
 }
 export interface DoneInput { done: boolean }   // POST /lessons/:id/done
 export interface DetailsInput { minute?: number; note?: string }   // POST /lessons/:id/details — начало внутри часа и заметка (любое из полей)

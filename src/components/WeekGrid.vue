@@ -3,7 +3,8 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
-import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
+import { gridStyle, gridFrame, lessonStyle, pastShade, trialStyle } from '../utils/gridStyle'
+import TrialSticker from './TrialSticker.vue'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney } from '../utils/price'
 import AvatarStack from './AvatarStack.vue'
@@ -11,8 +12,9 @@ import { useStudentsStore } from '../stores/students'
 import { useScheduleStore, needsStatus } from '../stores/schedule'
 const studentStore = useStudentsStore()
 const scheduleStore = useScheduleStore()
-const props = defineProps({ dates: { type: Array, required: true }, ghosts: { type: Array, default: () => [] } })
-const emit = defineEmits(['cell', 'lesson', 'ghost', 'ghost-skip'])
+// freshTrial — id только что приклеенного пробного урока: его стикер сразу открывается для текста
+const props = defineProps({ dates: { type: Array, required: true }, ghosts: { type: Array, default: () => [] }, freshTrial: { type: String, default: null } })
+const emit = defineEmits(['cell', 'lesson', 'ghost', 'ghost-skip', 'trial-save', 'trial-remove', 'trial-edited'])
 // «Призраки» на следующей неделе — уроки этой недели в тех же днях и часах, пока не подтверждены (в базе их нет)
 const ghostMap = computed(() => new Map(props.ghosts.map(g => [slotKey(g.date, g.hour), g])))
 const ghostAt = (d, h) => (at(d, h).length ? null : ghostMap.value.get(slotKey(d, h)))
@@ -34,6 +36,7 @@ function dropState(d, h) {                       // подсветка ячей�
   if (!dnd.active || o?.kind !== 'cell' || o.date !== d || o.hour !== h) return ''
   const occ = at(d, h)[0], p = dnd.payload
   if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : slotPast(d, h, now.value) || occ?.done || (occ && allOff(occ)) ? 'bad' : occ ? 'swap' : 'ok'      // в прошлое не переносим
+  if (p.kind === 'trial') return occ || slotPast(d, h, now.value) ? 'bad' : 'ok'      // стикер пробного урока — на свободное будущее время
   if (!occ) return 'ok'
   return 'bad'      // ученик / группа — только на свободную ячейку: из урока группу не собираем
 }
@@ -41,10 +44,10 @@ function dropState(d, h) {                       // подсветка ячей�
 const group = (l) => l.studentIds.map(stu).filter(Boolean)                 // участники группы — аватарки внахлёст (AvatarStack)
 const isGroup = (l) => group(l).length > 1
 const ringOf = () => 'var(--card)'                 // кольцо стопки аватарок — цвет фона под уроком
-const orphan = (l) => !group(l).length                                      // урок, в котором не осталось известных учеников: показываем серым «?», чтобы его можно было убрать
+const orphan = (l) => !l.trial && !group(l).length                                      // урок, в котором не осталось известных учеников: показываем серым «?», чтобы его можно было убрать
 // «Отменил ученик»: все отменили — карточка красная и зачёркнутая; в группе часть — красный значок «✕N»
 const offCount = (l) => group(l).filter(s => l.canceled?.[s.id]).length
-const allOff = (l) => !orphan(l) && offCount(l) === group(l).length
+const allOff = (l) => !l.trial && !orphan(l) && offCount(l) === group(l).length
 const goneName = (l) => Object.values(l.names ?? {})[0] ?? ''             // имя удалённого навсегда (у проведённых уроков)
 const lifted = (l) => dnd.active && dnd.payload?.kind === 'lesson' && dnd.payload.lesson.id === l.id
 const down = (e, l) => { if (!l.done && !allOff(l) && !orphan(l)) pressStart(e, { kind: 'lesson', lesson: l }) }      // проведённый, отменённый (и «пустой») урок не перетаскиваем
@@ -90,7 +93,8 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
-          <button class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
+          <TrialSticker v-if="l.trial" :lesson="l" :look="trialStyle" :auto-edit="freshTrial === l.id" @save="emit('trial-save', l, $event)" @remove="emit('trial-remove', l)" @edited="emit('trial-edited')" />
+          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
             @pointerdown="down($event, l)" @click.stop="tapLesson(l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
