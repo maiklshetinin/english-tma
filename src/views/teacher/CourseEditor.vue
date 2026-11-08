@@ -858,7 +858,7 @@ const G = { step: 116, unitGap: 160 }          // рельс всегда пря
 // за курсором мимо рельса: элементы структуры и где они лягут (в координатах холста)
 const flyTree = computed(() => {
   if (!drag.on || (drag.over && drag.item?.type !== 'unit') || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
-  const c = toWorld(drag.x, drag.y), w = { x: c.x - drag.ox, y: c.y - drag.oy }
+  const c = drag.ax != null ? { x: drag.ax, y: drag.ay } : toWorld(drag.x, drag.y), w = { x: c.x - drag.ox, y: c.y - drag.oy }
   const u = drag.item, rel = drag.from === 'loose' && u.x != null
   const dy = kidDy(drag.extra ?? [])
   return [u, ...(drag.extra ?? [])].map((x, k) => ({ x, p: rel && k ? { x: w.x + x.x - u.x, y: w.y + x.y - u.y, side: 'r' } : { x: w.x, y: w.y + (k ? dy[k - 1] : 0), side: 'r' } }))
@@ -873,6 +873,8 @@ function snapKids(u) {
 }
 const kidsOf = (u) => { const ks = doc.loose.filter(l => l.grp === u.id).sort((a, b) => a.y - b.y); return ks.length ? ks : null }
 const dragIds = computed(() => new Set(drag.on ? [drag.item?.id, ...(drag.extra ?? []).map(v => v.id)] : []))
+// призрак жёстко за курсором: раскладка — от якоря (один раз), а движение — только сдвиг всего призрака (transform)
+const ftreeSt = computed(() => { if (drag.ax == null) return null; const c = toWorld(drag.x, drag.y); return { transform: `translate(${c.x - drag.ax}px, ${c.y - drag.ay}px)` } })
 // плашка главы у призрака — едет вместе с ним
 const flyBox = computed(() => {
   const t = flyTree.value; if (!t || t[0].x.type !== 'unit' || t[0].x.hl === 'none') return null
@@ -883,7 +885,7 @@ const flyBox = computed(() => {
 })
 const joints = computed(() => (drag.on && drag.item?.type === 'unit' && drag.from !== 'file' ? chapterJoints().map(j => ({ ...j, y: j.y + (!unitGapH.value ? 0 : j.b === drag.to ? unitGapH.value / 2 : j.b > drag.to ? unitGapH.value : 0), hot: drag.over && drag.to === j.b })) : []))
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
-const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0, lz: null })          // lz — урок целится в главу на доске
+const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0, lz: null, ax: null, ay: null })          // lz — урок целится в главу на доске
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
 // Чекпоинт — в самом конце главы: его ветка экранов идёт ВВЕРХ (над линией), под ним сразу низ плашки главы — всегда на одном расстоянии,
 // и видно, что после чекпоинта урок не вставить. hasRail — ветка вниз (у уроков), railUp — ветка вверх (у чекпоинта)
@@ -1124,6 +1126,7 @@ function looseTarget(w) {
 }
 function aim(e) {
   const w = toWorld(e.clientX, e.clientY), n = nearest(w), tb = overToolbar(e.clientY)
+  if (drag.ax == null) { drag.ax = w.x; drag.ay = w.y }          // якорь призрака: дальше он едет одним сдвигом (transform), без перерисовки
   drag.over = n.near && !tb; drag.to = n.i
   drag.lz = !drag.over && !tb ? looseTarget(w) : null
 }
@@ -1141,7 +1144,7 @@ function move(e) {
     sel.value = null
     // где задание стоит сейчас — считаем ДО начала перетаскивания (потом оно уходит из раскладки рельса и место «съезжает»)
     const src0 = pending.from === 'rail' ? { ...pos(order.value.indexOf(pending.item)) } : pending.from === 'loose' ? { x: pending.item.x, y: pending.item.y } : null
-    Object.assign(drag, { on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : pending.from === 'loose' && pending.item?.type === 'unit' ? kidsOf(pending.item) : pending.from === 'rail' && pending.item?.type === 'unit' ? railKids(pending.item) : null, from: pending.type ? 'new' : pending.from })
+    Object.assign(drag, { ax: null, ay: null, on: true, item: pending.type ? newItem(pending.type) : pending.item, extra: pending.type === 'unit' ? chapterKids() : pending.from === 'loose' && pending.item?.type === 'unit' ? kidsOf(pending.item) : pending.from === 'rail' && pending.item?.type === 'unit' ? railKids(pending.item) : null, from: pending.type ? 'new' : pending.from })
     // за какое место взяли — так и держим: задание не «прыгает» под курсор своим углом
     const sw = toWorld(pending.sx, pending.sy), src = src0
     drag.ox = src ? sw.x - src.x : 0; drag.oy = src ? sw.y - src.y : 0
@@ -1165,7 +1168,7 @@ function up(e) {
 // Нажали задание на панели (не тянули): оно едет за курсором, нажатие ставит — на рельс (если рядом) или на холст; Esc — отмена
 let placingItem = false
 function itemPlaceStart(type, e) {
-  Object.assign(drag, { on: true, item: newItem(type), extra: type === 'unit' ? chapterKids() : null, ox: 0, oy: 0, from: 'new', x: e.clientX, y: e.clientY, over: false })
+  Object.assign(drag, { ax: null, ay: null, on: true, item: newItem(type), extra: type === 'unit' ? chapterKids() : null, ox: 0, oy: 0, from: 'new', x: e.clientX, y: e.clientY, over: false })
   tray.value = null; placingItem = true
   addEventListener('pointermove', itemPlaceMove); addEventListener('pointerdown', itemPlaceDown, true)
 }
@@ -1532,8 +1535,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <span v-for="j in lessonHints" :key="'lh' + j.k" class="jnt tile lj hint" :style="{ left: j.x + 'px', top: j.y + 'px', ...(j.z != null ? { zIndex: j.z } : null) }" title="Сюда можно добавить ещё уроки — тяните «Lesson» с панели"><em class="tn">2</em><svg class="jic" viewBox="0 0 24 24" v-html="T.lesson.ic" /><small>Lesson</small></span>
         <svg class="rail" :class="{ glow: railGlow }" :height="railBox.y1"><path :d="rail" class="r0" /><path :d="doneRail" class="r1" /></svg>
         <!-- Тянем главу / урок / чекпоинт мимо рельса — за курсором вся структура, как она ляжет (глава с уроком и чекпоинтом, у урока ветка с итогом) -->
-        <div v-if="flyTree" class="ftree">
-          <div v-if="flyBox" class="chapbox" :class="{ light: flyBox.light }" :style="flyBox.style" />
+        <div v-if="flyTree" class="ftree" :style="ftreeSt">
+          <div v-if="flyBox" class="chapbox still" :class="{ light: flyBox.light }" :style="flyBox.style" />
           <div v-for="g in flyTree" :key="'ft' + g.x.id">
             <div class="bead" :class="[g.x.type, 'todo', 's-r']" :style="beadStyle(g.x, g.p, colorOf(g.x))">
               <template v-if="g.x.type === 'unit'"><div class="uh"><b>{{ g.x.title }}<template v-if="g.x.sub">: {{ g.x.sub }}</template></b></div><div class="ubar"><em :style="badge(0)">0%</em></div></template>
@@ -2041,7 +2044,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ubar em { position: absolute; top: 50%; transform: translate(-50%, -50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
 .ftree { position: absolute; left: 0; top: 0; z-index: 10000; opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
-.ftree .bead, .ftree :deep(.lr *) { transition: none !important }          /* призрак главы / урока — ровно за курсором, без подъезда */
+.ftree .bead, .ftree :deep(.lr *), .ftree .chapbox, .ftree .chrail { transition: none !important }          /* призрак главы / урока — ровно за курсором, без подъезда */
 .bead.unit.lift { outline: 2px dashed #1fbe78; background: #fff !important }
 .fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px; background: #1fbe78; box-shadow: 0 10px 20px rgba(0, 0, 0, .2) }
 /* сводка курса — плоско */
