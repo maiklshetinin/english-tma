@@ -503,7 +503,8 @@ function screenTarget(w) {
     const n = r.x.steps?.length ?? 0, h = railHs[r.x.id] ?? 420, up = r.x.type === 'checkpoint'
     if ((up ? w.y < r.p.y - 40 - Math.min(700, h) - 30 || w.y > r.p.y + 70 : w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h)) || w.x < r.p.x + 120 || w.x > r.p.x + RAIL_X0 + Math.max(1, n) * SCR_STEP + SCR_W + 40) continue          // до конца «Итога урока»
     const i = Math.max(0, Math.min(n, Math.floor((w.x - r.p.x - RAIL_X0 + SCR_STEP / 2) / SCR_STEP)))
-    return { L: r.x, i, mark: { x: r.p.x + RAIL_X0 + i * SCR_STEP - 32, y: up ? r.p.y - Math.min(700, h) - 46 : r.p.y - 24, h: Math.min(700, h) + 70 }, gaps: Array.from({ length: n + 1 }, (_, k) => r.p.x + RAIL_X0 + k * SCR_STEP - 30).filter((_, k) => k !== i) }
+    // mark.ly — сама линия ветки: там магнит и стыки (и у чекпоинта, где экраны над ней)
+    return { L: r.x, i, mark: { x: r.p.x + RAIL_X0 + i * SCR_STEP - 32, y: up ? r.p.y - Math.min(700, h) - 46 : r.p.y - 24, h: Math.min(700, h) + 70, ly: r.p.y }, gaps: Array.from({ length: n + 1 }, (_, k) => r.p.x + RAIL_X0 + k * SCR_STEP - 30).filter((_, k) => k !== i) }
   }
   for (const [k, x] of order.value.entries()) {
     if (!INTERACTIVE.includes(x.type)) continue
@@ -1453,9 +1454,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
         <span class="rstart" :style="{ left: (layout[0]?.x ?? 0) + 'px', top: railTail.y0 + 'px' }" />
         <!-- тянем Lesson / чекпоинт — на рельсе стыки «Lesson» (серые), куда встанет — синий (вместо старого пунктирного кружка) -->
-        <span v-for="j in lessonJoints" :key="'lj' + j.k" class="jnt lj" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }"><svg class="jic" viewBox="0 0 24 24" v-html="T.lesson.ic" />{{ j.t }}</span>
+        <span v-for="j in lessonJoints" :key="'lj' + j.k" class="jnt tile lj" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }"><em class="tn">2</em><svg class="jic" viewBox="0 0 24 24" v-html="T.lesson.ic" /><small>{{ j.t }}</small></span>
         <!-- конец рельса — серый магнит: сюда встанет следующий Chapter; тянем Chapter — он оживает (стыки ниже) -->
-        <span v-if="!joints.length" class="jnt rend" :style="{ left: (railTail.x ?? 0) + 'px', top: railTail.y1 + 'px' }" title="Сюда встанет следующий Chapter — тяните «Chapter» с панели"><svg class="jic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg>Chapter</span>
+        <span v-if="!joints.length" class="jnt tile rend" :style="{ left: (railTail.x ?? 0) + 'px', top: railTail.y1 + 'px' }" title="Сюда встанет следующий Chapter — тяните «Chapter» с панели"><em class="tn">1</em><svg class="jic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Chapter</small></span>
         <!-- рельс пустой — подсказка, с чего начать -->
         <div v-if="!order.length && !drag.on" class="rhint" :style="{ left: '60px', top: railTail.y0 + 90 + 'px' }">
           <b>Перетащите на рельс Chapter</b>
@@ -1463,8 +1464,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
         <!-- стыки рельса: тянем главу — видно, куда её можно насадить; ближайший «магнитит» -->
         <template v-for="j in joints" :key="'j' + j.b">
-          <span class="jnt" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }"><svg class="jic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg>Chapter</span>
-          <span v-if="j.hot" class="jseg" :style="{ left: j.x + 'px', top: j.y + 'px' }" /><span v-if="j.hot" class="jtip" :style="{ left: j.x + 80 + 'px', top: j.y + 'px' }">Chapter встанет сюда</span>
+          <span class="jnt tile" :class="{ hot: j.hot }" :style="{ left: j.x + 'px', top: j.y + 'px' }"><em class="tn">1</em><svg class="jic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h5" /></svg><small>Chapter</small></span>
+          <span v-if="j.hot" class="jseg" :style="{ left: j.x + 'px', top: j.y + 'px' }" /><span v-if="j.hot" class="jtip" :style="{ left: j.x + 62 + 'px', top: j.y + 'px' }">Chapter встанет сюда</span>
         </template>
         <!-- выбранный урок — светлая строка во всю ширину плашки главы, как текущий урок в Busuu -->
         <div v-if="rowHl" class="rowhl" :style="rowHl" />
@@ -1497,10 +1498,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
         <!-- ветка урока: стыки между экранами; ближайший к экрану «магнитит» -->
         <template v-if="sd.on && sd.to && sd.to !== 'cancel' && sd.to.mark">
-          <span v-for="g in sd.to.gaps" :key="'g' + g" class="jnt dot" :style="{ left: g + 'px', top: sd.to.mark.y + 24 + 'px' }" />
-          <span class="jseg h" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }" />
-          <span class="jnt hot" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }">🧲</span>
-          <span class="jtip up" :style="{ left: sd.to.mark.x + 2 + 'px', top: sd.to.mark.y + 24 + 'px' }">Exercise встанет сюда</span>
+          <span v-for="g in sd.to.gaps" :key="'g' + g" class="jnt dot" :style="{ left: g + 'px', top: (sd.to.mark.ly ?? sd.to.mark.y + 24) + 'px' }" />
+          <span class="jseg h" :style="{ left: sd.to.mark.x + 2 + 'px', top: (sd.to.mark.ly ?? sd.to.mark.y + 24) + 'px' }" />
+          <span class="jnt dot hot" :style="{ left: sd.to.mark.x + 2 + 'px', top: (sd.to.mark.ly ?? sd.to.mark.y + 24) + 'px' }">🧲</span>
+          <span class="jtip up" :style="{ left: sd.to.mark.x + 2 + 'px', top: (sd.to.mark.ly ?? sd.to.mark.y + 24) + 'px' }">Exercise встанет сюда</span>
         </template>
         <div v-if="sd.on && sd.to?.bead" class="sdbead" :style="{ left: sd.to.bead.x + 'px', top: sd.to.bead.y + 'px' }" />
         <div v-for="g in sdGhost" :key="'g' + g.st.id" class="sdg" :style="{ left: g.left + 'px', top: g.top + 'px', '--c': KINDS[g.st.kind].c }">
@@ -1920,6 +1921,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .jnt.lj { height: 40px; padding: 0 16px 0 12px; font-size: 15px; z-index: 10024 } .jnt.lj:not(.hot) { border-style: solid; border-color: #d6d9dd; background: #ececec; color: #9aa0a8 }
 .bead.lift:not(.unit) { opacity: 0 !important }          /* место, куда встанет урок, показывает синяя плашка «Lesson» (а не пунктирный кружок) */
 .rail.glow .r0 { stroke: #a9d8ff } .rail.glow path { filter: drop-shadow(0 0 6px rgba(13, 153, 255, .45)) }          /* тянем на рельс — рельс подсвечен */
+.jnt.tile { display: grid; justify-items: center; gap: 4px; width: 92px; height: auto; padding: 10px 0 8px; border: 0; border-radius: 14px; background: #fff; color: #2c2c2c; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }          /* как кнопка на нижней панели: значок, подпись, номер */
+.jnt.tile .jic { width: 32px; height: 32px; stroke-width: 1.7 } .jnt.tile small { font-size: 13px; font-weight: 800 }
+.jnt.tile .tn { position: absolute; top: 6px; left: 16px }
+.jnt.tile.rend, .jnt.tile.lj:not(.hot) { opacity: .75 } .jnt.tile.lj:not(.hot) { transform: translate(-50%, -50%) scale(.8) }          /* в покое — чуть бледнее; стыки уроков — поменьше, чтобы не налезали на кружки */
+.jnt.tile.hot { background: #e5f4ff; color: #0d99ff; box-shadow: 0 0 0 2.5px #0d99ff, 0 0 0 9px rgba(13, 153, 255, .2), 0 0 0 16px rgba(13, 153, 255, .08); opacity: 1 } .jnt.tile.hot .tn { background: #0d99ff; color: #fff }
 .jnt.dot { width: 34px; height: 34px; padding: 0; border-radius: 50% }
 .jnt.hot { border: 2.5px solid #0d99ff; background: #0d99ff; color: #fff; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
 .jseg { position: absolute; z-index: 10024; width: 8px; height: 90px; margin: -45px 0 0 -4px; border-radius: 4px; background: #0d99ff; box-shadow: 0 0 12px rgba(13, 153, 255, .5); pointer-events: none } .jseg.h { width: 90px; height: 8px; margin: -4px 0 0 -45px }

@@ -360,7 +360,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       <span class="stem" />
       <!-- размер не меняется, когда к уроку тянут Exercise (иначе прыгает раскладка и плашка главы): меняется только надпись в плашке -->
       <!-- как плашка «Chapter» в конце рельса: тот же значок, что у кнопки «Exercise» на панели; серая — в покое, синяя — когда к уроку тянут Exercise -->
-      <div class="ef" :class="{ hot }"><span class="xpill"><svg viewBox="0 0 24 24" v-html="KINDS.choice.ic" />{{ hot ? 'Exercise встанет сюда' : 'Exercise' }}</span><span>Тяните сюда «Exercise» с панели внизу или вставьте скопированный (Ctrl+V)</span>
+      <div class="ef" :class="{ hot }"><span class="xpill"><em class="xn">3</em><svg viewBox="0 0 24 24" v-html="KINDS.choice.ic" /><small>Exercise</small></span><span>Тяните сюда «Exercise» с панели внизу или вставьте скопированный (Ctrl+V)</span>
         <!-- заметка-план: как чекпоинт должен собираться сам (пока вручную) -->
         <div v-if="isCk" class="cknote"><b>Заметка · чекпоинт соберётся сам (в планах)</b>
           <ul><li>Задания берутся из Exercise уроков этой Chapter: по 1–2 на каждое новое слово, фразу, правило.</li>
@@ -442,9 +442,10 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .ef b { font-size: 14px; font-weight: 800; color: #555 }
 .cknote { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 4px; background: #fff3b0; text-align: left; box-shadow: 0 2px 6px rgba(0, 0, 0, .08) }          /* как стикер */
 .cknote b { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 900; color: #6b5300 } .cknote ul { margin: 0; padding-left: 16px; display: grid; gap: 3px } .cknote li { font-size: 11.5px; font-weight: 600; line-height: 1.35; color: #4a4020 }
-.xpill { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px 0 16px; box-sizing: border-box; border-radius: 24px; border: 2.5px solid #d6d9dd; background: #ececec; color: #9aa0a8 !important; font-size: 18px !important; font-weight: 900 !important }
-.xpill svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round }
-.ef.hot { border-color: #0d99ff; background: rgba(13, 153, 255, .06) } .ef.hot .xpill { border-color: #0d99ff; background: #0d99ff; color: #fff !important; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
+.xpill { position: relative; display: grid; justify-items: center; gap: 4px; width: 92px; padding: 10px 0 8px; box-sizing: border-box; border-radius: 14px; background: #fff; color: #2c2c2c !important; opacity: .75; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }          /* как кнопка «Exercise» на нижней панели */
+.xpill svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round } .xpill small { font-size: 13px; font-weight: 800 }
+.xn { position: absolute; top: 6px; left: 16px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #eceef1; color: #6b7280; font-size: 11px; font-style: normal; font-weight: 900 }
+.ef.hot { border-color: #0d99ff; background: rgba(13, 153, 255, .06) } .ef.hot .xpill { background: #e5f4ff; color: #0d99ff !important; opacity: 1; box-shadow: 0 0 0 2.5px #0d99ff, 0 0 0 9px rgba(13, 153, 255, .2), 0 0 0 16px rgba(13, 153, 255, .08) } .ef.hot .xn { background: #0d99ff; color: #fff }
  .ef { transition: border-color .15s, background .15s } .ef { gap: 10px } .ef span { font-size: 12px; font-weight: 600; color: var(--hint) } .eb { display: flex; gap: 6px; margin-top: 6px }
 .paste { position: absolute; z-index: 3; transform: translateX(-50%); padding: 5px 10px; border: 1px solid var(--blue); border-radius: 14px; background: #fff; color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap }
 .paste:hover:not(:disabled) { background: var(--blue-l) }
