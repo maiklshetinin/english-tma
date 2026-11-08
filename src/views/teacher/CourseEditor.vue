@@ -451,7 +451,7 @@ const othersL = computed(() => {
       const bottom = L[last].y + 56 + (last > i && hasRail(lastIt, key) ? 40 + (railHs[key + lastIt.id] ?? RAIL_H) : 0)
       let x0 = CH_X0, x1 = CH_X1
       let fx1 = x1
-      for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key)) fx1 = Math.max(fx1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps.length) * 520 + 460 + 36)
+      for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key) || railUp(items[k], key)) fx1 = Math.max(fx1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps.length) * 520 + 460 + 36)
       if (u.hlw) x1 = fx1
       const hc = u.hlc ?? HL_DEF, y1 = top + Math.max(120, bottom - top)
       cb.push({ id: u.id, light: hc === '#ffffff', off: u.hl === 'none', box: { x0: ox + x0, y0: top, x1: ox + fx1, y1 }, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: ox + x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
@@ -500,10 +500,10 @@ function whereStep(st) {
 // куда упадёт: ветка урока и место на ней, кружок урока (в конец) или доска (null)
 function screenTarget(w) {
   for (const r of lessonRails.value) {
-    const n = r.x.steps?.length ?? 0, h = railHs[r.x.id] ?? 420
-    if (w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h) || w.x < r.p.x + 120 || w.x > r.p.x + RAIL_X0 + Math.max(1, n) * SCR_STEP + SCR_W + 40) continue          // до конца «Итога урока»
+    const n = r.x.steps?.length ?? 0, h = railHs[r.x.id] ?? 420, up = r.x.type === 'checkpoint'
+    if ((up ? w.y < r.p.y - 40 - Math.min(700, h) - 30 || w.y > r.p.y + 70 : w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h)) || w.x < r.p.x + 120 || w.x > r.p.x + RAIL_X0 + Math.max(1, n) * SCR_STEP + SCR_W + 40) continue          // до конца «Итога урока»
     const i = Math.max(0, Math.min(n, Math.floor((w.x - r.p.x - RAIL_X0 + SCR_STEP / 2) / SCR_STEP)))
-    return { L: r.x, i, mark: { x: r.p.x + RAIL_X0 + i * SCR_STEP - 32, y: r.p.y - 24, h: Math.min(700, h) + 70 }, gaps: Array.from({ length: n + 1 }, (_, k) => r.p.x + RAIL_X0 + k * SCR_STEP - 30).filter((_, k) => k !== i) }
+    return { L: r.x, i, mark: { x: r.p.x + RAIL_X0 + i * SCR_STEP - 32, y: up ? r.p.y - Math.min(700, h) - 46 : r.p.y - 24, h: Math.min(700, h) + 70 }, gaps: Array.from({ length: n + 1 }, (_, k) => r.p.x + RAIL_X0 + k * SCR_STEP - 30).filter((_, k) => k !== i) }
   }
   for (const [k, x] of order.value.entries()) {
     if (!INTERACTIVE.includes(x.type)) continue
@@ -737,7 +737,7 @@ const boxOf = () => {                              // всё, что можно 
   const rails = [...lessonRails.value.map(r => ({ course: doc.id, x: r.x, p: r.p, key: '' })),
     ...othersL.value.flatMap(o => (o.items ?? []).map((x, i) => ({ course: o.id, x, p: { x: o.ox + o.L[i].x, y: o.L[i].y }, key: 'o' + o.id })).filter(r => INTERACTIVE.includes(r.x.type)))]
   for (const r of rails) (r.x.steps ?? []).forEach((st, i) => {
-    const x0 = r.p.x + RAIL_X0 + i * 520, y0 = r.p.y + 40
+    const x0 = r.p.x + RAIL_X0 + i * 520, y0 = r.x.type === 'checkpoint' ? r.p.y - 40 - Math.min(700, railHs[r.key + r.x.id] ?? 420) : r.p.y + 40
     out.push({ id: 'st:' + r.course + ':' + st.id, k: 'step', course: r.course, lesson: r.x.id, s: st, x0, y0, x1: x0 + 460, y1: y0 + Math.min(700, railHs[r.key + r.x.id] ?? 420), ...(r.course === doc.id ? cardBox(st.id) : null) })
   })
   for (const k of doc.ink ?? []) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (let i = 0; i < k.p.length; i += 2) { x0 = Math.min(x0, k.p[i]); x1 = Math.max(x1, k.p[i]); y0 = Math.min(y0, k.p[i + 1]); y1 = Math.max(y1, k.p[i + 1]) } out.push({ id: k.id, k: 'ink', x0: x0 - k.w, y0: y0 - k.w, x1: x1 + k.w, y1: y1 + k.w }) }
@@ -863,14 +863,14 @@ const flyTree = computed(() => {
 })
 // глава на доске — блок: её урок и чекпоинт помнят главу (grp) и ездят вместе с ней
 // где под главой на доске лягут её задания: столбиком, под уроком с веткой — место во всю ветку (как на рельсе)
-const kidDy = (ks) => { let y = 60; return ks.map(v => { const d = y; y += BRANCH.includes(v.type) ? RAIL_H + 110 : 130; return d }) }
+const kidDy = (ks) => { let y = 60; return ks.map(v => { if (v.type === 'checkpoint') y += RAIL_H + 80; const d = y; y += hasRail(v) ? RAIL_H + 110 : 130; return d }) }          // чекпоинт — с местом над ним под ветку
 const kidsOf = (u) => { const ks = doc.loose.filter(l => l.grp === u.id).sort((a, b) => a.y - b.y); return ks.length ? ks : null }
 const dragIds = computed(() => new Set(drag.on ? [drag.item?.id, ...(drag.extra ?? []).map(v => v.id)] : []))
 // плашка главы у призрака — едет вместе с ним
 const flyBox = computed(() => {
   const t = flyTree.value; if (!t || t[0].x.type !== 'unit' || t[0].x.hl === 'none') return null
   const xs = t.map(g => g.p.x), y0 = t[0].p.y - 70
-  const y1 = Math.max(t[0].p.y + 70, ...t.slice(1).map(g => g.p.y + 56 + (BRANCH.includes(g.x.type) ? 40 + RAIL_H : 0)))
+  const y1 = Math.max(t[0].p.y + 70, ...t.slice(1).map(g => g.p.y + 56 + (hasRail(g.x) ? 40 + RAIL_H : 0)))
   const hc = t[0].x.hlc ?? HL_DEF, x0 = Math.min(...xs) + CH_X0, x1 = Math.max(...xs) + CH_X1
   return { light: hc === '#ffffff', style: { '--hc': hc, '--ho': hlOp(t[0].x) + '%', left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', transition: 'none' } }
 })
@@ -878,7 +878,10 @@ const joints = computed(() => (drag.on && drag.item?.type === 'unit' && drag.fro
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
 const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0 })
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
-const hasRail = (x, key = '') => INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && BRANCH.includes(x.type)))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
+// Чекпоинт — в самом конце главы: его ветка экранов идёт ВВЕРХ (над линией), под ним сразу низ плашки главы — всегда на одном расстоянии,
+// и видно, что после чекпоинта урок не вставить. hasRail — ветка вниз (у уроков), railUp — ветка вверх (у чекпоинта)
+const railUp = (x, key = '') => x?.type === 'checkpoint' && (!!x.steps?.length || !key)
+const hasRail = (x, key = '') => x?.type !== 'checkpoint' && INTERACTIVE.includes(x?.type) && (!!x.steps?.length || (!key && BRANCH.includes(x.type)))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
 const layoutOf = (list, key = '') => {
   let y = 0
   return list.map((x, i) => {
@@ -886,7 +889,11 @@ const layoutOf = (list, key = '') => {
       const gap = x.type === 'unit' ? G.unitGap : G.step, prev = list[i - 1]
       // глава: от низа плашки предыдущей главы — всегда CH_GAP (низ плашки = последнее задание + 56, у урока с веткой — + ветка)
       if (x.type === 'unit') y += 56 + (hasRail(prev, key) ? 40 + (railHs[key + prev.id] ?? RAIL_H) : 0) + CH_GAP + 70
-      else y += hasRail(prev, key) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + (x.type === 'unit' ? 110 : 70)) : gap
+      else {
+        let d = hasRail(prev, key) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + 70) : gap
+        if (railUp(x, key)) d = Math.max(d, (hasRail(prev, key) ? 40 + (railHs[key + prev.id] ?? RAIL_H) : 0) + 40 + (railHs[key + x.id] ?? RAIL_H) + 70)          // место над чекпоинтом — под его ветку
+        y += d
+      }
     }
     return { x: 0, y, side: 'r' }
   })
@@ -906,9 +913,9 @@ const lessonJoints = computed(() => {
   list.forEach((x, b) => {
     if (b === 0) return
     if (drag.over && x.id === drag.item.id) return out.push({ k: 'hot', x: L[b].x, y: L[b].y, t, hot: true })
-    if (x.type !== 'unit' && !dragIds.value.has(x.id) && !(drag.over && list[b - 1]?.id === drag.item.id)) out.push({ k: x.id, x: L[b].x, y: L[b].y - 58, t, hot: false })
+    if (x.type !== 'unit' && !dragIds.value.has(x.id) && !(drag.over && list[b - 1]?.id === drag.item.id) && list[b - 1]?.type !== 'checkpoint') out.push({ k: x.id, x: L[b].x, y: L[b].y - 58, t, hot: false })
   })
-  const n = list.length; if (n && !(drag.over && list[n - 1].id === drag.item.id)) out.push({ k: 'end', x: L[n - 1].x, y: L[n - 1].y + 58, t, hot: false })
+  const n = list.length; if (n && !(drag.over && list[n - 1].id === drag.item.id) && list[n - 1].type !== 'checkpoint') out.push({ k: 'end', x: L[n - 1].x, y: L[n - 1].y + 58, t, hot: false })
   return out
 })
 const unitGapH = computed(() => {
@@ -992,7 +999,7 @@ const chapterBoxes = computed(() => {
     for (const k of ks) {
       fx1 = Math.max(fx1, BRANCH.includes(k.type) ? k.x + RAIL_X0 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + CH_X1)
       x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, u.hlw ? k.x + RAIL_X0 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + CH_X1)
-      y1 = Math.max(y1, k.y + 56 + (BRANCH.includes(k.type) ? 40 + Math.min(700, railHs[k.id] ?? RAIL_H) : 0))
+      y1 = Math.max(y1, k.y + 56 + (hasRail(k) ? 40 + Math.min(700, railHs[k.id] ?? RAIL_H) : 0))
     }
     const hc = u.hlc ?? HL_DEF, top = u.y - 70
     out.push({ id: u.id, from: 'loose', box: { x0, y0: top, x1, y1 }, full: { x0, y0: top, x1: Math.max(x1, fx1), y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { ...layerSt(u.id), '--hc': hc, '--ho': hlOp(u) + '%', left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
@@ -1015,7 +1022,8 @@ const lessonBox = computed(() => {
   if (!sel.value || drag.on || msel.value.length) return null
   const r = lessonRails.value.find(v => v.x.id === sel.value); if (!r) return null
   const n = r.x.steps?.length ?? 0, k = 1 / view.z
-  const x0 = r.p.x - 44, y0 = r.p.y - 50, x1 = r.p.x + RAIL_X0 + Math.max(1, n) * 520 + SCR_W + 14, y1 = r.p.y + 40 + Math.min(900, railHs[r.x.id] ?? RAIL_H) + 14
+  const up = r.x.type === 'checkpoint', bh = Math.min(900, railHs[r.x.id] ?? RAIL_H)
+  const x0 = r.p.x - 44, y0 = up ? r.p.y - 40 - bh - 14 : r.p.y - 50, x1 = r.p.x + RAIL_X0 + Math.max(1, n) * 520 + SCR_W + 14, y1 = up ? r.p.y + 50 : r.p.y + 40 + bh + 14
   return { x: r.x, from: doc.items.includes(r.x) ? 'rail' : 'loose', style: { ...layerSt(r.x.id), left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', '--k': k } }
 })
 const titleEdit = ref(false)
@@ -1063,6 +1071,7 @@ function nearest(w) {
   const keep = doc.items.filter(v => v.id !== drag.item?.id && !(drag.extra ?? []).includes(v)), P = layoutOf(keep), n = keep.length
   if (!n) return { i: 0, near: Math.abs(w.x) < 200 && Math.abs(w.y) < 260 }          // рельс пустой — «на рельсе» у его начала
   let i = 0; while (i < n && P[i].y < w.y) i++
+  if (drag.item?.type !== 'checkpoint') while (i > 0 && keep[i - 1].type === 'checkpoint') i--          // после чекпоинта главы урок не встаёт — только перед ним
   const a = P[i - 1], b = P[i], rx = a && b ? a.x + (b.x - a.x) * Math.min(1, Math.max(0, (w.y - a.y) / Math.max(1, b.y - a.y))) : (a ?? b).x
   const inY = w.y > P[0].y - 140 && w.y < P[n - 1].y + 180
   return { i, near: inY && Math.abs(w.x - rx) < 110 }
@@ -1151,7 +1160,7 @@ function drop(where, w) {
 const branchEnd = (x, px) => (BRANCH.includes(x.type) || x.steps?.length ? px + RAIL_X0 + Math.max(1, x.steps?.length ?? 0) * 520 + SCR_W : px + CH_X1)
 function blockOf(u, ks) {
   let x0 = u.x + CH_X0, x1 = u.x + CH_X1, y1 = u.y + 70
-  for (const k of ks) { x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, branchEnd(k, k.x)); y1 = Math.max(y1, k.y + 56 + (BRANCH.includes(k.type) ? 40 + (railHs[k.id] ?? RAIL_H) : 0)) }
+  for (const k of ks) { x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, branchEnd(k, k.x)); y1 = Math.max(y1, k.y + 56 + (hasRail(k) ? 40 + (railHs[k.id] ?? RAIL_H) : 0)) }
   return { x0, y0: u.y - 70, x1, y1 }
 }
 function obstacles(self) {
@@ -1463,11 +1472,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <template v-if="g.x.type === 'unit'"><div class="uh"><b>{{ g.x.title }}<template v-if="g.x.sub">: {{ g.x.sub }}</template></b></div><div class="ubar"><em :style="badge(0)">0%</em></div></template>
               <template v-else><svg viewBox="0 0 24 24" class="ic" v-html="T[g.x.type].ic" /><em class="cap">{{ g.x.title }}<small>{{ T[g.x.type].t }}</small></em></template>
             </div>
-            <LessonRail v-if="g.x.type !== 'unit'" :item="g.x" :x="g.p.x" :y="g.p.y" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly />
+            <LessonRail v-if="g.x.type !== 'unit'" :item="g.x" :up="g.x.type === 'checkpoint'" :x="g.p.x" :y="g.p.y" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly />
           </div>
         </div>
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
-        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :hot="sd.on && sd.to?.L?.id === r.x.id" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
@@ -1493,7 +1502,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="och" :style="{ left: o.ox - 46 + 'px', top: '-170px' }" title="Дважды — открыть этот курс в редакторе" @pointerdown.stop @dblclick.stop="openOther(o.id)"><b>{{ o.title }}</b><small>другой курс · смотреть и копировать экраны · дважды — открыть</small></div>
           <div v-for="c in o.cb" :key="'ocb' + o.id + c.id" class="chapbox still" :class="{ light: c.light, off: c.off }" :style="c.style" @pointerdown.stop="msel = [($event.shiftKey ? msel : []), 'oi:' + o.id + ':' + c.id].flat(); sel = null; selectStep(null, null)" @dblclick.stop="openOther(o.id)" />
           <svg class="rail" :height="o.h"><path :d="o.path" class="r0" /></svg>
-          <LessonRail v-for="(x, i) in o.items.filter(v => INTERACTIVE.includes(v.type) && v.steps?.length)" :key="'olr' + o.id + x.id" :item="x" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
+          <LessonRail v-for="(x, i) in o.items.filter(v => INTERACTIVE.includes(v.type) && v.steps?.length)" :key="'olr' + o.id + x.id" :item="x" :up="x.type === 'checkpoint'" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
             :sel="opick?.lesson === x.id ? opick.s.id : null" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly
             @copy="copyStep($event, o.id)" @select="(sid) => { opick = sid && sid !== 'final' ? { course: o.id, lesson: x.id, s: x.steps.find(v => v.id === sid) } : null; if (sid) selectStep(null, null) }"
             @height="railHs['o' + o.id + x.id] = $event" @focus="showPoint" />

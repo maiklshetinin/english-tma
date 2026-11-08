@@ -23,7 +23,8 @@ const props = defineProps({
   canPaste: Boolean,
   readonly: Boolean,
   free: Boolean,                                          // экран сам по себе на доске (не на ветке урока): x, y — левый верх карточки
-  hot: { type: Boolean, default: false },                  // тянут Exercise к этому пустому уроку — плашка «Exercise» оживает
+  hot: { type: Boolean, default: false },
+  up: { type: Boolean, default: false },                   // ветка вверх (чекпоинт в конце главы): экраны над линией, низом к ней                  // тянут Exercise к этому пустому уроку — плашка «Exercise» оживает
   moving: { type: Object, default: null },                 // экраны, которые сейчас тащат (редактор курса): { ids, dx, dy } — едут за курсором в полный размер                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
 })
 const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus', 'copy', 'paste', 'grab'])
@@ -52,8 +53,8 @@ const cardStyle = (s, i) => {
   const lift = mv.on && s.id === mv.id
   const left = lift ? cx(steps.value.findIndex(v => v.id === s.id)) + mv.dx : cx(i)
   const mov = props.moving?.ids.includes(s.id)
-  if (mov) return { left: left + 'px', top: (props.free ? props.y : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: 10000, transition: 'none', transform: `translate(${props.moving.dx}px, ${props.moving.dy}px)`, pointerEvents: 'none' }
-  return { left: left + 'px', top: (props.free ? props.y : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: lift ? 7 : 3, transition: lift ? 'none' : undefined }
+  if (mov) return { left: left + 'px', top: (props.free ? props.y : props.up ? props.y + TOP : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: 10000, transition: 'none', transform: `translate(${props.moving.dx}px, ${props.moving.dy}px)${props.up && !props.free ? ' translateY(-100%)' : ''}`, pointerEvents: 'none' }
+  return { left: left + 'px', top: (props.free ? props.y : props.up ? props.y + TOP : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: lift ? 7 : 3, transition: lift ? 'none' : undefined }
 }
 
 async function removeStep(s) {
@@ -189,10 +190,10 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     <svg v-if="!free" class="line" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="steps.length && doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
 
     <!-- Пока тянем экран — пунктирное место, куда он встанет -->
-    <div v-if="mv.on" class="slot" :style="{ left: cx(mv.to) + 'px', top: y - TOP + 48 + 'px', width: CW + 'px', height: (frameH[mv.id] ?? 380) - 48 + 'px' }" />
+    <div v-if="mv.on" class="slot" :style="{ left: cx(mv.to) + 'px', top: (up ? y + TOP - (frameH[mv.id] ?? 380) + 48 : y - TOP + 48) + 'px', width: CW + 'px', height: (frameH[mv.id] ?? 380) - 48 + 'px' }" />
 
     <!-- Экраны — открытые карточки, висят на ветке урока -->
-    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: (mv.on && mv.id === s.id) || moving?.ids.includes(s.id), free }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
+    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: (mv.on && mv.id === s.id) || moving?.ids.includes(s.id), free, upb: up && !free }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
       <!-- станция на ветке с номером и ножка к экрану; за станцию тоже можно тянуть -->
       <template v-if="!free"><span class="stem" /><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span></template>
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
@@ -351,17 +352,17 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 
     <!-- «+» — добавить экран -->
     <!-- Урок без экранов: пустое место под экраны — добавить из «Интерактива» или вставить скопированный -->
-    <div v-if="!steps.length && !free" :ref="watchFrame" class="frame empty-f" :style="{ left: cx(0) + 'px', top: y - TOP + 'px', width: CW + 'px' }">
+    <div v-if="!steps.length && !free" :ref="watchFrame" class="frame empty-f" :class="{ upb: up }" :style="{ left: cx(0) + 'px', top: (up ? y + TOP : y - TOP) + 'px', width: CW + 'px' }">
       <span class="stem" />
       <!-- как плашка «Chapter» в конце рельса: тот же значок, что у кнопки «Exercise» на панели; серая — в покое, синяя — когда к уроку тянут Exercise -->
       <div class="ef" :class="{ hot }"><span class="xpill"><svg viewBox="0 0 24 24" v-html="KINDS.choice.ic" />Exercise</span><span>{{ hot ? 'Exercise встанет сюда' : 'Тяните сюда «Exercise» с панели внизу или вставьте скопированный (Ctrl+V)' }}</span>
         <div class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">Добавить Exercise</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
     </div>
-    <button v-if="canPaste && steps.length && !readonly && !free" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
+    <button v-if="canPaste && steps.length && !readonly && !free" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: (up ? y - 60 : y + 26) + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
     <!-- «+» на ветке убрали (07.11): экраны добавляют перетаскиванием из «Интерактива» или «+ Экран» в пустом уроке -->
 
     <!-- Итог урока -->
-    <div v-if="!free" :ref="watchFrame" class="frame" :data-id="'fin-' + item.id" :style="{ left: cx(finI) + 'px', top: y - TOP + 'px', width: CW + 'px', '--c': FINAL.c }">
+    <div v-if="!free" :ref="watchFrame" class="frame" :class="{ upb: up }" :data-id="'fin-' + item.id" :style="{ left: cx(finI) + 'px', top: (up ? y + TOP : y - TOP) + 'px', width: CW + 'px', '--c': FINAL.c }">
      <span class="stem" /><span class="node fin-n" :class="{ done: steps.length && run.at >= steps.length }" title="Итог урока — всегда в конце ветки"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
     <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>Итог урока · всегда в конце</b></div>
     <div class="card fin" :class="{ on: sel === 'final', now: steps.length && run.at >= steps.length }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
@@ -377,6 +378,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .line { position: absolute; overflow: visible; pointer-events: none; z-index: 1 } .line line { stroke: #e0e0e0; stroke-width: 8; stroke-linecap: round }
 /* экран — открытая карточка на рельсе, как на доске */
 .frame { position: absolute; z-index: 3 }
+.frame.upb { transform: translateY(-100%) } .frame.upb .stem { top: auto; bottom: -24px; height: 24px } .frame.upb .node { top: auto; bottom: -57px } .frame.upb .node.fin-n { bottom: -60px }          /* ветка чекпоинта — вверх: экраны над линией */
 /* ветка едет вместе с кружком урока (у кружка на рельсе та же анимация), а не отстаёт от него */
 .line, .plus, .paste, .frame { transition: left .22s ease, top .22s ease }
 .frame.free .flab { margin-top: 0 }
