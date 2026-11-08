@@ -69,6 +69,8 @@ const pickedTitle = computed(() => { if (!picked.value) return ''; const d = new
 
 // Итог месяца. paid — факт (проведённые, по зафиксированным ценам); expected — ожидается: проведённые + запланированные (по цене на время урока);
 // lost — отменённые учеником (по цене на время урока, без оплаты)
+// Доля отмен — от всей суммы уроков месяца (проведённые + запланированные + отменённые), как в «Информации»
+const lostPct = computed(() => { const all = sum.value.expected + sum.value.lost; return all ? Math.round(sum.value.lost / all * 100) : 0 })
 const sum = computed(() => {
   const s = { done: 0, plan: 0, off: 0, paid: 0, expected: 0, lost: 0 }
   for (const l of all.value) if (l.date.startsWith(month.value)) {
@@ -104,7 +106,7 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
       <template v-for="(d, i) in cells" :key="i">
         <span v-if="!d" class="day empty" />
         <button v-else class="day" :class="[dayStatus(d), { today: d === today, picked: d === picked, has: byDate[d], past: d < today }]" :aria-label="`${+d.slice(8)}: ${(byDate[d] || []).length} урок(ов)`" @click="pick(d)">
-          <span class="n">{{ +d.slice(8) }}</span>
+          <span class="n">{{ +d.slice(8) }}</span><small v-if="d === today" class="tl">сегодня</small>
           <span v-if="byDate[d]?.length > 1" class="dots"><i v-for="l in byDate[d].slice(0, 3)" :key="l.id" :class="statusOf(l)" /></span>
         </button>
       </template>
@@ -116,10 +118,11 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
         <i class="dot" /><b>{{ pickedTitle }} · {{ hh(l.hour, l.minute) }}</b>
         <span class="cs">{{ STATUS[statusOf(l)] }}{{ statusOf(l) !== 'off' && priceOf(l) ? ` · ${fmtMoney(priceOf(l))}` : '' }}</span>
       </div>
-      <!-- Итог месяца: легенда = счётчики, ниже деньги одной строкой -->
-      <div class="cnt"><span><i class="done" /><b>{{ sum.done }}</b> проведено</span><span><i class="plan" /><b>{{ sum.plan }}</b> запланировано</span><span><i class="off" /><b>{{ sum.off }}</b> отменено</span></div>
-      <div v-if="teacher && (sum.expected || sum.lost)" class="cm">
-        <div class="cmr"><span><b class="g">{{ fmtMoney(sum.paid) }}</b> из {{ fmtMoney(sum.expected) }} за месяц</span><b v-if="sum.lost" class="r">−{{ fmtMoney(sum.lost) }}</b></div>
+      <!-- Итог месяца — чеком, как подсказка в «Информации»: ✓ итого, ✕ отмены (доля), □ ещё запланировано (светлее) -->
+      <div class="rc">
+        <div class="rr tot"><i class="done" /><span class="t">Итого <small>· {{ sum.done }} ур. проведено</small></span><span v-if="teacher" class="v">{{ fmtMoney(sum.paid) }}</span></div>
+        <div v-if="sum.off" class="rr off"><i class="off" /><span class="t">Отмены<template v-if="teacher && lostPct"> ({{ lostPct }}%)</template> <small>· {{ sum.off }} ур.</small></span><span v-if="teacher" class="v">−{{ fmtMoney(sum.lost) }}</span></div>
+        <div v-if="sum.plan" class="rr pl"><i class="plan" /><span class="t">Ещё запланировано <small>· {{ sum.plan }} ур.</small></span><span v-if="teacher" class="v">{{ fmtMoney(sum.expected - sum.paid) }}</span></div>
       </div>
     </template>
   </div>
@@ -176,14 +179,14 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
 .day .n { font-size: 14px; font-weight: 800; line-height: 1 } .day.past:not(.has) .n { color: var(--hint-2) }
 /* Сегодня — синим (красный — это «отменён»): синее число и черта под ним; у дня с уроком цвет числа — как у урока, черта остаётся */
 /* Сегодня — серой подложкой, как в расписании */
-.day.today .n { color: var(--blue); font-weight: 900 } .day.today .n::after { content: ''; display: block; width: 14px; height: 2px; margin: 2px auto 0; border-radius: 2px; background: var(--blue) }      /* сегодня — синее число с чертой; серым — только запланированные */
+.day.today .n { color: var(--blue); font-weight: 900 } .day .tl { font-size: 9px; font-weight: 900; line-height: 1; color: var(--blue) }      /* сегодня — синее число и подпись «сегодня»; серым — только запланированные */      /* сегодня — синее число с чертой; серым — только запланированные */
 
 /* Статусы как в расписании (сборки в GitHub): кружок в углу дня. Проведён — зелёная галочка, отменён — красный крестик, впереди — серая плашка с рамкой */
 /* ✓ и ✕ — как на «Главной» (WeekGrid): кружок 16px, #1f883d / #cf222e, белая обводка */
-.cnt i.done, .cnt i.off { width: 16px; height: 16px; background: var(--c) center / 11px no-repeat }
+.cnt i.done, .cnt i.off, .rr i.done, .rr i.off { width: 16px; height: 16px; background: var(--c) center / 11px no-repeat }
 .day.done::after, .day.off::after { content: ''; position: absolute; top: 1px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--c) center / 11px no-repeat; box-shadow: 0 0 0 2px var(--card) }
-.day.done::after, .cnt i.done { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
-.day.off::after, .cnt i.off { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") }
+.day.done::after, .cnt i.done, .rr i.done { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
+.day.off::after, .cnt i.off, .rr i.off { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") }
 .day.plan { background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de } .day.plan .n { color: var(--text) }
 .day.off .n { color: var(--hint-2); text-decoration: line-through }
 .day.picked { outline: 2px solid var(--text); outline-offset: 1px }
@@ -221,6 +224,13 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .cl .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c) } .cl .cs { flex: 1; color: var(--hint); font-weight: 600 } .cl.off b { text-decoration: line-through; color: var(--hint) }
 .cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
 .cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { flex: none; border-radius: 50% } .cnt i.plan { width: 14px; height: 14px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }      /* легенда — как дни календаря: ✓ зелёный, ✕ красный, серый квадрат */ .cnt b { color: var(--text); font-weight: 900 }
+.rc { display: grid; gap: 7px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 14px; font-weight: 700 }
+.rr { display: flex; align-items: center; gap: 8px } .rr .t { flex: 1; min-width: 0 } .rr .t small { font-weight: 700; color: var(--hint) }
+.rr .v { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap }
+.rr i { flex: none; width: 16px; height: 16px; border-radius: 50% } .rr i.plan { width: 14px; height: 14px; margin: 0 1px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
+.rr.tot { font-size: 15px; font-weight: 900 } .rr.tot .v { font-size: 16px; font-weight: 900 }
+.rr.off { color: var(--red-d) }
+.rr.pl { color: var(--hint) } .rr.pl .v { font-weight: 700 }      /* «ещё запланировано» — светлее: это ещё не деньги */
 .cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
 .cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
 .cmr { gap: 10px } .cmr > span { flex: 1 }
