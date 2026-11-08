@@ -69,6 +69,7 @@ const pickedTitle = computed(() => { if (!picked.value) return ''; const d = new
 
 // Итог месяца. paid — факт (проведённые, по зафиксированным ценам); expected — ожидается: проведённые + запланированные (по цене на время урока);
 // lost — отменённые учеником (по цене на время урока, без оплаты)
+const lessonsWord = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'урок' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'урока' : 'уроков'}`
 // Уроки месяца по порядку — список под календарём в карточке ученика
 const monthLessons = computed(() => all.value.filter(l => l.date.startsWith(month.value)).sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour || (a.minute || 0) - (b.minute || 0)))
 const dayLabel = (d) => { const x = new Date(d + 'T00:00'); return `${DAYS[(x.getDay() + 6) % 7]}, ${x.getDate()} ${MONTHS_GEN[x.getMonth()]}` }
@@ -115,18 +116,19 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
       </template>
     </div>
     <div v-if="!compact" class="legend"><span><i class="done" />Проведён</span><span><i class="plan" />Запланирован</span><span><i class="off" />Отменён</span></div>
-  </div>
-  <!-- Карточка ученика: уроки месяца списком, как строки счёта — значок статуса, дата и время, цена; внизу итог и «Выставить счёт».
-       Нажатие на день в календаре подсвечивает его уроки в списке. -->
-  <div v-if="compact" class="card ml">
-    <div v-for="l in monthLessons" :key="l.id" class="mli" :class="[statusOf(l), { hl: picked === l.date }]">
-      <i class="st" :class="statusOf(l)" />
-      <span class="d">{{ dayLabel(l.date) }} <small>· {{ hh(l.hour, l.minute) }}{{ statusOf(l) === 'off' ? ' · отменил' : '' }}</small></span><i v-if="teacher" class="lead" />
-      <span v-if="teacher" class="v">{{ fmtMoney(lessonMoney(l)) }}</span>
+    <!-- Карточка ученика — всё одним «чеком»: календарь, под пунктиром уроки месяца (значок, дата и время, точки, цена), под пунктиром «Проведено» и «Итого», «Выставить счёт».
+         Нажатие на день подсвечивает его уроки в списке. -->
+    <div v-if="compact" class="ml">
+      <div v-for="l in monthLessons" :key="l.id" class="mli" :class="[statusOf(l), { hl: picked === l.date }]">
+        <i class="st" :class="statusOf(l)" />
+        <span class="d">{{ dayLabel(l.date) }} <small>· {{ hh(l.hour, l.minute) }}{{ statusOf(l) === 'off' ? ' · отменил' : '' }}</small></span><i v-if="teacher" class="lead" />
+        <span v-if="teacher" class="v">{{ fmtMoney(lessonMoney(l)) }}</span>
+      </div>
+      <p v-if="!monthLessons.length" class="none">В этом месяце уроков нет</p>
+      <div v-if="teacher && monthLessons.length" class="mcnt"><span>Проведено</span><span>{{ lessonsWord(sum.done) }}</span></div>
+      <div v-if="teacher && monthLessons.length" class="mtot"><span>Итого за {{ monthName }}</span><b>{{ fmtMoney(sum.paid) }}</b></div>
+      <button v-if="teacher && sum.done" class="rcpb" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="20" /> Выставить счёт</button>
     </div>
-    <p v-if="!monthLessons.length" class="none">В этом месяце уроков нет</p>
-    <div v-if="teacher && monthLessons.length" class="mtot"><span>Итого за {{ monthName }}</span><b>{{ fmtMoney(sum.paid) }}</b></div>
-    <button v-if="teacher && sum.done" class="rcpb" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="20" /> Выставить счёт</button>
   </div>
 
   <template v-if="!compact">
@@ -169,7 +171,7 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
 .nav:disabled { opacity: .35; cursor: default }
 .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px }
 .wd span { text-align: center; font-size: 12px; font-weight: 800; color: var(--hint-2) }
-.day { position: relative; aspect-ratio: 1 / 1; max-height: 56px; display: grid; place-content: center; justify-items: center; gap: 3px; border: 0; border-radius: 10px; background: none;
+.day { position: relative; justify-self: center; width: 100%; max-width: 56px; aspect-ratio: 1 / 1; max-height: 56px; display: grid; place-content: center; justify-items: center; gap: 3px; border: 0; border-radius: 10px; background: none;
   font: inherit; color: var(--text); cursor: pointer; padding: 0 }
 .day.empty { background: none; cursor: default }
 .day .n { font-size: 14px; font-weight: 800; line-height: 1 } .day.past:not(.has) .n { color: var(--hint-2) }
@@ -217,9 +219,15 @@ html[data-theme='dark'] .mrow.lost b { color: var(--red) }
 .sum.t { grid-template-columns: repeat(3, 1fr) }
 html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] .sum .r { color: var(--red) }
 .lc.cmp { max-width: none }
-.lc.cmp .day { max-height: 46px; border-radius: 10px } .lc.cmp .day .n { font-size: 13px }
+.lc.cmp .day { max-width: none; aspect-ratio: auto; height: 38px; max-height: none; border-radius: 8px }
+/* ---- Карточка ученика: одна карточка как чек — пунктир под шапкой, компактный календарь, пунктир, строки уроков, пунктир, итог ---- */
+.lc.cmp .cal { padding: 14px 16px 16px; gap: 0 }
+.lc.cmp .mh { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed #d6d6d6 } .lc.cmp .mh .mt b { font-size: 17px }
+.lc.cmp .grid { gap: 0 } .lc.cmp .wd { margin-bottom: 2px } .lc.cmp .wd span { font-size: 11px }
+.lc.cmp .ml { margin-top: 8px; padding: 6px 0 0; border-top: 1px dashed #d6d6d6 }
+.mcnt { display: flex; justify-content: space-between; margin-top: 6px; padding: 12px 4px 0; border-top: 1px dashed #d6d6d6; font-size: 13px; font-weight: 700; color: var(--hint) } .lc.cmp .day .n { font-size: 13px }
 /* Уроки месяца — отдельной карточкой, строки как в счёте */
-.ml { display: grid; padding: 6px 14px 14px }
+.ml { display: grid }
 /* Строки как в счёте: без линий между ними, от даты к цене — точки; над «Итого» — пунктир */
 .mli { display: flex; align-items: center; gap: 10px; padding: 8px 4px; font-size: 14px; font-weight: 800 }
 .mli .lead { flex: 1; min-width: 12px; align-self: flex-end; margin: 0 2px 6px; border-bottom: 2px dotted #cfcfcf }
@@ -230,7 +238,7 @@ html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] 
 .mli.plan { color: var(--hint) } .mli.plan .v { font-weight: 700 }
 .mli .st { flex: none; width: 16px; height: 16px; border-radius: 50% } .mli .st.plan { width: 14px; height: 14px; margin: 0 1px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
 .ml .none { margin: 10px 0 4px; text-align: center; font-size: 14px; font-weight: 700; color: var(--hint) }
-.mtot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; padding: 14px 4px 10px; border-top: 1px dashed #d6d6d6; font-size: 15px; font-weight: 900 } .mtot b { font-size: 20px }
+.mtot { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 4px 12px; font-size: 15px; font-weight: 900 } .mtot b { font-size: 20px }
 .rcpb { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 0; border-radius: 12px; background: var(--blue-l); color: var(--blue); font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
 .rcpb:hover { background: var(--blue); color: #fff }
 .cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
