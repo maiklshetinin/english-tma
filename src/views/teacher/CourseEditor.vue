@@ -719,7 +719,7 @@ const msel = ref([]), mq = ref(null)              // mq — рамка на эк
 // Считаем по раскладке (offset*), а не по экрану: так рамка не зависит от масштаба и не отстаёт, пока холст перерисовывается
 function cardBox(id) {
   const el = typeof document !== 'undefined' && document.querySelector(`.frame[data-id="${id}"] .card`); if (!el) return null
-  const f = el.closest('.frame'), x0 = f.offsetLeft + el.offsetLeft, y0 = f.offsetTop + el.offsetTop
+  const f = el.closest('.frame'), x0 = f.offsetLeft + el.offsetLeft, y0 = f.offsetTop + el.offsetTop - (f.classList.contains('upb') ? f.offsetHeight : 0)          // ветка чекпоинта — вверх (карточка сдвинута на свою высоту)
   return { x0, y0, x1: x0 + el.offsetWidth, y1: y0 + el.offsetHeight }
 }
 const boxOf = () => {                              // всё, что можно выделить, с рамкой в координатах холста
