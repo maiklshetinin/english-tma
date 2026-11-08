@@ -33,8 +33,8 @@ describe('все экраны в демо-режиме', () => {
     // Карточка ученика: путь, пресеты, оплата
     await go('students', '2'); await visit('student detail')
     expect(w.text()).toContain('Леня С.')
-    expect(w.text()).toContain('запланировано')                // по умолчанию открыта вкладка «Уроки»: компактный календарь со счётчиками месяца
-    await w.find('.day.has').trigger('click'); expect(w.find('.cl').exists()).toBe(true); expect(w.find('.cl .btn').exists()).toBe(false)   // урок дня — по нажатию на день; статус отсюда не меняют (только на «Главной»)
+    expect(w.text()).toContain('Итого за')                     // по умолчанию открыта вкладка «Уроки»: календарь и уроки месяца списком с итогом
+    await w.find('.day.has').trigger('click'); expect(w.find('.mli.hl').exists()).toBe(true); expect(w.find('.ml .btn').exists()).toBe(false)   // нажатие на день подсвечивает его уроки в списке; статус отсюда не меняют (только на «Главной»)
     await w.findAll('.seg button').find((b) => b.text() === 'Путь и слова')!.trigger('click'); await visit('student detail path')
     expect(w.text()).toContain('Unit 1')                       // путь ученика отрисован
     await go('students')

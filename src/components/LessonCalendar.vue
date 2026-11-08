@@ -69,8 +69,11 @@ const pickedTitle = computed(() => { if (!picked.value) return ''; const d = new
 
 // Итог месяца. paid — факт (проведённые, по зафиксированным ценам); expected — ожидается: проведённые + запланированные (по цене на время урока);
 // lost — отменённые учеником (по цене на время урока, без оплаты)
-// Доля отмен — от всей суммы уроков месяца (проведённые + запланированные + отменённые), как в «Информации»
-const lostPct = computed(() => { const all = sum.value.expected + sum.value.lost; return all ? Math.round(sum.value.lost / all * 100) : 0 })
+// Уроки месяца по порядку — список под календарём в карточке ученика
+const monthLessons = computed(() => all.value.filter(l => l.date.startsWith(month.value)).sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour || (a.minute || 0) - (b.minute || 0)))
+const dayLabel = (d) => { const x = new Date(d + 'T00:00'); return `${DAYS[(x.getDay() + 6) % 7]}, ${x.getDate()} ${MONTHS_GEN[x.getMonth()]}` }
+// Цена в строке: проведённый / запланированный — цена урока; отменённый — сколько потеряно (зачёркнуто)
+const lessonMoney = (l) => (statusOf(l) === 'off' ? priceAt(studentStore.findAny(props.studentId), l.date, l.hour) : priceOf(l))
 const sum = computed(() => {
   const s = { done: 0, plan: 0, off: 0, paid: 0, expected: 0, lost: 0 }
   for (const l of all.value) if (l.date.startsWith(month.value)) {
@@ -112,25 +115,18 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
       </template>
     </div>
     <div v-if="!compact" class="legend"><span><i class="done" />Проведён</span><span><i class="plan" />Запланирован</span><span><i class="off" />Отменён</span></div>
-    <template v-else>
-      <!-- Урок выбранного дня — прямо в карточке, по нажатию на день -->
-      <div v-for="l in dayLessons" :key="l.id" class="cl" :class="statusOf(l)">
-        <i class="dot" /><b>{{ pickedTitle }} · {{ hh(l.hour, l.minute) }}</b>
-        <span class="cs">{{ STATUS[statusOf(l)] }}{{ statusOf(l) !== 'off' && priceOf(l) ? ` · ${fmtMoney(priceOf(l))}` : '' }}</span>
-      </div>
-      <!-- Итог месяца: слева — чек, справа — «Счёт» карточкой (на узком экране — под чеком во всю ширину) -->
-      <div class="sumw">
-        <div class="rc">
-          <div class="rr tot"><i class="done" /><span class="t">Итого <small>· {{ sum.done }} ур. проведено</small></span><span v-if="teacher" class="v">{{ fmtMoney(sum.paid) }}</span></div>
-          <div v-if="sum.off" class="rr off"><i class="off" /><span class="t">Отмены<template v-if="teacher && lostPct"> ({{ lostPct }}%)</template> <small>· {{ sum.off }} ур.</small></span><span v-if="teacher" class="v">−{{ fmtMoney(sum.lost) }}</span></div>
-          <div v-if="sum.plan" class="rr pl"><i class="plan" /><span class="t">Ещё запланировано <small>· {{ sum.plan }} ур.</small></span><span v-if="teacher" class="v">{{ fmtMoney(sum.expected - sum.paid) }}</span></div>
-        </div>
-        <button v-if="teacher && sum.done" class="rcp" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true">
-          <span class="ri"><AppIcon name="receipt" :size="22" /></span>
-          <span class="rt"><b>Счёт</b><small>за {{ monthName }}</small></span>
-        </button>
-      </div>
-    </template>
+  </div>
+  <!-- Карточка ученика: уроки месяца списком, как строки счёта — значок статуса, дата и время, цена; внизу итог и «Выставить счёт».
+       Нажатие на день в календаре подсвечивает его уроки в списке. -->
+  <div v-if="compact" class="card ml">
+    <div v-for="l in monthLessons" :key="l.id" class="mli" :class="[statusOf(l), { hl: picked === l.date }]">
+      <i class="st" :class="statusOf(l)" />
+      <span class="d">{{ dayLabel(l.date) }} <small>· {{ hh(l.hour, l.minute) }}{{ statusOf(l) === 'off' ? ' · отменил' : '' }}</small></span>
+      <span v-if="teacher" class="v">{{ fmtMoney(lessonMoney(l)) }}</span>
+    </div>
+    <p v-if="!monthLessons.length" class="none">В этом месяце уроков нет</p>
+    <div v-if="teacher && monthLessons.length" class="mtot"><span>Итого за {{ monthName }}</span><b>{{ fmtMoney(sum.paid) }}</b></div>
+    <button v-if="teacher && sum.done" class="rcpb" title="Счёт за месяц: скачать (картинка или PDF) или отправить в Telegram" @click="receiptOpen = true"><AppIcon name="receipt" :size="20" /> Выставить счёт</button>
   </div>
 
   <template v-if="!compact">
@@ -183,10 +179,10 @@ const STATUS = computed(() => ({ done: 'Проведён', plan: 'Заплани
 
 /* Статусы как в расписании (сборки в GitHub): кружок в углу дня. Проведён — зелёная галочка, отменён — красный крестик, впереди — серая плашка с рамкой */
 /* ✓ и ✕ — как на «Главной» (WeekGrid): кружок 16px, #1f883d / #cf222e, белая обводка */
-.cnt i.done, .cnt i.off, .rr i.done, .rr i.off { width: 16px; height: 16px; background: var(--c) center / 11px no-repeat }
+.cnt i.done, .cnt i.off, .mli .st.done, .mli .st.off { width: 16px; height: 16px; background: var(--c) center / 11px no-repeat }
 .day.done::after, .day.off::after { content: ''; position: absolute; top: 1px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--c) center / 11px no-repeat; box-shadow: 0 0 0 2px var(--card) }
-.day.done::after, .cnt i.done, .rr i.done { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
-.day.off::after, .cnt i.off, .rr i.off { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") }
+.day.done::after, .cnt i.done, .mli .st.done { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") }
+.day.off::after, .cnt i.off, .mli .st.off { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") }
 .day.plan { background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de } .day.plan .n { color: var(--text) }
 .day.off .n { color: var(--hint-2); text-decoration: line-through }
 .day.picked { outline: 2px solid var(--text); outline-offset: 1px }
@@ -220,25 +216,23 @@ html[data-theme='dark'] .mrow.lost b { color: var(--red) }
 html[data-theme='dark'] .sum .g { color: var(--green) } html[data-theme='dark'] .sum .r { color: var(--red) }
 .lc.cmp { max-width: none }
 .lc.cmp .day { max-height: 44px; border-radius: 10px } .lc.cmp .day .n { font-size: 13px }
-.cl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; padding: 8px 10px; border-radius: 12px; background: var(--surface); font-size: 14px }
-.cl .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c) } .cl .cs { flex: 1; color: var(--hint); font-weight: 600 } .cl.off b { text-decoration: line-through; color: var(--hint) }
+/* Уроки месяца — отдельной карточкой, строки как в счёте */
+.ml { display: grid; padding: 6px 14px 14px }
+.mli { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 800 }
+.mli.hl { background: var(--blue-l); border-radius: 8px }
+.mli .d { flex: 1; min-width: 0 } .mli .d small { font-weight: 700; color: var(--hint) }
+.mli .v { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap }
+.mli.off { color: var(--red-d) } .mli.off .v { text-decoration: line-through }
+.mli.plan { color: var(--hint) } .mli.plan .v { font-weight: 700 }
+.mli .st { flex: none; width: 16px; height: 16px; border-radius: 50% } .mli .st.plan { width: 14px; height: 14px; margin: 0 1px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
+.ml .none { margin: 10px 0 4px; text-align: center; font-size: 14px; font-weight: 700; color: var(--hint) }
+.mtot { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 4px 10px; font-size: 15px; font-weight: 900 } .mtot b { font-size: 20px }
+.rcpb { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 0; border-radius: 12px; background: var(--blue-l); color: var(--blue); font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
+.rcpb:hover { background: var(--blue); color: #fff }
 .cnt { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--hint) }
 .cnt span { display: inline-flex; align-items: center; gap: 5px } .cnt i { flex: none; border-radius: 50% } .cnt i.plan { width: 14px; height: 14px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }      /* легенда — как дни календаря: ✓ зелёный, ✕ красный, серый квадрат */ .cnt b { color: var(--text); font-weight: 900 }
-.sumw { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border) }
-@media (max-width: 420px) { .sumw { grid-template-columns: 1fr } }
-.rc { display: grid; gap: 7px; font-size: 14px; font-weight: 700 }
-.rr { display: flex; align-items: center; gap: 8px } .rr .t { flex: 1; min-width: 0 } .rr .t small { font-weight: 700; color: var(--hint) }
-.rr .v { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap }
-.rr i { flex: none; width: 16px; height: 16px; border-radius: 50% } .rr i.plan { width: 14px; height: 14px; margin: 0 1px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
-.rr.tot { font-size: 15px; font-weight: 900 } .rr.tot .v { font-size: 16px; font-weight: 900 }
-.rr.off { color: var(--red-d) }
-.rr.pl { color: var(--hint) } .rr.pl .v { font-weight: 700 }      /* «ещё запланировано» — светлее: это ещё не деньги */
 .cm { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border) }
 .cmr { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; color: var(--hint) } .cmr b { font-size: 17px; font-weight: 900 }
 .cmr { gap: 10px } .cmr > span { flex: 1 }
-.rcp { display: flex; align-items: center; gap: 10px; min-width: 150px; padding: 10px 14px 10px 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); text-align: left; font: inherit; color: var(--text); cursor: pointer }
-.rcp:hover { background: var(--blue-l); border-color: transparent }
-.rcp .ri { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--blue-l); color: var(--blue) }
-.rcp .rt { display: grid; gap: 1px } .rcp .rt b { font-size: 16px; font-weight: 900 } .rcp .rt small { font-size: 12px; font-weight: 700; color: var(--hint) }
 .cmr .g { color: var(--text) } .cmr .r { color: var(--red-d); font-size: 15px }
 </style>
