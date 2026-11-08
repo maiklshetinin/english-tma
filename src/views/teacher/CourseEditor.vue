@@ -1433,7 +1433,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           </div>
         </div>
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
-        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :hot="sd.on && sd.to?.L?.id === r.x.id" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />

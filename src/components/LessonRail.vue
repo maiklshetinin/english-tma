@@ -23,6 +23,7 @@ const props = defineProps({
   canPaste: Boolean,
   readonly: Boolean,
   free: Boolean,                                          // экран сам по себе на доске (не на ветке урока): x, y — левый верх карточки
+  hot: { type: Boolean, default: false },                  // тянут Exercise к этому пустому уроку — плашка «Exercise» оживает
   moving: { type: Object, default: null },                 // экраны, которые сейчас тащат (редактор курса): { ids, dx, dy } — едут за курсором в полный размер                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
 })
 const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus', 'copy', 'paste', 'grab'])
@@ -352,7 +353,8 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     <!-- Урок без экранов: пустое место под экраны — добавить из «Интерактива» или вставить скопированный -->
     <div v-if="!steps.length && !free" :ref="watchFrame" class="frame empty-f" :style="{ left: cx(0) + 'px', top: y - TOP + 'px', width: CW + 'px' }">
       <span class="stem" />
-      <div class="ef"><b>Exercise пока нет</b><span>Тяните из «Exercise» внизу или вставьте скопированный (Ctrl+V)</span>
+      <!-- как плашка «Chapter» в конце рельса: тот же значок, что у кнопки «Exercise» на панели; серая — в покое, синяя — когда к уроку тянут Exercise -->
+      <div class="ef" :class="{ hot }"><span class="xpill"><svg viewBox="0 0 24 24" v-html="KINDS.choice.ic" />Exercise</span><span>{{ hot ? 'Exercise встанет сюда' : 'Тяните сюда «Exercise» с панели внизу или вставьте скопированный (Ctrl+V)' }}</span>
         <div class="eb"><button class="add sm" @pointerdown.stop @click="emit('add')">Добавить Exercise</button><button v-if="canPaste" class="add sm" @pointerdown.stop @click="emit('paste', null)">Вставить</button></div></div>
     </div>
     <button v-if="canPaste && steps.length && !readonly && !free" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: y + 26 + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
@@ -422,7 +424,11 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--hint); cursor: pointer; padding: 0 } .ib:hover { background: var(--red-l); color: var(--red-d) }
 .ib.cp:hover { background: var(--blue-l); color: var(--blue-d) }
 .empty-f .stem { top: -26px } .ef { display: grid; justify-items: center; gap: 4px; margin-top: 14px; padding: 18px; border: 2px dashed #d6d6d6; border-radius: 18px; background: rgba(255, 255, 255, .7); text-align: center }
-.ef b { font-size: 14px; font-weight: 800; color: #555 } .ef span { font-size: 12px; font-weight: 600; color: var(--hint) } .eb { display: flex; gap: 6px; margin-top: 6px }
+.ef b { font-size: 14px; font-weight: 800; color: #555 }
+.xpill { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px 0 16px; box-sizing: border-box; border-radius: 24px; border: 2.5px solid #d6d9dd; background: #ececec; color: #9aa0a8 !important; font-size: 18px !important; font-weight: 900 !important }
+.xpill svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round }
+.ef.hot { border-color: #0d99ff; background: rgba(13, 153, 255, .06) } .ef.hot .xpill { border-color: #0d99ff; background: #0d99ff; color: #fff !important; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
+.ef.hot > span:not(.xpill) { color: #0d99ff; font-weight: 800 } .ef { transition: border-color .15s, background .15s } .ef { gap: 10px } .ef span { font-size: 12px; font-weight: 600; color: var(--hint) } .eb { display: flex; gap: 6px; margin-top: 6px }
 .paste { position: absolute; z-index: 3; transform: translateX(-50%); padding: 5px 10px; border: 1px solid var(--blue); border-radius: 14px; background: #fff; color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap }
 .paste:hover:not(:disabled) { background: var(--blue-l) }
 .ib.rs:hover { background: var(--blue-l); color: var(--blue-d) }
