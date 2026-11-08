@@ -51,7 +51,7 @@ const cardStyle = (s, i) => {
   const lift = mv.on && s.id === mv.id
   const left = lift ? cx(steps.value.findIndex(v => v.id === s.id)) + mv.dx : cx(i)
   const mov = props.moving?.ids.includes(s.id)
-  if (mov) return { left: left + 'px', top: (props.free ? props.y : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: 30, transition: 'none', transform: `translate(${props.moving.dx}px, ${props.moving.dy}px)`, pointerEvents: 'none' }
+  if (mov) return { left: left + 'px', top: (props.free ? props.y : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: 10000, transition: 'none', transform: `translate(${props.moving.dx}px, ${props.moving.dy}px)`, pointerEvents: 'none' }
   return { left: left + 'px', top: (props.free ? props.y : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: lift ? 7 : 3, transition: lift ? 'none' : undefined }
 }
 

@@ -448,9 +448,11 @@ const othersL = computed(() => {
       const lastIt = items[last], top = L[i].y - 70
       const bottom = L[last].y + 56 + (last > i && hasRail(lastIt, key) ? 40 + (railHs[key + lastIt.id] ?? RAIL_H) : 0)
       let x0 = CH_X0, x1 = CH_X1
-      if (u.hlw) for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key)) x1 = Math.max(x1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps.length) * 520 + 460 + 36)
+      let fx1 = x1
+      for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key)) fx1 = Math.max(fx1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps.length) * 520 + 460 + 36)
+      if (u.hlw) x1 = fx1
       const hc = u.hlc ?? HL_DEF, y1 = top + Math.max(120, bottom - top)
-      cb.push({ id: u.id, light: hc === '#ffffff', off: u.hl === 'none', box: { x0: ox + x0, y0: top, x1: ox + x1, y1 }, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: ox + x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
+      cb.push({ id: u.id, light: hc === '#ffffff', off: u.hl === 'none', box: { x0: ox + x0, y0: top, x1: ox + fx1, y1 }, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: ox + x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
     })
     return { ...c, ox, L, cb, path: railPath(items.length, L, ox), h: Math.max(0, ...L.map(p => p.y)) + 200,
       st: items.map(it => (it.type === 'unit' ? 'done' : (k++ < (c.progress ?? 0) ? 'done' : 'todo'))) }
@@ -758,7 +760,7 @@ const oneBox = computed(() => {
 const selBox = computed(() => {
   if (chapSel.value && !sd.on) {             // выбрана глава — рамка вокруг всей главы
     void (view.x + view.y + view.z)
-    const b = chapSel.value.box, a = toScreen({ x: b.x0, y: b.y0 }), c = toScreen({ x: b.x1, y: b.y1 })
+    const b = chapSel.value.full ?? chapSel.value.box, a = toScreen({ x: b.x0, y: b.y0 }), c = toScreen({ x: b.x1, y: b.y1 })
     return { left: Math.round(a.x) + 'px', top: Math.round(a.y) + 'px', width: Math.round(c.x - a.x) + 'px', height: Math.round(c.y - a.y) + 'px' }
   }
   const ids = new Set(msel.value); if (!ids.size || sd.on) return null
@@ -941,23 +943,27 @@ const chapterBoxes = computed(() => {
     const next = chapters.value[k + 1], lastIt = order.value[c.last]
     const bottom = L[c.last].y + 56 + (c.last > c.i && hasRail(lastIt) ? 40 + (railHs[lastIt.id] ?? RAIL_H) : 0)          // низ — по последнему заданию главы (тот же отступ, что в раскладке)
     let x0 = CH_X0, x1 = CH_X1
-    if (u.hlw) for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) x1 = Math.max(x1, r.p.x + RAIL_X0 + Math.max(1, r.x.steps?.length ?? 0) * 520 + 460 + 36) }
+    let fx1 = x1          // выделение главы — вся схема: с ветками экранов и «Итогом урока» (тянуть — за любое место)
+    for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) fx1 = Math.max(fx1, r.p.x + RAIL_X0 + Math.max(1, r.x.steps?.length ?? 0) * 520 + 460 + 36) }
+    if (u.hlw) x1 = fx1
     const top = L[c.i].y - 70
     const hc = u.hlc ?? HL_DEF
     const y1 = top + Math.max(120, bottom - top)
-    out.push({ id: u.id, from: 'rail', box: { x0, y0: top, x1, y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
+    out.push({ id: u.id, from: 'rail', box: { x0, y0: top, x1, y1 }, full: { x0, y0: top, x1: fx1, y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
   })
   // главы на доске — блоком вокруг своих урока и чекпоинта
   for (const u of doc.loose) {
     if (u.type !== 'unit' || dragIds.value.has(u.id)) continue
     const ks = doc.loose.filter(l => l.grp === u.id && !dragIds.value.has(l.id))
     let x0 = u.x + CH_X0, x1 = u.x + CH_X1, y1 = u.y + 70
+    let fx1 = x1
     for (const k of ks) {
+      fx1 = Math.max(fx1, BRANCH.includes(k.type) ? k.x + RAIL_X0 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + CH_X1)
       x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, u.hlw ? k.x + RAIL_X0 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + CH_X1)
       y1 = Math.max(y1, k.y + 56 + (BRANCH.includes(k.type) ? 40 + Math.min(700, railHs[k.id] ?? RAIL_H) : 0))
     }
     const hc = u.hlc ?? HL_DEF, top = u.y - 70
-    out.push({ id: u.id, from: 'loose', box: { x0, y0: top, x1, y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
+    out.push({ id: u.id, from: 'loose', box: { x0, y0: top, x1, y1 }, full: { x0, y0: top, x1: Math.max(x1, fx1), y1 }, light: hc === '#ffffff', w: !!u.hlw, style: { ...layerSt(u.id), '--hc': hc, '--ho': hlOp(u) + '%', left: x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
   }
   return out
 })
@@ -978,7 +984,7 @@ const lessonBox = computed(() => {
   const r = lessonRails.value.find(v => v.x.id === sel.value); if (!r) return null
   const n = r.x.steps?.length ?? 0, k = 1 / view.z
   const x0 = r.p.x - 44, y0 = r.p.y - 50, x1 = r.p.x + RAIL_X0 + Math.max(1, n) * 520 + SCR_W + 14, y1 = r.p.y + 40 + Math.min(900, railHs[r.x.id] ?? RAIL_H) + 14
-  return { x: r.x, from: doc.items.includes(r.x) ? 'rail' : 'loose', style: { left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', '--k': k } }
+  return { x: r.x, from: doc.items.includes(r.x) ? 'rail' : 'loose', style: { ...layerSt(r.x.id), left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px', '--k': k } }
 })
 const titleEdit = ref(false)
 function editTitle() { titleEdit.value = true; nextTick(() => document.querySelector('[data-ctitle]')?.select()) }
@@ -987,9 +993,14 @@ const chMenu = ref(null)                 // открытый список в м�
 function setHl(u, how) { delete u.hl; delete u.hlw; if (how === 'none') u.hl = 'none'; if (how === 'wide') u.hlw = true; save() }
 function setHlc(u, c) { if (c === HL_DEF) delete u.hlc; else u.hlc = c; if (u.hl === 'none') delete u.hl; chMenu.value = null; save() }
 const hlHow = (u) => (u.hl === 'none' ? 'none' : u.hlw ? 'wide' : 'rail')
+// Слои, как в Figma: что на доске подвинули последним — то сверху (порядок в doc.loose = порядок слоёв; рельс — самый нижний слой)
+// у главы на доске весь блок (плашка, уроки, их ветки) — в одном слое с главой
+const layerZ = computed(() => { const m = {}; doc.loose.forEach((l, k) => { m[l.id] = 10 + k }); for (const l of doc.loose) if (l.grp && m[l.grp] != null) m[l.id] = m[l.grp]; return m })
+const layerSt = (id) => (layerZ.value[id] != null ? { zIndex: layerZ.value[id] } : null)
+function toTop(list) { const ids = new Set(list.map(v => v.id)), moved = doc.loose.filter(l => ids.has(l.id)); if (!moved.length) return; doc.loose = [...doc.loose.filter(l => !ids.has(l.id)), ...moved] }
 const looseShown = computed(() => doc.loose.filter(l => l.type !== 'screen' && !dragIds.value.has(l.id)))
 const freeScreens = computed(() => doc.loose.filter(l => l.type === 'screen' && l.steps?.length))
-const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1], ...(selColor.value[x.id] ? { '--rc': selColor.value[x.id] } : {}) })
+const beadStyle = (x, p, c) => ({ left: p.x + 'px', top: p.y + 'px', '--c': c[0], '--d': c[1], ...(selColor.value[x.id] ? { '--rc': selColor.value[x.id] } : {}), ...(sel.value === x.id || renaming.value === x.id || isM(x.id) ? null : layerSt(x.id)) })
 const colorOf = (x, i) => (x.type === 'unit' ? (i == null ? UNIT_COLORS[0] : unitColor(i)) : [T[x.type].c, T[x.type].d])
 
 // ---------- Перетаскивание: с панели, с рельса, с холста ----------
@@ -1096,7 +1107,7 @@ function drop(where, w) {
   }
   // новая глава — сразу со структурой, как в Busuu: глава, урок, чекпоинт (на рельсе они уже встали вместе с главой; на доске — блоком)
   if (where === 'canvas' && from === 'new' && kids.length) { const dy = kidDy(kids); kids.forEach((v, k) => { v.x = x.x; v.y = x.y + dy[k]; v.grp = x.id; doc.loose.push(v) }) }
-  if (where === 'canvas' && x.type === 'unit') keepApart(x)
+  if (where === 'canvas') toTop([x, ...kids, ...doc.loose.filter(l => l.grp === x.id)])          // положили куда угодно (можно поверх) — и этот объект теперь верхний слой
   Object.assign(drag, { on: false, item: null, extra: null, over: false, ox: 0, oy: 0 })
   if (where !== 'cancel' && from === 'new') { sel.value = x.id; if (MEDIA.includes(x.type) && !x.media) pickFile(findAny(x.id), x.type) }
   setProgress(doc.progress)
@@ -1410,12 +1421,12 @@ async function reset() { if (!(await ask('Вернуть пример курса
           </div>
         </div>
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
-        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
         <!-- Экраны прямо на доске (унесли с ветки или положили из «Интерактива») -->
-        <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" :style="layerSt(f.id)" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :moving="sdMoving"
           @copy="copyStep" @change="save" @height="railHs[f.id] = $event" @select="selectStep(f.id, $event)" @grab="grabStep" />
         <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
@@ -1687,7 +1698,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .board.hand, .board.hand:active { cursor: grab } .board.hand:active { cursor: grabbing } .board.hand .world { pointer-events: none }
 .board.pen .world { pointer-events: none }
 .board:not(.hand):not(.placing):not(.pen) { cursor: default }
-.ink { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; z-index: 5 }
+.ink { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; z-index: 9002 }
 .ink path { fill: none; stroke-linecap: round; stroke-linejoin: round } .ink path.on { filter: drop-shadow(0 0 2px #0d99ff) drop-shadow(0 0 1px #0d99ff) }
 .mq { position: absolute; z-index: 20; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }
 .selbox { position: absolute; z-index: 19; border: 2px solid #0d99ff; pointer-events: none }
@@ -1833,10 +1844,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .cpill { display: flex; align-items: center; gap: 8px; width: 380px; box-sizing: border-box; padding: 11px 14px; border: 1.5px solid #e2e2e2; border-radius: 14px; background: #fff; font-size: 16px }
 .cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
 .rstart { position: absolute; z-index: 1; width: 22px; height: 22px; margin: -11px; border-radius: 50%; background: #d6d6d6; box-shadow: 0 0 0 5px #f4f4f4 }
-.jnt { position: absolute; z-index: 25; width: 34px; height: 34px; margin: -17px; box-sizing: border-box; border-radius: 50%; border: 2.5px dashed #aeb5bd; background: #f4f4f4; display: grid; place-items: center; font-size: 17px; pointer-events: none }
+.jnt { position: absolute; z-index: 10025; width: 34px; height: 34px; margin: -17px; box-sizing: border-box; border-radius: 50%; border: 2.5px dashed #aeb5bd; background: #f4f4f4; display: grid; place-items: center; font-size: 17px; pointer-events: none }
 .jnt.hot { border: 2.5px solid #0d99ff; background: #0d99ff; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
-.jseg { position: absolute; z-index: 24; width: 8px; height: 90px; margin: -45px 0 0 -4px; border-radius: 4px; background: #0d99ff; box-shadow: 0 0 12px rgba(13, 153, 255, .5); pointer-events: none } .jseg.h { width: 90px; height: 8px; margin: -4px 0 0 -45px }
-.jtip { position: absolute; z-index: 26; transform: translateY(-50%); padding: 4px 10px; border-radius: 8px; background: #0d99ff; color: #fff; font-size: 13px; font-weight: 800; white-space: nowrap; pointer-events: none } .jtip.up { transform: translate(-50%, -150%) }
+.jseg { position: absolute; z-index: 10024; width: 8px; height: 90px; margin: -45px 0 0 -4px; border-radius: 4px; background: #0d99ff; box-shadow: 0 0 12px rgba(13, 153, 255, .5); pointer-events: none } .jseg.h { width: 90px; height: 8px; margin: -4px 0 0 -45px }
+.jtip { position: absolute; z-index: 10026; transform: translateY(-50%); padding: 4px 10px; border-radius: 8px; background: #0d99ff; color: #fff; font-size: 13px; font-weight: 800; white-space: nowrap; pointer-events: none } .jtip.up { transform: translate(-50%, -150%) }
 .rowhl { position: absolute; z-index: 1; border-radius: 22px; background: #eef4fd; pointer-events: none }
 .chapbox { pointer-events: auto; cursor: default } .chapbox.still, .board.moving .chapbox { transition: none } .chapbox.off { background: none !important; box-shadow: none !important }
 .chapbox { background: color-mix(in srgb, var(--hc) var(--ho, 8%), transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hc) 38%, transparent) }
@@ -1847,7 +1858,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .uh.ren { display: grid; gap: 2px } .rrow { display: flex; align-items: center; gap: 8px }
 .uh.ren .rin { width: 100%; border: 0; border-radius: 6px; background: rgba(13, 153, 255, .07); padding: 1px 4px; margin: 0 -4px; outline: none; caret-color: #0d99ff; box-shadow: none }
 .uh.ren .rin:focus { background: rgba(13, 153, 255, .12) } .uh.ren .rin.big { font-size: 20px; font-weight: 900 } .uh.ren .rin:not(.big) { font-size: 14px; font-weight: 600; color: #4b5563 }
-.bead.ren { z-index: 31 } .upen { pointer-events: auto } .rrow .rin { flex: 1; min-width: 0 }
+.bead.ren { z-index: 10001 } .bead.on { z-index: 10000 } .upen { pointer-events: auto } .rrow .rin { flex: 1; min-width: 0 }
 .ctl { display: inline-flex; align-items: center; gap: 6px } .ctl .upen { width: 24px; height: 24px } .ctl .upen svg { width: 15px; height: 15px }      /* карандаш у названия урока — переименовать только по нему */
 .bead.s-l .ctl { flex-direction: row } .cap .rrow.lren { width: 100%; gap: 6px } .cap .rrow.lren .upen { width: 24px; height: 24px }
 .cap .rin.lren, .cap .lren .rin { border: 0; border-radius: 6px; background: rgba(13, 153, 255, .07); padding: 1px 4px; margin: 0 -4px; caret-color: #0d99ff; box-shadow: none }
@@ -1855,7 +1866,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .upen.fin-ok { opacity: 1; background: #0d99ff; color: #fff } .upen.fin-ok:hover { background: #0b85e0; color: #fff }
 .opi { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 1.8 } .opi path { fill: #fff; stroke: none } .opv { font-size: 13px; font-weight: 700; color: #fff; min-width: 34px; text-align: left }
 .hlsw { grid-template-columns: repeat(8, 32px) } .hlsw button[style*="#ffffff"] { box-shadow: inset 0 0 0 1.5px #ccc }
-.bead.unit.on { z-index: 30; outline: none }          /* выбранная глава — рамка вокруг всей главы, без второй рамки у названия */ .nor { flex: none; padding: 1px 7px; border-radius: 6px; background: #fff4c2; color: #8a6d00; font-size: 11px; font-weight: 800 }          /* меню главы — поверх соседних карточек */
+.bead.unit.on { z-index: 10000; outline: none }          /* выбранная глава — рамка вокруг всей главы, без второй рамки у названия */ .nor { flex: none; padding: 1px 7px; border-radius: 6px; background: #fff4c2; color: #8a6d00; font-size: 11px; font-weight: 800 }          /* меню главы — поверх соседних карточек */
 .nbar.chbar { bottom: calc(100% + 50px); gap: 4px; padding: 0 8px; z-index: 40 }
 .cbw { height: 34px; padding: 0 10px !important; border-radius: 8px; font-size: 13px !important; font-weight: 700 } .cbw:hover:not(:disabled) { background: #383838 } .cbw.on { background: #383838; box-shadow: inset 0 0 0 1.5px #0d99ff } .cbw:disabled { opacity: .35; cursor: default }
 .chap { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid #e3e3e3; border-radius: 22px; background: #fff; pointer-events: none }
@@ -1885,7 +1896,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ubar { position: relative; width: 370px; height: 10px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
 .ubar em { position: absolute; top: 50%; transform: translate(-50%, -50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
-.ftree { opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
+.ftree { position: absolute; left: 0; top: 0; z-index: 10000; opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
 .ftree .bead, .ftree :deep(.lr *) { transition: none !important }          /* призрак главы / урока — ровно за курсором, без подъезда */
 .bead.unit.lift { outline: 2px dashed #1fbe78; background: #fff !important }
 .fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px; background: #1fbe78; box-shadow: 0 10px 20px rgba(0, 0, 0, .2) }
@@ -1900,17 +1911,17 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .lpv b { font-size: 18px; font-weight: 900; line-height: 1.2 } .lpv p { margin: 0 0 6px; font-size: 13px; font-weight: 600; opacity: .9 }
 .pgo { padding: 11px; border: 0; border-radius: 12px; background: #fff; color: var(--d); font: inherit; font-size: 15px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
 .pgo:active { transform: translateY(2px); box-shadow: none }
-.sdmark { position: absolute; z-index: 20; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
-.sdbead { position: absolute; z-index: 20; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
-.sdg { position: absolute; z-index: 30; width: 460px; pointer-events: none; opacity: .95 }
+.sdmark { position: absolute; z-index: 10020; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
+.sdbead { position: absolute; z-index: 10020; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
+.sdg { position: absolute; z-index: 10030; width: 460px; pointer-events: none; opacity: .95 }
 .sdl { display: flex; align-items: center; gap: 6px; height: 34px; font-size: 13px; color: #555 } .sdl b { font-weight: 800 }
 .sdl .kc { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #fff } .sdl .kc svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .sdc { overflow: hidden; border-radius: 22px; background: #fff; box-shadow: 0 0 0 2px var(--c), 0 18px 40px rgba(0, 0, 0, .2) }
 .runov { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
 .runbox { width: min(560px, 100%); height: min(820px, 96vh); border-radius: 22px; overflow: hidden; background: #fff }
 /* Стикеры */
-.note { position: absolute; z-index: 4; width: 240px; min-height: 240px; display: flex; box-sizing: border-box; padding: 16px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .06); cursor: grab; touch-action: none }
-.note.ghost { opacity: .6; pointer-events: none; z-index: 9; box-shadow: none }
+.note { position: absolute; z-index: 9000; width: 240px; min-height: 240px; display: flex; box-sizing: border-box; padding: 16px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .06); cursor: grab; touch-action: none }
+.note.ghost { opacity: .6; pointer-events: none; z-index: 9001; box-shadow: none }
 .nt { flex: 1; display: flex; min-width: 0 }
 .nt textarea, .nv { flex: 1; min-height: 140px; margin: 0; padding: 0; border: 0; background: none; resize: none; outline: none; font: inherit; color: #2b2b2b; line-height: 1.3; overflow-wrap: anywhere }
 .nt textarea { pointer-events: auto; cursor: text }
