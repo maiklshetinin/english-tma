@@ -88,6 +88,25 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
       return new Set((await assignedTo(sid)).flatMap((d) => filesOf({ ...(d.data() as Course), items: d.data().items ?? [], loose: [] })))
     },
 
+    /** Преподаватель: сбросить прогресс ученика — { what: 'all' } словарь Review и прохождение всех курсов, { what: 'course', courseId } — один курс */
+    async reset(rawSid: unknown, input: unknown) {
+      const sid = cleanId(rawSid, 'student id'), b = (input ?? {}) as { what?: unknown; courseId?: unknown }
+      if (!(await db.collection('students').doc(sid).get()).exists) throw fail(404, 'student not found')
+      if (b.what === 'all') {
+        const batch = db.batch()
+        batch.delete(progress().doc(sid)); batch.delete(db.collection('review').doc(sid))
+        await batch.commit(); return { ok: true }
+      }
+      if (b.what !== 'course') throw fail(400, 'bad what')
+      const cid = cleanId(b.courseId, 'course id')
+      await db.runTransaction(async (tx) => {
+        const ref = progress().doc(sid), all: Record<string, CourseRun> = { ...((await tx.get(ref)).data()?.c ?? {}) }
+        if (!(cid in all)) return
+        delete all[cid]; tx.set(ref, { c: all, updatedAt: FieldValue.serverTimestamp() })
+      })
+      return { ok: true }
+    },
+
     /** Преподаватель: курсы и прохождение ученика (назначенные — с прогрессом, остальные — чтобы назначить) */
     async ofStudent(rawSid: unknown) {
       const sid = cleanId(rawSid, 'student id'), runs = await runsOf(sid)

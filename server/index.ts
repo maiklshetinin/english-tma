@@ -172,6 +172,7 @@ app.delete('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => {
 // Курсы (редактор «рельс») — только преподаватели; пространство общее (все видят все курсы)
 // Курс у ученика (learn.ts): преподаватель назначает и смотрит прохождение, ученик — только свои курсы и свой прогресс
 app.post('/courses/:id/assign', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.assign(req.params.id, req.body))))      // { studentId, on }
+app.post('/students/:id/progress/reset', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.reset(req.params.id, req.body))))      // { what: 'all' } | { what: 'course', courseId }
 app.get('/students/:id/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.ofStudent(req.params.id))))
 app.get('/my/courses', requireUser, wrap(async (req, res) => res.json(await learn.myList(req.user))))
 app.get('/my/courses/:id', requireUser, wrap(async (req, res) => res.json(await learn.myCourse(req.user, req.params.id))))

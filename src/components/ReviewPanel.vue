@@ -66,7 +66,7 @@ const reset = () => { resetReview(); openKey.value = null }
         <template v-for="x in shown" :key="x.key">
           <div class="tr" :class="{ on: openKey === x.key }" role="button" tabindex="0" @click="openKey = openKey === x.key ? null : x.key">
             <span class="pic"><img v-if="x.image && resolve(x.image, 'image')" :src="resolve(x.image, 'image')" alt="" /><i v-else>{{ x.kind === 'phrase' ? 'Фр' : 'Сл' }}</i></span>
-            <span class="w"><button v-if="x.audio" class="pl" title="Послушать" @click.stop="play(x)"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></button>{{ x.text }}</span>
+            <span class="w"><button v-if="x.audio" class="pl" title="Послушать" @click.stop="play(x)"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></button><span class="wt">{{ x.text }}<small v-if="x.tr" class="mt">{{ x.tr }}</small></span></span>
             <span class="t">{{ x.tr }}</span>
             <span class="str" :class="x.lv"><i v-for="n in 3" :key="n" :class="{ f: n <= LV[x.lv].n }" />{{ LV[x.lv].t }}</span>
           </div>
@@ -84,10 +84,10 @@ const reset = () => { resetReview(); openKey.value = null }
 .sy { margin-left: 10px; font-size: 12px; font-weight: 800; color: var(--hint); vertical-align: middle } .sy.synced { color: #1fbe78 } .sy.error { color: #ff9600 }
 .howb { all: unset; cursor: pointer; margin-top: 12px; font-size: 13px; font-weight: 800; color: #1cb0f6 } .howb span { font-size: 11px }
 .how { margin-top: 10px; display: grid; gap: 7px; padding: 12px 14px; border-radius: 12px; background: #f6f8fa } .how p { margin: 0; font-size: 13px; line-height: 1.45; color: #444 } .how b { color: #222 } .how .nt { color: #777; font-size: 12px }
-.rv { width: 100%; max-width: 760px; margin: 0 auto; display: grid; gap: 12px }
-.rcard { background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }
+.rv { width: 100%; max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0 }          /* minmax(0) — на телефоне ничего не распирает за край */
+.rcard { min-width: 0; background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }
 h2 { margin: 0; font-size: 24px; font-weight: 900 }
-.lv3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px }
+.lv3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px }
 .lvc { display: flex; align-items: flex-end; gap: 10px; cursor: pointer; border-radius: 12px; padding: 4px }
 .lvc:hover { background: #f5f6f8 }
 .jar { position: relative; flex: none; width: 54px; height: 72px; border-radius: 10px; border: 2px solid #e3e6ea; overflow: hidden; background: #fff }
@@ -109,6 +109,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .w { display: flex; align-items: center; gap: 8px; font-weight: 800; min-width: 0; overflow-wrap: anywhere }
 .pl { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 0; background: #1cb0f6; display: grid; place-items: center; cursor: pointer; padding: 0 }
 .pl svg { width: 13px; height: 13px; fill: #fff }
+.wt { display: grid; min-width: 0 } .mt { display: none; font-size: 12px; font-weight: 600; color: var(--hint) }          /* перевод под словом — на телефоне, где колонки «Перевод» нет */
 .t { color: var(--hint); font-weight: 600; min-width: 0; overflow-wrap: anywhere }
 .str { display: flex; align-items: flex-end; gap: 2px; font-size: 13px; font-weight: 700 }
 .str i { width: 4px; border-radius: 1px; background: #dfe2e6 } .str i:nth-child(1) { height: 6px } .str i:nth-child(2) { height: 9px } .str i:nth-child(3) { height: 12px; margin-right: 6px }
@@ -117,5 +118,10 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .det p { margin: 0 } .det ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px }
 .det li { display: flex; gap: 8px; align-items: center; font-weight: 600 } .det li small { margin-left: auto; color: var(--hint) }
 .det li span { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 7px; color: #fff } .det .y { background: #58cc02 } .det .x { background: #ff4b4b } .det .n { background: #b5bac1 }
-@media (max-width: 520px) { .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
+@media (max-width: 520px) {
+  .rcard { padding: 14px; gap: 12px } h2 { font-size: 21px }
+  .lv3 { gap: 6px } .lvc { gap: 6px; padding: 2px } .jar { width: 34px; height: 48px; border-radius: 8px } .lvc b { font-size: 19px } .lvc > span:last-child { font-size: 11.5px }
+  .rbar .sp { flex-basis: 100%; height: 0 } .rbar .go, .rbar .ghost { flex: 1; padding: 9px 10px }
+  .mt { display: block }
+  .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
 </style>

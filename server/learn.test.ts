@@ -53,9 +53,20 @@ ok('у преподавателя: назначенный сверху, с пр�
 const keys = await L.allowedKeys(masha)
 ok('файлы: только своих курсов и без черновиков доски', keys.has('t/tg_1/c/k1/x.mp4') && !keys.has('t/tg_1/c/k1/secret.jpg') && !keys.has('t/tg_1/c/k2/y.mp4'))
 
+// --- сброс преподавателем ---
+await L.assign('k2', { studentId: 's1', on: true }); await L.done(masha, 'k2', { itemId: 'z' })
+store.set('review/s1', { items: { a: {} } })
+await L.reset('s1', { what: 'course', courseId: 'k2' })
+ok('сброс одного курса: k2 с нуля, k1 на месте', !store.get('courseProgress/s1').c.k2 && store.get('courseProgress/s1').c.k1.done === 2)
+ok('плохой what — 400', (await code(L.reset('s1', { what: 'x' }))) === 400)
+await L.assign('k2', { studentId: 's1', on: false })
+
 // --- снять ---
 await L.assign('k1', { studentId: 's1', on: false })
 ok('снят: курс пропал у ученика', (await L.myList(masha)).courses.length === 0 && (await code(L.myCourse(masha, 'k1'))) === 404)
 ok('прогресс сохранился (назначат снова — продолжит)', store.get('courseProgress/s1').c.k1.done === 2)
+
+await L.reset('s1', { what: 'all' })
+ok('сброс всего: прохождение и словарь ученика удалены', !store.has('courseProgress/s1') && !store.has('review/s1'))
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nall passed')
