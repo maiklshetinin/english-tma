@@ -2,12 +2,11 @@
 // «Как видит ученик»: просмотрщик курсов на вкладке «Курсы». Курс — тем же рельсом, что в редакторе (юниты с процентом,
 // кружки заданий с теми же значками, «Сейчас»). Нажал урок — он запускается во весь экран, как в Busuu; кружок и фото — тоже во весь экран.
 // Ничего не правит: править — «Открыть в редакторе». Курсы — с сервера (без сервера — один курс из этого браузера, как в редакторе).
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
-import { audSrc, imgSrc } from '../composables/useCardMedia'
+import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
-import ReviewPanel from './ReviewPanel.vue'
 import { recordStep } from '../stores/review'
 import BackButton from './BackButton.vue'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
@@ -77,35 +76,13 @@ const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 function go(x) { peek.value = null; open.value = x }
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
-const tab = ref('course')
 const onAnswer = (a) => recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title })
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value?.steps ?? []).filter(s => !stepIssue(s)))
 
-// файлы: свой ключ курса в S3 — ссылка на просмотр (пачкой), «idb:» — из этого браузера, остальное — как в карточках
-const urls = reactive({}), want = new Set(); let vt = 0
-function askView(key) {
-  want.add(key); clearTimeout(vt)
-  vt = setTimeout(async () => {
-    const keys = [...want]; want.clear()
-    try { const r = await apiRequest('/media/view', { method: 'POST', body: JSON.stringify({ keys }) }); if (r.ok) Object.assign(urls, (await r.json()).urls) } catch { /* без сети — позже */ }
-  }, 50)
-}
-const idb = () => new Promise((ok, no) => { const r = indexedDB.open('tma-course-media', 1); r.onupgradeneeded = () => r.result.createObjectStore('v'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) })
-function local(id) {
-  if (!(id in urls)) {
-    urls[id] = ''
-    idb().then(db => { const q = db.transaction('v').objectStore('v').get(id); q.onsuccess = () => { if (q.result) urls[id] = URL.createObjectURL(q.result) } }).catch(() => {})
-  }
-  return urls[id]
-}
-function resolve(v, kind) {
-  if (!v) return ''
-  if (v.startsWith('idb:')) return local(v.slice(4))
-  if (/^t\//.test(v)) { if (!online) return ''; if (!(v in urls)) { urls[v] = ''; askView(v) } return urls[v] }
-  return kind === 'audio' ? audSrc(v) : kind === 'image' ? imgSrc(v) : v
-}
+// файлы курса: свой ключ в S3, «idb:» из этого браузера, остальное — как в карточках (composables/useCourseMedia)
+const { resolve, local } = useCourseMedia(online)
 const fileOf = (x) => (x.file ? resolve(x.file) : x.media ? local(x.media) : '')
 // всё объявлено — можно грузить выбранный курс (immediate)
 watch(() => props.id, loadCourse, { immediate: true })
@@ -116,9 +93,6 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
   <div class="cv">
     <h3 class="vh">Как видит ученик <small>нажмите на урок — покажется его время и «Поехали!»</small></h3>
     <!-- как в Busuu: «Уроки» и «Review» (слова и фразы из пройденных уроков) -->
-    <div class="vtabs"><button :class="{ on: tab === 'course' }" @click="tab = 'course'">Курс</button><button :class="{ on: tab === 'review' }" @click="tab = 'review'">Review</button></div>
-    <ReviewPanel v-if="tab === 'review'" :resolve="resolve" />
-    <template v-else>
     <p v-if="err" class="hint">Не удалось загрузить курс {{ err }}</p>
     <div v-if="loading || !course" class="card hint none">{{ loading ? 'Загрузка…' : 'Выберите курс выше' }}</div>
 
@@ -153,7 +127,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <p>{{ screens(okSteps(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
             <!-- пройденный — как в Busuu: повторить навыки (в разработке) или пройти урок заново -->
             <template v-if="state(x) === 'done'">
-              <button class="pgo" @click="tab = 'review'; peek = null">Повторить навыки</button>
+              <button class="pgo" @click="peek = null; router.push({ name: 'review' })">Повторить навыки</button>
               <button class="pgo ghost" @click="go(x)">Пройти заново</button>
             </template>
             <button v-else class="pgo" @click="go(x)">Поехали!</button>
@@ -169,7 +143,6 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
       </section>
       <p v-if="!units.length" class="hint none">В курсе пока нет заданий</p>
     </div>
-    </template>
 
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
@@ -193,7 +166,6 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
 <style scoped>
 .cv { display: grid; gap: 10px; margin-bottom: 22px }
-.vtabs { width: 100%; max-width: 620px; margin: 0 auto; display: flex; gap: 6px } .vtabs button { border: 0; border-radius: 10px; padding: 7px 14px; font: inherit; font-size: 14px; font-weight: 800; background: #fff; color: var(--hint); cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, .08) } .vtabs button.on { background: #e5f4ff; color: #1899d6 }
 .vh { width: 100%; max-width: 620px; margin: 0 auto; font-size: 15px } .vh small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .tabs { flex-wrap: wrap; justify-self: start }
 .none { text-align: center; margin: 0 }

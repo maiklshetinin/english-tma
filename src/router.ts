@@ -45,6 +45,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/courses', name: 'courses', component: () => import('./views/teacher/CourseEditor.vue'), meta: { tab: 'courses', roles: ['teacher'] } },      // ЭСКИЗ: редактор курсов (холст), грузится лениво
   { path: '/cards-studio', name: 'cards-studio', component: () => import('./views/teacher/CardStudio.vue'), meta: { tab: 'words', roles: ['teacher'] } },      // ЭСКИЗ: редактор карточек
   { path: '/info', name: 'info', component: () => import('./views/teacher/TeacherInfo.vue'), meta: { tab: 'info', roles: ['teacher'] } },      // доходы по месяцам (грузится лениво)
+  { path: '/review', name: 'review', component: () => import('./views/ReviewView.vue'), meta: { tab: 'review' } },      // Review: словарь ученика (слова и фразы уроков и их сила)
   { path: '/words', name: 'words', component: TeacherWords, meta: { tab: 'words', roles: ['teacher'] } },
   { path: '/cards', name: 'cards', component: StudentCards, meta: { tab: 'cards', roles: ['student'] } },
   { path: '/lessons', name: 'lessons', component: Schedule, meta: { tab: 'lessons', roles: ['student'] } },

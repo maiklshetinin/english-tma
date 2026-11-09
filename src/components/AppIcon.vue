@@ -34,6 +34,7 @@ const P = {
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
   grid: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   chart: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
+  review: '<path stroke-width="2.8" d="M6 19.5v-4.5M12 19.5v-9M18 19.5V5.5"/>',          // Review: три растущих столбика, как сила слова
   receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
   download: '<path d="M12 4.5v10.5M7.5 10.8L12 15.2l4.5-4.4"/><path d="M5 19.5h14"/>',
   send: '<path d="M20.2 4.2L3.8 10.7c-.6.2-.6 1.1 0 1.3l4.6 1.6 1.7 5c.2.6 1 .7 1.4.2l2.6-3.1 4.2 3c.5.3 1.1 0 1.2-.5l2.1-13.2c.1-.5-.4-.9-.9-.7z"/><path d="M8.4 13.6l9.4-7.2"/>',

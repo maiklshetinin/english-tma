@@ -39,11 +39,11 @@ export const allLessons = computed(() => useScheduleStore().lessons.flatMap((l) 
 
 export const TABS: Record<Role, { id: string; label: string; icon: string }[]> = {
   student: [
-    { id: 'path', label: 'Путь', icon: 'route' }, { id: 'cards', label: 'Слова', icon: 'cards' },
+    { id: 'path', label: 'Путь', icon: 'route' }, { id: 'review', label: 'Review', icon: 'review' }, { id: 'cards', label: 'Слова', icon: 'cards' },
     { id: 'lessons', label: 'Уроки', icon: 'calendar' }, { id: 'profile', label: 'Профиль', icon: 'user' },
   ],
   teacher: [
-    { id: 'home', label: 'Главная', icon: 'home' }, { id: 'path', label: 'Курсы', icon: 'route' },
+    { id: 'home', label: 'Главная', icon: 'home' }, { id: 'path', label: 'Курсы', icon: 'route' }, { id: 'review', label: 'Review', icon: 'review' },
     { id: 'students', label: 'Ученики', icon: 'users' }, { id: 'words', label: 'Слова', icon: 'cards' },
     { id: 'info', label: 'Инфо', icon: 'chart' }, { id: 'profile', label: 'Профиль', icon: 'user' },
   ],
