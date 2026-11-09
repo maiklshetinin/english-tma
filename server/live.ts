@@ -10,8 +10,13 @@
 //    Так преподавателю не нужно раз в минуту перечитывать список учеников из базы.
 //  • После любой правки через обычные маршруты (ученики, расписание, группы…) остальным уходит «changed» — они перезагружают
 //    эти данные. Всё в памяти одного процесса: на Render один экземпляр сервера, этого достаточно.
+//  • Заметки на экране (мини-чат, notes.ts): note+ / note:reply / note:react / note:done / note:del — сервер сохраняет и рассылает всем
+//    заметку целиком ({ t: 'note', note }); typing — «печатает…» (не храним); nudge — всплывающее уведомление у адресата (висит, пока
+//    не закроет крестиком); note:seen — прочитал (закрыл уведомление / открыл заметку) → у автора «Прочитано».
+//    Новичок получает все заметки в hello.notes.
 import type { Server } from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
+import type { Notes, NoteAuthor } from './notes.js'
 
 export interface LiveUser { uid: string; role: string; name: string; photo: string; dev?: boolean }
 type Verify = (token: string) => Promise<LiveUser | null>
@@ -22,7 +27,7 @@ const colorOf = (uid: string) => COLORS[[...uid].reduce((h, c) => (h * 31 + c.ch
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : 0)
 
-export function makeLive({ verify, origins, hello = () => ({}) }: { verify: Verify; origins: string[]; hello?: () => Record<string, unknown> }) {
+export function makeLive({ verify, origins, hello = () => ({}), notes }: { verify: Verify; origins: string[]; hello?: () => Record<string, unknown>; notes?: Notes }) {
   const conns = new Set<Conn>()
   let seq = 0, cursors = false, cursorsBy = ''
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
@@ -44,6 +49,22 @@ export function makeLive({ verify, origins, hello = () => ({}) }: { verify: Veri
     }
     else if (m.t === 'cursors' && c.dev) { cursors = m.on === true; cursorsBy = c.name; for (const o of conns) send(o, { t: 'cursors', on: cursors, by: cursorsBy, mine: o.uid === c.uid }) }
     else if (m.t === 'doc' && m.doc && typeof m.doc === 'object') room(c, { t: 'doc', cid: c.cid, uid: c.uid, doc: m.doc })
+    else if (notes && typeof m.t === 'string' && m.t.startsWith('note')) onNote(c, m)
+    // «печатает…» под заметкой — остальным, не храним
+    else if (m.t === 'typing') { const out = { t: 'typing', id: str(m.id, 64), uid: c.uid, name: c.name, color: c.color }; for (const o of conns) if (o.uid !== c.uid) send(o, out) }
+    // «Позвать»: у адресата (или у всех, если не указан) заметка открывается сама и всплывает уведомление
+    else if (m.t === 'nudge' && notes?.get(str(m.id, 64))) {
+      const to = str(m.to, 64), out = { t: 'nudge', id: str(m.id, 64), mid: str(m.mid, 64), from: { uid: c.uid, name: c.name, photo: c.photo, color: c.color } }
+      for (const o of conns) if (o.uid !== c.uid && (!to || o.uid === to)) send(o, out)
+    }
+  }
+  const author = (c: Conn): NoteAuthor => ({ uid: c.uid, name: c.name, photo: c.photo, color: c.color })
+  function onNote(c: Conn, m: Record<string, unknown>) {
+    const n = m.t === 'note+' ? notes!.create(author(c), m) : m.t === 'note:reply' ? notes!.reply(author(c), m.id, m)
+      : m.t === 'note:react' ? notes!.react(author(c), m.id, m.mid, m.e) : m.t === 'note:done' ? notes!.done(m.id, m.done)
+      : m.t === 'note:seen' ? notes!.seen(author(c), m.id) : null
+    if (n) { const out = { t: 'note', note: n, by: c.uid, cid: c.cid, ref: str(m.ref, 40) }; for (const o of conns) send(o, out); return }
+    if (m.t === 'note:del') { const gone = notes!.remove(author(c), m.id); if (gone) for (const o of conns) send(o, { t: 'note-', id: gone }) }
   }
 
   return {
@@ -59,7 +80,7 @@ export function makeLive({ verify, origins, hello = () => ({}) }: { verify: Veri
         if (!u || u.role !== 'teacher') return ws.close(4401, 'unauthorized')
         const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
         conns.add(c)
-        send(c, { ...hello(), t: 'hello', cid: c.cid, cursors, cursorsBy })
+        send(c, { ...hello(), t: 'hello', cid: c.cid, uid: c.uid, cursors, cursorsBy, notes: notes?.all() ?? [] })
         presence()
         ws.on('message', (d) => onMessage(c, String(d)))
         ws.on('pong', () => { c.alive = true })

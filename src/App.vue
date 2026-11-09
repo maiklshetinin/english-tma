@@ -10,6 +10,7 @@ import DragGhost from './components/DragGhost.vue'
 import WakeUp from './components/WakeUp.vue'
 import PresenceBar from './components/PresenceBar.vue'
 import GlobalCursors from './components/GlobalCursors.vue'
+import ScreenNotes from './components/ScreenNotes.vue'
 import { startLive, stopLive, setWhere, onLive } from './composables/useLive'
 import { active, onActive } from './composables/useActive'
 import { useStudentsStore } from './stores/students'
@@ -66,7 +67,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
       <PresenceBar v-if="auth.isTeacher && route.name !== 'courses'" />
       <main><RouterView v-slot="{ Component, route: r }"><component :is="Component" :key="auth.role + r.meta.tab" /></RouterView></main>
     </div>
-    <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" />
+    <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" /><ScreenNotes v-if="auth.isTeacher && route.name !== 'courses'" />
   </template>
   <AppDialog />
 </template>
