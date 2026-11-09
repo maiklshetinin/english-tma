@@ -25,16 +25,22 @@ const props = defineProps({
   name: { type: String, default: '' },
   closable: Boolean, closeText: { type: String, default: '' },   // closeText — вместо ✕ наша кнопка «назад» (стрелка), подпись — в подсказке
   embedded: Boolean, pct: { type: Number, default: null }, stats: { type: Object, default: null },
+  again: Boolean,                                         // на ветке в редакторе: ошибка → экран повторится в конце ветки (emit next с again)
   track: Boolean,                                         // ученик проходит урок — ответы уходят в Review (emit 'answer')
 })
 const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer'])
 
 const i = ref(props.start), t0 = Date.now(), endT = ref(0)
 const score = reactive({ ok: 0, all: 0 })
-const step = computed(() => props.steps[i.value])
-const isFinal = computed(() => i.value >= props.steps.length)
+// Как в Busuu: ошибся в упражнении — оно встаёт в конец урока, пока не ответишь верно (только при прохождении урока, не в редакторе)
+const retry = !props.single && !props.embedded
+const seq = ref(props.steps.map((_, k) => k))                          // очередь экранов: номера в steps, ошибочные добавляются в конец
+watch(() => props.steps, (v) => { seq.value = v.map((_, k) => k) })
+const cur = computed(() => (retry ? seq.value[i.value] : i.value))
+const step = computed(() => props.steps[cur.value])
+const isFinal = computed(() => i.value >= (retry ? seq.value.length : props.steps.length))
 const pct = computed(() => props.pct != null ? props.pct : props.single ? (props.steps.length ? Math.round(Math.min(i.value + 1, props.steps.length) / (props.steps.length + 1) * 100) : 0)
-  : Math.round(i.value / (props.steps.length || 1) * 100))
+  : Math.round(i.value / ((retry ? seq.value.length : props.steps.length) || 1) * 100))
 const src = (v, k) => (v ? props.resolve(v, k) : '')
 
 // ---- состояние текущего экрана ----
@@ -118,7 +124,8 @@ function again() { const v = vid.value; if (v) { v.currentTime = 0; v.play().cat
 function sendText() { if (st.text.trim()) st.done = true }
 
 // ---- дальше ----
-function next() { if (props.single || !st.done) return; if (props.embedded) return emit('next', { ...mine }); i.value++ }
+const later = computed(() => (retry || props.again) && st.done && ['choice', 'order', 'gap'].includes(step.value?.kind) && !right.value)          // ошибка → «вернёмся в конце»
+function next() { if (props.single || !st.done) return; if (props.embedded) return emit('next', { ...mine, again: later.value }); if (later.value) seq.value.push(cur.value); i.value++ }
 const answer = computed(() => step.value?.opts?.[step.value.ans ?? 0])
 const time = computed(() => { const s = props.stats ? props.stats.sec : Math.round(((endT.value || Date.now()) - t0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const acc = computed(() => { const x = props.stats ?? score; return x.all ? Math.round(x.ok / x.all * 100) : 100 })
@@ -294,9 +301,9 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Снизу: результат и «Продолжить» -->
     <div class="foot" :class="{ good: !isFinal && checks && st.done && right, bad: !isFinal && checks && st.done && !right }">
-      <span v-if="!isFinal && step.kind === 'choice' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span v-if="!right">{{ answer?.w }}</span></span>
-      <span v-else-if="!isFinal && step.kind === 'order' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильно так:' }}</b><span class="fs">{{ step.phrase }}</span><small>{{ step.tr }}</small><small v-if="step.note" class="fn">{{ step.note }}</small></span>
-      <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gp.a }}{{ gp.gap }}{{ gp.b }}</span><small>{{ step.tr }}</small></span>
+      <span v-if="!isFinal && step.kind === 'choice' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span v-if="!right">{{ answer?.w }}</span><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
+      <span v-else-if="!isFinal && step.kind === 'order' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильно так:' }}</b><span class="fs">{{ step.phrase }}</span><small>{{ step.tr }}</small><small v-if="step.note" class="fn">{{ step.note }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
+      <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gp.a }}{{ gp.gap }}{{ gp.b }}</span><small>{{ step.tr }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'answer' && st.done && step.tr" class="fb"><small>Пример ответа</small><span class="fs">{{ step.tr }}</span></span>
       <span v-else class="fb" />
       <template v-if="embedded && isFinal"><button class="go ghost" @click="emit('restart')">↺ Заново</button><button class="go" @click="emit('full')">Во весь экран</button></template>
@@ -380,7 +387,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .out svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .out:disabled { opacity: .45; cursor: default }
 .wr2 { display: grid; gap: 8px; width: 100%; max-width: 380px; align-self: center } .wr2 .out { justify-self: end }
 .wr2 textarea { resize: none; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; font: inherit; font-size: 15px; outline: none } .wr2 textarea:focus { border-color: #1a73e8 }
-.fs { font-weight: 700 } .fb small { color: var(--hint); font-weight: 600; font-size: 12px } .fn { margin-top: 2px }
+.fs { font-weight: 700 } .fb small { color: var(--hint); font-weight: 600; font-size: 12px } .fn { margin-top: 2px } .fb .lt { color: #ff9600; font-weight: 800 }
 /* итог */
 .fin { align-items: center; text-align: center } .thumb { width: 72px; height: 72px; margin-top: 10px }
 .fin h2 { margin: 0; font-size: 22px }

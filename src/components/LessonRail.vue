@@ -43,7 +43,10 @@ const order = computed(() => {
 })
 const cx = (i) => props.x + (props.free ? 0 : X0) + i * STEP
 // до итога; у пустого урока итог — после места под первый экран (ветка и итог видны сразу)
-const finI = computed(() => Math.max(1, order.value.length))
+// ошибся при прохождении ветки — экран повторяется в конце, перед итогом (как у ученика в Busuu), пока не ответишь верно
+const again = computed(() => run.again.filter(a => steps.value.some(s => s.id === a.id)))
+const total = computed(() => steps.value.length + again.value.length)
+const finI = computed(() => Math.max(1, order.value.length + again.value.length))
 const endX = computed(() => cx(finI.value) + CW / 2)
 // Шапка карточки: тянуть — переставить на ветке, унести на другую ветку или на доску (тащит редактор курса, с выделенными вместе)
 function down(e, s) { if (e.button === 0) emit('grab', { e, s }) }
@@ -159,27 +162,34 @@ function setMin(s, m) { if (m === KIND_MIN[s.kind]) delete s.min; else s.min = m
 const isEdit = (s) => !props.readonly && (editing[s.id] ?? !!stepIssue(s))
 function save(s) { keepCard(s); editing[s.id] = false; changed() }
 // Прохождение ветки: сколько экранов пройдено, счёт каждого, время — прогресс и итог меняются на ходу
-const run = reactive({ at: 0, res: {}, t0: 0, t1: 0, key: 0 })
-const pctAt = (i) => Math.round((i < run.at ? i + 1 : i) / Math.max(1, steps.value.length) * 100)
-function advance(s, sc) {
-  const i = steps.value.indexOf(s); if (!run.t0) run.t0 = Date.now()
-  run.res[s.id] = sc; run.at = Math.max(run.at, i + 1)
-  if (run.at >= steps.value.length && !run.t1) run.t1 = Date.now()
-  emit('focus', { x: cx(Math.min(i + 1, steps.value.length)) + CW / 2, y: props.y + 200 })
+const run = reactive({ at: 0, res: {}, t0: 0, t1: 0, key: 0, again: [], n: 0 })
+const pctAt = (i) => Math.round((i < run.at ? i + 1 : i) / Math.max(1, total.value) * 100)
+const stepOf = (a) => steps.value.find(s => s.id === a.id)
+// i — место на ветке (экраны, потом повторы); a — повтор, если проходят его
+function advance(s, sc, i = steps.value.indexOf(s), a = null) {
+  if (!run.t0) run.t0 = Date.now()
+  run.res[a ? 'r' + a.k : s.id] = { ok: sc.ok, all: sc.all }
+  if (sc.again) run.again.push({ k: ++run.n, id: s.id })
+  run.at = Math.max(run.at, i + 1)
+  if (run.at >= total.value && !run.t1) run.t1 = Date.now()
+  emit('focus', { x: cx(Math.min(i + 1, total.value)) + CW / 2, y: props.y + 200 })
 }
 const stats = computed(() => {
-  if (run.at < steps.value.length) return null
-  const r = steps.value.map(s => run.res[s.id] ?? { ok: 0, all: 0 })
+  if (run.at < total.value) return null
+  const r = Object.values(run.res)
   return { ok: r.reduce((a, x) => a + x.ok, 0), all: r.reduce((a, x) => a + x.all, 0), sec: Math.round(((run.t1 || Date.now()) - run.t0) / 1000) }
 })
 // Сбросить один экран: ответы на нём стираются, прохождение ветки откатывается к нему
 const rk = reactive({})
 function resetStep(s) {
   const i = steps.value.indexOf(s); rk[s.id] = (rk[s.id] ?? 0) + 1; delete run.res[s.id]
-  if (run.at > i) { run.at = i; run.t1 = 0 }
+  if (run.at > i) {                    // откат к экрану: повторы от него и дальше тоже уходят
+    run.at = i; run.t1 = 0
+    run.again = run.again.filter(a => { const keep = steps.value.findIndex(x => x.id === a.id) < i; if (!keep) delete run.res['r' + a.k]; return keep })
+  }
 }
-function restart() { Object.assign(run, { at: 0, res: {}, t0: 0, t1: 0, key: run.key + 1 }); emit('focus', { x: cx(0) + CW / 2, y: props.y + 200 }) }
-const doneX = computed(() => (!steps.value.length ? props.x : run.at >= steps.value.length ? endX.value : run.at ? cx(run.at - 1) + CW / 2 : props.x))
+function restart() { Object.assign(run, { at: 0, res: {}, t0: 0, t1: 0, key: run.key + 1, again: [] }); emit('focus', { x: cx(0) + CW / 2, y: props.y + 200 }) }
+const doneX = computed(() => (!steps.value.length ? props.x : run.at >= total.value ? endX.value : run.at ? cx(run.at - 1) + CW / 2 : props.x))
 // Стрелки ‹ › в подписи — переставить экран на шаг
 function shift(s, d) { const a = props.item.steps, i = a.indexOf(s), j = i + d; if (j < 0 || j >= a.length) return; a.splice(i, 1); a.splice(j, 0, s); changed() }
 onUnmounted(() => { ro.disconnect(); ro2.disconnect(); cancelAnimationFrame(hT) })
@@ -213,7 +223,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       </div>
       <div class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at }]" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
-      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" @next="advance(s, $event)" />
+      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" />
       <template v-else>
       <div class="pbar"><i :style="{ width: pctAt(i) + '%' }" /></div>
 
@@ -373,11 +383,20 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
     <button v-if="canPaste && steps.length && !readonly && !free" class="paste" :style="{ left: cx(order.length) - GAP / 2 + 'px', top: (up ? y - 60 : y + 26) + 'px' }" :disabled="full" title="Вставить скопированный экран в конец ветки" @pointerdown.stop @click="emit('paste', steps.at(-1)?.id ?? null)">Вставить</button>
     <!-- «+» на ветке убрали (07.11): экраны добавляют перетаскиванием из «Интерактива» или «+ Экран» в пустом уроке -->
 
+    <!-- Повторы: экран, где ошиблись, встаёт в конец ветки перед итогом -->
+    <div v-for="(a, j) in (free ? [] : again)" :key="'r' + a.k" class="frame again" :class="{ upb: up }" :style="{ left: cx(order.length + j) + 'px', top: (up ? y + TOP : y - TOP) + 'px', width: CW + 'px', '--c': KINDS[stepOf(a).kind].c }">
+      <span class="stem" /><span class="node" :class="{ done: order.length + j < run.at, now: order.length + j === run.at }">{{ order.length + j < run.at ? '✓' : '↻' }}</span>
+      <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[stepOf(a).kind].ic" /></span><b>Ещё раз · {{ steps.indexOf(stepOf(a)) + 1 }} · {{ KINDS[stepOf(a).kind].t }}</b><span class="tm">ошибка — повтор в конце</span></div>
+      <div class="card" :class="{ now: order.length + j === run.at }" @wheel="ownWheel">
+        <LessonPlayer :key="'r' + a.k + ':' + run.key" embedded again :steps="steps" :start="steps.indexOf(stepOf(a))" :pct="pctAt(order.length + j)" :resolve="resolve" @next="advance(stepOf(a), $event, order.length + j, a)" />
+      </div>
+    </div>
+
     <!-- Итог урока -->
     <div v-if="!free" :ref="watchFrame" class="frame" :class="{ upb: up }" :data-id="'fin-' + item.id" :style="{ left: cx(finI) + 'px', top: (up ? y + TOP : y - TOP) + 'px', width: CW + 'px', '--c': FINAL.c }">
-     <span class="stem" /><span class="node fin-n" :class="{ done: steps.length && run.at >= steps.length }" :title="finName + ' — всегда в конце ветки'"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
+     <span class="stem" /><span class="node fin-n" :class="{ done: steps.length && run.at >= total }" :title="finName + ' — всегда в конце ветки'"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
     <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>{{ finName }} · всегда в конце</b></div>
-    <div class="card fin" :class="{ on: sel === 'final', now: steps.length && run.at >= steps.length }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
+    <div class="card fin" :class="{ on: sel === 'final', now: steps.length && run.at >= total }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
       <div v-if="!steps.length" class="fin0"><span class="fi"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>{{ finName }}</b><span>{{ isCk ? 'Здесь ученик увидит итог всей Chapter: что усвоено, что повторить. Появится, когда в чекпоинте будут экраны.' : 'Здесь ученик увидит результат: сколько верных ответов и за сколько времени. Появится, когда в уроке будут экраны.' }}</span></div>
       <LessonPlayer v-else :key="'fin:' + run.key" embedded :steps="steps" :start="steps.length" :pct="pctAt(steps.length)" :stats="stats" :resolve="resolve" @restart="restart" @full="emit('play')" />
     </div>
@@ -398,6 +417,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .fin0 { display: grid; justify-items: center; gap: 8px; padding: 34px 26px; text-align: center; color: var(--hint); font-size: 13px; font-weight: 600 }
 .fin0 b { color: #333; font-size: 17px } .fi { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--yellow); color: #fff }
 .fi svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.frame.again .card { outline: 2px dashed #ff9600; outline-offset: 3px } .frame.again .flab b { color: #ff9600 } .frame.again .node:not(.done) { background: #fff3e0; color: #ff9600; border-color: #ff9600 }          /* повтор после ошибки */
 .frame.lift { z-index: 7 } .frame.lift .card { box-shadow: 0 16px 34px rgba(0, 0, 0, .2) }
 /* подпись над экраном — как имя фрейма в Figma */
 .line line.done { stroke: #1fbe78 }
