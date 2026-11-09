@@ -147,7 +147,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
 /* «Сегодня» — серая шапка дня во всю ширину колонки (края совпадают с линиями таблицы), скруглена только сверху и стоит прямо на таблице */
 .dh.today { background: var(--surface) }      /* тот же серый, что у закрашенного прошедшего времени — одна шкала времени */ .dh.today b, .dh.today small { color: var(--text) }
-.wk.gs-cells .dh.today { margin: 0; border-radius: 12px 12px 0 0 }
+.wk.gs-cells .dh.today { margin: 0; border-radius: 12px 12px 0 0; box-shadow: inset 1px 1px 0 var(--border), inset -1px 0 0 var(--border) }      /* обведена, как таблица: «язычок» колонки, торчит вверх */
 /* Сегодня понедельник / воскресенье — угол таблицы под шапкой дня прямой, иначе в углу остаётся белый «треугольничек» */
 .wk.gs-cells.td-first .g.head + .g > .cell:nth-child(2) { border-top-left-radius: 0 }
 .wk.gs-cells.td-last .g.head + .g > .cell:last-child { border-top-right-radius: 0 }
@@ -155,7 +155,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .cell.free { cursor: pointer } .cell.free:hover { background: var(--blue-l) }
 .tm.now { background: var(--surface); border-radius: 10px; color: var(--text); font-weight: 900 }
 /* Текущий час — как «сегодня» в шапке: серая подсветка во всю высоту строки, скруглена только слева и прилегает к таблице */
-.wk.gs-cells .tm.now { margin-right: 0; border-radius: 10px 0 0 10px }
+.wk.gs-cells .tm.now { margin-right: 0; border-radius: 10px 0 0 10px; box-shadow: inset 1px 1px 0 var(--border), inset 0 -1px 0 var(--border) }      /* обведено, как таблица: «язычок» строки, торчит влево */
 .wk.gs-cells.tm-first .g.head + .g > .cell:nth-child(2) { border-top-left-radius: 0 }      /* первый / последний час — угол таблицы прямой, без белого уголка */
 .wk.gs-cells.tm-last .g:last-child > .cell:nth-child(2) { border-bottom-left-radius: 0 }
 .cell.ok { background: var(--green-l); box-shadow: inset 0 0 0 2px var(--green) }
@@ -241,9 +241,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk.gs-cells .g.head + .g.nowrow > .cell:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 1px 0 var(--border), inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g.head + .g.nowrow > .cell.tcol:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g:last-child > .cell:nth-child(2) { border-bottom-left-radius: 10px }
-/* Сегодня понедельник / воскресенье — в первой строке (под шапкой дня) нет внешней линии таблицы слева / справа: шапка дня переходит в колонку без черты */
-.wk.gs-cells.td-first .g.head + .g > .cell.tcol:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
-.wk.gs-cells.td-last .g.head + .g > .cell.tcol:last-child:not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 -1px 0 var(--border) } .wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
+.wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
 @media (min-width: 720px) { .wk.gs-cells .tm, .wk.gs-cells .corner { margin-right: 8px } }      /* «мск» — той же ширины, что колонка часов, с зазором до таблицы */
 .wk.gs-cells .chip { inset: 3px; border-radius: 7px }
 @media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } .wk.gs-cells .corner { margin-right: 3px } }
