@@ -244,9 +244,9 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 /* Сегодня понедельник / воскресенье — у серого (прошедшего) времени колонки «сегодня» нет внешней линии таблицы слева / справа: серое идёт ровно, как шапка дня */
 .wk.gs-cells.shade.td-first .g > .cell.tcol.past:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
 .wk.gs-cells.shade.td-last .g > .cell.tcol.past:last-child:not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 -1px 0 var(--border) } .wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
-@media (min-width: 720px) { .wk.gs-cells .tm { margin-right: 6px } }
+@media (min-width: 720px) { .wk.gs-cells .tm, .wk.gs-cells .corner { margin-right: 8px } }      /* «мск» — той же ширины, что колонка часов, с зазором до таблицы */
 .wk.gs-cells .chip { inset: 3px; border-radius: 7px }
-@media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } }
+@media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } .wk.gs-cells .corner { margin-right: 3px } }
 @media (max-width: 719px) { .wk.gs-cells .chip { inset: 2px } }
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 @media (max-width: 719px) { .min { top: auto; bottom: -5px; right: -4px; transform: none; font-size: 10px; padding: 0 3px } }      /* на телефоне — в правом нижнем углу, чтобы не закрывать кружок */
