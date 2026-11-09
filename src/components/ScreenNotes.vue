@@ -87,6 +87,14 @@ const text = ref(''), mode = ref(''), ta = ref(null), picker = ref(''), cargoMen
 const cargoOf = computed(() => CARGO.find((c) => c.id === mode.value))
 // меню посылок — position: fixed по кнопке: карточка обрезает всё, что выходит за её края (у новой заметки она низкая)
 const cmenuAt = ref({})
+// выбор реакции — тоже position: fixed над кнопкой: список сообщений прокручивается и обрезает всплывашку у верхнего сообщения
+const pickAt = ref({})
+function togglePick(e, id) {
+  if (picker.value === id) { picker.value = ''; return }
+  const r = e.currentTarget.getBoundingClientRect(), W = 6 * 32 + 8
+  pickAt.value = { left: Math.max(8, Math.min(innerWidth - W - 8, r.right - W)) + 'px', bottom: innerHeight - r.top + 4 + 'px' }
+  picker.value = id
+}
 function toggleCargo(e) {
   cargoMenu.value = !cargoMenu.value
   if (!cargoMenu.value) return
@@ -186,14 +194,14 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
       <button v-if="note" class="ib del" type="button" title="Удалить заметку" aria-label="Удалить заметку" @click="del(note)"><AppIcon name="trash" :size="15" /></button>
       <button class="ib" type="button" aria-label="Закрыть" @click="close"><AppIcon name="x" :size="14" /></button>
     </div>
-    <div v-if="note" class="msgs">
+    <div v-if="note" class="msgs" @scroll="picker = ''">
       <div v-for="m in note.msgs" :key="m.id" class="m">
         <span class="av" :style="{ '--c': m.color }"><img v-if="m.photo" :src="m.photo" alt="" referrerpolicy="no-referrer" /><b v-else>{{ ini(m.name) }}</b></span>
         <span class="mb">
           <span class="mh">{{ mine(m) ? 'Вы' : m.name }}<small>{{ time(m.at) }}</small>
             <button v-if="mine(m) && editing !== m.id" class="r add pen" type="button" title="Исправить" aria-label="Исправить сообщение" @click="startEdit(m)"><AppIcon name="pencil" :size="12" /></button>
-            <button class="r add" type="button" :aria-expanded="picker === m.id" title="Реакция" aria-label="Реакция" @click="picker = picker === m.id ? '' : m.id">+ 🙂</button>
-            <span v-if="picker === m.id" class="pick"><button v-for="e in REACTIONS" :key="e" type="button" @click="react(note.id, m.id, e); picker = ''">{{ e }}</button></span></span>
+            <button class="r add" type="button" :aria-expanded="picker === m.id" title="Реакция" aria-label="Реакция" @click="togglePick($event, m.id)">+ 🙂</button>
+            <span v-if="picker === m.id" class="pick" :style="pickAt"><button v-for="e in REACTIONS" :key="e" type="button" @click="react(note.id, m.id, e); picker = ''">{{ e }}</button></span></span>
           <textarea v-if="editing === m.id" v-model="editText" class="ed" rows="2" maxlength="1000" @keydown="onEditKey" @blur="saveEdit" />
           <span v-else class="mt">{{ m.text }}<small v-if="m.edited" class="edd"> (изм.)</small></span>
           <span v-if="reacts(m).length" class="re">
@@ -273,7 +281,7 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 .r { height: 24px; padding: 0 8px; border: 0; border-radius: 99px; background: var(--surface); font: inherit; font-size: 12.5px; font-weight: 800; color: var(--hint); cursor: pointer }
 .r.me { background: var(--blue-l); color: var(--blue-d, #1278b0); box-shadow: inset 0 0 0 1px var(--blue) }
 .r.add { opacity: 0; transition: opacity .1s } .m:hover .r.add, .r.add[aria-expanded='true'], .sheet .r.add { opacity: 1 }
-.pick { position: absolute; right: 0; bottom: calc(100% + 4px); z-index: 2; display: flex; gap: 2px; padding: 4px; border-radius: 99px; background: var(--card); box-shadow: 0 6px 18px rgba(0, 0, 0, .18), 0 0 0 1px var(--border) }
+.pick { position: fixed; z-index: 70; display: flex; gap: 2px; padding: 4px; border-radius: 99px; background: var(--card); box-shadow: 0 6px 18px rgba(0, 0, 0, .18), 0 0 0 1px var(--border) }
 .pick button { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: none; font-size: 17px; cursor: pointer } .pick button:hover { background: var(--surface) }
 .rd { padding: 0 14px 6px 52px; font-size: 11px; font-weight: 800; color: var(--hint-2) } .rd.ok { color: var(--blue) }
 .typ { display: flex; align-items: center; gap: 8px; padding: 0 14px 8px; font-size: 12px; font-weight: 800; color: var(--c) }
