@@ -19,9 +19,10 @@ export const review = reactive<{ items: Record<string, RItem>; sync: 'local' | '
 const pending = new Set<string>(read<string[]>(PEND, []))            // ключи, которые ещё не ушли на сервер
 const save = () => { write(KEY, review.items); write(PEND, [...pending]) }
 
-let timer: ReturnType<typeof setTimeout> | undefined, busy = false
+let timer: ReturnType<typeof setTimeout> | undefined, busy = false, inflight: Promise<void> = Promise.resolve()
 const later = (ms: number) => { clearTimeout(timer); timer = setTimeout(push, ms) }
-async function push() {
+function push() { inflight = pushNow(); return inflight }
+async function pushNow() {
   if (!online() || busy || !pending.size) return
   busy = true
   const keys = [...pending].slice(0, BATCH)
@@ -63,8 +64,11 @@ export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: numbe
   save(); if (online()) later(2000)
 }
 
-/** «Очистить» — свой словарь (и на сервере) */
-export async function resetReview() {
+/** «Очистить» — свой словарь целиком, и на сервере. Сначала ждём отправку, которая уже в пути, — иначе она вернула бы слова на сервер.
+ *  true — очищено (без сервера — только в этом браузере), false — сервер не ответил. */
+export async function resetReview(): Promise<boolean> {
+  clearTimeout(timer); await inflight.catch(() => {})
   review.items = {}; pending.clear(); save()
-  if (online()) try { await apiRequest('/review/reset', { method: 'POST', body: '{}' }) } catch { /* потом */ }
+  if (!online()) return true
+  try { const r = await apiRequest('/review/reset', { method: 'POST', body: '{}' }); return r.ok } catch { return false }
 }

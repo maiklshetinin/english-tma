@@ -7,7 +7,8 @@ import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
-import { recordStep, syncReview } from '../stores/review'
+import { recordStep, syncReview, review } from '../stores/review'
+import { hitsOf, keyOf, strengthNow, levelOf, exName } from '../utils/review'
 import { useAuthStore } from '../stores/auth'
 import BackButton from './BackButton.vue'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
@@ -86,7 +87,7 @@ const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 // Экраны учителя (если положил) + экраны из уроков этой Chapter, где ученик ошибся (прогресс с сервера; в «Как видит ученик» — ошибки
 // этого просмотра). Ошибок нет — проверяемые экраны из уроков Chapter, до CK_MAX, равномерно — чекпоинт не бывает пустым.
 const GRADED = ['choice', 'order', 'gap', 'pairs'], CK_MAX = 8
-const misses = new Set()                       // экраны с ошибкой в открытом сейчас уроке
+const misses = reactive(new Set())             // экраны с ошибкой в открытом сейчас уроке
 const localMiss = reactive({})                 // «Как видит ученик»: урок → экраны с ошибкой
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 function ckParts(x) {
@@ -116,10 +117,31 @@ function tap(x) {
   if (x.type === 'video' || x.type === 'photo') { inline.value = inline.value === x.id ? null : x.id; return }
   peek.value = peek.value === x.id ? null : x.id          // всё остальное — карточкой под заданием, без перехода на отдельную страницу
 }
-function go(x) { peek.value = null; open.value = x; t0 = Date.now(); misses.clear() }
+function go(x) { peek.value = null; open.value = x; t0 = Date.now(); misses.clear(); for (const k in snap) delete snap[k]; for (const k in rvLog) delete rvLog[k] }
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
-const onAnswer = (a) => { if (a.ok === false) misses.add(a.step.id); recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title }) }
+// итог урока: какие слова урок записал в Review и как изменилась их сила — чтобы сверять с разделом Review строка в строку
+const snap = reactive({})                      // ключ слова → сила до урока (null — новое)
+const rvLog = reactive({})                     // ключ слова → журнал: какой экран, как ответили, сколько силы (+15 / −20 / встретилось)
+const sOf = (k) => (review.items[k] ? Math.round(strengthNow(review.items[k])) : null)
+const onAnswer = (a) => {
+  if (a.ok === false) misses.add(a.step.id)
+  const hits = hitsOf(a.step, a), was = {}
+  for (const h of hits) { const k = keyOf(h.text); was[k] = sOf(k); if (!(k in snap)) snap[k] = was[k] }
+  recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title })
+  for (const h of hits) { const k = keyOf(h.text), now = sOf(k); (rvLog[k] ??= []).push({ ex: exName(a.step), ok: h.ok, d: was[k] == null ? null : now - was[k], now }) }
+}
+// итог урока: что уйдёт в чекпоинт этой Chapter (экраны с ошибкой) — для проверки, что автоматика сработала
+const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || ''
+const ckLog = computed(() => {
+  const x = open.value; if (!x || x.type === 'checkpoint') return null
+  const u = units.value.find(u => u.tasks.some(t => t.id === x.id))
+  const ck = u?.tasks.slice(u.tasks.findIndex(t => t.id === x.id) + 1).find(t => t.type === 'checkpoint')
+  if (!ck) return { none: true }
+  return { title: ck.title || 'Чекпоинт', items: (x.steps ?? []).filter(s => misses.has(s.id)).map(s => ({ id: s.id, ex: exName(s), w: stepWord(s) })) }
+})
+const rvWords = computed(() => Object.keys(snap).map(k => review.items[k] && { ...review.items[k], before: snap[k], now: Math.round(strengthNow(review.items[k])), log: rvLog[k] ?? [] }).filter(Boolean)
+  .map(x => ({ ...x, lv: levelOf(x.now) })).sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })))
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value ? stepsOf(open.value) : []))
@@ -194,7 +216,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
       <div v-if="open" class="full">
-        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" @answer="onAnswer" @done="finish(open, $event)" @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>

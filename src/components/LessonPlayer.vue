@@ -27,6 +27,8 @@ const props = defineProps({
   embedded: Boolean, pct: { type: Number, default: null }, stats: { type: Object, default: null },
   again: Boolean,                                         // на ветке в редакторе: ошибка → экран повторится в конце ветки (emit next с again)
   track: Boolean,                                         // ученик проходит урок — ответы уходят в Review (emit 'answer')
+  ckLog: { type: Object, default: null },                 // итог: что уйдёт в чекпоинт Chapter — { title, items: [{ ex, w }] } или { none: true }
+  review: { type: Array, default: null },                 // итог: слова, которые урок записал в Review, — { text, tr, kind, audio, before, now, lv } (CourseViewer)
 })
 const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer', 'miss'])
 
@@ -171,7 +173,26 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       <svg class="thumb" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="var(--yellow)" /><path d="M20 30h7l6-12c3 0 4.5 2 4 5l-1.5 6H45a3.5 3.5 0 0 1 3.4 4.3l-3 11A4 4 0 0 1 41.5 47H27l-7-2z" fill="#fff" /><rect x="15" y="29" width="7" height="18" rx="2" fill="#fff" /></svg>
       <h2>Отлично{{ name ? ', ' + name : '' }}!</h2>
       <div class="tiles"><div><small>Время</small><b>{{ single || (embedded && !stats) ? '—' : time }}</b></div><div><small>Верно</small><b>{{ single || (embedded && !stats) ? '—' : acc + '%' }}</b></div><div><small>Экранов</small><b>{{ steps.length }}</b></div></div>
-      <div v-if="words.length" class="wl">
+      <!-- слова урока так, как они легли в Review: уровень и изменение силы (сверять с разделом Review строка в строку) -->
+      <div v-if="review?.length" class="wl rvw">
+        <div class="wh">Слова урока → Review<span class="rsum">окрепло {{ review.filter(x => x.before != null && x.now > x.before).length }} · новых {{ review.filter(x => x.before == null).length }} · ослабло {{ review.filter(x => x.before != null && x.now < x.before).length }}</span></div>
+        <div v-for="x in review" :key="x.key" class="wr rv">
+          <button v-if="x.audio" class="say" title="Послушать" @click="say(x.audio)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button><span v-else class="say no" />
+          <span class="rt"><b>{{ x.text }}</b><small>{{ x.kind === 'phrase' ? 'Фраза' : 'Слово' }}{{ x.tr ? ' · ' + x.tr : '' }}</small></span>
+          <span class="rs" :class="x.lv"><i class="f" /><i :class="{ f: x.lv !== 'weak' }" /><i :class="{ f: x.lv === 'strong' }" />{{ { weak: 'Слабое', medium: 'Среднее', strong: 'Сильное' }[x.lv] }}</span>
+          <span class="rd" :class="x.before == null ? 'nw' : x.now > x.before ? 'up' : x.now < x.before ? 'dn' : ''">{{ x.before == null ? `новое · ${x.now}` : x.now === x.before ? `${x.now} · без изм.` : `${x.before} → ${x.now} ${x.now > x.before ? '↑' : '↓'}` }}</span>
+          <!-- журнал: каждый экран урока, где было слово, и что он дал силе -->
+          <span v-if="x.log?.length" class="rlog"><span v-for="(e, n) in x.log" :key="n" :class="e.ok === true ? 'ly' : e.ok === false ? 'lx' : ''">{{ e.ex }}: {{ e.ok === true ? 'верно' : e.ok === false ? 'ошибка' : 'встретилось' }}{{ e.d == null ? ` → ${e.now} (новое)` : e.d ? ` ${e.d > 0 ? '+' : ''}${e.d} → ${e.now}` : '' }}</span></span>
+        </div>
+      </div>
+      <!-- что уйдёт в чекпоинт Chapter -->
+      <div v-if="ckLog" class="wl ckl">
+        <div class="wh">В чекпоинт Chapter<span v-if="!ckLog.none" class="rsum">«{{ ckLog.title }}»</span></div>
+        <p v-if="ckLog.none" class="ckn">В этой Chapter нет чекпоинта — ошибки никуда не уходят.</p>
+        <p v-else-if="!ckLog.items.length" class="ckn">Ошибок нет — в чекпоинт ничего не добавится (без ошибок он соберётся из заданий уроков Chapter).</p>
+        <div v-for="c in ckLog.items" v-else :key="c.id" class="wr ck"><span class="ckx">!</span><b>{{ c.ex }}</b><small>{{ c.w }}</small></div>
+      </div>
+      <div v-else-if="words.length" class="wl">
         <div class="wh">Слова урока</div>
         <div v-for="x in words" :key="x.w" class="wr"><button v-if="x.a" class="say" title="Послушать" @click="say(x.a)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button><span v-else class="say no" /><b>{{ x.w }}</b><small>{{ x.t }}</small></div>
       </div>
@@ -398,6 +419,14 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .wl { width: 100%; display: grid; gap: 6px; text-align: left } .wh { font-size: 12px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .wr { display: grid; grid-template-columns: 30px auto 1fr; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface) }
 .wr b { font-size: 14px } .wr small { font-size: 12px; color: var(--hint); font-weight: 600 }
+.wr.rv .rlog { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px } .rlog span { flex: none; white-space: nowrap; font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 7px; background: #eceef1; color: #555 } .rlog .ly { background: #e3f6d5; color: #3d8c00 } .rlog .lx { background: #ffe1e1; color: #c62828 }          /* не .x — так называется крестик закрытия */
+.ckn { margin: 0; font-size: 13px; font-weight: 700; color: var(--hint) } .wr.ck { grid-template-columns: 24px auto 1fr } .ckx { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #9747ff; color: #fff; font-size: 12px; font-weight: 900 }
+.wh .rsum { margin-left: 8px; text-transform: none; letter-spacing: 0; font-weight: 700 }
+.wr.rv { grid-template-columns: 30px minmax(0, 1fr) auto auto; gap: 10px } .rt { display: grid; min-width: 0 } .rt b { overflow-wrap: anywhere }
+.rs { display: flex; align-items: flex-end; gap: 2px; font-size: 12px; font-weight: 800; white-space: nowrap } .rs i { width: 4px; border-radius: 1px; background: #dfe2e6 } .rs i:nth-child(1) { height: 6px } .rs i:nth-child(2) { height: 9px } .rs i:nth-child(3) { height: 12px; margin-right: 5px }
+.rs.weak i.f { background: #ff4b4b } .rs.medium i.f { background: #ff9600 } .rs.strong i.f { background: #58cc02 }
+.rd { min-width: 82px; text-align: right; font-size: 12px; font-weight: 900; color: var(--hint); white-space: nowrap } .rd.up { color: #3d8c00 } .rd.dn { color: #d32f2f } .rd.nw { color: #1278b0 }
+@media (max-width: 480px) { .wr.rv { grid-template-columns: 30px minmax(0, 1fr) auto; row-gap: 2px } .wr.rv .rd { grid-column: 2 / -1; text-align: left; min-width: 0 } }
 .say { width: 28px; height: 28px; border: 0; border-radius: 50%; background: #fff; display: grid; place-items: center; cursor: pointer; padding: 0 } .say.no { background: none }
 .say svg { width: 16px; height: 16px; fill: none; stroke: var(--blue); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
 /* низ */

@@ -51,4 +51,22 @@ describe('stores/review', () => {
     const post = apiRequest.mock.calls.find((c) => c[1]?.method === 'POST')
     expect(Object.keys(JSON.parse(post![1].body).items)).toEqual(['x'])
   })
+
+  it('«Очистить»: сначала дожидается отправки в пути, потом сброс на сервере — слова не возвращаются', async () => {
+    const order: string[] = []
+    let release!: () => void
+    apiRequest.mockImplementation((p: string, o?: RequestInit) => {
+      if (p === '/review' && o?.method === 'POST') { order.push('save'); return new Promise((r) => { release = () => r({ ok: true, status: 200, json: async () => ({}) } as Response) }) }
+      if (p === '/review/reset') { order.push('reset'); return ok({ ok: true }) }
+      return ok({ items: {} })
+    })
+    const { recordStep, resetReview, review } = await import('./review')
+    recordStep(choice, { ok: true })
+    await vi.advanceTimersByTimeAsync(2500)                    // отправка ушла и висит
+    const done = resetReview()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(order).toEqual(['save'])                            // сброс ждёт
+    release(); expect(await done).toBe(true)
+    expect(order).toEqual(['save', 'reset']); expect(review.items).toEqual({})
+  })
 })

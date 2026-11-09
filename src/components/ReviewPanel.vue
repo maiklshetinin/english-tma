@@ -3,6 +3,8 @@
 // Нажал на строку — история: где встречалось, верно / ошибка, когда повторить. Пока — данные этого браузера (stores/review.ts).
 import { ref, computed } from 'vue'
 import { review, resetReview } from '../stores/review'
+import { ask } from '../composables/useDialog'
+import { showToast } from '../composables/useToast'
 import { strengthNow, levelOf, R } from '../utils/review'
 
 const props = defineProps({
@@ -24,7 +26,13 @@ let au = null
 const play = (x) => { if (!x.audio) return; au?.pause(); au = new Audio(props.resolve(x.audio, 'audio')); au.play().catch(() => {}) }
 const days = (t) => { const d = Math.round((t - Date.now()) / 86_400_000); return d <= 0 ? 'сегодня' : d === 1 ? 'завтра' : `через ${d} дн.` }
 const when = (t) => new Date(t).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-const reset = () => { resetReview(); openKey.value = null }
+// «Очистить» — с подтверждением; удаляется весь словарь (и на сервере), прохождение курса не меняется
+async function reset() {
+  if (!(await ask('Очистить словарь?', { text: 'Все слова и фразы и их сила удалятся — и на сервере, на всех устройствах. Прохождение курса не меняется.', ok: 'Очистить', danger: true }))) return
+  openKey.value = null
+  if (await resetReview()) showToast('Словарь очищен')
+  else showToast('Не удалось очистить на сервере — попробуйте ещё раз', null, 'bad')
+}
 </script>
 
 <template>
