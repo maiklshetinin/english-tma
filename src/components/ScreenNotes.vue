@@ -85,6 +85,14 @@ const ini = (s) => (s || '?').trim()[0]?.toUpperCase() || '?'
 // mode: '' — обычное сообщение, 'bell' — всплывающим уведомлением, id посылки — спустить на парашюте (меню «Что доставить»)
 const text = ref(''), mode = ref(''), ta = ref(null), picker = ref(''), cargoMenu = ref(false)
 const cargoOf = computed(() => CARGO.find((c) => c.id === mode.value))
+// меню посылок — position: fixed по кнопке: карточка обрезает всё, что выходит за её края (у новой заметки она низкая)
+const cmenuAt = ref({})
+function toggleCargo(e) {
+  cargoMenu.value = !cargoMenu.value
+  if (!cargoMenu.value) return
+  const r = e.currentTarget.getBoundingClientRect(), W = 236
+  cmenuAt.value = { left: Math.max(8, Math.min(innerWidth - W - 8, r.right + 40 - W)) + 'px', bottom: innerHeight - r.top + 8 + 'px' }
+}
 function pickCargo(id) { mode.value = mode.value === id ? '' : id; cargoMenu.value = false }
 function send() {
   const t = text.value.trim(); if (!t) return
@@ -200,11 +208,11 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
       <textarea ref="ta" v-model="text" rows="1" :placeholder="note ? 'Ответить…' : 'Напишите — увидят все, кто в приложении'" maxlength="1000" @keydown="onKey" />
       <button class="bell" :class="{ on: mode === 'bell' }" type="button" :aria-pressed="mode === 'bell'" :title="mode === 'bell' ? 'Отправится уведомлением: у коллег всплывёт плашка' : 'Отправить уведомлением — у коллег всплывёт плашка, пока не закроют'" @click="mode = mode === 'bell' ? '' : 'bell'; cargoMenu = false"><AppIcon name="bell" :size="16" /></button>
       <span class="cw">
-        <button class="bell chute" :class="{ on: cargoOf }" type="button" :aria-pressed="!!cargoOf" :aria-expanded="cargoMenu" :title="cargoOf ? `Отправится на парашюте: ${cargoOf.title}` : 'Отправить на парашюте — посылкой'" @click="cargoMenu = !cargoMenu">
+        <button class="bell chute" :class="{ on: cargoOf }" type="button" :aria-pressed="!!cargoOf" :aria-expanded="cargoMenu" :title="cargoOf ? `Отправится на парашюте: ${cargoOf.title}` : 'Отправить на парашюте — посылкой'" @click="toggleCargo">
           <template v-if="cargoOf"><svg v-if="!cargoOf.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ cargoOf.em }}</span></template>
           <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 0 1 18 0Z" /><path d="M3 11l8 8M21 11l-8 8M12 11v8" /><rect x="10" y="18" width="4" height="4" rx="1" /></svg>
         </button>
-        <span v-if="cargoMenu" class="cmenu" role="menu" aria-label="Что доставить">
+        <span v-if="cargoMenu" class="cmenu" :style="cmenuAt" role="menu" aria-label="Что доставить">
           <b>Что доставить на парашюте</b>
           <span class="cgrid"><button v-for="c in CARGO" :key="c.id" class="cg" :class="{ on: mode === c.id }" type="button" role="menuitemradio" :aria-checked="mode === c.id" @click="pickCargo(c.id)"><svg v-if="!c.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ c.em }}</span>{{ c.title }}</button></span>
         </span>
@@ -278,7 +286,7 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 .bell, .go { flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer }
 .bell { background: none; color: var(--hint) } .bell:hover { background: var(--surface) } .bell.on { background: var(--orange-l); color: var(--orange-d) }
 .cw { position: relative; display: grid } .chute .ce { font-size: 18px; line-height: 1 } .chute .mc { width: 22px; height: 19px } .cg .mc { width: 32px; height: 32px } .bell.chute.on { background: #ffe6e6; color: #e5484d }
-.cmenu { position: absolute; right: -40px; bottom: calc(100% + 8px); z-index: 3; width: 236px; padding: 10px; border-radius: 14px; background: var(--card); box-shadow: 0 12px 34px rgba(0, 0, 0, .2), 0 0 0 1px var(--border) }
+.cmenu { position: fixed; z-index: 70; width: 236px; padding: 10px; border-radius: 14px; background: var(--card); box-shadow: 0 12px 34px rgba(0, 0, 0, .2), 0 0 0 1px var(--border) }
 .cmenu b { display: block; padding: 0 2px 8px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .cgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px }
 .cg { display: grid; justify-items: center; gap: 2px; padding: 8px 2px 6px; border: 0; border-radius: 10px; background: var(--surface); font: inherit; font-size: 11px; font-weight: 800; color: var(--hint); cursor: pointer }
