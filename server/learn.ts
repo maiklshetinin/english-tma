@@ -10,7 +10,7 @@ import { id as cleanId } from './clean.js'
 import type { TokenUser } from './types.js'
 import type { Course, CourseItem } from './courses.js'
 
-export interface LessonRun { ok: number; all: number; sec: number; at: number }
+export interface LessonRun { ok: number; all: number; sec: number; at: number; miss?: string[] }          // miss — экраны урока, где ученик ошибся (из них собирается чекпоинт Chapter)
 export interface CourseRun { done: number; lessons: Record<string, LessonRun> }
 export interface LearnDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; get: (id: unknown) => Promise<Course & { assigned?: string[] }>; filesOf: (c: Course) => string[]; now?: () => number }
 
@@ -71,6 +71,12 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
       if (n < 0) throw fail(400, 'bad item')
       const res: LessonRun = { ok: int(b.ok, 1000), all: int(b.all, 1000), sec: int(b.sec, 24 * 3600), at: now() }
       if (res.ok > res.all) throw fail(400, 'bad score')
+      if (b.miss != null) {                      // экраны с ошибкой — только этого задания
+        if (!Array.isArray(b.miss) || b.miss.length > 200) throw fail(400, 'bad miss')
+        const own = new Set((tasksOf(c)[n].steps ?? []).map((s) => (s as { id?: string }).id))
+        const miss = [...new Set(b.miss.map(String))].filter((x) => own.has(x))
+        if (miss.length) res.miss = miss
+      }
       let out: CourseRun = { done: 0, lessons: {} }
       await db.runTransaction(async (tx) => {
         const ref = progress().doc(sid), all: Record<string, CourseRun> = (await tx.get(ref)).data()?.c ?? {}

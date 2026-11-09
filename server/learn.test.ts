@@ -14,7 +14,7 @@ store.set('students/s1', { name: 'Маша', archived: false, tgId: 10 })
 store.set('students/s2', { name: 'Петя', archived: false, tgId: 11 })
 const masha: TokenUser = { uid: 'tg:10', role: 'student', studentId: 's1' }
 const petya: TokenUser = { uid: 'tg:11', role: 'student', studentId: 's2' }
-const course = { title: 'A1', items: [{ id: 'u1', type: 'unit', title: 'Chapter 1' }, { id: 'a', type: 'lesson', title: 'Урок 1' },
+const course = { title: 'A1', items: [{ id: 'u1', type: 'unit', title: 'Chapter 1' }, { id: 'a', type: 'lesson', title: 'Урок 1', steps: [{ id: 's1', kind: 'choice', q: 'Hi', opts: [{ w: 'a' }, { w: 'b' }], ans: 0 }, { id: 's2', kind: 'choice', q: 'Yo', opts: [{ w: 'a' }, { w: 'b' }], ans: 1 }] },
   { id: 'v', type: 'video', title: 'Кружок', file: 't/tg_1/c/k1/x.mp4' }, { id: 'b', type: 'lesson', title: 'Урок 2' }], loose: [{ id: 'l', type: 'photo', title: '', file: 't/tg_1/c/k1/secret.jpg', x: 0, y: 0 }] }
 await C.put('tg:1', 'k1', course)
 await C.put('tg:1', 'k2', { ...course, title: 'B1', items: [{ id: 'z', type: 'video', title: '', file: 't/tg_1/c/k2/y.mp4' }] })
@@ -37,6 +37,8 @@ ok('несуществующий ученик — 404', (await code(L.assign('k1
 ok('перескочить вперёд нельзя — 409', (await code(L.done(masha, 'k1', { itemId: 'b', ok: 1, all: 1, sec: 5 }))) === 409)
 let r = await L.done(masha, 'k1', { itemId: 'a', ok: 3, all: 4, sec: 60 })
 ok('урок 1 пройден: done 1, результат', r.done === 1 && r.lessons.a.ok === 3 && r.lessons.a.at === 1000)
+ok('ошибки урока сохраняются (только его экраны)', (await L.done(masha, 'k1', { itemId: 'a', ok: 1, all: 2, miss: ['s2', 'чужой', 's2'] })).lessons.a.miss?.join() === 's2')
+ok('miss не массив — 400', (await code(L.done(masha, 'k1', { itemId: 'a', miss: 'x' }))) === 400)
 r = await L.done(masha, 'k1', { itemId: 'v' })
 ok('кружок отмечен', r.done === 2)
 r = await L.done(masha, 'k1', { itemId: 'a', ok: 4, all: 4, sec: 50 })

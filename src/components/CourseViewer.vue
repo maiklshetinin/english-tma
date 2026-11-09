@@ -2,7 +2,7 @@
 // «Как видит ученик»: просмотрщик курсов на вкладке «Курсы». Курс — тем же рельсом, что в редакторе (юниты с процентом,
 // кружки заданий с теми же значками, «Сейчас»). Нажал урок — он запускается во весь экран, как в Busuu; кружок и фото — тоже во весь экран.
 // Ничего не правит: править — «Открыть в редакторе». Курсы — с сервера (без сервера — один курс из этого браузера, как в редакторе).
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { useCourseMedia } from '../composables/useCourseMedia'
@@ -71,13 +71,38 @@ const done = computed(() => Math.min(props.student ? run.value.done : course.val
 // ученик прошёл задание (урок — по «Готово» в итоге; кружок, фото, занятие — кнопкой) → на сервер, «Сейчас» переезжает дальше
 let t0 = 0
 async function finish(x, sc = {}) {
+  if (x && x.type !== 'checkpoint') localMiss[x.id] = [...misses]           // «Как видит ученик»: чекпоинт соберётся из этих ошибок
   if (!props.student || !x) return
-  const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0 }
+  const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0, ...(x.type !== 'checkpoint' && misses.size ? { miss: [...misses] } : {}) }
   try { const r = await apiRequest(`/my/courses/${props.id}/done`, { method: 'POST', body: JSON.stringify(body) }); if (r.ok) run.value = await r.json() } catch { /* без сети — пройдёт ещё раз */ }
 }
 const markDone = (x) => { finish(x); peek.value = null; inline.value = null }
 const canMark = (x) => props.student && state(x) === 'current'
-const ready = (x) => INTERACTIVE.includes(x.type) && (x.steps ?? []).some(s => !stepIssue(s))
+const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
+
+// ---------- Чекпоинт собирается сам ----------
+// Экраны учителя (если положил) + экраны из уроков этой Chapter, где ученик ошибся (прогресс с сервера; в «Как видит ученик» — ошибки
+// этого просмотра). Ошибок нет — проверяемые экраны из уроков Chapter, до CK_MAX, равномерно — чекпоинт не бывает пустым.
+const GRADED = ['choice', 'order', 'gap', 'pairs'], CK_MAX = 8
+const misses = new Set()                       // экраны с ошибкой в открытом сейчас уроке
+const localMiss = reactive({})                 // «Как видит ученик»: урок → экраны с ошибкой
+const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
+function ckParts(x) {
+  const u = units.value.find(u => u.tasks.some(t => t.id === x.id))
+  const before = u ? u.tasks.slice(0, u.tasks.findIndex(t => t.id === x.id)) : []
+  const pool = before.filter(t => t.type !== 'checkpoint').flatMap(t => okSteps(t).filter(s => GRADED.includes(s.kind)).map(s => ({ s, from: t.id })))
+  const missOf = (id) => (props.student ? run.value.lessons?.[id]?.miss : localMiss[id]) ?? []
+  const weak = pool.filter(p => missOf(p.from).includes(p.s.id)).map(p => p.s)
+  const own = okSteps(x), seen = new Set(own.map(s => s.id))
+  let auto = weak.filter(s => !seen.has(s.id))
+  const fromErrors = auto.length > 0
+  if (!fromErrors && pool.length) {            // ошибок нет — по экрану из каждого урока по очереди, до CK_MAX
+    const step = Math.max(1, pool.length / CK_MAX)
+    auto = Array.from({ length: Math.min(CK_MAX, pool.length) }, (_, k) => pool[Math.floor(k * step)].s).filter(s => !seen.has(s.id))
+  }
+  return { own, auto, fromErrors }
+}
+const stepsOf = (x) => { if (x.type !== 'checkpoint') return okSteps(x); const p = ckParts(x); return [...p.own, ...p.auto] }
 
 // открыто в рамке: урок (экраны), кружок, фото или «пусто»
 const open = ref(null)
@@ -89,14 +114,13 @@ function tap(x) {
   if (x.type === 'video' || x.type === 'photo') { inline.value = inline.value === x.id ? null : x.id; return }
   peek.value = peek.value === x.id ? null : x.id          // всё остальное — карточкой под заданием, без перехода на отдельную страницу
 }
-const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
-function go(x) { peek.value = null; open.value = x; t0 = Date.now() }
+function go(x) { peek.value = null; open.value = x; t0 = Date.now(); misses.clear() }
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
-const onAnswer = (a) => recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title })
+const onAnswer = (a) => { if (a.ok === false) misses.add(a.step.id); recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title }) }
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
-const steps = computed(() => (open.value?.steps ?? []).filter(s => !stepIssue(s)))
+const steps = computed(() => (open.value ? stepsOf(open.value) : []))
 
 // файлы курса: свой ключ в S3, «idb:» из этого браузера, остальное — как в карточках (composables/useCourseMedia)
 const { resolve, local } = useCourseMedia(online)
@@ -130,19 +154,20 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
-          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<span v-if="x.sub" class="csub">{{ x.sub }}</span><small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${lessonMin(okSteps(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
+          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<span v-if="x.sub" class="csub">{{ x.sub }}</span><small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${lessonMin(stepsOf(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
           <!-- карточка урока перед стартом -->
           <div v-if="peek === x.id" class="pv" @click.stop>
-            <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ (T[x.type] ?? T.lesson).t }}</small><small v-if="ready(x)">≈ {{ lessonMin(okSteps(x)) }} мин</small></div>
+            <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ (T[x.type] ?? T.lesson).t }}</small><small v-if="ready(x)">≈ {{ lessonMin(stepsOf(x)) }} мин</small></div>
             <b>{{ x.title || (T[x.type] ?? T.lesson).t }}</b>
             <p v-if="x.sub" class="psub">{{ x.sub }}</p>
             <template v-if="!ready(x)">
-              <p>{{ x.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : x.type === 'reward' ? 'Награда за пройденный Chapter.' : 'В этом уроке пока нет экранов — их собирают в редакторе («Интерактив»).' }}</p>
+              <p>{{ x.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : x.type === 'reward' ? 'Награда за пройденный Chapter.' : x.type === 'checkpoint' ? 'Чекпоинт собирается сам из уроков этой Chapter, но в них пока нет проверяемых экранов (выбор, пары, собрать, пропуск).' : 'В этом уроке пока нет экранов — их собирают в редакторе («Интерактив»).' }}</p>
               <button v-if="canMark(x)" class="pgo" @click="markDone(x)">Готово — дальше</button>
               <button v-else-if="INTERACTIVE.includes(x.type) && !student" class="pgo ghost" @click="edit">Открыть в редакторе</button>
             </template>
             <template v-else>
-            <p>{{ screens(okSteps(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
+            <p>{{ screens(stepsOf(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
+            <p v-if="x.type === 'checkpoint'" class="cka">{{ ckParts(x).fromErrors ? `Собран сам: ${ckParts(x).auto.length} — где ${student ? 'вы ошибались' : 'были ошибки'} в уроках Chapter` : `Собран сам из уроков Chapter: ${ckParts(x).auto.length}` }}{{ ckParts(x).own.length ? ` + ${ckParts(x).own.length} от преподавателя` : '' }}</p>
             <!-- пройденный — как в Busuu: повторить навыки (в разработке) или пройти урок заново -->
             <template v-if="state(x) === 'done'">
               <button class="pgo" @click="peek = null; router.push({ name: 'review' })">Повторить навыки</button>
@@ -221,6 +246,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
 .vrow > .bead { margin: 31px 0 }
 .pgo:disabled { opacity: .55; cursor: default }
+.cka { font-size: 13px; font-weight: 800; opacity: .9 }
 .kin { flex: 0 0 100%; padding: 4px 0 18px 64px; position: relative; z-index: 1 } .kin .pgo { margin-top: 10px; max-width: 280px; --d: #1a8bc9 }
 .kbig { display: block; width: 260px; height: 260px; border-radius: 50%; object-fit: cover; background: #000; cursor: pointer; box-shadow: 0 0 0 4px #fff, 0 0 0 7px #2aabee }
 .pbig { display: block; max-width: 100%; max-height: 420px; border-radius: 16px }

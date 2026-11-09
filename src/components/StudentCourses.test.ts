@@ -49,4 +49,21 @@ describe('курс у ученика', () => {
     expect(apiRequest.mock.calls.some((c) => c[0] === '/my/courses/k1/done' && JSON.parse(c[1].body).itemId === 'v')).toBe(true)
     expect(w.find('.cpill').text()).toContain('2 из 3')
   })
+
+  it('чекпоинт собирается сам: экраны уроков Chapter, где ученик ошибся; ошибок нет — экраны уроков Chapter', async () => {
+    const ch = (id: string, ans: number) => ({ id, kind: 'choice', q: 'Как сказать «привет»?', opts: [{ w: 'Hello', t: 'привет' }, { w: 'Bye', t: 'пока' }], ans })
+    const items = [{ id: 'u1', type: 'unit', title: 'Chapter 1' }, { id: 'a', type: 'lesson', title: 'Урок 1', steps: [ch('s1', 0), ch('s2', 0), ch('s3', 0)] }, { id: 'ck', type: 'checkpoint', title: 'Чекпоинт' }]
+    let miss: string[] = ['s2']
+    apiRequest.mockImplementation((p: string) => (p === '/my/courses/k1' ? ok({ id: 'k1', title: 'A1', items, run: { done: 1, lessons: { a: { ok: 2, all: 3, sec: 1, at: 1, miss } } } }) : ok({ items: {} })))
+    let w = mount(CourseViewer, { props: { id: 'k1', student: true }, global: { stubs: { Teleport: true } } })
+    await flushPromises()
+    await w.findAll('.vrow')[1].find('.cap').trigger('click')
+    expect(w.find('.pv').text()).toContain('1 экран'); expect(w.find('.cka').text()).toContain('Собран сам: 1 — где вы ошибались')
+    expect(w.find('.pv').text()).not.toContain('Готово — дальше')
+    miss = []; w.unmount()
+    w = mount(CourseViewer, { props: { id: 'k1', student: true }, global: { stubs: { Teleport: true } } })
+    await flushPromises()
+    await w.findAll('.vrow')[1].find('.cap').trigger('click')
+    expect(w.find('.cka').text()).toContain('Собран сам из уроков Chapter: 3')
+  })
 })
