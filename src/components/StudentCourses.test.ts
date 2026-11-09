@@ -21,6 +21,7 @@ describe('курс у ученика', () => {
     let assigned = false
     apiRequest.mockImplementation((p: string, o?: RequestInit) => {
       if (p.endsWith('/assign')) { assigned = JSON.parse(String(o!.body)).on; return ok({ ok: true }) }
+      if (p === '/courses/k1') return ok({ id: 'k1', title: 'A1', progress: 0, items: [{ id: 'u1', type: 'unit', title: 'Chapter 1' }, ...tasks] })
       return ok({ courses: [{ id: 'k1', title: 'A1', total: 3, assigned, tasks, run: { done: assigned ? 1 : 0, lessons: assigned ? { a: { ok: 3, all: 4, sec: 90, at: Date.now() } } : {} } }] })
     })
     const w = mount(StudentCourses, { props: { studentId: 's1' } })
@@ -29,7 +30,7 @@ describe('курс у ученика', () => {
     await w.find('.top .btn').trigger('click'); await flushPromises()
     expect(apiRequest.mock.calls.find((c) => c[0] === '/courses/k1/assign')![1].body).toBe(JSON.stringify({ studentId: 's1', on: true }))
     expect(w.text()).toContain('1 из 3 · 33%')
-    await w.find('.more').trigger('click')
+    expect(w.find('.path .cpill').text()).toContain('1 из 3')            // путь ученика открыт сразу: его рельс с его прогрессом
     const li = w.findAll('.tl li')
     expect(li[0].classes()).toContain('d'); expect(li[0].text()).toContain('75%'); expect(li[0].text()).toContain('3 из 4')
     expect(li[1].text()).toContain('Сейчас'); expect(li[2].classes()).toContain('t')

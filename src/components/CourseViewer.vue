@@ -18,6 +18,7 @@ const LOCAL = 'tma.courseRail.v1'
 const props = defineProps({
   id: { type: String, default: null },                // выбранный курс (из списка курсов)
   student: Boolean,                                   // ученик проходит свой назначенный курс: свой прогресс с сервера (server/learn.ts)
+  of: { type: Object, default: null },                // карточка ученика у преподавателя: его прохождение { done, lessons } — путь, как его видит ученик
 })          // выбранный курс (из списка курсов)
 const course = ref(null), err = ref(''), loading = ref(false)
 const onEsc = (e) => { if (e.key !== 'Escape') return; if (open.value) open.value = null; else peek.value = null }
@@ -67,7 +68,8 @@ const units = computed(() => {
 const total = computed(() => (course.value?.items ?? []).filter(x => x.type !== 'unit').length)
 // у ученика — свой прогресс (сколько заданий подряд пройдено); в «Как видит ученик» — прогресс из редактора
 const run = ref({ done: 0, lessons: {} })
-const done = computed(() => Math.min(props.student ? run.value.done : course.value?.progress ?? 0, total.value))
+const mine = computed(() => (props.of ? { done: 0, lessons: {}, ...props.of } : run.value))          // чьё прохождение показываем
+const done = computed(() => Math.min(props.student || props.of ? mine.value.done : course.value?.progress ?? 0, total.value))
 // ученик прошёл задание (урок — по «Готово» в итоге; кружок, фото, занятие — кнопкой) → на сервер, «Сейчас» переезжает дальше
 let t0 = 0
 async function finish(x, sc = {}) {
@@ -91,7 +93,7 @@ function ckParts(x) {
   const u = units.value.find(u => u.tasks.some(t => t.id === x.id))
   const before = u ? u.tasks.slice(0, u.tasks.findIndex(t => t.id === x.id)) : []
   const pool = before.filter(t => t.type !== 'checkpoint').flatMap(t => okSteps(t).filter(s => GRADED.includes(s.kind)).map(s => ({ s, from: t.id })))
-  const missOf = (id) => (props.student ? run.value.lessons?.[id]?.miss : localMiss[id]) ?? []
+  const missOf = (id) => (props.student || props.of ? mine.value.lessons?.[id]?.miss : localMiss[id]) ?? []
   const weak = pool.filter(p => missOf(p.from).includes(p.s.id)).map(p => p.s)
   const own = okSteps(x), seen = new Set(own.map(s => s.id))
   let auto = weak.filter(s => !seen.has(s.id))
@@ -132,7 +134,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
 <template>
   <div class="cv">
-    <h3 v-if="!student" class="vh">Как видит ученик <small>нажмите на урок — покажется его время и «Поехали!»</small></h3>
+    <h3 v-if="!student && !of" class="vh">Как видит ученик <small>нажмите на урок — покажется его время и «Поехали!»</small></h3>
     <!-- как в Busuu: «Уроки» и «Review» (слова и фразы из пройденных уроков) -->
     <p v-if="err" class="hint">Не удалось загрузить курс {{ err }}</p>
     <div v-if="loading || !course" class="card hint none">{{ loading ? 'Загрузка…' : 'Выберите курс выше' }}</div>
@@ -167,7 +169,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             </template>
             <template v-else>
             <p>{{ screens(stepsOf(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
-            <p v-if="x.type === 'checkpoint'" class="cka">{{ ckParts(x).fromErrors ? `Собран сам: ${ckParts(x).auto.length} — где ${student ? 'вы ошибались' : 'были ошибки'} в уроках Chapter` : `Собран сам из уроков Chapter: ${ckParts(x).auto.length}` }}{{ ckParts(x).own.length ? ` + ${ckParts(x).own.length} от преподавателя` : '' }}</p>
+            <p v-if="x.type === 'checkpoint'" class="cka">{{ ckParts(x).fromErrors ? `Собран сам: ${ckParts(x).auto.length} — где ${student ? 'вы ошибались' : of ? 'ученик ошибался' : 'были ошибки'} в уроках Chapter` : `Собран сам из уроков Chapter: ${ckParts(x).auto.length}` }}{{ ckParts(x).own.length ? ` + ${ckParts(x).own.length} от преподавателя` : '' }}</p>
             <!-- пройденный — как в Busuu: повторить навыки (в разработке) или пройти урок заново -->
             <template v-if="state(x) === 'done'">
               <button class="pgo" @click="peek = null; router.push({ name: 'review' })">Повторить навыки</button>
@@ -192,7 +194,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
       <div v-if="open" class="full">
-        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" track @answer="onAnswer" @done="finish(open, $event)" @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" @answer="onAnswer" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>
