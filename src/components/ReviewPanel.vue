@@ -3,11 +3,11 @@
 // Нажал на строку — история: где встречалось, верно / ошибка, когда повторить. Пока — данные этого браузера (stores/review.ts).
 import { ref, computed } from 'vue'
 import { review, resetReview } from '../stores/review'
-import { strengthNow, levelOf } from '../utils/review'
+import { strengthNow, levelOf, R } from '../utils/review'
 
 const props = defineProps({ resolve: { type: Function, required: true } })
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
-const filter = ref('all'), openKey = ref(null)
+const filter = ref('all'), openKey = ref(null), how = ref(false)
 const list = computed(() => Object.values(review.items).map(x => { const s = strengthNow(x); return { ...x, now: s, lv: levelOf(s) } })
   .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })))
 const count = (lv) => list.value.filter(x => x.lv === lv).length
@@ -31,6 +31,18 @@ const reset = () => { resetReview(); openKey.value = null }
           <span class="jar"><i :style="{ height: (count(lv) ? Math.max(8, count(lv) / max * 100) : 0) + '%' }" /></span>
           <span><b>{{ count(lv) }}</b>{{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</span>
         </div>
+      </div>
+      <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button>
+      <div v-if="how" class="how">
+        <p><b>1. Что сюда попадает.</b> Каждое слово и фраза из экранов уроков, которые ты прошёл: «Новое слово», «Подсказка», «Выбери ответ», «Пары», «Собери слово / фразу», «Заполни пропуск», «Повтори». Одно-два слова — это <i>слово</i>, длиннее — <i>фраза</i>. Одинаковые записи (без учёта регистра и точки в конце) — одна строка.</p>
+        <p><b>2. Сила 0–100.</b> Новое слово появляется с силой {{ R.NEW }}. Верный ответ — +{{ R.OK }}, ошибка — {{ R.BAD }}. Экраны без проверки («Новое слово», «Подсказка», «Повтори») только отмечают «встретилось» — силу не меняют. В «Парах» каждая пара считается отдельно: перепутал — ошибка только у неё.</p>
+        <p><b>3. Уровни.</b> До {{ R.WEAK }} — слабое, {{ R.WEAK }}–{{ R.STRONG - 1 }} — среднее, от {{ R.STRONG }} — сильное. Банки сверху показывают, сколько слов в каждом; нажми банку — список отфильтруется.</p>
+        <p><b>4. Когда повторить.</b> После верного ответа срок повтора: слабое — через {{ R.DUE.weak }} день, среднее — через {{ R.DUE.medium }} дня, сильное — через {{ R.DUE.strong }} дней. После ошибки — завтра.</p>
+        <p><b>5. Забывание.</b> Если срок повтора прошёл, сила тает на {{ R.DECAY }} в день — сильное слово без повторов со временем снова станет средним, потом слабым.</p>
+        <p><b>6. Ошибка в уроке.</b> Экран повторяется в конце урока, пока не ответишь верно (каждая попытка записывается сюда), и попадает в чекпоинт своей Chapter (в редакторе курса это уже видно вживую; у ученика включим вместе с сервером).</p>
+        <p><b>7. Чекпоинт.</b> Итог Chapter собирается из твоих ошибок в её уроках (дальше — ещё ~¾ упражнений Chapter и 2–3 слабых слова из прошлых). Порог — 80 % верных с первой попытки.</p>
+        <p><b>8. Нажми на строку</b> — увидишь историю: где встречалось, верно или ошибка, когда повторить.</p>
+        <p class="nt">Пока словарь хранится только в этом браузере. Дальше — на сервере у каждого ученика, и учитель увидит слабые места. «Повторить сейчас» — короткая тренировка из слабых слов — следующим шагом.</p>
       </div>
     </div>
 
@@ -63,6 +75,8 @@ const reset = () => { resetReview(); openKey.value = null }
 </template>
 
 <style scoped>
+.howb { all: unset; cursor: pointer; margin-top: 12px; font-size: 13px; font-weight: 800; color: #1cb0f6 } .howb span { font-size: 11px }
+.how { margin-top: 10px; display: grid; gap: 7px; padding: 12px 14px; border-radius: 12px; background: #f6f8fa } .how p { margin: 0; font-size: 13px; line-height: 1.45; color: #444 } .how b { color: #222 } .how .nt { color: #777; font-size: 12px }
 .rv { width: 100%; max-width: 760px; margin: 0 auto; display: grid; gap: 12px }
 .rcard { background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }
 h2 { margin: 0; font-size: 24px; font-weight: 900 }

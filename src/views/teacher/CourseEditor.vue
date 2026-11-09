@@ -52,6 +52,9 @@ const MEDIA = ['video', 'photo']                         // задания с ф
 const TASKS = ['lesson', 'checkpoint']
 const TASK_D = { lesson: 'Ветка экранов, в конце — итог', checkpoint: 'Конец Chapter, в конце — итог' }
 const BRANCH = ['lesson', 'checkpoint']            // у них ветка экранов видна всегда, даже пустая
+const autoCk = reactive({})                      // id чекпоинта → [{ k, s, from }]
+let autoN = 0
+const nSteps = (x) => (x?.steps?.length ?? 0) + (autoCk[x?.id]?.length ?? 0)          // экраны на ветке, у чекпоинта — с «авто»
 // Обложка урока, как в Busuu: фото или кружок в самом кружке урока (поле file / media, вид — ck)
 const covK = (x) => (MEDIA.includes(x.type) ? x.type : x.ck ?? null)
 const UNIT_COLORS = [['var(--green)', 'var(--green-d)'], ['var(--purple)', 'var(--purple-d)'], ['var(--blue)', 'var(--blue-d)'], ['var(--orange)', 'var(--orange-d)']]
@@ -437,7 +440,7 @@ async function loadOthers() {
 }
 watch(allCourses, (v) => { if (v) loadOthers(); else { others.value = []; opick.value = null } })
 // ширина курса на холсте: самая длинная ветка урока
-const widthOf = (items) => Math.max(760, ...items.filter(x => INTERACTIVE.includes(x.type)).map(x => RAIL_X0 + (Math.max(1, x.steps?.length ?? 0) + 1) * 520 + 120))          // пустой урок — тоже с веткой («Экранов пока нет» и «Итог урока»)
+const widthOf = (items) => Math.max(760, ...items.filter(x => INTERACTIVE.includes(x.type)).map(x => RAIL_X0 + (Math.max(1, nSteps(x)) + 1) * 520 + 120))          // пустой урок — тоже с веткой («Экранов пока нет» и «Итог урока»)
 const othersL = computed(() => {
   let x = widthOf(doc.items) + 260
   return others.value.map((c) => {
@@ -452,7 +455,7 @@ const othersL = computed(() => {
       const bottom = L[last].y + 56 + (last > i && hasRail(lastIt, key) ? 40 + (railHs[key + lastIt.id] ?? RAIL_H) : 0)
       let x0 = CH_X0, x1 = CH_X1
       let fx1 = x1
-      for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key) || railUp(items[k], key)) fx1 = Math.max(fx1, L[k].x + RAIL_X0 + Math.max(1, items[k].steps?.length ?? 0) * 520 + 460 + 36)
+      for (let k = i + 1; k <= last; k++) if (hasRail(items[k], key) || railUp(items[k], key)) fx1 = Math.max(fx1, L[k].x + RAIL_X0 + Math.max(1, nSteps(items[k])) * 520 + 460 + 36)
       if (u.hlw) x1 = fx1
       const hc = u.hlc ?? HL_DEF, y1 = top + Math.max(120, bottom - top)
       cb.push({ id: u.id, light: hc === '#ffffff', off: u.hl === 'none', box: { x0: ox + x0, y0: top, x1: ox + fx1, y1 }, style: { '--hc': hc, '--ho': hlOp(u) + '%', left: ox + x0 + 'px', top: top + 'px', width: x1 - x0 + 'px', height: y1 - top + 'px' } })
@@ -903,6 +906,21 @@ const railHs = reactive({})                  // фактическая высо�
 // и видно, что после чекпоинта урок не вставить. hasRail — ветка вниз (у уроков), railUp — ветка вверх (у чекпоинта)
 // соседние курсы («Все курсы») раскладываются точь-в-точь как свой: и пустые уроки — с веткой (иначе их не видно, а копируются они)
 const railUp = (x) => x?.type === 'checkpoint'
+// ---------- Чекпоинт собирается сам (демо в редакторе) ----------
+// Прошли урок на ветке и ошиблись — экран сразу попадает в чекпоинт этой Chapter (фиолетовая рамка «Авто»).
+// Не сохраняется в курс: у ученика чекпоинт собирается по его собственным ответам.
+function ckFor(id) {
+  const i = order.value.findIndex(x => x.id === id)
+  if (i >= 0) { for (let k = i + 1; k < order.value.length && order.value[k].type !== 'unit'; k++) if (order.value[k].type === 'checkpoint') return order.value[k]; return null }
+  const l = doc.loose.find(x => x.id === id)
+  return l?.grp ? doc.loose.find(x => x.grp === l.grp && x.type === 'checkpoint') ?? null : null
+}
+function onWeak(L, s) {
+  const ck = ckFor(L.id); if (!ck) return
+  const list = (autoCk[ck.id] ??= [])
+  if (!list.some(a => a.s === s)) list.push({ k: ++autoN, s, from: L.title || 'Lesson' })
+}
+const unAuto = (id, k) => { autoCk[id] = (autoCk[id] ?? []).filter(a => a.k !== k) }
 const hasRail = (x) => x?.type !== 'checkpoint' && INTERACTIVE.includes(x?.type) && (!!x.steps?.length || BRANCH.includes(x.type))          // свой курс — ветка у каждого урока (и пустого); соседние — только с экранами
 const layoutOf = (list, key = '') => {
   let y = 0
@@ -1027,7 +1045,7 @@ const chapterBoxes = computed(() => {
     const bottom = L[c.last].y + 56 + (c.last > c.i && hasRail(lastIt) ? 40 + (railHs[lastIt.id] ?? RAIL_H) : 0)          // низ — по последнему заданию главы (тот же отступ, что в раскладке)
     let x0 = CH_X0, x1 = CH_X1
     let fx1 = x1          // выделение главы — вся схема: с ветками экранов и «Итогом урока» (тянуть — за любое место)
-    for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) fx1 = Math.max(fx1, r.p.x + RAIL_X0 + Math.max(1, r.x.steps?.length ?? 0) * 520 + 460 + 36) }
+    for (let i = c.i + 1; i <= c.last; i++) { const r = rails.get(order.value[i].id); if (r) fx1 = Math.max(fx1, r.p.x + RAIL_X0 + Math.max(1, nSteps(r.x)) * 520 + 460 + 36) }
     if (u.hlw) x1 = fx1
     const top = L[c.i].y - 70
     const hc = u.hlc ?? HL_DEF
@@ -1041,8 +1059,8 @@ const chapterBoxes = computed(() => {
     let x0 = u.x + CH_X0, x1 = u.x + CH_X1, y1 = u.y + 70
     let fx1 = x1
     for (const k of ks) {
-      fx1 = Math.max(fx1, BRANCH.includes(k.type) ? k.x + RAIL_X0 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + CH_X1)
-      x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, u.hlw ? k.x + RAIL_X0 + Math.max(1, k.steps?.length ?? 0) * 520 + 460 + 36 : k.x + CH_X1)
+      fx1 = Math.max(fx1, BRANCH.includes(k.type) ? k.x + RAIL_X0 + Math.max(1, nSteps(k)) * 520 + 460 + 36 : k.x + CH_X1)
+      x0 = Math.min(x0, k.x + CH_X0); x1 = Math.max(x1, u.hlw ? k.x + RAIL_X0 + Math.max(1, nSteps(k)) * 520 + 460 + 36 : k.x + CH_X1)
       y1 = Math.max(y1, k.y + 56 + (hasRail(k) ? 40 + Math.min(700, railHs[k.id] ?? RAIL_H) : 0))
     }
     const hc = u.hlc ?? HL_DEF, top = u.y - 70
@@ -1560,7 +1578,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :glow="sd.on" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
-          :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)"
+          :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)" :auto="autoCk[r.x.id]" :to-ck="!!ckFor(r.x.id)" @weak="onWeak(r.x, $event)" @unauto="unAuto(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
         <!-- Экраны прямо на доске (унесли с ветки или положили из «Интерактива») -->
         <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" :style="layerSt(f.id)" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
