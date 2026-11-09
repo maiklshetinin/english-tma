@@ -9,6 +9,7 @@ import { lessonStyle, trialStyle } from '../utils/gridStyle'
 import { computed, ref, watch, nextTick } from 'vue'
 import { dnd } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
+import AppIcon from './AppIcon.vue'
 import AvatarStack from './AvatarStack.vue'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore, slotKey } from '../stores/schedule'
@@ -49,6 +50,13 @@ const one = computed(() => people.value.length === 1)
 const scheduleStore = useScheduleStore()
 const firstName = (l) => studentStore.findAny(l.studentIds[0])?.name ?? 'ученик'
 const who = (l) => (l.studentIds.length > 1 ? `группа (${l.studentIds.length})` : firstName(l))
+// Урок (или стикер) вынесли за таблицу — всё вокруг таблицы светится красным: «отпустите — снимется». Таблица остаётся белой «окном».
+const outZone = computed(() => dnd.active && lesson.value && (dnd.over?.kind === 'out' || dnd.over?.kind === 'panel'))
+const zoneBox = ref(null)
+watch(outZone, (on) => {
+  const r = on && document.querySelector('.wk')?.getBoundingClientRect()
+  zoneBox.value = r ? { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' } : null
+})
 const hint = computed(() => {
   const o = dnd.over, pl = p.value
   if (!pl || !o) return null
@@ -84,6 +92,7 @@ const hintPos = computed(() => {
 })
 </script>
 <template>
+  <div v-if="outZone && zoneBox" class="dzone" :style="zoneBox" aria-hidden="true" />
   <div v-if="dnd.active && (people.length || trial)" class="gw" :style="{ transform: `translate(${dnd.x}px, ${dnd.y}px)` }">
     <div v-if="trial" class="tghost" :class="[trialStyle, { gone: dnd.over?.kind === 'out' || dnd.over?.kind === 'panel' }]" :style="box">
       <template v-if="trialStyle === 'note'"><b>Пробный</b><span>{{ p.lesson?.note || 'Напишите…' }}</span></template>
@@ -98,7 +107,7 @@ const hintPos = computed(() => {
         <Avatar v-for="(s, i) in shown" :key="s.id" :s="s" :size="av" :style="{ marginLeft: ml(i), zIndex: 10 - i }" />
       </template>
     </div>
-    <Transition name="hint"><div v-if="hint" ref="hintEl" :key="hint.k + hint.t" class="dhint" :class="hint.k" :style="hintPos">{{ hint.t }}</div></Transition>
+    <Transition name="hint"><div v-if="hint" ref="hintEl" :key="hint.k + hint.t" class="dhint" :class="hint.k" :style="hintPos"><AppIcon v-if="outZone" name="trash" :size="15" class="bin" />{{ hint.t }}</div></Transition>
   </div>
 </template>
 <style scoped>
@@ -136,6 +145,10 @@ const hintPos = computed(() => {
 .tghost.capsule { align-items: center; gap: 6px; padding: 0 10px 0 6px; border-radius: 99px; background: #ffe58a; font-size: 13px; font-weight: 800; white-space: nowrap }
 .tghost.capsule i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #e0a800; box-shadow: 0 0 0 3px #fff3c2 }
 .tghost.gone { opacity: .55; box-shadow: 0 0 0 2px var(--red), 0 8px 20px rgba(0, 0, 0, .2) }
+.dzone { position: fixed; z-index: 90; pointer-events: none; border-radius: 16px; box-shadow: 0 0 0 2px var(--red), 0 0 0 200vmax rgba(255, 75, 75, .10); animation: dz .15s ease-out }
+@keyframes dz { from { opacity: 0 } }
+.dhint .bin { display: inline-block; vertical-align: -3px; margin-right: 5px }
+.ghost.lesson.gone .nm { text-decoration: line-through }
 .dhint.swap { background: var(--orange-d) } .dhint.bad { background: var(--red) }
 .hint-enter-active { transition: opacity .12s } .hint-enter-from { opacity: 0 }
 </style>

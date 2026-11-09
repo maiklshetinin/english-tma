@@ -240,7 +240,10 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk.gs-cells .g.nowrow > .cell:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g.head + .g.nowrow > .cell:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 1px 0 var(--border), inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g.head + .g.nowrow > .cell.tcol:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
-.wk.gs-cells .g:last-child > .cell:nth-child(2) { border-bottom-left-radius: 10px } .wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
+.wk.gs-cells .g:last-child > .cell:nth-child(2) { border-bottom-left-radius: 10px }
+/* Сегодня понедельник / воскресенье — у серого (прошедшего) времени колонки «сегодня» нет внешней линии таблицы слева / справа: серое идёт ровно, как шапка дня */
+.wk.gs-cells.shade.td-first .g > .cell.tcol.past:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
+.wk.gs-cells.shade.td-last .g > .cell.tcol.past:last-child:not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 -1px 0 var(--border) } .wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
 @media (min-width: 720px) { .wk.gs-cells .tm { margin-right: 6px } }
 .wk.gs-cells .chip { inset: 3px; border-radius: 7px }
 @media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } }
