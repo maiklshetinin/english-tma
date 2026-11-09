@@ -467,6 +467,18 @@ function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; 
 // «Интерактив» на панели: экран — в выбранный урок; ничего не выбрано — новый урок в конец рельса
 // Экран добавляется «рыбой» — готовым образцом, который сразу можно пройти, а потом поправить (карандаш); 'lesson' — целый урок-образец
 const TPL = [...TEMPLATES, { id: 'lesson', kind: 'intro', t: 'Готовый урок', d: '7 экранов-образцов' }]
+// Меню Exercise по группам (что тренируем) и навыкам (для аналитики): Слух, Чтение, Письмо, Речь
+const SKILL_T = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
+const SKILLS = { choice: ['L'], audiotest: ['L'], pairs: ['R'], fill: ['L'], type: ['W'], order: ['W'], speak: ['S'], answer: ['S', 'W'] }
+const XGROUPS = (() => {
+  const gs = [
+    { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip', 'lesson'], cols: 2 },
+    { k: 'words', t: 'Слова', d: 'отдельные слова', ids: ['choice', 'audiotest', 'pairs'], cols: 2 },
+    { k: 'ctx', t: 'Фразы и контекст', d: 'слова внутри предложения', ids: ['fill', 'type', 'order', 'speak', 'answer'], cols: 3 },
+  ]
+  const used = new Set(gs.flatMap(g => g.ids)); gs[2].ids.push(...TPL.filter(t => !used.has(t.id)).map(t => t.id))          // новое упражнение без группы — в «Фразы»
+  return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(t => t.id === id)).filter(Boolean) }))
+})()
 function addScreen(id) {
   let L = activeLesson.value ? findAny(activeLesson.value) : null
   if (!L) { L = it('lesson', 'Урок', { steps: [] }); doc.items.push(L) }
@@ -1766,9 +1778,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <small><b>{{ T[k].t }}</b>{{ TASK_D[k] }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
-        <span class="tt2">Тяните на ветку урока или на доску — или нажмите и поставьте</span>
         <!-- мини-окошки: как выглядит экран -->
-        <button v-for="t in TPL" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
+        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="g.k"><div class="xgh"><b>{{ g.t }}</b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
+        <button v-for="t in g.items" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <span class="mini" :class="t.id"><i class="mp" />
             <template v-if="t.id === 'intro'"><i class="mh" /><span class="mm"><i class="ma" /></span><i class="mw" /><i class="ml" /></template>
             <template v-else-if="t.id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
@@ -1784,7 +1796,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <i class="mb" />
           </span>
           <small><b>{{ t.t }}</b>{{ t.d }}</small>
+          <span v-if="SKILLS[t.id]" class="skl"><i v-for="k in SKILLS[t.id]" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
         </button>
+        </div></div>
       </template>
       <template v-else-if="tray === 'pen'"><button v-for="c in INK_COLORS" :key="c" class="sw pen" :class="{ on: inkColor === c }" :style="{ background: c }" title="Цвет маркера" @click="inkColor = c" /></template>
       <template v-else-if="tray === 'note'"><button v-for="c in NOTE_COLORS" :key="c" class="sw" :class="{ on: noteColor === c }" :style="{ background: c }" title="Цвет стикера — потом нажмите на холст" @click="noteColor = c; noteTool = true" /></template>
@@ -2149,7 +2163,12 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .och b { font-size: 22px; font-weight: 900 } .och small { font-size: 12px; font-weight: 700; color: var(--hint) }
 .bead.ro { cursor: default } .bead.ro:hover { transform: none }
 .allr.on { background: var(--blue-l); border-color: var(--blue); color: var(--blue-d) }
-.tray.inter { display: grid; grid-template-columns: auto repeat(6, 124px); gap: 2px 4px; overflow: visible } .tray.inter .tt2 { grid-row: span 2 }
+.tray.inter { display: flex; align-items: stretch; gap: 8px; overflow: visible } .tray.inter .tt2 { align-self: center }
+.xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.words { background: #eef7ff } .xg.ctx { background: #f3f0ff }          /* группы упражнений — рядом, по горизонтали */
+.xgh { display: grid; gap: 0; padding: 0 8px } .xgh b { font-size: 13.5px; font-weight: 900; color: #2c2c2c } .xgh small { font-size: 11px; font-weight: 600; color: var(--hint) }
+.xgc { display: grid; gap: 2px 4px }
+.skl { display: flex; gap: 3px; justify-content: center } .chip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }          /* навык → аналитика */
+.chip.L { background: #1cb0f6 } .chip.R { background: #a560e8 } .chip.W { background: #ff9600 } .chip.S { background: #58cc02 }
 .tray.inter .mini { width: 112px; height: 86px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 124px; gap: 5px; padding: 6px 4px 4px; align-self: start }
 .tray.inter .mini .mb { right: 6px; bottom: 5px; width: 26px; height: 7px } .tray.inter .mini.lesson { overflow: visible } .tray.inter .mini .ms { transform: scale(.82); transform-origin: top center }
 .tray.inter .mi small { font-size: 10.5px; line-height: 1.2 } .tray.inter .mi small b { font-size: 12.5px }
