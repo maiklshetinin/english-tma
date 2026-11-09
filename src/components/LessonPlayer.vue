@@ -28,7 +28,7 @@ const props = defineProps({
   again: Boolean,                                         // на ветке в редакторе: ошибка → экран повторится в конце ветки (emit next с again)
   track: Boolean,                                         // ученик проходит урок — ответы уходят в Review (emit 'answer')
 })
-const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer'])
+const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer', 'miss'])
 
 const i = ref(props.start), t0 = Date.now(), endT = ref(0)
 const score = reactive({ ok: 0, all: 0 })
@@ -125,7 +125,9 @@ function sendText() { if (st.text.trim()) st.done = true }
 
 // ---- дальше ----
 const later = computed(() => (retry || props.again) && st.done && ['choice', 'order', 'gap'].includes(step.value?.kind) && !right.value)          // ошибка → «вернёмся в конце»
-function next() { if (props.single || !st.done) return; if (props.embedded) return emit('next', { ...mine, again: later.value }); if (later.value) seq.value.push(cur.value); i.value++ }
+// на ветке в редакторе повтор встаёт в конец сразу, как только ответили неверно (не ждём «Продолжить»)
+watch(later, (v) => { if (v && props.embedded) emit('miss') })
+function next() { if (props.single || !st.done) return; if (props.embedded) return emit('next', { ...mine }); if (later.value) seq.value.push(cur.value); i.value++ }
 const answer = computed(() => step.value?.opts?.[step.value.ans ?? 0])
 const time = computed(() => { const s = props.stats ? props.stats.sec : Math.round(((endT.value || Date.now()) - t0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const acc = computed(() => { const x = props.stats ?? score; return x.all ? Math.round(x.ok / x.all * 100) : 100 })

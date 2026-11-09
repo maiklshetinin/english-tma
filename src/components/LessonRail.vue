@@ -174,11 +174,12 @@ const pctAt = (i) => Math.round((i < run.at ? i + 1 : i) / Math.max(1, total.val
 function advance(s, sc, i = steps.value.indexOf(s), a = null) {
   if (!run.t0) run.t0 = Date.now()
   run.res[a ? 'r' + a.k : s.id] = { ok: sc.ok, all: sc.all }
-  if (sc.again) { run.again.push({ k: ++run.n, s }); if (!isCk.value && steps.value.includes(s)) emit('weak', s) }      // ошибка → повтор в конце и в чекпоинт Chapter
   run.at = Math.max(run.at, i + 1)
   if (run.at >= total.value && !run.t1) run.t1 = Date.now()
   emit('focus', { x: cx(Math.min(i + 1, total.value)) + CW / 2, y: props.y + 200 })
 }
+// ошиблись на экране — сразу: повтор в конец ветки и экран в чекпоинт Chapter
+function miss(s) { if (!run.t0) run.t0 = Date.now(); run.t1 = 0; run.again.push({ k: ++run.n, s }); if (!isCk.value && steps.value.includes(s)) emit('weak', s) }
 const stats = computed(() => {
   if (run.at < total.value) return null
   const r = Object.values(run.res)
@@ -188,10 +189,9 @@ const stats = computed(() => {
 const rk = reactive({})
 function resetStep(s) {
   const i = steps.value.indexOf(s); rk[s.id] = (rk[s.id] ?? 0) + 1; delete run.res[s.id]
-  if (run.at > i) {                    // откат к экрану: повторы от него и дальше тоже уходят
-    run.at = i; run.t1 = 0
-    run.again = run.again.filter(a => { const j = steps.value.indexOf(a.s), keep = j >= 0 && j < i; if (!keep) delete run.res['r' + a.k]; return keep })
-  }
+  if (run.at > i) { run.at = i; run.t1 = 0 }
+  // откат к экрану: повторы от него и дальше тоже уходят
+  run.again = run.again.filter(a => { const j = steps.value.indexOf(a.s), keep = j >= 0 && j < i; if (!keep) delete run.res['r' + a.k]; return keep })
 }
 function restart() { Object.assign(run, { at: 0, res: {}, t0: 0, t1: 0, key: run.key + 1, again: [] }); emit('focus', { x: cx(0) + CW / 2, y: props.y + 200 }) }
 const doneX = computed(() => (!steps.value.length ? props.x : run.at >= total.value ? endX.value : run.at ? cx(run.at - 1) + CW / 2 : props.x))
@@ -228,7 +228,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       </div>
       <div class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at }]" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
-      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" />
+      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
       <template v-else>
       <div class="pbar"><i :style="{ width: pctAt(i) + '%' }" /></div>
 
@@ -387,7 +387,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[a.s.kind].ic" /></span><b>Авто · {{ KINDS[a.s.kind].t }}</b><span class="tm" :title="'Ошибка в уроке «' + a.from + '» — экран сам попал в чекпоинт'">ошибка в «{{ a.from }}»</span>
         <button v-if="!readonly" class="ib" title="Убрать из чекпоинта" @pointerdown.stop @click="emit('unauto', a.k)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button></div>
       <div class="card" :class="{ now: steps.length + j === run.at }" @wheel="ownWheel">
-        <LessonPlayer :key="'a' + a.k + ':' + run.key" embedded again :steps="[a.s]" :start="0" :pct="pctAt(steps.length + j)" :resolve="resolve" @next="advance(a.s, $event, steps.length + j, { k: 'a' + a.k })" />
+        <LessonPlayer :key="'a' + a.k + ':' + run.key" embedded again :steps="[a.s]" :start="0" :pct="pctAt(steps.length + j)" :resolve="resolve" @next="advance(a.s, $event, steps.length + j, { k: 'a' + a.k })" @miss="miss(a.s)" />
       </div>
     </div>
     <!-- Стикер у чекпоинта: подробно, как он собирается (можно свернуть) -->
@@ -412,7 +412,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
       <span class="stem" /><span class="node" :class="{ done: steps.length + auto.length + j < run.at, now: steps.length + auto.length + j === run.at }">{{ steps.length + auto.length + j < run.at ? '✓' : '↻' }}</span>
       <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="KINDS[a.s.kind].ic" /></span><b>Ещё раз · {{ steps.includes(a.s) ? steps.indexOf(a.s) + 1 + ' · ' : 'авто · ' }}{{ KINDS[a.s.kind].t }}</b><span class="tm">{{ toCk ? 'ошибка — повтор в конце и в чекпоинт' : 'ошибка — повтор в конце' }}</span></div>
       <div class="card" :class="{ now: steps.length + auto.length + j === run.at }" @wheel="ownWheel">
-        <LessonPlayer :key="'r' + a.k + ':' + run.key" embedded again :steps="[a.s]" :start="0" :pct="pctAt(steps.length + auto.length + j)" :resolve="resolve" @next="advance(a.s, $event, steps.length + auto.length + j, a)" />
+        <LessonPlayer :key="'r' + a.k + ':' + run.key" embedded again :steps="[a.s]" :start="0" :pct="pctAt(steps.length + auto.length + j)" :resolve="resolve" @next="advance(a.s, $event, steps.length + auto.length + j, a)" @miss="miss(a.s)" />
       </div>
     </div>
 
