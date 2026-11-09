@@ -7,7 +7,8 @@ import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
-import { recordStep } from '../stores/review'
+import { recordStep, syncReview } from '../stores/review'
+import { useAuthStore } from '../stores/auth'
 import BackButton from './BackButton.vue'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
 
@@ -19,7 +20,8 @@ const course = ref(null), err = ref(''), loading = ref(false)
 const onEsc = (e) => { if (e.key !== 'Escape') return; if (open.value) open.value = null; else peek.value = null }
 // нажали мимо карточки урока — она закрывается
 const onDown = (e) => { if (peek.value && !e.target.closest?.('.pv, .vrow.peek')) peek.value = null }
-onMounted(() => { addEventListener('keydown', onEsc); addEventListener('pointerdown', onDown) })
+const auth = useAuthStore()
+onMounted(() => { syncReview(auth.user?.id); addEventListener('keydown', onEsc); addEventListener('pointerdown', onDown) })
 onUnmounted(() => { removeEventListener('keydown', onEsc); removeEventListener('pointerdown', onDown) })
 
 // типы заданий — как в редакторе курса

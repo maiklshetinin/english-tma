@@ -14,10 +14,10 @@ import { makeGroups } from './groups.js'
 import { makeSchedule } from './schedule.js'
 import { makeContent } from './content.js'
 import { makeSrs } from './srs.js'
+import { makeReview } from './review.js'
 import { makeCourses } from './courses.js'
 import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
-import { makeNotes } from './notes.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -60,10 +60,7 @@ app.get('/', (_, res) => res.send('ok'))                  // для провер
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHandler => (req, res) => {
   fn(req, res).catch((e) => { e.status < 500 ? console.log(`  → ${e.status} ${e.message}`) : console.error(e); res.status(e.status || 500).json({ error: e.message || 'error' }) })
 }
-const notes = makeNotes({ db })      // заметки на общем экране (мини-чат) — грузим из базы при старте
-notes.load().catch((e) => console.error('notes: не загрузились', e))
 const live = makeLive({
-  notes,
   origins: list(env.ALLOWED_ORIGIN),
   hello: () => ({ seen: students.recentSeen() }),
   verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(roleOf(u) ?? 'none'), name: String(u.tgName || ''), photo: String(u.tgPhoto || ''), dev: u.dev === true } },
@@ -73,6 +70,7 @@ const students = makeStudents({ db, FieldValue, photoByUsername, tz: env.SCHEDUL
 const groups = makeGroups({ db, FieldValue })
 const content = makeContent({ db, FieldValue })
 const srs = makeSrs({ db, FieldValue })
+const review = makeReview({ db, FieldValue })
 const courses = makeCourses({ db, FieldValue })
 const storage = makeStorage(env)                // кружки курсов — в S3 (см. storage.ts); без переменных S3_* — выключено
 const schedule = makeSchedule({ db, FieldValue, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })      // часовой пояс, по которому считаются «эта» и «следующая» неделя
@@ -196,6 +194,10 @@ app.delete('/groups/:id', requireUser, requireTeacher, wrap(async (req, res) => 
 app.get('/srs', requireUser, wrap(async (req, res) => res.json(await srs.list(req.user))))              // свой прогресс (преподаватель — ещё и всех учеников)
 app.post('/srs/reset', requireUser, wrap(async (req, res) => res.json(await srs.reset(req.user, req.body))))      // { cardIds } → свои карточки снова «новые» (сбросить колоду)
 app.post('/srs/rate', requireUser, wrap(async (req, res) => { await srs.rate(req.user, req.body); res.json({ ok: true }) }))
+// Review — «Твой словарь» (review.ts): свой; преподаватель — ещё и ученика (?studentId=…)
+app.get('/review', requireUser, wrap(async (req, res) => res.json(await review.get(req.user, req.query.studentId))))
+app.post('/review', requireUser, wrap(async (req, res) => res.json(await review.save(req.user, req.body))))          // { items: { ключ: запись } } — только изменённые
+app.post('/review/reset', requireUser, wrap(async (req, res) => { await review.reset(req.user); res.json({ ok: true }) }))
 
 // Аватарка пользователя через Bot API (Mini App отдаёт фото только самого пользователя). Токен бота наружу не уходит.
 const tgApi = (m: string, q: Record<string, string>) => fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${m}?${new URLSearchParams(q)}`).then((r) => r.json() as Promise<any>)

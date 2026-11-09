@@ -124,14 +124,14 @@ ok('вернуть: на вернувшегося можно снова созд
 // --- удалить навсегда ---
 ok('удалить не архивного → 409, нет записи → 404', (await code(S.purge(masha.id))) === 409 && (await code(S.archivedName(masha.id))) === 409 && (await code(S.purge('nope'))) === 404)
 const gone = await S.create({ name: 'Лиза' }, 'tg:1')
-store.set(`paths/${gone.id}`, { units: [] }); store.set(`srs/${gone.id}`, { cards: {}, log: {} })
+store.set(`paths/${gone.id}`, { units: [] }); store.set(`srs/${gone.id}`, { cards: {}, log: {} }); store.set(`review/${gone.id}`, { items: {} })
 store.set('decks/d1', { title: 'A', forAll: false, assigned: [gone.id, big.id] }); store.set('decks/d2', { title: 'B', forAll: true, assigned: [] })
 store.set('users/tg:77', { role: 'student', studentId: gone.id })
 const inv = await S.invite(gone.id, 'tg:1')
 await S.archive(gone.id)
 ok('имя архивного для удаления', (await S.archivedName(gone.id)) === 'Лиза')
 await S.purge(gone.id)
-ok('удаление: записи, пути, прогресса и приглашений нет', !store.has(`students/${gone.id}`) && !store.has(`paths/${gone.id}`) && !store.has(`srs/${gone.id}`) && !store.has(`invites/${inv}`) && !store.has('users/tg:77'))
+ok('удаление: записи, пути, прогресса и приглашений нет', !store.has(`students/${gone.id}`) && !store.has(`paths/${gone.id}`) && !store.has(`srs/${gone.id}`) && !store.has(`review/${gone.id}`) && !store.has(`invites/${inv}`) && !store.has('users/tg:77'))
 ok('удаление: из колод снят, остальные назначения целы', JSON.stringify(store.get('decks/d1').assigned) === JSON.stringify([big.id]) && store.get('decks/d2').title === 'B')
 ok('удалённого нет ни в списке, ни в архиве', (await S.list(teacher)).every(s => s.id !== gone.id) && (await S.listArchived()).every(s => s.id !== gone.id))
 // --- «в сети» ---

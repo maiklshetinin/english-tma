@@ -5,10 +5,15 @@ import { ref, computed } from 'vue'
 import { review, resetReview } from '../stores/review'
 import { strengthNow, levelOf, R } from '../utils/review'
 
-const props = defineProps({ resolve: { type: Function, required: true } })
+const props = defineProps({
+  resolve: { type: Function, required: true },
+  items: { type: Object, default: null },            // словарь ученика (карточка ученика у преподавателя); нет — свой
+  readonly: Boolean,                                  // только посмотреть: без «Очистить» и «Повторить сейчас»
+  title: { type: String, default: 'Твой словарь' },
+})
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
-const list = computed(() => Object.values(review.items).map(x => { const s = strengthNow(x); return { ...x, now: s, lv: levelOf(s) } })
+const list = computed(() => Object.values(props.items ?? review.items).map(x => { const s = strengthNow(x); return { ...x, now: s, lv: levelOf(s) } })
   .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })))
 const count = (lv) => list.value.filter(x => x.lv === lv).length
 const max = computed(() => Math.max(1, ...['weak', 'medium', 'strong'].map(count)))
@@ -25,7 +30,7 @@ const reset = () => { resetReview(); openKey.value = null }
 <template>
   <div class="rv">
     <div class="rcard">
-      <h2>Твой словарь</h2>
+      <h2>{{ title }}<small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></h2>
       <div class="lv3">
         <div v-for="lv in ['weak', 'medium', 'strong']" :key="lv" class="lvc" :class="lv" role="button" tabindex="0" @click="filter = filter === lv ? 'all' : lv">
           <span class="jar"><i :style="{ height: (count(lv) ? Math.max(8, count(lv) / max * 100) : 0) + '%' }" /></span>
@@ -42,7 +47,7 @@ const reset = () => { resetReview(); openKey.value = null }
         <p><b>6. Ошибка в уроке.</b> Экран повторяется в конце урока, пока не ответишь верно (каждая попытка записывается сюда), и попадает в чекпоинт своей Chapter (в редакторе курса это уже видно вживую; у ученика включим вместе с сервером).</p>
         <p><b>7. Чекпоинт.</b> Итог Chapter собирается из твоих ошибок в её уроках (дальше — ещё ~¾ упражнений Chapter и 2–3 слабых слова из прошлых). Порог — 80 % верных с первой попытки.</p>
         <p><b>8. Нажми на строку</b> — увидишь историю: где встречалось, верно или ошибка, когда повторить.</p>
-        <p class="nt">Пока словарь хранится только в этом браузере. Дальше — на сервере у каждого ученика, и учитель увидит слабые места. «Повторить сейчас» — короткая тренировка из слабых слов — следующим шагом.</p>
+        <p class="nt">Словарь хранится на сервере у каждого ученика (без сети ответы ждут в браузере и уходят потом); преподаватель видит его в карточке ученика → «Review». «Повторить сейчас» — короткая тренировка из слабых слов — следующим шагом.</p>
       </div>
     </div>
 
@@ -51,10 +56,11 @@ const reset = () => { resetReview(); openKey.value = null }
         <label for="rv-filter">Показать:</label>
         <select id="rv-filter" v-model="filter"><option v-for="f in FILTERS" :key="f.k" :value="f.k">{{ f.t }}</option></select>
         <span class="sp" />
-        <button class="ghost" title="Только для проверки алгоритма" @click="reset">Очистить</button>
-        <button class="go" disabled title="Следующим шагом: короткая тренировка из слабых слов">Повторить сейчас</button>
+        <template v-if="!readonly"><button class="ghost" title="Только для проверки алгоритма" @click="reset">Очистить</button>
+        <button class="go" disabled title="Следующим шагом: короткая тренировка из слабых слов">Повторить сейчас</button></template>
       </div>
-      <p v-if="!list.length" class="empty">Пока пусто. Пройдите урок курса — слова и фразы из его экранов появятся здесь: новые — слабыми, верные ответы делают их сильнее.</p>
+      <p v-if="!list.length && readonly" class="empty">Пока пусто — слова появятся, когда ученик пройдёт уроки курса.</p>
+      <p v-else-if="!list.length" class="empty">Пока пусто. Пройдите урок курса — слова и фразы из его экранов появятся здесь: новые — слабыми, верные ответы делают их сильнее.</p>
       <div v-else class="tbl">
         <div class="th"><span /><span>Английский</span><span>Перевод</span><span>Сила</span></div>
         <template v-for="x in shown" :key="x.key">
@@ -75,6 +81,7 @@ const reset = () => { resetReview(); openKey.value = null }
 </template>
 
 <style scoped>
+.sy { margin-left: 10px; font-size: 12px; font-weight: 800; color: var(--hint); vertical-align: middle } .sy.synced { color: #1fbe78 } .sy.error { color: #ff9600 }
 .howb { all: unset; cursor: pointer; margin-top: 12px; font-size: 13px; font-weight: 800; color: #1cb0f6 } .howb span { font-size: 11px }
 .how { margin-top: 10px; display: grid; gap: 7px; padding: 12px 14px; border-radius: 12px; background: #f6f8fa } .how p { margin: 0; font-size: 13px; line-height: 1.45; color: #444 } .how b { color: #222 } .how .nt { color: #777; font-size: 12px }
 .rv { width: 100%; max-width: 760px; margin: 0 auto; display: grid; gap: 12px }

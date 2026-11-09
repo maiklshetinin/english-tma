@@ -193,6 +193,7 @@ export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/Mos
       batch.delete(ref)
       batch.delete(db.collection('paths').doc(id))
       batch.delete(db.collection('srs').doc(id))
+      batch.delete(db.collection('review').doc(id))          // «Твой словарь» ученика
       for (const d of (await db.collection('invites').where('studentId', '==', id).get()).docs) batch.delete(d.ref)
       for (const d of (await db.collection('users').where('studentId', '==', id).get()).docs) batch.delete(d.ref)
       for (const d of (await db.collection('decks').where('assigned', 'array-contains', id).get()).docs)

@@ -4,8 +4,13 @@
 import ReviewPanel from '../components/ReviewPanel.vue'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import { API, fb, isDemo } from '../firebase'
+import { onMounted } from 'vue'
+import { syncReview } from '../stores/review'
+import { useAuthStore } from '../stores/auth'
 
 const { resolve } = useCourseMedia(!isDemo && !!API && !!fb)
+const auth = useAuthStore()
+onMounted(() => syncReview(auth.user?.id))                 // свой словарь с сервера (и отправить, что не ушло)
 </script>
 
 <template>
