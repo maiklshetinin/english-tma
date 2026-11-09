@@ -11,7 +11,7 @@ const misha = { uid: 'tg:1', name: 'Миша', photo: '', color: '#f00' }, stasy
 const N = makeNotes()
 ok('пустой текст и чужой путь — нет заметки', !N.create(misha, { path: '/', text: '   ' }) && !N.create(misha, { path: 'http://x', text: 'hi' }))
 const n = N.create(misha, { path: '/', where: 'home', sel: 'div:nth-child(1)', rx: 0.5, ry: 2.9, x: 10, y: 20, text: ' Перенеси Веру ' })!
-ok('заметка: место, первое сообщение, обрезано', n.path === '/' && n.ry === 2 && n.msgs[0].text === 'Перенеси Веру' && n.msgs[0].name === 'Миша' && !n.done)
+ok('заметка: место, первое сообщение, обрезано', n.path === '/' && n.ry === 2 && n.msgs[0].text === 'Перенеси Веру' && n.msgs[0].name === 'Миша')
 N.reply(stasya, n.id, { text: 'Ок' })
 ok('ответ', n.msgs.length === 2 && n.msgs[1].uid === 'tg:2')
 N.react(stasya, n.id, n.msgs[0].id, '👍'); N.react(misha, n.id, n.msgs[0].id, '👍')
@@ -24,9 +24,7 @@ N.seen({ ...stasya, uid: 'tg:3' }, n.id); ok('прочитал', n.seen['tg:3'])
 N.move(n.id, { sel: 'p:nth-child(2)', rx: 0.1, ry: 0.9, x: 5, y: 6 }); ok('перенос булавки', n.sel === 'p:nth-child(2)' && n.rx === 0.1 && n.path === '/')
 ok('чужое сообщение не исправить', !N.edit(misha, n.id, n.msgs[1].id, { text: 'x' }))
 N.edit(misha, n.id, n.msgs[0].id, { text: ' Перенеси Веру на пятницу ' }); ok('своё исправить', n.msgs[0].text === 'Перенеси Веру на пятницу' && n.msgs[0].edited)
-N.done(n.id, true); ok('готово', n.done)
-N.reply(misha, n.id, { text: 'ещё' }); ok('ответ снова открывает', !n.done)
-ok('удалить может только автор', !N.remove(stasya, n.id) && N.remove(misha, n.id) === n.id && !N.all().length)
+ok('удалить может любой', N.remove(n.id) === n.id && !N.all().length && !N.remove('nope'))
 
 // --- через WebSocket ---
 const users: Record<string, any> = { a: { uid: 'tg:1', role: 'teacher', name: 'Миша', photo: '' }, b: { uid: 'tg:2', role: 'teacher', name: 'Стася', photo: '' }, c: { uid: 'tg:3', role: 'teacher', name: 'Оля', photo: '' } }

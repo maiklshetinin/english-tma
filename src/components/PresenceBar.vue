@@ -19,7 +19,7 @@ const ini = (n) => (n || '?').trim()[0]?.toUpperCase() || '?'
 // Заметки на экране: список (новые сверху), нажатие — перейти к месту и открыть; «Новая заметка» — нажать на экран
 const router = useRouter()
 const list = ref(false)
-const notes = computed(() => notesState.list.filter((n) => notesState.showDone || !n.done))
+const notes = computed(() => notesState.list)
 const whereN = (n) => n.where || 'приложение'
 function go(n) { list.value = false; if (router.currentRoute.value.fullPath !== n.path) router.push(n.path); setTimeout(() => openNote(n.id), 60) }
 function newNote() { list.value = false; notesState.open = null; notesState.placing = true }
@@ -42,10 +42,10 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
     </button>
     <div v-if="list" class="bg" @click="list = false" />
     <div v-if="list" class="menu nl" role="dialog" aria-label="Заметки">
-      <div class="mh nh"><span>Заметки · {{ notes.length }}</span><button type="button" @click="notesState.showDone = !notesState.showDone">{{ notesState.showDone ? 'Скрыть решённые' : 'Показать решённые' }}</button></div>
-      <button v-for="n in notes" :key="n.id" class="ni" :class="{ dn: n.done }" type="button" @click="go(n)">
+      <div class="mh">Заметки · {{ notes.length }}</div>
+      <button v-for="n in notes" :key="n.id" class="ni" type="button" @click="go(n)">
         <span class="av sm" :style="{ '--c': n.msgs[0].color }"><img v-if="n.msgs[0].photo" :src="n.msgs[0].photo" alt="" referrerpolicy="no-referrer" /><b v-else :style="{ background: n.msgs[0].color }">{{ ini(n.msgs[0].name) }}</b></span>
-        <span class="tx"><b>{{ n.msgs[0].text }}</b><small>{{ whereN(n) }}<template v-if="n.msgs.length > 1"> · ответов: {{ n.msgs.length - 1 }}</template><template v-if="n.done"> · решено ✓</template></small></span>
+        <span class="tx"><b>{{ n.msgs[0].text }}</b><small>{{ whereN(n) }}<template v-if="n.msgs.length > 1"> · ответов: {{ n.msgs.length - 1 }}</template></small></span>
         <i v-if="unread(n)" class="dot" />
       </button>
       <p v-if="!notes.length" class="empty">Заметок нет. Правый клик на экране (или клавиша C) → «Оставить заметку здесь»</p>
@@ -72,9 +72,8 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
 .nt:hover, .nt.on { color: var(--blue) }
 .nt em { position: absolute; right: -4px; top: -4px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box; border-radius: 99px; background: var(--red); color: #fff; font-style: normal; font-size: 10px; font-weight: 900; line-height: 17px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .nl { width: 320px; max-height: 70vh; overflow: auto; display: grid }
-.nh { display: flex; justify-content: space-between; align-items: center } .nh button { padding: 0; border: 0; background: none; font: inherit; color: var(--blue); text-transform: none; letter-spacing: 0; cursor: pointer }
 .ni { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: 10px; background: none; font: inherit; text-align: left; cursor: pointer } .ni:hover { background: var(--surface) }
-.ni .tx { flex: 1; min-width: 0 } .ni .tx b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .ni.dn { opacity: .55 }
+.ni .tx { flex: 1; min-width: 0 } .ni .tx b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .ni .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--blue) }
 .empty { margin: 4px 8px 8px; font-size: 12px; font-weight: 700; color: var(--hint); line-height: 1.4 }
 .add { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 9px 8px; border: 0; border-top: 1px solid var(--border); border-radius: 0 0 10px 10px; background: none; font: inherit; font-size: 14px; font-weight: 800; color: var(--blue); cursor: pointer }

@@ -8,7 +8,7 @@ import type { Firestore } from 'firebase-admin/firestore'
 export interface NoteAuthor { uid: string; name: string; photo: string; color: string }
 export interface NoteMsg extends NoteAuthor { id: string; text: string; at: number; react: Record<string, string[]>; edited?: number }      // edited — когда исправлено      // react: реакция → uid тех, кто поставил
 // seen: uid → когда человек последний раз прочитал заметку (закрыл всплывающее уведомление или открыл её) — для «Прочитано»
-export interface Note { id: string; path: string; where: string; sel: string; rx: number; ry: number; x: number; y: number; at: number; done: boolean; by: string; msgs: NoteMsg[]; seen: Record<string, number> }
+export interface Note { id: string; path: string; where: string; sel: string; rx: number; ry: number; x: number; y: number; at: number; by: string; msgs: NoteMsg[]; seen: Record<string, number> }
 
 export const NOTE_TEXT = 1000, NOTE_MSGS = 200, NOTES_MAX = 300
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '✅', '👀'] as const
@@ -38,16 +38,16 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
     create(u: NoteAuthor, m: Record<string, unknown>): Note | null {
       const t = text(m.text), path = str(m.path, 200)
       if (!t || !path.startsWith('/')) return null
-      const n: Note = { id: id('n'), path, where: str(m.where, 40), sel: str(m.sel, 600), rx: frac(m.rx), ry: frac(m.ry), x: px(m.x), y: px(m.y), at: now(), done: false, by: u.uid, msgs: [msg(u, t)], seen: { [u.uid]: now() } }
+      const n: Note = { id: id('n'), path, where: str(m.where, 40), sel: str(m.sel, 600), rx: frac(m.rx), ry: frac(m.ry), x: px(m.x), y: px(m.y), at: now(), by: u.uid, msgs: [msg(u, t)], seen: { [u.uid]: now() } }
       notes.set(n.id, n); save(n)
       if (notes.size > NOTES_MAX) { const old = this.all().at(-1); if (old) { notes.delete(old.id); db?.collection('notes').doc(old.id).delete().catch(() => {}) } }
       return n
     },
-    /** Ответ под заметкой (решённая заметка снова открывается) */
+    /** Ответ под заметкой */
     reply(u: NoteAuthor, nid: unknown, m: Record<string, unknown>): Note | null {
       const n = notes.get(str(nid, 64)), t = text(m.text)
       if (!n || !t || n.msgs.length >= NOTE_MSGS) return null
-      n.msgs.push(msg(u, t)); n.done = false; n.seen = { ...n.seen, [u.uid]: now() }; save(n); return n
+      n.msgs.push(msg(u, t)); n.seen = { ...n.seen, [u.uid]: now() }; save(n); return n
     },
     /** Реакция на сообщение: поставить / снять (повторное нажатие) */
     react(u: NoteAuthor, nid: unknown, mid: unknown, e: unknown): Note | null {
@@ -77,14 +77,9 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
       if (!n || !path.startsWith('/')) return null
       Object.assign(n, { path, sel: str(m.sel, 600), rx: frac(m.rx), ry: frac(m.ry), x: px(m.x), y: px(m.y) }); save(n); return n
     },
-    /** «Готово» — заметка решена (булавка прячется), или снова открыта */
-    done(nid: unknown, on: unknown): Note | null {
+    /** Удалить заметку целиком — любой преподаватель (спрашиваем в приложении «Удалить заметку?») */
+    remove(nid: unknown): string | null {
       const n = notes.get(str(nid, 64)); if (!n) return null
-      n.done = on === true; save(n); return n
-    },
-    /** Удалить заметку целиком — только тот, кто её оставил */
-    remove(u: NoteAuthor, nid: unknown): string | null {
-      const n = notes.get(str(nid, 64)); if (!n || n.by !== u.uid) return null
       notes.delete(n.id); db?.collection('notes').doc(n.id).delete().catch(() => {}); return n.id
     },
   }

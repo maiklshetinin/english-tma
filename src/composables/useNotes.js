@@ -14,7 +14,6 @@ export const notesState = reactive({
   placing: false,         // «Новая заметка» из списка: следующее нажатие на экран ставит булавку
   typing: {},             // id заметки → { uid, name, color, until }
   popups: [],             // всплывающие уведомления: { id, mid, from, at }
-  showDone: false,
 })
 const byId = (id) => notesState.list.find((n) => n.id === id)
 export const noteById = byId
@@ -22,7 +21,7 @@ const upsert = (n) => { const i = notesState.list.findIndex((x) => x.id === n.id
 
 /** Непрочитано мной: есть сообщения от других новее моего «прочитал» */
 export const unread = (n) => n.msgs.some((m) => m.uid !== notesState.me && m.at > (n.seen?.[notesState.me] ?? 0))
-export const unreadCount = computed(() => notesState.list.filter((n) => !n.done && unread(n)).length)
+export const unreadCount = computed(() => notesState.list.filter((n) => unread(n)).length)
 
 let wired = false
 export function wireNotes() {
@@ -62,7 +61,6 @@ export const react = (id, mid, e) => liveSend({ t: 'note:react', id, mid, e })
 export function moveNote(id, at) { const n = byId(id); if (n) Object.assign(n, at); liveSend({ t: 'note:move', id, ...at }) }
 /** Исправить своё сообщение */
 export function editMsg(id, mid, text) { const t = text.trim(); if (!t) return; const m = byId(id)?.msgs.find((x) => x.id === mid); if (m) { m.text = t; m.edited = Date.now() } liveSend({ t: 'note:edit', id, mid, text: t }) }
-export const setDone = (id, done) => liveSend({ t: 'note:done', id, done })
 export const removeNote = (id) => liveSend({ t: 'note:del', id })
 export const nudge = (id, mid = '', to = '') => liveSend({ t: 'nudge', id, mid, to })
 export function seen(id) { liveSend({ t: 'note:seen', id }) }

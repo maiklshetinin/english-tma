@@ -3,15 +3,16 @@
 //  • Правый клик (или клавиша C) → «Оставить заметку здесь»: булавка приклеивается к месту на странице, у коллег — сразу.
 //  • Свои сообщения можно исправить (карандаш у сообщения) — у коллег пометка «изм.».
 //  • Булавку можно перетащить на другое место — у коллег она переедет сразу.
-//  • Нажал на булавку — карточка: сообщения, реакции, «печатает…», «Прочитано», поле ответа. «Готово» — заметка решена.
+//  • Нажал на булавку — карточка: сообщения, реакции, «печатает…», «Прочитано», поле ответа. Корзина — удалить заметку у всех.
 //  • Колокольчик у кнопки «Отправить» — уведомлением: у коллеги всплывает плашка и висит, пока не закроет крестиком.
 //  • На телефоне карточка — снизу во всю ширину; новую заметку ставят из списка у «Сейчас здесь» («Новая заметка» → нажать на экран).
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
 import { live, WHERE } from '../composables/useLive'
-import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, setDone, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg } from '../composables/useNotes'
+import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
+import { ask } from '../composables/useDialog'
 
 wireNotes()
 const route = useRoute(), router = useRouter()
@@ -22,7 +23,7 @@ const whereOf = () => WHERE[route.meta.tab] || (route.meta.tab === 'info' ? 'И�
 // --- булавки на этой странице ---
 const pins = computed(() => {
   void tick.value
-  return S.list.filter((n) => n.path === route.fullPath && (!n.done || S.open === n.id)).map((n) => ({ n, at: placeOf(n), unread: unread(n) }))
+  return S.list.filter((n) => n.path === route.fullPath).map((n) => ({ n, at: placeOf(n), unread: unread(n) }))
 })
 // --- перенос булавки: потянул (больше 5 px) — едет за пальцем/мышью, отпустил — приклеилась на новое место (у всех) ---
 const drag = ref(null)          // { id, x, y }
@@ -61,6 +62,11 @@ const cardPos = computed(() => {
   return { left: Math.max(8, left) + 'px', top: Math.max(8, Math.min(a.y - 18, innerHeight - H - 8)) + 'px' }
 })
 const close = () => { S.open = null; S.draft = null }
+// Удалить заметку целиком — у всех; спрашиваем, как обычно
+async function del(n) {
+  if (!(await ask('Удалить заметку?', { text: n.msgs.length > 1 ? `Вместе с ответами (${n.msgs.length - 1}) — у всех.` : 'Она пропадёт у всех.', ok: 'Удалить', danger: true }))) return
+  removeNote(n.id); close()
+}
 
 // --- имена: кто прочитал, кто печатает ---
 const nameOf = (uid) => live.users.find((u) => u.uid === uid)?.name || note.value?.msgs.find((m) => m.uid === uid)?.name || 'коллега'
@@ -141,7 +147,7 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 
 <template>
   <!-- булавки -->
-  <button v-for="p in pins" :key="p.n.id" class="sn-pin" :class="{ on: S.open === p.n.id, unread: p.unread, done: p.n.done, dragging: drag?.id === p.n.id }" :style="{ transform: `translate(${pinAt(p).x}px, ${pinAt(p).y}px)`, '--c': p.n.msgs[0].color }"
+  <button v-for="p in pins" :key="p.n.id" class="sn-pin" :class="{ on: S.open === p.n.id, unread: p.unread, dragging: drag?.id === p.n.id }" :style="{ transform: `translate(${pinAt(p).x}px, ${pinAt(p).y}px)`, '--c': p.n.msgs[0].color }"
     :aria-label="`Заметка: ${p.n.msgs[0].text}`" :title="p.n.msgs[0].text" @pointerdown="pinDown($event, p.n)" @click.stop="pinClick(p.n)" @dragstart.prevent>
     <img v-if="p.n.msgs[0].photo" :src="p.n.msgs[0].photo" alt="" referrerpolicy="no-referrer" /><b v-else>{{ ini(p.n.msgs[0].name) }}</b>
     <em v-if="p.n.msgs.length > 1">{{ p.n.msgs.length }}</em>
@@ -153,8 +159,7 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
   <div v-if="(note || S.draft) && anchor" class="sn-card" :class="{ sheet: mobile }" :style="cardPos" role="dialog" :aria-label="note ? 'Заметка' : 'Новая заметка'" @pointerdown.stop>
     <div class="hd">
       <span>{{ note ? `Заметка${note.where ? ' · ' + note.where : ''}` : 'Новая заметка' }}</span>
-      <button v-if="note && note.by === S.me" class="ib" type="button" title="Удалить заметку" aria-label="Удалить заметку" @click="removeNote(note.id)"><AppIcon name="trash" :size="14" /></button>
-      <button v-if="note" class="done" :class="{ on: note.done }" type="button" @click="setDone(note.id, !note.done); !note.done && close()"><AppIcon name="check" :size="13" />{{ note.done ? 'Решено' : 'Готово' }}</button>
+      <button v-if="note" class="ib del" type="button" title="Удалить заметку" aria-label="Удалить заметку" @click="del(note)"><AppIcon name="trash" :size="15" /></button>
       <button class="ib" type="button" aria-label="Закрыть" @click="close"><AppIcon name="x" :size="14" /></button>
     </div>
     <div v-if="note" class="msgs">
@@ -208,7 +213,7 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 .sn-pin.unread em, .sn-pin.unread::after { background: var(--blue) }
 .sn-pin.unread:not(:has(em))::after { content: ''; position: absolute; right: -2px; top: -2px; width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px var(--card) }
 .sn-pin { touch-action: none; cursor: grab } .sn-pin.dragging { transition: none; cursor: grabbing; box-shadow: 0 8px 22px rgba(0, 0, 0, .3) }
-.sn-pin.on { box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) } .sn-pin.done { opacity: .6 }
+.sn-pin.on { box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) }
 .sn-pin.new { pointer-events: none; color: var(--blue); box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) }
 /* Карточка */
 .sn-card { position: fixed; z-index: 60; width: 320px; max-height: 440px; display: flex; flex-direction: column; border-radius: 16px; background: var(--card); box-shadow: 0 14px 40px rgba(0, 0, 0, .2), 0 0 0 1px var(--border); overflow: hidden; animation: snp .14s ease-out }
@@ -216,9 +221,7 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 .sn-card.sheet { left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 70vh; border-radius: 20px 20px 0 0; padding-bottom: var(--safe-b) }
 .hd { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 14px; background: var(--surface); border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .hd > span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.ib { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--hint); display: grid; place-items: center; cursor: pointer } .ib:hover { background: var(--border); color: var(--text) }
-.done { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border: 0; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); font: inherit; font-size: 11px; color: var(--green-d); text-transform: none; letter-spacing: 0; cursor: pointer }
-.done.on { background: var(--green-l) }
+.ib { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--hint); display: grid; place-items: center; cursor: pointer } .ib:hover { background: var(--border); color: var(--text) } .ib.del:hover { background: var(--red-l); color: var(--red) }
 .msgs { flex: 1; overflow: auto; padding: 4px 0 }
 .m { display: flex; gap: 10px; padding: 8px 14px }
 .av { flex: none; width: 28px; height: 28px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--c); color: #fff; font-size: 12px; font-weight: 900 }

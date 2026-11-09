@@ -10,7 +10,7 @@
 //    Так преподавателю не нужно раз в минуту перечитывать список учеников из базы.
 //  • После любой правки через обычные маршруты (ученики, расписание, группы…) остальным уходит «changed» — они перезагружают
 //    эти данные. Всё в памяти одного процесса: на Render один экземпляр сервера, этого достаточно.
-//  • Заметки на экране (мини-чат, notes.ts): note+ / note:reply / note:react / note:done / note:del — сервер сохраняет и рассылает всем
+//  • Заметки на экране (мини-чат, notes.ts): note+ / note:reply / note:react / note:edit / note:move / note:del — сервер сохраняет и рассылает всем
 //    заметку целиком ({ t: 'note', note }); typing — «печатает…» (не храним); nudge — всплывающее уведомление у адресата (висит, пока
 //    не закроет крестиком); note:seen — прочитал (закрыл уведомление / открыл заметку) → у автора «Прочитано».
 //    Новичок получает все заметки в hello.notes.
@@ -61,11 +61,11 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
   const author = (c: Conn): NoteAuthor => ({ uid: c.uid, name: c.name, photo: c.photo, color: c.color })
   function onNote(c: Conn, m: Record<string, unknown>) {
     const n = m.t === 'note+' ? notes!.create(author(c), m) : m.t === 'note:reply' ? notes!.reply(author(c), m.id, m)
-      : m.t === 'note:react' ? notes!.react(author(c), m.id, m.mid, m.e) : m.t === 'note:done' ? notes!.done(m.id, m.done)
+      : m.t === 'note:react' ? notes!.react(author(c), m.id, m.mid, m.e)
       : m.t === 'note:seen' ? notes!.seen(author(c), m.id) : m.t === 'note:move' ? notes!.move(m.id, m)
       : m.t === 'note:edit' ? notes!.edit(author(c), m.id, m.mid, m) : null
     if (n) { const out = { t: 'note', note: n, by: c.uid, cid: c.cid, ref: str(m.ref, 40) }; for (const o of conns) send(o, out); return }
-    if (m.t === 'note:del') { const gone = notes!.remove(author(c), m.id); if (gone) for (const o of conns) send(o, { t: 'note-', id: gone }) }
+    if (m.t === 'note:del') { const gone = notes!.remove(m.id); if (gone) for (const o of conns) send(o, { t: 'note-', id: gone }) }
   }
 
   return {
