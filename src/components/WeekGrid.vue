@@ -7,6 +7,8 @@ import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle
 import TrialSticker from './TrialSticker.vue'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney } from '../utils/price'
+// На телефоне суммы дня короче: 2 200 → «2,2к», 950 → «950»
+const kShort = (n) => (n >= 1000 ? String(Math.round(n / 100) / 10).replace('.', ',') + 'к' : String(n || 0))
 import AvatarStack from './AvatarStack.vue'
 import { useStudentsStore } from '../stores/students'
 import { useScheduleStore, needsStatus } from '../stores/schedule'
@@ -84,8 +86,8 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
       </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
-        <span class="dsum" :class="{ ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'">{{ money(d).plan ? fmtMoney(money(d).plan) : 0 }}</span>
-        <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−{{ fmtMoney(money(d).lost) }}</span></span>
+        <span class="dsum" :class="{ ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'"><i class="full">{{ money(d).plan ? fmtMoney(money(d).plan) : 0 }}</i><i class="kk">{{ kShort(money(d).plan) }}</i></span>
+        <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−<i class="full">{{ fmtMoney(money(d).lost) }}</i><i class="kk">{{ kShort(money(d).lost) }}</i></span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g" :class="{ nowrow: rowNow(h) }">
       <span class="tm" :class="{ now: rowNow(h) }">{{ rowNow(h) ? hh(h, now.minute) : hh(h) }}</span>
@@ -141,7 +143,9 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
 /* Деньги дня — одна цифра под датой: сумма уроков дня; зелёная, когда все проведены */
 .dsum { margin-top: 2px; line-height: 1.25; font-size: 12px; font-weight: 900; color: var(--hint-2); white-space: nowrap } .dsum.ok { color: var(--green-d) }
 html[data-theme='dark'] .dsum.ok { color: var(--green) }
-.dsum.zero { opacity: .45 }      /* место под доход есть всегда (0) — шапка не меняет высоту, когда появляется первый урок */
+.dsum.zero { opacity: .45 }
+.dsum i, .dlost i { font-style: normal } .kk { display: none }
+@media (max-width: 719px) { .dsum .full, .dlost .full { display: none } .dsum .kk, .dlost .kk { display: inline } }      /* место под доход есть всегда (0) — шапка не меняет высоту, когда появляется первый урок */
 .dh { position: relative }
 .dlost { position: absolute; left: 50%; top: calc(100% - 7px); transform: translateX(-50%); z-index: 2; padding: 0 4px; border-radius: 6px; background: var(--card); font-size: 10px; font-weight: 800; color: var(--red-d); line-height: 14px; white-space: nowrap; pointer-events: none }      /* потеряно из-за отмен — мелко красным под суммой, поверх зазора: шапка не прыгает */
 @media (min-width: 720px) { .dn { display: flex; align-items: baseline; gap: 5px } .dn small { font-size: 13px } .dh { padding: 6px 8px } .dsum { font-size: 13px } }
@@ -246,6 +250,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk.gs-cells .chip { inset: 3px; border-radius: 7px }
 @media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } .wk.gs-cells .corner { margin-right: 3px } }
 @media (max-width: 719px) { .wk.gs-cells .chip { inset: 2px } }
+@media (max-width: 420px) { .wk.gs-cells .tm.now { font-size: 9px; letter-spacing: -.3px; justify-items: start; padding-left: 3px } }      /* «13:24» влезает в узкий столбик и не прячется под точкой линии «сейчас» */
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 @media (max-width: 719px) { .min { top: auto; bottom: -5px; right: -4px; transform: none; font-size: 10px; padding: 0 3px } }      /* на телефоне — в правом нижнем углу, чтобы не закрывать кружок */
 </style>

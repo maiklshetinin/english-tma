@@ -196,6 +196,7 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
               <button v-if="week < 0" role="tab" aria-selected="true" class="on"><b>{{ pastTitle }}</b><small>{{ weekRange(dates) }}</small></button>
               <button v-for="o in (week < 0 ? [0] : [0, 1])" :key="o" role="tab" :aria-selected="week === o" :class="{ on: week === o }" @click="week = o"><b>{{ o ? 'Следующая' : 'Эта' }}</b><small>{{ weekRange(o ? w2 : w1) }}</small></button>
             </div>
+            <i class="wbr" aria-hidden="true" />
             <WeekLoad :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <GridStyleButton />
             <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Стикер: перетащите в свободную ячейку" aria-label="Стикер: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i v-for="(s, k) in pack" :key="s.id" :style="{ '--c': s.c, '--bg': s.bg, left: 8 + k * 6 + 'px', transform: `rotate(${k * 5 - 6}deg)` }" /></button>
@@ -231,7 +232,21 @@ watch(() => w1.value[0], () => scheduleStore.load().catch(() => {}))            
 .trial-pad { position: relative; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none }
 .trial-pad i { position: absolute; top: 7px; width: 12px; height: 25px; border-radius: 2px 2px 3px 3px; background: var(--bg); box-shadow: inset 0 6px 0 var(--c), 0 1px 3px rgba(0, 0, 0, .2); transform-origin: 50% 100% }
 .trial-pad:hover { border-color: var(--hint-2) } .trial-pad.held { opacity: .55 }
-@media (min-width: 1024px) { .wh { flex-wrap: nowrap } .wh > * { flex: none } }      /* на компьютере шапка всегда в одну строку — таблица не съезжает */
+@media (min-width: 1024px) { .wh { flex-wrap: nowrap } .wh > * { flex: none } }
+.wbr { display: none }
+/* Телефон: шапка в две строки — 1) «‹» и переключатель недель во всю ширину; 2) маленький спидометр и деньги слева, решётка / стикеры / «как на этой» справа.
+   Панели учеников сверху нет — урок ставится нажатием на свободную ячейку (окно «Кого назначить?»). */
+@media (max-width: 719px) {
+  .side { display: none }
+  .home { padding-top: 10px }
+  .wh { gap: 8px; padding: 0 }
+  .wk-sw { display: grid; flex: 1; min-width: 0; grid-auto-columns: minmax(0, 1fr) } .wk-sw button { justify-items: center }
+  .wbr { display: block; flex-basis: 100%; height: 0 }
+  .wh > :deep(.wl) { order: 1 } .wh .money { order: 2; margin-left: 0 } .wh > :deep(.gsb), .trial-pad, .gall { order: 3 } .wh > :deep(.gsb) { margin-left: auto } .ask { order: 4; flex-basis: 100%; justify-content: center }
+  .wh :deep(.wl .g) { height: 36px; padding: 0 8px 0 4px; box-sizing: border-box } .wh :deep(.wl .g svg) { width: 38px; height: 21px } .wh :deep(.wl .v b) { font-size: 15px } .wh :deep(.wl .v) { font-size: 11px }
+  .wh :deep(.wm) { height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 10px } .wh :deep(.wm b) { font-size: 15px } .wh :deep(.wm small) { font-size: 12px } .wh :deep(.wm .lost) { font-size: 11px }
+  .wh :deep(.gsb), .trial-pad, .gall { width: 36px; height: 36px }
+}      /* на компьютере шапка всегда в одну строку — таблица не съезжает */
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
 .gall { position: relative; border-color: var(--border); color: var(--blue) } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .ask { display: inline-flex; align-items: center; gap: 6px; background: var(--orange-l); color: var(--orange-d) } .ask i { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: #fff; font-style: normal; font-size: 11px; font-weight: 900 }
