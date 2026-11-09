@@ -22,7 +22,7 @@ async function load(id) {
 watch(() => props.studentId, load, { immediate: true })
 // «Сбросить прогресс»: словарь Review и прохождение всех курсов ученика — с нуля (назначения курсов остаются)
 async function reset() {
-  if (!(await ask('Сбросить прогресс ученика?', { text: 'Словарь Review и прохождение всех курсов начнутся с нуля. Назначенные курсы останутся. Отменить нельзя.', ok: 'Сбросить', danger: true }))) return
+  if (!(await ask('Вы уверены, что хотите удалить прогресс ученика?', { text: 'Словарь Review и прохождение всех курсов начнутся с нуля. Назначенные курсы останутся. Вернуть прогресс будет нельзя.', ok: 'Удалить прогресс', danger: true }))) return
   const r = await apiRequest(`/students/${encodeURIComponent(props.studentId)}/progress/reset`, { method: 'POST', body: JSON.stringify({ what: 'all' }) }).catch(() => null)
   if (!r?.ok) return showToast('Не удалось сбросить — попробуйте ещё раз', null, 'bad')
   showToast('Прогресс ученика сброшен'); load(props.studentId)

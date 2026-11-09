@@ -19,6 +19,7 @@ import { makeCourses } from './courses.js'
 import { makeLearn } from './learn.js'
 import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
+import { makeNotes } from './notes.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -61,7 +62,10 @@ app.get('/', (_, res) => res.send('ok'))                  // для провер
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHandler => (req, res) => {
   fn(req, res).catch((e) => { e.status < 500 ? console.log(`  → ${e.status} ${e.message}`) : console.error(e); res.status(e.status || 500).json({ error: e.message || 'error' }) })
 }
+const notes = makeNotes({ db })      // заметки на общем экране (мини-чат) — грузим из базы при старте
+notes.load().catch((e) => console.error('notes: не загрузились', e))
 const live = makeLive({
+  notes,
   origins: list(env.ALLOWED_ORIGIN),
   hello: () => ({ seen: students.recentSeen() }),
   verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(roleOf(u) ?? 'none'), name: String(u.tgName || ''), photo: String(u.tgPhoto || ''), dev: u.dev === true } },
