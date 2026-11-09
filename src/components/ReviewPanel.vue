@@ -56,6 +56,7 @@ const reset = () => { resetReview(); openKey.value = null }
         <label for="rv-filter">Показать:</label>
         <select id="rv-filter" v-model="filter"><option v-for="f in FILTERS" :key="f.k" :value="f.k">{{ f.t }}</option></select>
         <span class="sp" />
+        <slot name="actions" />          <!-- карточка ученика: «Сбросить прогресс» -->
         <template v-if="!readonly"><button class="ghost" title="Только для проверки алгоритма" @click="reset">Очистить</button>
         <button class="go" disabled title="Следующим шагом: короткая тренировка из слабых слов">Повторить сейчас</button></template>
       </div>

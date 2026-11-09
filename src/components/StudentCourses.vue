@@ -5,6 +5,7 @@ import { ref, watch } from 'vue'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
+import { ask } from '../composables/useDialog'
 
 const props = defineProps({ studentId: { type: [String, Number], required: true } })
 const online = !isDemo && !!API && !!fb
@@ -23,6 +24,13 @@ async function toggle(c) {
     if (!r.ok) throw new Error()
     showToast(c.assigned ? `Курс «${c.title}» снят` : `Курс «${c.title}» назначен`); await load()
   } catch { showToast('Не удалось — попробуйте ещё раз', null, 'bad') } finally { busy.value = null }
+}
+// сбросить прохождение одного курса — ученик начнёт его с первого задания
+async function resetCourse(c) {
+  if (!(await ask(`Сбросить прохождение «${c.title}»?`, { text: 'Ученик начнёт курс с первого задания. Словарь Review не меняется.', ok: 'Сбросить', danger: true }))) return
+  const r = await apiRequest(`/students/${encodeURIComponent(props.studentId)}/progress/reset`, { method: 'POST', body: JSON.stringify({ what: 'course', courseId: c.id }) }).catch(() => null)
+  if (!r?.ok) return showToast('Не удалось сбросить — попробуйте ещё раз', null, 'bad')
+  showToast(`Прохождение «${c.title}» сброшено`); load()
 }
 const pct = (c) => (c.total ? Math.round(Math.min(c.run.done, c.total) / c.total * 100) : 0)
 const when = (t) => new Date(t).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -56,7 +64,8 @@ const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} мин` : `${s} с`)
             <span v-else-if="k === c.run.done" class="now">Сейчас</span>
           </li>
         </ol>
-        <button v-if="c.assigned" class="more" @click="openId = openId === c.id ? null : c.id">{{ openId === c.id ? 'Скрыть прохождение' : 'Смотреть прохождение' }}</button>
+        <div v-if="c.assigned" class="acts"><button class="more" @click="openId = openId === c.id ? null : c.id">{{ openId === c.id ? 'Скрыть прохождение' : 'Смотреть прохождение' }}</button>
+          <button v-if="c.run.done" class="more red" @click="resetCourse(c)">Сбросить прохождение</button></div>
       </div>
       <p v-if="!list.length" class="hint" style="margin:0">Курсов пока нет — создайте их во вкладке «Курсы».</p>
     </template>
@@ -68,6 +77,7 @@ const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} мин` : `${s} с`)
 .r { padding: 10px 0; border-top: 1px solid var(--border) } .top { display: flex; align-items: center; gap: 10px } .in { flex: 1; min-width: 0; cursor: default } .r.on .in { cursor: pointer }
 .pr { display: flex; align-items: center; gap: 8px; margin-top: 4px } .bar { flex: 1; max-width: 220px; height: 8px; border-radius: 4px; background: var(--surface); overflow: hidden } .bar i { display: block; height: 100%; background: #1fbe78; border-radius: 4px }
 .pr small { font-size: 12px; font-weight: 800; color: var(--hint) }
+.acts { display: flex; gap: 16px; flex-wrap: wrap } .more.red { color: var(--red, #ff4b4b) }
 .more { border: 0; background: none; padding: 6px 0 0; font: inherit; font-size: 13px; font-weight: 800; color: var(--blue); cursor: pointer }
 .tl { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px }
 .tl li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--surface) }

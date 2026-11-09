@@ -10,6 +10,7 @@ const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: asy
 
 import StudentCourses from './StudentCourses.vue'
 import CourseViewer from './CourseViewer.vue'
+import StudentReview from './StudentReview.vue'
 
 const tasks = [{ id: 'a', type: 'lesson', title: 'Урок 1' }, { id: 'v', type: 'video', title: 'Кружок' }, { id: 'b', type: 'lesson', title: 'Урок 2' }]
 
@@ -65,5 +66,16 @@ describe('курс у ученика', () => {
     await flushPromises()
     await w.findAll('.vrow')[1].find('.cap').trigger('click')
     expect(w.find('.cka').text()).toContain('Собран сам из уроков Chapter: 3')
+  })
+
+  it('карточка ученика → Review: «Очистить» рядом с фильтром; курс с прогрессом — «Сбросить прохождение»', async () => {
+    apiRequest.mockImplementation((p: string) => (p.startsWith('/review') ? ok({ items: {} }) : ok({ courses: [{ id: 'k1', title: 'A1', total: 3, assigned: true, tasks, run: { done: 1, lessons: {} } }] })))
+    const w = mount(StudentReview, { props: { studentId: 's1' } })
+    await flushPromises()
+    expect(w.find('.rbar .rst').text()).toBe('Очистить')
+    expect(w.text()).not.toContain('Повторить сейчас')
+    const c = mount(StudentCourses, { props: { studentId: 's1' } })
+    await flushPromises()
+    expect(c.find('.more.red').text()).toBe('Сбросить прохождение')
   })
 })
