@@ -148,6 +148,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
               <button class="pgo" @click="peek = null; router.push({ name: 'review' })">Повторить навыки</button>
               <button class="pgo ghost" @click="go(x)">Пройти заново</button>
             </template>
+            <button v-else-if="student && state(x) === 'todo'" class="pgo" disabled title="Ученик идёт по курсу по порядку">Сначала пройдите предыдущие</button>
             <button v-else class="pgo" @click="go(x)">Поехали!</button>
             </template>
           </div>
@@ -219,6 +220,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
 .vrow > .bead { margin: 31px 0 }
+.pgo:disabled { opacity: .55; cursor: default }
 .kin { flex: 0 0 100%; padding: 4px 0 18px 64px; position: relative; z-index: 1 } .kin .pgo { margin-top: 10px; max-width: 280px; --d: #1a8bc9 }
 .kbig { display: block; width: 260px; height: 260px; border-radius: 50%; object-fit: cover; background: #000; cursor: pointer; box-shadow: 0 0 0 4px #fff, 0 0 0 7px #2aabee }
 .pbig { display: block; max-width: 100%; max-height: 420px; border-radius: 16px }
