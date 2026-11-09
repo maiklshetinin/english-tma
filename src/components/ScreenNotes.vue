@@ -29,16 +29,17 @@ const drag = ref(null)          // { id, x, y }
 function pinDown(e, n) {
   if (e.button > 0) return
   const sx = e.clientX, sy = e.clientY, pin = e.currentTarget
+  const at = placeOf(n), dx = sx - at.x, dy = sy - at.y        // за какое место булавки взяли — так и держим, булавка не прыгает к курсору
   let moved = false
   const mv = (ev) => {
     if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return
-    moved = true; drag.value = { id: n.id, x: ev.clientX, y: ev.clientY }
+    moved = true; drag.value = { id: n.id, x: ev.clientX - dx, y: ev.clientY - dy }
   }
   const up = (ev) => {
     removeEventListener('pointermove', mv); removeEventListener('pointerup', up)
     if (!moved) return
     pin.style.visibility = 'hidden'                               // чтобы под пальцем нашёлся элемент страницы, а не сама булавка
-    const at = anchorAt(ev.clientX, ev.clientY)
+    const at = anchorAt(ev.clientX - dx, ev.clientY - dy)
     pin.style.visibility = ''
     drag.value = null; justDragged = true; setTimeout(() => { justDragged = false }, 0)
     moveNote(n.id, at); re()
