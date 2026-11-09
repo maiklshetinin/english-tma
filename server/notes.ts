@@ -11,6 +11,8 @@ export interface NoteMsg extends NoteAuthor { id: string; text: string; at: numb
 export interface Note { id: string; path: string; where: string; sel: string; rx: number; ry: number; x: number; y: number; at: number; by: string; msgs: NoteMsg[]; seen: Record<string, number> }
 
 export const NOTE_TEXT = 1000, NOTE_MSGS = 200, NOTES_MAX = 300
+/** Общий чат преподавателей (с 09.11.2026 вместо булавок) — одна заметка с этим путём: сообщений не «200 и стоп», а последние 200 */
+export const CHAT_PATH = '/__chat'
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '✅', '👀'] as const
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const frac = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1, Math.min(2, v)) * 1000) / 1000 : 0)
@@ -46,7 +48,8 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
     /** Ответ под заметкой */
     reply(u: NoteAuthor, nid: unknown, m: Record<string, unknown>): Note | null {
       const n = notes.get(str(nid, 64)), t = text(m.text)
-      if (!n || !t || n.msgs.length >= NOTE_MSGS) return null
+      if (!n || !t || (n.msgs.length >= NOTE_MSGS && n.path !== CHAT_PATH)) return null
+      if (n.path === CHAT_PATH) while (n.msgs.length >= NOTE_MSGS) n.msgs.shift()          // чат: старые уходят
       n.msgs.push(msg(u, t)); n.seen = { ...n.seen, [u.uid]: now() }; save(n); return n
     },
     /** Реакция на сообщение: поставить / снять (повторное нажатие) */

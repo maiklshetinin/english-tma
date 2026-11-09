@@ -28,7 +28,11 @@ const upsert = (n) => { const i = notesState.list.findIndex((x) => x.id === n.id
 
 /** Непрочитано мной: есть сообщения от других новее моего «прочитал» */
 export const unread = (n) => n.msgs.some((m) => m.uid !== notesState.me && m.at > (n.seen?.[notesState.me] ?? 0))
-export const unreadCount = computed(() => notesState.list.filter((n) => unread(n)).length)
+// Один общий чат справа (09.11.2026 — вместо заметок-булавок): это одна заметка с особым путём CHAT_PATH.
+// Старые заметки-булавки остаются в базе, но не показываются.
+export const CHAT_PATH = '/__chat'
+export const chatNote = computed(() => notesState.list.filter((n) => n.path === CHAT_PATH).sort((a, b) => a.at - b.at)[0] ?? null)
+export const unreadCount = computed(() => { const c = chatNote.value; return c ? c.msgs.filter((m) => m.uid !== notesState.me && m.at > (c.seen?.[notesState.me] ?? 0)).length : 0 })
 
 let wired = false
 export function wireNotes() {
@@ -80,6 +84,13 @@ export function seen(id) { liveSend({ t: 'note:seen', id }) }
 let lastTyping = 0
 export function typing(id) { const t = Date.now(); if (t - lastTyping > 2000) { lastTyping = t; liveSend({ t: 'typing', id: id || 'new' }) } }
 
+/** Открыть / закрыть общий чат; пока в нём нет ни одного сообщения — черновик, первое сообщение его создаёт */
+export function toggleChat(on = !(notesState.open || notesState.draft)) {
+  if (!on) { notesState.open = null; notesState.draft = null; return }
+  const c = chatNote.value
+  if (c) openNote(c.id)
+  else { notesState.open = null; notesState.draft = { path: CHAT_PATH, where: 'Чат', sel: '', rx: 0, ry: 0, x: 0, y: 0 } }
+}
 export function openNote(id) {
   notesState.open = id; notesState.draft = null
   const n = byId(id); if (n && unread(n)) seen(id)

@@ -5,9 +5,8 @@
 // над страницей (и только если в приложении есть кто-то ещё). Без соединения (демо) — не видно.
 import { ref, computed } from 'vue'
 import { live, people, WHERE, shared, setSharedCursors } from '../composables/useLive'
-import { useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
-import { notesState, unreadCount, unread, openNote } from '../composables/useNotes'
+import { notesState, unreadCount, toggleChat } from '../composables/useNotes'
 import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const props = defineProps({ inline: Boolean })
@@ -17,12 +16,7 @@ const more = computed(() => Math.max(0, people.value.length - 5))
 const bad = ref({})
 const ini = (n) => (n || '?').trim()[0]?.toUpperCase() || '?'
 // Заметки на экране: список (новые сверху), нажатие — перейти к месту и открыть; «Новая заметка» — нажать на экран
-const router = useRouter()
-const list = ref(false)
-const notes = computed(() => notesState.list)
-const whereN = (n) => n.where || 'приложение'
-function go(n) { list.value = false; if (router.currentRoute.value.fullPath !== n.path) router.push(n.path); setTimeout(() => openNote(n.id), 60) }
-function newNote() { list.value = false; notesState.open = null; notesState.placing = true }
+const chatOn = computed(() => !!(notesState.open || notesState.draft))          // общий чат открыт
 const label = (p) => (p.where === 'courses' ? 'в редакторе курсов' : WHERE[p.where] ? `«${WHERE[p.where]}»` : 'в приложении')
 </script>
 <template>
@@ -31,7 +25,7 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
     <button v-if="auth.isDev && !inline" class="cur" :class="{ on: shared.cursors }" :aria-pressed="shared.cursors"
       :title="shared.cursors ? 'Общие курсоры включены — нажмите, чтобы выключить у всех' : 'Включить общие курсоры: все увидят курсоры друг друга'" @click="setSharedCursors(!shared.cursors)">
       <svg viewBox="0 0 16 16"><path d="M2 1.5l5 13 1.9-5.4L14.5 7z" /></svg></button>
-    <button v-if="!inline" class="nt" :class="{ on: list }" :aria-expanded="list" :title="`Заметки на экране${unreadCount ? ' — новых: ' + unreadCount : ''}`" aria-label="Заметки" @click="list = !list; open = false">
+    <button v-if="!inline" class="nt" :class="{ on: chatOn }" :aria-pressed="chatOn" :title="`Чат${unreadCount ? ' — новых: ' + unreadCount : ''}`" aria-label="Чат" @click="toggleChat(); open = false">
       <AppIcon name="chat" :size="16" /><em v-if="unreadCount">{{ unreadCount }}</em></button>
     <button class="row" :title="people.map(p => (p.me ? 'Вы' : p.name) + ' — ' + label(p)).join('\n')" @click="open = !open">
       <span v-for="p in shown" :key="p.uid" class="av" :style="{ '--c': p.color }">
@@ -40,17 +34,6 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
       </span>
       <span v-if="more" class="av more">+{{ more }}</span>
     </button>
-    <div v-if="list" class="bg" @click="list = false" />
-    <div v-if="list" class="menu nl" role="dialog" aria-label="Заметки">
-      <div class="mh">Заметки · {{ notes.length }}</div>
-      <button v-for="n in notes" :key="n.id" class="ni" type="button" @click="go(n)">
-        <span class="av sm" :style="{ '--c': n.msgs[0].color }"><img v-if="n.msgs[0].photo" :src="n.msgs[0].photo" alt="" referrerpolicy="no-referrer" /><b v-else :style="{ background: n.msgs[0].color }">{{ ini(n.msgs[0].name) }}</b></span>
-        <span class="tx"><b>{{ n.msgs[0].text }}</b><small>{{ whereN(n) }}<template v-if="n.msgs.length > 1"> · ответов: {{ n.msgs.length - 1 }}</template></small></span>
-        <i v-if="unread(n)" class="dot" />
-      </button>
-      <p v-if="!notes.length" class="empty">Заметок нет. Правый клик на экране (или клавиша C) → «Оставить заметку здесь»</p>
-      <button class="add" type="button" @click="newNote"><AppIcon name="plus" :size="16" />Новая заметка</button>
-    </div>
     <div v-if="open" class="bg" @click="open = false" />
     <div v-if="open" class="menu" role="dialog" aria-label="Кто сейчас в приложении">
       <div class="mh">Сейчас в приложении</div>

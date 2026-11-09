@@ -1,5 +1,7 @@
 <script setup>
-// Заметки на общем экране — мини-чат преподавателей (логика: composables/useNotes.js, сервер: server/notes.ts).
+// 09.11.2026: вместо заметок-булавок — ОДИН общий чат справа (кнопка-чат у «Сейчас здесь»). Булавки, правый клик и клавиша C выключены;
+// старые заметки остаются в базе, но не показываются. Реакции, правка, «печатает…», «Прочитано», колокольчик и парашют — как были.
+// Было: заметки на общем экране — мини-чат преподавателей (логика: composables/useNotes.js, сервер: server/notes.ts).
 //  • Правый клик (или клавиша C) → «Оставить заметку здесь»: булавка приклеивается к месту на странице, у коллег — сразу.
 //  • Свои сообщения можно исправить (карандаш у сообщения) — у коллег пометка «изм.».
 //  • Булавку можно перетащить на другое место — у коллег она переедет сразу.
@@ -12,7 +14,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
 import ParachuteDrop from './ParachuteDrop.vue'
 import { live, WHERE } from '../composables/useLive'
-import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO } from '../composables/useNotes'
+import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO, CHAT_PATH } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
 import { ask } from '../composables/useDialog'
 
@@ -25,7 +27,7 @@ const whereOf = () => WHERE[route.meta.tab] || (route.meta.tab === 'info' ? 'И�
 // --- булавки на этой странице ---
 const pins = computed(() => {
   void tick.value
-  return S.list.filter((n) => n.path === route.fullPath).map((n) => ({ n, at: placeOf(n), unread: unread(n) }))
+  return []          // булавок больше нет — один общий чат (было: заметки этой страницы)
 })
 // --- перенос булавки: потянул (больше 5 px) — едет за пальцем/мышью, отпустил — приклеилась на новое место (у всех) ---
 const drag = ref(null)          // { id, x, y }
@@ -55,14 +57,9 @@ const pinAt = (p) => (drag.value?.id === p.n.id ? drag.value : p.at)
 
 // --- открытая заметка или черновик новой ---
 const note = computed(() => (S.open ? noteById(S.open) : null))
-const anchor = computed(() => { void tick.value; return drag.value && drag.value.id === S.open ? drag.value : note.value ? placeOf(note.value) : S.draft ? placeOf(S.draft) : null })
+const anchor = computed(() => ((note.value || S.draft) ? { x: 0, y: 0 } : null))          // чат прикреплён к правому краю, не к месту на странице
 const mobile = ref(innerWidth < 720)
-const cardPos = computed(() => {
-  const a = anchor.value; if (!a || mobile.value) return null
-  const W = 320, H = note.value ? 440 : 130
-  const left = a.x + 26 + W > innerWidth - 8 ? a.x - 26 - W : a.x + 26
-  return { left: Math.max(8, left) + 'px', top: Math.max(8, Math.min(a.y - 18, innerHeight - H - 8)) + 'px' }
-})
+const cardPos = computed(() => null)          // чат — справа во всю высоту (класс dock), на телефоне — снизу
 const close = () => { S.open = null; S.draft = null }
 // Удалить заметку целиком — у всех; спрашиваем, как обычно
 async function del(n) {
@@ -115,6 +112,9 @@ function onKey(e) {
 }
 watch(() => S.open || (S.draft && 'new'), (v) => { picker.value = ''; if (v) nextTick(() => ta.value?.focus()) })
 const mine = (m) => m.uid === S.me
+// чат: открыли или пришло новое сообщение — прокрутить вниз, к последнему
+const box = ref(null)
+watch(() => [S.open, note.value?.msgs.length], () => nextTick(() => { if (box.value) box.value.scrollTop = box.value.scrollHeight }), { immediate: true })
 // Исправить своё сообщение: карандаш у сообщения → поле на месте текста; Enter — сохранить, Esc — отмена
 const editing = ref(''), editText = ref('')
 function startEdit(m) { editing.value = m.id; editText.value = m.text; nextTick(() => document.querySelector('.sn-card .ed')?.focus()) }
@@ -126,6 +126,8 @@ const reacts = (m) => Object.entries(m.react || {}).map(([e, who]) => ({ e, n: w
 const menu = ref(null)
 const editable = (el) => el?.closest?.('input, textarea, select, [contenteditable="true"]')
 function onContext(e) {
+  return          // правый клик «Оставить заметку здесь» выключен — теперь один общий чат (ниже — как было)
+  // eslint-disable-next-line no-unreachable
   if (!live.on || editable(e.target) || e.target.closest?.('.sn-card, .sn-pin, .sn-menu')) return
   e.preventDefault()
   menu.value = { x: e.clientX, y: e.clientY }
@@ -139,8 +141,7 @@ let lastX = innerWidth / 2, lastY = innerHeight / 2
 const onMove = (e) => { lastX = e.clientX; lastY = e.clientY; if (S.aim) aimX.value = e.clientX }
 function onKeyGlobal(e) {
   if (!live.on || editable(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
-  if (e.key === 'c' || e.key === 'с' || e.key === 'C' || e.key === 'С') { e.preventDefault(); startAt(lastX, lastY) }
-  else if (e.key === 'Escape') { close(); menu.value = null; S.placing = false; S.aim = null }
+  if (e.key === 'Escape') { close(); menu.value = null; S.placing = false; S.aim = null }
 }
 function onPlace(e) {
   if (S.aim && !e.target.closest?.('.sn-aim .msg')) {        // посылка: нажатие выбирает, куда сбросить (по горизонтали)
@@ -158,7 +159,7 @@ const aimX = ref(0)
 const popups = computed(() => S.popups.map((p) => { const n = noteById(p.id); return n && { ...p, n, m: n.msgs.find((x) => x.id === p.mid) || n.msgs.at(-1) } }).filter(Boolean))
 function openPopup(p) {
   closePopup(p.id, true)
-  if (p.n.path !== route.fullPath) router.push(p.n.path)
+  if (p.n.path !== CHAT_PATH && p.n.path !== route.fullPath) router.push(p.n.path)
 }
 
 let clock = 0
@@ -174,7 +175,7 @@ onUnmounted(() => {
   removeEventListener('pointerdown', onPlace, true)
   removeEventListener('scroll', re, { capture: true }); removeEventListener('resize', onResize); clearInterval(clock)
 })
-watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
+watch(() => route.fullPath, () => { menu.value = null; re() })          // чат при переходе по вкладкам остаётся открытым
 </script>
 
 <template>
@@ -188,13 +189,13 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
   <span v-if="S.draft && anchor" class="sn-pin new" :style="{ transform: `translate(${anchor.x}px, ${anchor.y}px)` }"><AppIcon name="plus" :size="16" /></span>
 
   <!-- карточка -->
-  <div v-if="(note || S.draft) && anchor" class="sn-card" :class="{ sheet: mobile }" :style="cardPos" role="dialog" :aria-label="note ? 'Заметка' : 'Новая заметка'" @pointerdown.stop>
+  <div v-if="(note || S.draft) && anchor" class="sn-card dock" :class="{ sheet: mobile }" :style="cardPos" role="dialog" :aria-label="note ? 'Заметка' : 'Новая заметка'" @pointerdown.stop>
     <div class="hd">
-      <span>{{ note ? `Заметка${note.where ? ' · ' + note.where : ''}` : 'Новая заметка' }}</span>
-      <button v-if="note" class="ib del" type="button" title="Удалить заметку" aria-label="Удалить заметку" @click="del(note)"><AppIcon name="trash" :size="15" /></button>
+      <span>Чат<small v-if="note" class="cnt"> · {{ note.msgs.length }}</small></span>
+      <button v-if="note && note.path !== CHAT_PATH" class="ib del" type="button" title="Удалить заметку" aria-label="Удалить заметку" @click="del(note)"><AppIcon name="trash" :size="15" /></button>
       <button class="ib" type="button" aria-label="Закрыть" @click="close"><AppIcon name="x" :size="14" /></button>
     </div>
-    <div v-if="note" class="msgs" @scroll="picker = ''">
+    <div v-if="note" ref="box" class="msgs" @scroll="picker = ''">
       <div v-for="m in note.msgs" :key="m.id" class="m">
         <span class="av" :style="{ '--c': m.color }"><img v-if="m.photo" :src="m.photo" alt="" referrerpolicy="no-referrer" /><b v-else>{{ ini(m.name) }}</b></span>
         <span class="mb">
@@ -213,7 +214,7 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
     </div>
     <div v-if="typer" class="typ" :style="{ '--c': typer.color }"><span class="dots"><i /><i /><i /></span>{{ typer.name }} печатает…</div>
     <div class="in">
-      <textarea ref="ta" v-model="text" rows="1" :placeholder="note ? 'Ответить…' : 'Напишите — увидят все, кто в приложении'" maxlength="1000" @keydown="onKey" />
+      <textarea ref="ta" v-model="text" rows="1" :placeholder="'Сообщение — увидят все, кто в приложении'" maxlength="1000" @keydown="onKey" />
       <button class="bell" :class="{ on: mode === 'bell' }" type="button" :aria-pressed="mode === 'bell'" :title="mode === 'bell' ? 'Отправится уведомлением: у коллег всплывёт плашка' : 'Отправить уведомлением — у коллег всплывёт плашка, пока не закроют'" @click="mode = mode === 'bell' ? '' : 'bell'; cargoMenu = false"><AppIcon name="bell" :size="16" /></button>
       <span class="cw">
         <button class="bell chute" :class="{ on: cargoOf }" type="button" :aria-pressed="!!cargoOf" :aria-expanded="cargoMenu" :title="cargoOf ? `Отправится на парашюте: ${cargoOf.title}` : 'Отправить на парашюте — посылкой'" @click="toggleCargo">
@@ -261,6 +262,8 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 .sn-pin.on { box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) }
 .sn-pin.new { pointer-events: none; color: var(--blue); box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) }
 /* Карточка */
+.sn-card.dock:not(.sheet) { left: auto !important; top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 60px); right: 14px; bottom: 16px; width: 340px; max-height: none }          /* общий чат — справа во всю высоту */
+.hd .cnt { font-weight: 700; color: var(--hint) }
 .sn-card { position: fixed; z-index: 60; width: 320px; max-height: 440px; display: flex; flex-direction: column; border-radius: 16px; background: var(--card); box-shadow: 0 14px 40px rgba(0, 0, 0, .2), 0 0 0 1px var(--border); overflow: hidden; animation: snp .14s ease-out }
 @keyframes snp { from { opacity: 0; transform: scale(.96) } }
 .sn-card.sheet { left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 70vh; border-radius: 20px 20px 0 0; padding-bottom: var(--safe-b) }

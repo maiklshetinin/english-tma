@@ -25,6 +25,10 @@ N.move(n.id, { sel: 'p:nth-child(2)', rx: 0.1, ry: 0.9, x: 5, y: 6 }); ok('пе�
 ok('чужое сообщение не исправить', !N.edit(misha, n.id, n.msgs[1].id, { text: 'x' }))
 N.edit(misha, n.id, n.msgs[0].id, { text: ' Перенеси Веру на пятницу ' }); ok('своё исправить', n.msgs[0].text === 'Перенеси Веру на пятницу' && n.msgs[0].edited)
 ok('удалить может любой', N.remove(n.id) === n.id && !N.all().length && !N.remove('nope'))
+const chat = N.create(misha, { path: '/__chat', where: 'Чат', text: 'Привет' })!
+for (let k = 0; k < 230; k++) N.reply(stasya, chat.id, { text: 'm' + k })
+ok('общий чат: не упирается в 200 — хранит последние 200', chat.msgs.length === 200 && chat.msgs.at(-1)!.text === 'm229')
+N.remove(chat.id)
 
 // --- через WebSocket ---
 const users: Record<string, any> = { a: { uid: 'tg:1', role: 'teacher', name: 'Миша', photo: '' }, b: { uid: 'tg:2', role: 'teacher', name: 'Стася', photo: '' }, c: { uid: 'tg:3', role: 'teacher', name: 'Оля', photo: '' } }
