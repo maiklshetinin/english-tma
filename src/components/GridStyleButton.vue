@@ -2,7 +2,7 @@
 // Кнопка с решёткой над таблицей недели: меню (как в iOS) — рамка, прошедшее время и вид урока (серый / голубой). См. utils/gridStyle.js.
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { gridFrame, setGridFrame, LESSON_STYLES, lessonStyle, setLessonStyle, pastShade, setPastShade, TRIAL_STYLES, trialStyle, setTrialStyle } from '../utils/gridStyle'
+import { gridFrame, setGridFrame, LESSON_STYLES, lessonStyle, setLessonStyle, pastShade, setPastShade } from '../utils/gridStyle'
 const open = ref(null)
 function toggle(e) {
   if (open.value) { open.value = null; return }
@@ -35,12 +35,6 @@ onUnmounted(() => removeEventListener('keydown', onKey))
           <span class="ls-pv" :class="s.id"><i /><b /></span>
           <span class="gs-tx"><b>{{ s.title }}</b><small>{{ s.sub }}</small></span>
           <span v-if="lessonStyle === s.id" class="gs-ok"><AppIcon name="check" :size="16" /></span>
-        </button>
-        <div class="gs-h sep">Пробный урок</div>
-        <button v-for="s in TRIAL_STYLES" :key="s.id" class="gs-r" role="menuitemradio" :aria-checked="trialStyle === s.id" @click="setTrialStyle(s.id)">
-          <span class="tr-pv" :class="s.id"><i /></span>
-          <span class="gs-tx"><b>{{ s.title }}</b><small>{{ s.sub }}</small></span>
-          <span v-if="trialStyle === s.id" class="gs-ok"><AppIcon name="check" :size="16" /></span>
         </button>
       </div>
     </div>
@@ -75,11 +69,6 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .ls-pv b { position: absolute; left: 0; right: 0; top: 2px; bottom: 2px; border-radius: 5px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
 .ls-pv.gray b { background: var(--group); box-shadow: 0 1px 3px rgba(0, 0, 0, .14); border-radius: 99px }
 .ls-pv.blue b { background: var(--blue-l); box-shadow: 0 1px 3px rgba(28, 120, 200, .25); border-radius: 99px }
-/* Превью пробного урока: жёлтая капсула / жёлтый листок с загнутым уголком */
-.tr-pv { flex: none; display: grid; place-items: center; width: 38px; height: 26px }
-.tr-pv.capsule i { width: 36px; height: 16px; border-radius: 99px; background: #ffe58a; box-shadow: inset 0 0 0 1px #e9cf6a }
-.tr-pv.note i { position: relative; width: 26px; height: 24px; border-radius: 3px; background: #fff3a8; box-shadow: 0 2px 4px rgba(120, 90, 0, .25); transform: rotate(-4deg) }
-.tr-pv.note i::after { content: ''; position: absolute; right: 0; bottom: 0; border: 4px solid transparent; border-right-color: #e9d27a; border-bottom-color: #e9d27a }
 /* Переключатель как в Telegram */
 .sw { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 99px; background: var(--border); cursor: pointer; transition: background .15s }
 .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s }

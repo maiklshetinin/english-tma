@@ -5,7 +5,8 @@
 //  • Урок из таблицы: копия карточки того же размера поверх оригинала, едет за курсором.
 // Над призраком — подсказка, что будет, если отпустить сейчас (те же правила, что у броска в TeacherHome):
 // зелёная — назначить / перенести, оранжевая — поменять местами, красная — нельзя и почему (или «снять урок» над панелью).
-import { lessonStyle, trialStyle } from '../utils/gridStyle'
+import { lessonStyle } from '../utils/gridStyle'
+import { stickerVars, lastSticker } from '../utils/sticker'
 import { computed, ref, watch, nextTick } from 'vue'
 import { dnd } from '../composables/useDnd'
 import Avatar from './Avatar.vue'
@@ -17,7 +18,7 @@ import { fmtSlot, slotPast } from '../utils/dates'
 const studentStore = useStudentsStore()
 const p = computed(() => dnd.payload)
 const lesson = computed(() => p.value?.kind === 'lesson')
-// Стикер пробного урока: с подушечки «Пробный урок» над таблицей или уже приклеенный (урок без учеников)
+// Стикер-закладка: с пачки закладок над таблицей или уже приклеенный (урок без учеников)
 const trial = computed(() => p.value?.kind === 'trial' || (lesson.value && p.value.lesson.trial && !p.value.lesson.studentIds.length))
 const people = computed(() => {
   if (!p.value) return []
@@ -66,7 +67,7 @@ const hint = computed(() => {
   if (pl.kind === 'trial') {
     if (occ) return { k: 'bad', t: 'Занято — нужна свободная ячейка' }
     if (slotPast(o.date, o.hour)) return { k: 'bad', t: 'Это время уже прошло' }
-    return { k: 'ok', t: `Пробный урок · ${at}` }
+    return { k: 'ok', t: `Стикер · ${at}` }
   }
   if (!lesson.value) {
     if (occ) return { k: 'bad', t: 'Занято. Добавить в этот урок — откройте его → «Добавить ученика»' }
@@ -78,7 +79,7 @@ const hint = computed(() => {
   if (occ?.done) return { k: 'bad', t: 'Здесь проведённый урок — не меняется' }
   if (occ && occ.studentIds.length && occ.studentIds.every(id => occ.canceled?.[id])) return { k: 'bad', t: 'Здесь отменённый урок — не меняется' }
   if (slotPast(o.date, o.hour)) return { k: 'bad', t: 'Это время уже прошло' }
-  if (occ) return { k: 'swap', t: `Поменять местами: ${occ.trial && !occ.studentIds.length ? 'пробный урок' : who(occ)}` }
+  if (occ) return { k: 'swap', t: `Поменять местами: ${occ.trial && !occ.studentIds.length ? 'стикер' : who(occ)}` }
   return { k: 'ok', t: `Перенести · ${at}` }
 })
 // Подсказка — над призраком, по центру (на тачскрине призрак над пальцем, так что и подсказку палец не закрывает)
@@ -94,9 +95,8 @@ const hintPos = computed(() => {
 <template>
   <div v-if="outZone && zoneBox" class="dzone" :style="zoneBox" aria-hidden="true" />
   <div v-if="dnd.active && (people.length || trial)" class="gw" :style="{ transform: `translate(${dnd.x}px, ${dnd.y}px)` }">
-    <div v-if="trial" class="tghost" :class="[trialStyle, { gone: dnd.over?.kind === 'out' || dnd.over?.kind === 'panel' }]" :style="box">
-      <template v-if="trialStyle === 'note'"><b>Пробный</b><span>{{ p.lesson?.note || 'Напишите…' }}</span></template>
-      <template v-else><i /><span>{{ (p.lesson?.note || '').split('\n')[0] || 'Пробный' }}</span></template>
+    <div v-if="trial" class="tghost" :class="{ gone: dnd.over?.kind === 'out' || dnd.over?.kind === 'panel' }" :style="[box, stickerVars(p.lesson?.color ?? lastSticker)]">
+      <span>{{ p.lesson?.note || 'Стикер' }}</span>
     </div>
     <div v-else class="ghost" :class="[{ lesson, small: small || lesson, one, gone: lesson && (dnd.over?.kind === 'out' || dnd.over?.kind === 'panel') }, lesson ? `ls-${lessonStyle}` : '']" :style="box">
       <template v-if="lesson">
@@ -139,11 +139,9 @@ const hintPos = computed(() => {
   white-space: normal; box-shadow: 0 6px 16px rgba(0, 0, 0, .18); background: var(--green-d) }
 /* Урок вытащили за таблицу — снимется: бледнеет и краснеет рамка */
 .ghost.lesson.gone { opacity: .55; box-shadow: 0 0 0 2px var(--red), 0 8px 20px rgba(0, 0, 0, .2) !important }
-.tghost { position: absolute; box-sizing: border-box; display: flex; overflow: hidden; color: #5c4a00; box-shadow: 0 10px 22px rgba(120, 90, 0, .3); opacity: .97 }
-.tghost.note { flex-direction: column; justify-content: center; padding: 3px 7px; border-radius: 3px; background: #fff3a8; transform: rotate(-3deg) }
-.tghost.note b { font-size: 9px; font-weight: 900; letter-spacing: .4px; text-transform: uppercase; color: #a07c00 } .tghost.note span { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.tghost.capsule { align-items: center; gap: 6px; padding: 0 10px 0 6px; border-radius: 99px; background: #ffe58a; font-size: 13px; font-weight: 800; white-space: nowrap }
-.tghost.capsule i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #e0a800; box-shadow: 0 0 0 3px #fff3c2 }
+.tghost { position: absolute; box-sizing: border-box; display: flex; align-items: center; overflow: hidden; padding: 0 6px 0 12px; border-radius: 2px 5px 5px 2px; background: var(--bg); color: #2b2b2b; box-shadow: 0 10px 22px rgba(0, 0, 0, .22); transform: rotate(-3deg); opacity: .97 }
+.tghost::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--c) }
+.tghost span { font-size: 12px; font-weight: 800; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2 }
 .tghost.gone { opacity: .55; box-shadow: 0 0 0 2px var(--red), 0 8px 20px rgba(0, 0, 0, .2) }
 .dzone { position: fixed; z-index: 90; pointer-events: none; border-radius: 16px; box-shadow: 0 0 0 2px var(--red), 0 0 0 200vmax rgba(255, 75, 75, .10); animation: dz .15s ease-out }
 @keyframes dz { from { opacity: 0 } }

@@ -11,7 +11,8 @@
 import type { Firestore, FieldValue as FV, Transaction, DocumentReference } from 'firebase-admin/firestore'
 import { fail } from './login.js'
 import { priceAt } from './price.js'
-import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, StudentsInput, TokenUser, WeekDoc, CancelInput, DetailsInput } from './types.js'
+import { STICKER_COLORS } from './types.js'
+import type { DoneInput, Lesson, LessonDoc, LessonInput, ScheduleResponse, ScheduleWeek, SlotInput, StudentsInput, TokenUser, WeekDoc, CancelInput, DetailsInput, StickerColor } from './types.js'
 
 export const HOUR_MIN = 8, HOUR_MAX = 22                 // как в таблице на сайте: 08:00 … 22:00
 const ID = /^[\w-]{1,64}$/
@@ -33,11 +34,11 @@ export const slotKey = (date: string, hour: number) => `${date}_${pad(hour)}`
 const canceledOf = (x: Pick<LessonDoc, 'studentIds' | 'canceled'>) => Object.fromEntries(Object.entries(x.canceled ?? {}).filter(([k]) => x.studentIds.includes(k)))   // только ученики этого урока
 export const MINUTES = [0, 15, 30, 45]
 const NOTE_MAX = 300
-const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names' | 'canceled' | 'minute' | 'note' | 'trial'>): Lesson => {
+const pub = (id: string, x: Pick<LessonDoc, 'date' | 'hour' | 'studentIds' | 'done' | 'prices' | 'names' | 'canceled' | 'minute' | 'note' | 'trial' | 'color'>): Lesson => {
   const canceled = canceledOf(x)
   return { id, date: x.date, hour: x.hour, studentIds: [...x.studentIds], done: !!x.done, ...(x.done ? { prices: { ...(x.prices ?? {}) } } : {}),
     ...(x.names && Object.keys(x.names).length ? { names: { ...x.names } } : {}), ...(Object.keys(canceled).length ? { canceled } : {}),
-    ...(x.minute ? { minute: x.minute } : {}), ...(x.note ? { note: x.note } : {}), ...(x.trial ? { trial: true } : {}) }
+    ...(x.minute ? { minute: x.minute } : {}), ...(x.note ? { note: x.note } : {}), ...(x.trial ? { trial: true } : {}), ...(x.trial && x.color ? { color: x.color } : {}) }
 }
 const byTime = (a: Lesson, b: Lesson) => a.date.localeCompare(b.date) || a.hour - b.hour
 /** Урок глазами ученика: только он сам, только его цена и отметка «отменил»; без заметки преподавателя и чужих имён. */
@@ -212,15 +213,16 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
     },
 
     // Новый урок в слот. studentIds — один ученик (обычный урок) или несколько (группа).
-    // trial: true — пробный урок-стикер: всегда бесплатный, без учеников, только текст (note); занимает слот, в деньгах не участвует, ученикам не виден.
+    // trial: true — стикер-закладка (цвет — color): всегда бесплатный, без учеников, только текст (note); занимает слот, в деньгах не участвует, ученикам не виден.
     async create(input: Partial<LessonInput> | undefined, by: string): Promise<Lesson> {
       const raw = Array.isArray(input?.studentIds) ? input.studentIds : input?.studentId != null ? [input.studentId] : []
       const slot = slotOf(input)
       const trial = input?.trial === true
       const ids = trial ? [] : await studentIdsOf(raw)
       const note = trial && typeof input?.note === 'string' ? input.note.trim().slice(0, NOTE_MAX) : ''
+      const color = trial && STICKER_COLORS.includes(input?.color as StickerColor) ? input!.color : undefined
       const minute = MINUTES.includes(input?.minute as number) ? (input!.minute as number) : 0           // можно сразу указать начало внутри часа
-      const ref = lessons().doc(), data = { date: slot.date, hour: slot.hour, studentIds: ids, ...(minute ? { minute } : {}), ...(trial ? { trial: true } : {}), ...(note ? { note } : {}) }
+      const ref = lessons().doc(), data = { date: slot.date, hour: slot.hour, studentIds: ids, ...(minute ? { minute } : {}), ...(trial ? { trial: true } : {}), ...(note ? { note } : {}), ...(color ? { color } : {}) }
       await db.runTransaction(async (tx) => {
         const W = weekLoader(tx), w = await W.get(slot.ws)
         if (w.slots[slot.key]) throw fail(409, 'slot busy')
@@ -274,6 +276,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
       const patch: Partial<LessonDoc> = {}
       if (input?.minute !== undefined) { if (!MINUTES.includes(input.minute as number)) throw fail(400, 'minute: 0, 15, 30 or 45'); patch.minute = input.minute }
       if (input?.note !== undefined) { if (typeof input.note !== 'string') throw fail(400, 'note must be string'); patch.note = input.note.trim().slice(0, NOTE_MAX) }
+      if (input?.color !== undefined) { if (!STICKER_COLORS.includes(input.color)) throw fail(400, 'color: ' + STICKER_COLORS.join(', ')); patch.color = input.color }      // цвет стикера-закладки
       if (!Object.keys(patch).length) throw fail(400, 'nothing to change')
       let out: Lesson | undefined
       await db.runTransaction(async (tx) => {

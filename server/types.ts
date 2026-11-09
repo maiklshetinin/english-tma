@@ -132,7 +132,8 @@ export interface LessonDoc {
   hour: number                 // 8–22
   weekStart: string            // понедельник той недели, где лежит дата
   studentIds: string[]         // один ученик или группа (до 12); у пробного урока — пусто
-  trial?: boolean              // пробный урок (стикер в расписании): учеников нет, текст стикера — в note; не деньги
+  trial?: boolean              // стикер-закладка в расписании (бывший «пробный урок»): учеников нет, текст — в note; не деньги
+  color?: StickerColor         // цвет стикера-закладки
   done?: boolean               // «урок проведён» (отмечает преподаватель; на всех учеников урока сразу)
   doneAt?: ServerTime | null
   prices?: Record<string, number>   // цена урока по ученикам, зафиксированная в момент отметки «проведён»: потом не меняется
@@ -162,7 +163,8 @@ export interface Lesson {
   canceled?: Record<string, string> // кто из учеников отменил урок (id → ISO-время); ученик видит только свою отметку
   minute?: number                   // минута начала: 0 | 15 | 30 | 45 (видят все)
   note?: string                     // заметка преподавателя (только преподавателю); у пробного урока — текст стикера
-  trial?: boolean                   // пробный урок — стикер: studentIds пустой (только преподавателю, ученику не виден)
+  trial?: boolean                   // стикер-закладка: studentIds пустой (только преподавателю, ученику не виден)
+  color?: StickerColor              // цвет стикера
 }
 
 export interface LessonInput {             // POST /lessons
@@ -171,11 +173,15 @@ export interface LessonInput {             // POST /lessons
   date: string
   hour: number
   minute?: number                          // начало внутри часа: 0 | 15 | 30 | 45
-  trial?: boolean                          // пробный урок-стикер: учеников не нужно (studentId(s) не передаются)
+  trial?: boolean                          // стикер-закладка: учеников не нужно (studentId(s) не передаются)
+  color?: StickerColor                     // цвет стикера
   note?: string                            // текст стикера пробного урока (до 300 символов)
 }
 export interface DoneInput { done: boolean }   // POST /lessons/:id/done
-export interface DetailsInput { minute?: number; note?: string }   // POST /lessons/:id/details — начало внутри часа и заметка (любое из полей)
+/** Цвета стикеров-закладок — как в пачке клейких закладок */
+export const STICKER_COLORS = ['blue', 'green', 'yellow', 'pink', 'orange'] as const
+export type StickerColor = typeof STICKER_COLORS[number]
+export interface DetailsInput { minute?: number; note?: string; color?: StickerColor }   // POST /lessons/:id/details — начало внутри часа и заметка (любое из полей)
 export interface CancelInput { studentId: string; canceled: boolean }   // POST /lessons/:id/cancel — «отменил ученик» (без оплаты) / вернуть
 export interface SlotInput { date: string; hour: number }   // POST /lessons/:id/move
 export interface StudentsInput { studentIds: string[] }      // POST /lessons/:id/students — новый состав урока целиком (1–12 учеников)

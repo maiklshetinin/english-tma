@@ -3,7 +3,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
-import { gridStyle, gridFrame, lessonStyle, pastShade, trialStyle } from '../utils/gridStyle'
+import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
 import TrialSticker from './TrialSticker.vue'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney } from '../utils/price'
@@ -12,7 +12,7 @@ import { useStudentsStore } from '../stores/students'
 import { useScheduleStore, needsStatus } from '../stores/schedule'
 const studentStore = useStudentsStore()
 const scheduleStore = useScheduleStore()
-// freshTrial — id только что приклеенного пробного урока: его стикер сразу открывается для текста
+// freshTrial — id только что приклеенного стикера: он сразу открывается для текста
 const props = defineProps({ dates: { type: Array, required: true }, ghosts: { type: Array, default: () => [] }, freshTrial: { type: String, default: null } })
 const emit = defineEmits(['cell', 'lesson', 'ghost', 'ghost-skip', 'trial-save', 'trial-remove', 'trial-edited'])
 // «Призраки» на следующей неделе — уроки этой недели в тех же днях и часах, пока не подтверждены (в базе их нет)
@@ -36,7 +36,7 @@ function dropState(d, h) {                       // подсветка ячей�
   if (!dnd.active || o?.kind !== 'cell' || o.date !== d || o.hour !== h) return ''
   const occ = at(d, h)[0], p = dnd.payload
   if (p.kind === 'lesson') return occ?.id === p.lesson.id ? '' : slotPast(d, h, now.value) || occ?.done || (occ && allOff(occ)) ? 'bad' : occ ? 'swap' : 'ok'      // в прошлое не переносим
-  if (p.kind === 'trial') return occ || slotPast(d, h, now.value) ? 'bad' : 'ok'      // стикер пробного урока — на свободное будущее время
+  if (p.kind === 'trial') return occ || slotPast(d, h, now.value) ? 'bad' : 'ok'      // стикер — на свободное будущее время
   if (!occ) return 'ok'
   return 'bad'      // ученик / группа — только на свободную ячейку: из урока группу не собираем
 }
@@ -93,7 +93,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         data-drop="cell" :data-date="d" :data-hour="h" @click="clickCell(d, h)">
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
-          <TrialSticker v-if="l.trial" :lesson="l" :look="trialStyle" :auto-edit="freshTrial === l.id" @save="emit('trial-save', l, $event)" @remove="emit('trial-remove', l)" @edited="emit('trial-edited')" />
+          <TrialSticker v-if="l.trial" :lesson="l" :auto-edit="freshTrial === l.id" @save="emit('trial-save', l, $event)" @remove="emit('trial-remove', l)" @edited="emit('trial-edited')" />
           <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
             @pointerdown="down($event, l)" @click.stop="tapLesson(l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
@@ -241,9 +241,9 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk.gs-cells .g.head + .g.nowrow > .cell:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 1px 0 var(--border), inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g.head + .g.nowrow > .cell.tcol:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
 .wk.gs-cells .g:last-child > .cell:nth-child(2) { border-bottom-left-radius: 10px }
-/* Сегодня понедельник / воскресенье — у серого (прошедшего) времени колонки «сегодня» нет внешней линии таблицы слева / справа: серое идёт ровно, как шапка дня */
-.wk.gs-cells.shade.td-first .g > .cell.tcol.past:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
-.wk.gs-cells.shade.td-last .g > .cell.tcol.past:last-child:not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 -1px 0 var(--border) } .wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
+/* Сегодня понедельник / воскресенье — в первой строке (под шапкой дня) нет внешней линии таблицы слева / справа: шапка дня переходит в колонку без черты */
+.wk.gs-cells.td-first .g.head + .g > .cell.tcol:nth-child(2):not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset -1px -1px 0 var(--border) }
+.wk.gs-cells.td-last .g.head + .g > .cell.tcol:last-child:not(.ok):not(.bad):not(.swap):not(.join) { box-shadow: inset 0 -1px 0 var(--border) } .wk.gs-cells .g:last-child > .cell:last-child { border-bottom-right-radius: 10px }
 @media (min-width: 720px) { .wk.gs-cells .tm, .wk.gs-cells .corner { margin-right: 8px } }      /* «мск» — той же ширины, что колонка часов, с зазором до таблицы */
 .wk.gs-cells .chip { inset: 3px; border-radius: 7px }
 @media (max-width: 420px) { .wk.gs-cells .g { grid-template-columns: 36px repeat(7, minmax(0, 1fr)) } .wk.gs-cells .tm { font-size: 10px; margin-right: 3px } .wk.gs-cells .corner { margin-right: 3px } }

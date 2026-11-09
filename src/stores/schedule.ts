@@ -116,13 +116,13 @@ export const useScheduleStore = defineStore('schedule', () => {
     sync(async () => { lesson.id = (await post<Lesson>('/lessons', { studentIds: [...lesson.studentIds], date, hour }, 'Не удалось сохранить урок')).id })
     return lesson
   }
-  /** Пробный урок — стикер без учеников: всегда бесплатный, занимает слот, текст пишется прямо в нём (note). В деньгах не участвует, ученикам не виден. */
-  function createTrial(date: string, hour: number, note = ''): Lesson {
+  /** Стикер-закладка (в базе — trial): без учеников, всегда бесплатный, цвет — color; занимает слот, текст пишется прямо в нём (note). В деньгах не участвует, ученикам не виден. */
+  function createTrial(date: string, hour: number, note = '', color?: Lesson['color']): Lesson {
     rev++
-    lessons.value.push({ id: `${TMP}${++tmpSeq}`, date, hour, studentIds: [], trial: true, ...(note ? { note } : {}) })
+    lessons.value.push({ id: `${TMP}${++tmpSeq}`, date, hour, studentIds: [], trial: true, ...(note ? { note } : {}), ...(color ? { color } : {}) })
     const lesson = lessons.value[lessons.value.length - 1]
     // правки текста, сделанные пока урок создаётся, стоят в очереди следом и уйдут уже с настоящим id
-    sync(async () => { lesson.id = (await post<Lesson>('/lessons', { trial: true, date, hour, note }, 'Не удалось сохранить пробный урок')).id })
+    sync(async () => { lesson.id = (await post<Lesson>('/lessons', { trial: true, date, hour, note, ...(color ? { color } : {}) }, 'Не удалось сохранить стикер')).id })
     return lesson
   }
   function move(lesson: Lesson, date: string, hour: number) {
@@ -157,10 +157,11 @@ export const useScheduleStore = defineStore('schedule', () => {
     sync(async () => { if (!isTmp(l.id)) await post(`/lessons/${encodeURIComponent(l.id)}/cancel`, { studentId, canceled }, 'Не удалось изменить отмену') })
   }
   /** Начало внутри часа (0/15/30/45) и заметка преподавателя: правка сразу на экране, запрос — по очереди. */
-  function setDetails(lesson: Lesson, d: { minute?: number; note?: string }) {
+  function setDetails(lesson: Lesson, d: { minute?: number; note?: string; color?: Lesson['color'] }) {
     const l = live(lesson) ?? lesson; rev++
     if (d.minute !== undefined) l.minute = d.minute || undefined
     if (d.note !== undefined) l.note = d.note.trim().slice(0, 300) || undefined
+    if (d.color !== undefined) l.color = d.color
     const body = { ...d, ...(d.note !== undefined ? { note: d.note.trim().slice(0, 300) } : {}) }
     sync(async () => { if (!isTmp(l.id)) await post(`/lessons/${encodeURIComponent(l.id)}/details`, body, 'Не удалось сохранить время или заметку') })
   }

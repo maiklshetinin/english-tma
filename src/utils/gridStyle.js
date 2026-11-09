@@ -27,11 +27,6 @@ export function setPastShade(on) { pastShade.value = !!on; try { localStorage.se
 // Фон в точку убран: выключаем у тех, у кого он был включён
 try { localStorage.removeItem('tma.bgDots'); localStorage.removeItem('tma.gridStyle') } catch { /* приватный режим */ }
 
-// Пробный урок — стикер в расписании: «капсула» (жёлтая, текст — во всплывающем листке по нажатию) или «листок» (жёлтая бумажка, пишем прямо в ней)
-export const TRIAL_STYLES = [
-  { id: 'capsule', title: 'Капсула', sub: 'текст — по нажатию' },
-  { id: 'note', title: 'Листок', sub: 'пишем прямо в ячейке' },
-]
-const TS = 'tma.trialStyle'
-export const trialStyle = ref((() => { try { return localStorage.getItem(TS) === 'capsule' ? 'capsule' : 'note' } catch { return 'note' } })())
-export function setTrialStyle(id) { trialStyle.value = id; try { localStorage.setItem(TS, id) } catch { /* приватный режим */ } }
+
+// Вид заметки-стикера больше не выбирается (всегда жёлтый листок)
+try { localStorage.removeItem('tma.trialStyle') } catch { /* приватный режим */ }

@@ -277,6 +277,9 @@ ok('пробный урок занимает слот', (await code(S.create({ s
 ok('без trial пустой урок по-прежнему 400', (await code(S.create({ date: '2027-05-05', hour: 12 }, 'tg:1'))) === 400)
 ok('пробный урок в неделе — у преподавателя', (await S.week('2027-05-03')).lessons.some(l => l.id === tr.id && l.trial))
 ok('текст стикера правится как заметка', (await S.setDetails(tr.id, { note: 'Аня, B1' })).note === 'Аня, B1')
+ok('цвет стикера меняется', (await S.setDetails(tr.id, { color: 'pink' })).color === 'pink' && (store.get('lessons/' + tr.id) as any).color === 'pink')
+ok('чужой цвет → 400', (await code(S.setDetails(tr.id, { color: 'black' as any }))) === 400)
+ok('стикер создаётся сразу с цветом', (await S.create({ trial: true, date: '2027-05-05', hour: 15, color: 'green' }, 'tg:1')).color === 'green')
 const tr2 = await S.create({ trial: true, date: '2027-05-05', hour: 13 }, 'tg:1')
 ok('пробный урок без учеников и бесплатный: состав не меняется → 409', (await code(S.setStudents(tr2.id, { studentIds: [masha.id] }))) === 409
   && (store.get('lessons/' + tr2.id) as any).studentIds.length === 0)
