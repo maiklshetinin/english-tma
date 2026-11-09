@@ -220,7 +220,6 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
   .tiles { display: flex; gap: 2px } .gi { top: 1px; left: 3px } .grp, .solo { flex: none } .mix { display: contents }
   .st { flex: none; width: 64px; padding: 4px 2px } .nm { font-size: 11px; -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block }
   .st :deep(.av) { width: 44px !important; height: 44px !important; font-size: 20px !important }
-  .drophint { flex-direction: row; display: flex; justify-content: center; align-items: center; gap: 8px; border-radius: 12px }
 }
 /* Меню группы — как контекстное меню iOS: карточка со скруглением, строки 52px, лёгкое затемнение вокруг */
 .gpop-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .06) }

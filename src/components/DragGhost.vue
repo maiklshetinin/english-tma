@@ -54,15 +54,24 @@ const who = (l) => (l.studentIds.length > 1 ? `группа (${l.studentIds.leng
 // Урок (или стикер) вынесли за таблицу — всё вокруг таблицы светится красным: «отпустите — снимется». Таблица остаётся белой «окном».
 const outZone = computed(() => dnd.active && lesson.value && (dnd.over?.kind === 'out' || dnd.over?.kind === 'panel'))
 const zoneBox = ref(null)
-// Большая корзина — в свободном месте слева от таблицы, у верха таблицы (между меню и таблицей), если оно есть
-const binPos = ref(null)
 watch(outZone, (on) => {
   const r = on && document.querySelector('.wk')?.getBoundingClientRect()
-  zoneBox.value = r ? { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' } : null
+  zoneBox.value = r ? rectBox(r) : null
+})
+// Пока тащим урок или стикер — где его можно убрать: панель учеников закрыта плашкой с корзиной (на учеников урок не кладётся),
+// и такая же корзина — в свободном месте слева от таблицы (между меню и таблицей), если оно есть
+const dragLesson = computed(() => dnd.active && lesson.value)
+const binPos = ref(null), coverBox = ref(null)
+const rectBox = (r) => ({ left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' })
+watch(dragLesson, (on) => {
+  const r = on && document.querySelector('.wk')?.getBoundingClientRect()
   const nav = r && document.querySelector('.nav')?.getBoundingClientRect()
   const from = nav && nav.right < r.left ? nav.right : 0, gap = r ? r.left - from : 0
-  binPos.value = r && gap >= 110 ? { left: from + gap / 2 + 'px', top: r.top + 90 + 'px' } : null
+  binPos.value = r && gap >= 130 ? { left: from + gap / 2 + 'px', top: r.top + 110 + 'px' } : null
+  const pr = on && document.querySelector('[data-drop="panel"]')?.getBoundingClientRect()
+  coverBox.value = pr && pr.width ? rectBox(pr) : null
 })
+const binText = computed(() => (trial.value ? 'Отпустите, чтобы убрать стикер' : 'Отпустите, чтобы снять урок'))
 const hint = computed(() => {
   const o = dnd.over, pl = p.value
   if (!pl || !o) return null
@@ -99,7 +108,8 @@ const hintPos = computed(() => {
 </script>
 <template>
   <div v-if="outZone && zoneBox" class="dzone" :style="zoneBox" aria-hidden="true" />
-  <div v-if="outZone && binPos" class="dbin" :style="binPos" aria-hidden="true"><span><AppIcon name="trash" :size="30" /></span></div>
+  <div v-if="dragLesson && coverBox" class="dcover" :class="{ hot: dnd.over?.kind === 'panel' }" :style="coverBox" aria-hidden="true"><AppIcon name="trash" :size="34" /><b>{{ binText }}</b></div>
+  <div v-if="dragLesson && binPos" class="dbin" :class="{ hot: outZone }" :style="binPos" aria-hidden="true"><AppIcon name="trash" :size="34" /><b>{{ binText }}</b></div>
   <div v-if="dnd.active && (people.length || trial)" class="gw" :style="{ transform: `translate(${dnd.x}px, ${dnd.y}px)` }">
     <div v-if="trial" class="tghost" :class="{ gone: dnd.over?.kind === 'out' || dnd.over?.kind === 'panel' }" :style="[box, stickerVars(p.lesson?.color ?? lastSticker)]">
       <span>{{ p.lesson?.note || 'Стикер' }}</span>
@@ -149,10 +159,13 @@ const hintPos = computed(() => {
 .tghost::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--c) }
 .tghost span { font-size: 12px; font-weight: 800; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2 }
 .tghost.gone { opacity: .55; box-shadow: 0 0 0 2px var(--red), 0 8px 20px rgba(0, 0, 0, .2) }
-.dzone { position: fixed; z-index: 90; pointer-events: none; border-radius: 16px; box-shadow: 0 0 0 2px var(--red), 0 0 0 200vmax rgba(255, 75, 75, .10); animation: dz .15s ease-out }
+.dzone { position: fixed; z-index: 90; pointer-events: none; border-radius: 16px; box-shadow: 0 0 0 2px var(--red), 0 0 0 200vmax rgba(60, 0, 0, .22); animation: dz .15s ease-out }      /* всё вокруг таблицы затемняется */
 @keyframes dz { from { opacity: 0 } }
-.dbin { position: fixed; z-index: 91; pointer-events: none; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 8px; color: var(--red); font-size: 13px; font-weight: 900; text-align: center; line-height: 1.25; animation: dz .15s ease-out }
-.dbin span { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--card); box-shadow: 0 0 0 3px var(--red), 0 8px 22px rgba(255, 75, 75, .3) }
+.dbin, .dcover { position: fixed; z-index: 92; pointer-events: none; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--text); text-align: center; animation: dz .15s ease-out }
+.dbin b, .dcover b { max-width: 180px; font-size: 14px; font-weight: 800; line-height: 1.3 }
+.dbin { transform: translate(-50%, -50%); width: 190px; padding: 16px 10px; border-radius: 16px; background: color-mix(in srgb, var(--card) 94%, transparent); box-shadow: 0 6px 20px rgba(0, 0, 0, .12) }
+.dcover { box-sizing: border-box; padding: 12px; border-radius: 16px; background: color-mix(in srgb, var(--card) 97%, transparent) }      /* учеников не видно — понятно, что на них не кладём, а убираем */
+.dbin.hot, .dcover.hot { box-shadow: 0 0 0 2px var(--red), 0 6px 20px rgba(0, 0, 0, .12) }
 .dhint .bin { display: inline-block; vertical-align: -3px; margin-right: 5px }
 .ghost.lesson.gone .nm { text-decoration: line-through }
 .dhint.swap { background: var(--orange-d) } .dhint.bad { background: var(--red) }
