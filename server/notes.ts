@@ -64,6 +64,12 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
       const n = notes.get(str(nid, 64)); if (!n) return null
       n.seen = { ...n.seen, [u.uid]: now() }; save(n); return n
     },
+    /** Перенести булавку на другое место (той же или другой страницы) — любой преподаватель */
+    move(nid: unknown, m: Record<string, unknown>): Note | null {
+      const n = notes.get(str(nid, 64)), path = str(m.path, 200) || n?.path || ''
+      if (!n || !path.startsWith('/')) return null
+      Object.assign(n, { path, sel: str(m.sel, 600), rx: frac(m.rx), ry: frac(m.ry), x: px(m.x), y: px(m.y) }); save(n); return n
+    },
     /** «Готово» — заметка решена (булавка прячется), или снова открыта */
     done(nid: unknown, on: unknown): Note | null {
       const n = notes.get(str(nid, 64)); if (!n) return null

@@ -62,7 +62,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
   function onNote(c: Conn, m: Record<string, unknown>) {
     const n = m.t === 'note+' ? notes!.create(author(c), m) : m.t === 'note:reply' ? notes!.reply(author(c), m.id, m)
       : m.t === 'note:react' ? notes!.react(author(c), m.id, m.mid, m.e) : m.t === 'note:done' ? notes!.done(m.id, m.done)
-      : m.t === 'note:seen' ? notes!.seen(author(c), m.id) : null
+      : m.t === 'note:seen' ? notes!.seen(author(c), m.id) : m.t === 'note:move' ? notes!.move(m.id, m) : null
     if (n) { const out = { t: 'note', note: n, by: c.uid, cid: c.cid, ref: str(m.ref, 40) }; for (const o of conns) send(o, out); return }
     if (m.t === 'note:del') { const gone = notes!.remove(author(c), m.id); if (gone) for (const o of conns) send(o, { t: 'note-', id: gone }) }
   }

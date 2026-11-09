@@ -1,6 +1,7 @@
 <script setup>
 // Заметки на общем экране — мини-чат преподавателей (логика: composables/useNotes.js, сервер: server/notes.ts).
 //  • Правый клик (или клавиша C) → «Оставить заметку здесь»: булавка приклеивается к месту на странице, у коллег — сразу.
+//  • Булавку можно перетащить на другое место — у коллег она переедет сразу.
 //  • Нажал на булавку — карточка: сообщения, реакции, «печатает…», «Прочитано», поле ответа. «Готово» — заметка решена.
 //  • Колокольчик у кнопки «Отправить» — уведомлением: у коллеги всплывает плашка и висит, пока не закроет крестиком.
 //  • На телефоне карточка — снизу во всю ширину; новую заметку ставят из списка у «Сейчас здесь» («Новая заметка» → нажать на экран).
@@ -8,7 +9,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
 import { live, WHERE } from '../composables/useLive'
-import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, setDone, removeNote, typing, openNote, closePopup, wireNotes } from '../composables/useNotes'
+import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, setDone, removeNote, typing, openNote, closePopup, wireNotes, moveNote } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
 
 wireNotes()
@@ -22,9 +23,34 @@ const pins = computed(() => {
   void tick.value
   return S.list.filter((n) => n.path === route.fullPath && (!n.done || S.open === n.id)).map((n) => ({ n, at: placeOf(n), unread: unread(n) }))
 })
+// --- перенос булавки: потянул (больше 5 px) — едет за пальцем/мышью, отпустил — приклеилась на новое место (у всех) ---
+const drag = ref(null)          // { id, x, y }
+function pinDown(e, n) {
+  if (e.button > 0) return
+  const sx = e.clientX, sy = e.clientY, pin = e.currentTarget
+  let moved = false
+  const mv = (ev) => {
+    if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return
+    moved = true; drag.value = { id: n.id, x: ev.clientX, y: ev.clientY }
+  }
+  const up = (ev) => {
+    removeEventListener('pointermove', mv); removeEventListener('pointerup', up)
+    if (!moved) return
+    pin.style.visibility = 'hidden'                               // чтобы под пальцем нашёлся элемент страницы, а не сама булавка
+    const at = anchorAt(ev.clientX, ev.clientY)
+    pin.style.visibility = ''
+    drag.value = null; justDragged = true; setTimeout(() => { justDragged = false }, 0)
+    moveNote(n.id, at); re()
+  }
+  addEventListener('pointermove', mv); addEventListener('pointerup', up)
+}
+let justDragged = false
+const pinClick = (n) => { if (justDragged) return; S.open === n.id ? close() : openNote(n.id) }
+const pinAt = (p) => (drag.value?.id === p.n.id ? drag.value : p.at)
+
 // --- открытая заметка или черновик новой ---
 const note = computed(() => (S.open ? noteById(S.open) : null))
-const anchor = computed(() => { void tick.value; return note.value ? placeOf(note.value) : S.draft ? placeOf(S.draft) : null })
+const anchor = computed(() => { void tick.value; return drag.value && drag.value.id === S.open ? drag.value : note.value ? placeOf(note.value) : S.draft ? placeOf(S.draft) : null })
 const mobile = ref(innerWidth < 720)
 const cardPos = computed(() => {
   const a = anchor.value; if (!a || mobile.value) return null
@@ -108,8 +134,8 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 
 <template>
   <!-- булавки -->
-  <button v-for="p in pins" :key="p.n.id" class="sn-pin" :class="{ on: S.open === p.n.id, unread: p.unread, done: p.n.done }" :style="{ transform: `translate(${p.at.x}px, ${p.at.y}px)`, '--c': p.n.msgs[0].color }"
-    :aria-label="`Заметка: ${p.n.msgs[0].text}`" :title="p.n.msgs[0].text" @click.stop="S.open === p.n.id ? close() : openNote(p.n.id)">
+  <button v-for="p in pins" :key="p.n.id" class="sn-pin" :class="{ on: S.open === p.n.id, unread: p.unread, done: p.n.done, dragging: drag?.id === p.n.id }" :style="{ transform: `translate(${pinAt(p).x}px, ${pinAt(p).y}px)`, '--c': p.n.msgs[0].color }"
+    :aria-label="`Заметка: ${p.n.msgs[0].text}`" :title="p.n.msgs[0].text" @pointerdown="pinDown($event, p.n)" @click.stop="pinClick(p.n)" @dragstart.prevent>
     <img v-if="p.n.msgs[0].photo" :src="p.n.msgs[0].photo" alt="" referrerpolicy="no-referrer" /><b v-else>{{ ini(p.n.msgs[0].name) }}</b>
     <em v-if="p.n.msgs.length > 1">{{ p.n.msgs.length }}</em>
   </button>
@@ -172,6 +198,7 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 .sn-pin em { position: absolute; right: -5px; top: -5px; min-width: 16px; height: 16px; padding: 0 3px; box-sizing: border-box; border-radius: 99px; background: var(--hint); color: #fff; font-style: normal; font-size: 10px; font-weight: 900; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .sn-pin.unread em, .sn-pin.unread::after { background: var(--blue) }
 .sn-pin.unread:not(:has(em))::after { content: ''; position: absolute; right: -2px; top: -2px; width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px var(--card) }
+.sn-pin { touch-action: none; cursor: grab } .sn-pin.dragging { transition: none; cursor: grabbing; box-shadow: 0 8px 22px rgba(0, 0, 0, .3) }
 .sn-pin.on { box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) } .sn-pin.done { opacity: .6 }
 .sn-pin.new { pointer-events: none; color: var(--blue); box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) }
 /* Карточка */
