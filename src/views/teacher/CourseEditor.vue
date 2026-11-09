@@ -812,7 +812,7 @@ const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [
 const board = ref(null), W = ref(innerWidth), H = ref(innerHeight)
 const view = reactive({ x: innerWidth / 2, y: 330, z: 1 })
 const phone = computed(() => W.value < 720)
-const toWorld = (cx, cy) => { const r = board.value.getBoundingClientRect(); return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z } }
+const toWorld = (cx, cy) => { if (!board.value) return { x: 0, y: 0 }; const r = board.value.getBoundingClientRect()          /* ушли со страницы посреди перетаскивания */; return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z } }
 const toScreen = (p) => ({ x: p.x * view.z + view.x, y: p.y * view.z + view.y })
 function zoomAt(f, cx, cy) {
   const r = board.value.getBoundingClientRect(), z = Math.min(2.5, Math.max(0.15, view.z * f)), k = z / view.z

@@ -7,8 +7,9 @@ import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { audSrc, imgSrc } from '../composables/useCardMedia'
 import LessonPlayer from './LessonPlayer.vue'
+import ReviewPanel from './ReviewPanel.vue'
+import { recordStep } from '../stores/review'
 import BackButton from './BackButton.vue'
-import { say } from '../composables/useDialog'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
 
 const router = useRouter()
@@ -75,7 +76,9 @@ function tap(x) {
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 function go(x) { peek.value = null; open.value = x }
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
-const reviewSkills = () => say('Функционал в разработке', { text: '«Повторить навыки» — скоро здесь можно будет быстро повторить слова и правила из этого урока. А пока урок можно пройти заново.' })
+// Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
+const tab = ref('course')
+const onAnswer = (a) => recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title })
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value?.steps ?? []).filter(s => !stepIssue(s)))
@@ -112,6 +115,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 <template>
   <div class="cv">
     <h3 class="vh">Как видит ученик <small>нажмите на урок — покажется его время и «Поехали!»</small></h3>
+    <!-- как в Busuu: «Уроки» и «Review» (слова и фразы из пройденных уроков) -->
+    <div class="vtabs"><button :class="{ on: tab === 'course' }" @click="tab = 'course'">Курс</button><button :class="{ on: tab === 'review' }" @click="tab = 'review'">Review</button></div>
+    <ReviewPanel v-if="tab === 'review'" :resolve="resolve" />
+    <template v-else>
     <p v-if="err" class="hint">Не удалось загрузить курс {{ err }}</p>
     <div v-if="loading || !course" class="card hint none">{{ loading ? 'Загрузка…' : 'Выберите курс выше' }}</div>
 
@@ -146,7 +153,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <p>{{ screens(okSteps(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
             <!-- пройденный — как в Busuu: повторить навыки (в разработке) или пройти урок заново -->
             <template v-if="state(x) === 'done'">
-              <button class="pgo" @click="reviewSkills">Повторить навыки</button>
+              <button class="pgo" @click="tab = 'review'; peek = null">Повторить навыки</button>
               <button class="pgo ghost" @click="go(x)">Пройти заново</button>
             </template>
             <button v-else class="pgo" @click="go(x)">Поехали!</button>
@@ -162,11 +169,12 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
       </section>
       <p v-if="!units.length" class="hint none">В курсе пока нет заданий</p>
     </div>
+    </template>
 
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
       <div v-if="open" class="full">
-        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" track @answer="onAnswer" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>
@@ -185,6 +193,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
 <style scoped>
 .cv { display: grid; gap: 10px; margin-bottom: 22px }
+.vtabs { width: 100%; max-width: 620px; margin: 0 auto; display: flex; gap: 6px } .vtabs button { border: 0; border-radius: 10px; padding: 7px 14px; font: inherit; font-size: 14px; font-weight: 800; background: #fff; color: var(--hint); cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, .08) } .vtabs button.on { background: #e5f4ff; color: #1899d6 }
 .vh { width: 100%; max-width: 620px; margin: 0 auto; font-size: 15px } .vh small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .tabs { flex-wrap: wrap; justify-self: start }
 .none { text-align: center; margin: 0 }

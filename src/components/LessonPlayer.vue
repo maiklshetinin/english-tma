@@ -25,8 +25,9 @@ const props = defineProps({
   name: { type: String, default: '' },
   closable: Boolean, closeText: { type: String, default: '' },   // closeText — вместо ✕ наша кнопка «назад» (стрелка), подпись — в подсказке
   embedded: Boolean, pct: { type: Number, default: null }, stats: { type: Object, default: null },
+  track: Boolean,                                         // ученик проходит урок — ответы уходят в Review (emit 'answer')
 })
-const emit = defineEmits(['close', 'done', 'next', 'restart', 'full'])
+const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer'])
 
 const i = ref(props.start), t0 = Date.now(), endT = ref(0)
 const score = reactive({ ok: 0, all: 0 })
@@ -39,9 +40,9 @@ const src = (v, k) => (v ? props.resolve(v, k) : '')
 // ---- состояние текущего экрана ----
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
-const st = reactive({ picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', res: null, showTr: false, hint: false, mode: '', text: '' })
+const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', res: null, showTr: false, hint: false, mode: '', text: '' })
 function setup() {
-  Object.assign(st, { picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', res: null, showTr: false, hint: false, mode: '', text: '' }); Object.assign(mine, { ok: 0, all: 0 })
+  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', res: null, showTr: false, hint: false, mode: '', text: '' }); Object.assign(mine, { ok: 0, all: 0 })
   recStop(true); rec.url = ''; rec.err = ''
   const s = step.value; if (!s) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
@@ -51,7 +52,7 @@ function setup() {
   }
   if (s.kind === 'order') { const idx = orderParts(s).map((_, k) => k); let o = shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
-  if (s.kind === 'intro' || s.kind === 'tip' || s.kind === 'speak') st.done = true
+  if (s.kind === 'intro' || s.kind === 'tip' || s.kind === 'speak') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }          // без оценки — только «встречалось»
   if (!props.single && !props.embedded) autoplay()
 }
 const full = (s) => (s.pairs ?? []).filter(p => p.a?.trim() && p.b?.trim())
@@ -81,7 +82,7 @@ function tap(side, k) {
   if (st.left == null || st.right == null) return
   const a = st.left, b = st.right; st.left = st.right = null; score.all++; mine.all++
   if (a === b) { st.matched.push(a); score.ok++; mine.ok++; if (st.matched.length === full(step.value).length) st.done = true }
-  else { st.bad = [a, 'r' + b]; setTimeout(() => { st.bad = [] }, 550) }
+  else { st.bad = [a, 'r' + b]; if (!st.wrong.includes(a)) st.wrong.push(a); setTimeout(() => { st.bad = [] }, 550) }
 }
 
 // ---- проверка ответа (choice / order / gap): верно → зелёный низ, нет → красный и правильный ответ ----
@@ -134,6 +135,11 @@ const words = computed(() => {
   return out
 })
 const say = (a) => { au?.pause(); au = new Audio(src(a, 'audio')); au.play().catch(() => {}) }
+// экран решён (или показан, если без оценки) — ответ в Review: верно / нет, у «Пар» — какие пары перепутали
+watch(() => st.done, (d) => {
+  const s = step.value; if (!d || !props.track || !s || !['choice', 'order', 'gap', 'pairs'].includes(s.kind)) return
+  emit('answer', { step: s, ok: s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong] })
+})
 // всё объявлено — теперь можно запускать (immediate вызывает setup сразу)
 watch([i, () => (props.single || props.embedded ? JSON.stringify(step.value) : props.steps)], setup, { immediate: true })     // в конструкторе — заново при каждой правке
 watch(() => props.start, (v) => { i.value = v })          // ветка в редакторе: экраны добавили / переставили — этот кадр показывает свой экран
