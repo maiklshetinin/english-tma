@@ -469,12 +469,12 @@ function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; 
 const TPL = [...TEMPLATES, { id: 'lesson', kind: 'intro', t: 'Готовый урок', d: '7 экранов-образцов' }]
 // Меню Exercise по группам (что тренируем) и навыкам (для аналитики): Слух, Чтение, Письмо, Речь
 const SKILL_T = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
-const SKILLS = { choice: ['L'], audiotest: ['L'], pairs: ['R'], fill: ['L'], type: ['W'], order: ['W'], speak: ['S'], answer: ['S', 'W'] }
+const SKILLS = { choice: ['L'], audiotest: ['L'], pairs: ['R'], spell: ['W'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], speak: ['S'], answer: ['S', 'W'] }
 const XGROUPS = (() => {
   const gs = [
     { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip', 'lesson'], cols: 2 },
-    { k: 'words', t: 'Слова', d: 'отдельные слова', ids: ['choice', 'audiotest', 'pairs'], cols: 2 },
-    { k: 'ctx', t: 'Фразы и контекст', d: 'слова внутри предложения', ids: ['fill', 'type', 'order', 'speak', 'answer'], cols: 3 },
+    { k: 'words', t: 'Слова', d: 'отдельные слова', ids: ['choice', 'audiotest', 'pairs', 'spell', 'sayword'], cols: 3 },          // от узнавания к воспроизведению
+    { k: 'ctx', t: 'Фразы и контекст', d: 'слова внутри предложения', ids: ['fill', 'order', 'type', 'speak', 'answer'], cols: 3 },          // проще → сложнее: выбрать, собрать из кнопок, вписать, сказать, ответить своими словами
   ]
   const used = new Set(gs.flatMap(g => g.ids)); gs[2].ids.push(...TPL.filter(t => !used.has(t.id)).map(t => t.id))          // новое упражнение без группы — в «Фразы»
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(t => t.id === id)).filter(Boolean) }))
@@ -1786,6 +1786,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <template v-else-if="t.id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
             <template v-else-if="t.id === 'audiotest'"><i class="mh" /><span class="mm sm"><i class="ma" /></span><span class="mr"><i /><i class="g" /><i /></span></template>
             <template v-else-if="t.id === 'pairs'"><i class="mh" /><span class="mq"><i class="g" /><i class="g" /><i /><i /><i /><i /></span></template>
+            <template v-else-if="t.id === 'spell'"><i class="mh" /><i class="ma" /><span class="mc ln"><i class="l" /><i class="l" /><i class="l" /></span><span class="mc"><i class="l" /><i class="l" /><i class="l" /></span></template>
+            <template v-else-if="t.id === 'sayword'"><i class="mh" /><span class="mm"><i class="ma" /></span><span class="mk"><i /><i class="b" /><i /></span></template>
             <template v-else-if="t.id === 'order'"><i class="mh" /><i class="ma" /><span class="mc ln"><i /><i /></span><span class="mc"><i /><i /><i /></span></template>
             <template v-else-if="t.id === 'tip'"><i class="mh" /><i class="ml" /><i class="ml s" /><span class="mq t"><i /><i /><i /><i /></span></template>
             <template v-else-if="t.id === 'speak'"><i class="mh" /><span class="mm"><b class="cp" /></span><span class="mk"><i /><i class="b" /><i /></span></template>
@@ -2174,7 +2176,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tray.inter .mi small { font-size: 10.5px; line-height: 1.2 } .tray.inter .mi small b { font-size: 12.5px }
 .mini .mm { position: relative; display: block } .mini .mm .ma { position: absolute; left: 8%; right: 8%; bottom: 3px; width: auto; height: 5px; background: #1a73e8 } .mini .mm.sm { height: 24px }
 .mini .mr { display: grid; gap: 3px; width: 100% } .mini .mr i { height: 7px; border: 1px solid #e3e3e3; background: #fff } .mini .mr i.g { background: #8ff0c8; border-color: #5fe0aa }
-.mini .mc { display: flex; gap: 3px; justify-content: center; width: 100% } .mini .mc i { width: 18px; height: 8px; border: 1px solid #d5d5d5; background: #fff } .mini .mc i.o { border-color: #1a73e8 }
+.mini .mc { display: flex; gap: 3px; justify-content: center; width: 100% } .mini .mc i.l { width: 9px }          /* «Собери слово» — плашки-буквы */ .mini .mc i { width: 18px; height: 8px; border: 1px solid #d5d5d5; background: #fff } .mini .mc i.o { border-color: #1a73e8 }
 .mini .mc.ln { justify-content: flex-start; padding-bottom: 3px; border-bottom: 1.5px solid #e3e3e3 }
 .mini .ml.s { width: 60% } .mini .mq.t { gap: 0 } .mini .mq.t i { height: 7px; border-radius: 0 }
 .mini .cp { position: absolute; left: 50%; bottom: 3px; width: 26px; height: 5px; margin-left: -13px; border-radius: 2px; background: rgba(0, 0, 0, .55) }

@@ -54,7 +54,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       put(o, 'text', str(r.text, 1500))
       o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120) }; put(out, 't', str(q.t, 120)); put(out, 'audio', ref(q.audio)); return out })
     }
-    if (kind === 'order') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)); put(o, 'note', str(r.note, 600)) }
+    if (kind === 'order') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)); put(o, 'note', str(r.note, 600)); if (r.by === 'letters') o.by = 'letters' }          // «Собери слово» — по буквам
     if (kind === 'speak' || kind === 'gap') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)) }
     if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 4).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))
     if (kind === 'answer') { put(o, 'text', str(r.text, 300)); put(o, 'note', str(r.note, 600)); put(o, 'tr', str(r.tr, 300)) }

@@ -15,7 +15,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
 import BackButton from './BackButton.vue'
-import { KINDS, shuffle, phraseWords, tipParts, gapParts, sameAnswer } from '../utils/lesson'
+import { KINDS, shuffle, orderParts, tipParts, gapParts, sameAnswer } from '../utils/lesson'
 
 const props = defineProps({
   steps: { type: Array, required: true },
@@ -49,7 +49,7 @@ function setup() {
     const idx = full(s).map((_, k) => k)
     st.L = props.single ? idx : shuffle(idx); st.R = props.single ? idx.slice().reverse() : shuffle(idx)
   }
-  if (s.kind === 'order') { const idx = phraseWords(s.phrase).map((_, k) => k); let o = shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
+  if (s.kind === 'order') { const idx = orderParts(s).map((_, k) => k); let o = shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
   if (s.kind === 'intro' || s.kind === 'tip' || s.kind === 'speak') st.done = true
   if (!props.single && !props.embedded) autoplay()
@@ -88,8 +88,8 @@ function tap(side, k) {
 function verdict(ok) { st.res = ok; st.done = true; score.all++; mine.all++; if (ok) { score.ok++; mine.ok++ } }
 
 // ---- собери фразу ----
-const pw = computed(() => phraseWords(step.value?.phrase))
-function put(k) { if (st.done) return; st.pool = st.pool.filter(x => x !== k); st.built.push(k); if (!st.pool.length) verdict(st.built.map(x => pw.value[x]).join(' ') === pw.value.join(' ')) }
+const pw = computed(() => orderParts(step.value))
+function put(k) { if (st.done) return; st.pool = st.pool.filter(x => x !== k); st.built.push(k); if (!st.pool.length) verdict(st.built.map(x => pw.value[x]).join(' ') === pw.value.join(' ')) }          // по тексту — одинаковые буквы можно ставить в любом порядке
 function back(k) { if (st.done) return; st.built = st.built.filter(x => x !== k); st.pool.push(k) }
 
 // ---- пропуск ----
@@ -208,9 +208,9 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Собери фразу -->
     <div v-else-if="step.kind === 'order'" class="body">
-      <h3 class="hd">{{ KINDS.order.head }}</h3>
+      <h3 class="hd">{{ step.by === 'letters' ? 'Соберите слово по буквам' : KINDS.order.head }}</h3>
       <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
-      <div v-if="pw.length < 2" class="empty">Впишите фразу хотя бы из 2 слов</div>
+      <div v-if="pw.length < 2" class="empty">{{ step.by === 'letters' ? 'Впишите слово хотя бы из 2 букв' : 'Впишите фразу хотя бы из 2 слов' }}</div>
       <template v-else>
         <div class="built" :class="{ ok: st.done && st.res, no: st.done && !st.res }"><button v-for="k in st.built" :key="'b' + k" class="chip" @click="back(k)">{{ pw[k] }}</button></div>
         <div class="pool"><button v-for="k in st.pool" :key="'p' + k" class="chip" @click="put(k)">{{ pw[k] }}</button></div>

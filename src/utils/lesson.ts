@@ -21,7 +21,8 @@ export interface Step {
   image?: string; audio?: string; video?: string; exAudio?: string   // свои файлы или из карточки (в «Выбери ответ» audio — свой звук вопроса; exAudio — озвучка примера)
   ask?: 'audio' | 'tr'; show?: 'pics' | 'text'; opts?: Opt[]; ans?: number   // «Выбери ответ»
   pairs?: Pair[]                                                     // «Пары»
-  phrase?: string; note?: string                                     // «Собери фразу»: фраза (слова через пробел), перевод — в tr, пояснение
+  phrase?: string; note?: string; by?: 'letters'                     // by: 'letters' — «Собери слово»: по буквам, а не по словам
+                                     // «Собери фразу»: фраза (слова через пробел), перевод — в tr, пояснение
   text?: string                                                      // «Подсказка»: текст правила; фразы с переводом и звуком — в opts; «Ответь на вопрос»: вопрос
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
 }
@@ -116,6 +117,10 @@ export function fishLesson(): Step[] {
 export const fishAudiotest = (): Step => ({ id: stepId(), kind: 'choice', ask: 'audio', show: 'text', ans: 1, image: fish('wave.jpg'), audio: fish('see-you-later.mp3'),
   opts: [{ w: 'How’s it going?' }, { w: 'See you later!', t: 'Увидимся!' }, { w: 'My name’s Lisa.' }] })
 /** Пропуск с вариантами-плашками (по видео) */
+/** Собери слово: буквы вразброс, на слух */
+export const fishSpell = (): Step => ({ id: stepId(), kind: 'order', by: 'letters', phrase: 'bye', tr: 'пока', audio: fish('bye.mp3') })
+/** Повтори слово: фото, звук — ученик записывает себя */
+export const fishSayWord = (): Step => ({ id: stepId(), kind: 'speak', phrase: 'go ahead', tr: 'давай, вперёд', image: fish('go-ahead.jpg'), audio: fish('go-ahead.mp3') })
 export const fishFill = (): Step => ({ id: stepId(), kind: 'gap', phrase: '[Hello]!', tr: 'Привет!', video: fish('hello.mp4'), opts: [{ w: 'Halo' }, { w: 'Hello' }] })
 
 /** Шаблоны в меню редактора: тип экрана + готовая «рыба» (у одного типа может быть несколько видов) */
@@ -124,6 +129,8 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'choice', kind: 'choice', t: 'Выбери ответ', d: 'На слух — ответы картинками', make: () => fishStep('choice') },
   { id: 'audiotest', kind: 'choice', t: 'Аудиотест', d: 'Фото со звуком — ответы текстом', make: fishAudiotest },
   { id: 'pairs', kind: 'pairs', t: 'Пары', d: 'Слово ↔ перевод', make: () => fishStep('pairs') },
+  { id: 'spell', kind: 'order', t: 'Собери слово', d: 'Буквы по порядку на слух', make: fishSpell },
+  { id: 'sayword', kind: 'speak', t: 'Повтори слово', d: 'Фото, звук и запись голоса', make: fishSayWord },
   { id: 'order', kind: 'order', t: 'Собери фразу', d: 'Слова по порядку на слух', make: () => fishStep('order') },
   { id: 'tip', kind: 'tip', t: 'Подсказка', d: 'Мини-правило и фразы', make: () => fishStep('tip') },
   { id: 'speak', kind: 'speak', t: 'Повтори за диктором', d: 'Видео и запись голоса', make: () => fishStep('speak') },
@@ -158,7 +165,7 @@ export function stepIssue(s: Step): string {
     if (s.show === 'pics' && o.some(x => !x.image)) return 'Не у всех вариантов есть фото'
     return ''
   }
-  if (s.kind === 'order') return phraseWords(s.phrase).length >= 2 ? '' : 'Нужна фраза хотя бы из 2 слов'
+  if (s.kind === 'order') return orderParts(s).length >= 2 ? '' : s.by === 'letters' ? 'Нужно слово хотя бы из 2 букв' : 'Нужна фраза хотя бы из 2 слов'
   if (s.kind === 'tip') return s.text?.trim() || s.opts?.length ? '' : 'Нет текста подсказки'
   if (s.kind === 'speak') return s.phrase?.trim() || s.video ? '' : 'Нет фразы и видео'
   if (s.kind === 'gap') {
@@ -182,6 +189,8 @@ const norm = (v?: string) => (v ?? '').toLowerCase().replace(/[’‘`]/g, "'").
 export const sameAnswer = (a?: string, b?: string) => !!norm(b) && norm(a) === norm(b)
 /** Слова фразы для «Собери фразу» (по пробелам; знаки препинания остаются при словах) */
 export const phraseWords = (p?: string) => (p ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 12)
+/** Кусочки «Собери фразу / слово»: слова — или буквы (by: 'letters') */
+export const orderParts = (s?: Partial<Step> | null) => (s?.by === 'letters' ? [...(s.phrase ?? '').replace(/\s+/g, '')].slice(0, 14) : phraseWords(s?.phrase))
 
 /** Карточка колоды → поля экрана */
 export interface CardLike { id?: string; front: string; back: string; example?: string; exampleTr?: string; image?: string; audio?: string; exampleAudio?: string }

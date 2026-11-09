@@ -11,7 +11,7 @@ import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
 import LessonPlayer from './LessonPlayer.vue'
 import { useDecksStore } from '../stores/decks'
-import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, gapParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
+import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, orderParts, gapParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -302,9 +302,9 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
         </div>
         <!-- собери фразу -->
         <template v-if="s.kind === 'order'">
-          <input v-model="s.phrase" class="big" placeholder="See you later!" @input="changed" />
-          <div class="chips"><span v-for="(w, k) in phraseWords(s.phrase)" :key="k">{{ w }}</span><small v-if="phraseWords(s.phrase).length">← ученик увидит вразброс</small></div>
-          <input v-model="s.tr" class="tr" placeholder="перевод фразы" @input="changed" />
+          <input v-model="s.phrase" class="big" :placeholder="s.by === 'letters' ? 'bye' : 'See you later!'" @input="changed" />
+          <div class="chips"><span v-for="(w, k) in orderParts(s)" :key="k">{{ w }}</span><small v-if="orderParts(s).length">← ученик увидит вразброс{{ s.by === 'letters' ? ' (по буквам)' : '' }}</small></div>
+          <input v-model="s.tr" class="tr" :placeholder="s.by === 'letters' ? 'перевод слова' : 'перевод фразы'" @input="changed" />
           <textarea v-model="s.note" class="ex tr" rows="2" placeholder="Пояснение после ответа (необязательно)" @input="changed" />
         </template>
         <!-- подсказка -->
