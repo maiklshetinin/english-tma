@@ -1,5 +1,6 @@
 <script setup>
 import StudentReview from '../../components/StudentReview.vue'
+import StudentCourses from '../../components/StudentCourses.vue'
 import { ref, computed, watch } from 'vue'
 import { isOnline, seenLabel } from '../../utils/online'
 import { useRoute, useRouter } from 'vue-router'
@@ -131,6 +132,7 @@ const zoom = ref(false)      // фото ученика крупно (как в 
     <LessonCalendar v-if="tab === 'lessons'" :student-id="s.id" teacher compact />
     <StudentReview v-else-if="tab === 'review'" :student-id="s.id" />
     <template v-else>
+    <StudentCourses :student-id="s.id" />
     <StudentDecks :student-id="s.id" />
     <div class="card">
       <h3>Путь ученика</h3>

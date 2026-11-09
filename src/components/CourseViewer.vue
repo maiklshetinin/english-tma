@@ -15,7 +15,10 @@ import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
 const router = useRouter()
 const online = !isDemo && !!API && !!fb
 const LOCAL = 'tma.courseRail.v1'
-const props = defineProps({ id: { type: String, default: null } })          // выбранный курс (из списка курсов)
+const props = defineProps({
+  id: { type: String, default: null },                // выбранный курс (из списка курсов)
+  student: Boolean,                                   // ученик проходит свой назначенный курс: свой прогресс с сервера (server/learn.ts)
+})          // выбранный курс (из списка курсов)
 const course = ref(null), err = ref(''), loading = ref(false)
 const onEsc = (e) => { if (e.key !== 'Escape') return; if (open.value) open.value = null; else peek.value = null }
 // нажали мимо карточки урока — она закрывается
@@ -44,7 +47,8 @@ async function loadCourse(id) {
   open.value = null; peek.value = null; course.value = null; if (!id) return
   loading.value = true
   try {
-    if (!online) course.value = JSON.parse(localStorage.getItem(LOCAL))
+    if (props.student) { const r = await apiRequest(`/my/courses/${id}`); if (!r.ok) throw new Error(`(${r.status})`); const d = await r.json(); course.value = d; run.value = d.run }
+    else if (!online) course.value = JSON.parse(localStorage.getItem(LOCAL))
     else { const r = await apiRequest(`/courses/${id}`); if (!r.ok) throw new Error(`(${r.status})`); course.value = await r.json() }
   } catch (e) { err.value = e.message } finally { loading.value = false }
 }
@@ -61,7 +65,18 @@ const units = computed(() => {
   return out
 })
 const total = computed(() => (course.value?.items ?? []).filter(x => x.type !== 'unit').length)
-const done = computed(() => Math.min(course.value?.progress ?? 0, total.value))
+// у ученика — свой прогресс (сколько заданий подряд пройдено); в «Как видит ученик» — прогресс из редактора
+const run = ref({ done: 0, lessons: {} })
+const done = computed(() => Math.min(props.student ? run.value.done : course.value?.progress ?? 0, total.value))
+// ученик прошёл задание (урок — по «Готово» в итоге; кружок, фото, занятие — кнопкой) → на сервер, «Сейчас» переезжает дальше
+let t0 = 0
+async function finish(x, sc = {}) {
+  if (!props.student || !x) return
+  const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0 }
+  try { const r = await apiRequest(`/my/courses/${props.id}/done`, { method: 'POST', body: JSON.stringify(body) }); if (r.ok) run.value = await r.json() } catch { /* без сети — пройдёт ещё раз */ }
+}
+const markDone = (x) => { finish(x); peek.value = null; inline.value = null }
+const canMark = (x) => props.student && state(x) === 'current'
 const ready = (x) => INTERACTIVE.includes(x.type) && (x.steps ?? []).some(s => !stepIssue(s))
 
 // открыто в рамке: урок (экраны), кружок, фото или «пусто»
@@ -75,7 +90,7 @@ function tap(x) {
   peek.value = peek.value === x.id ? null : x.id          // всё остальное — карточкой под заданием, без перехода на отдельную страницу
 }
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
-function go(x) { peek.value = null; open.value = x }
+function go(x) { peek.value = null; open.value = x; t0 = Date.now() }
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
 const onAnswer = (a) => recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title })
@@ -93,7 +108,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
 <template>
   <div class="cv">
-    <h3 class="vh">Как видит ученик <small>нажмите на урок — покажется его время и «Поехали!»</small></h3>
+    <h3 v-if="!student" class="vh">Как видит ученик <small>нажмите на урок — покажется его время и «Поехали!»</small></h3>
     <!-- как в Busuu: «Уроки» и «Review» (слова и фразы из пройденных уроков) -->
     <p v-if="err" class="hint">Не удалось загрузить курс {{ err }}</p>
     <div v-if="loading || !course" class="card hint none">{{ loading ? 'Загрузка…' : 'Выберите курс выше' }}</div>
@@ -123,7 +138,8 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <p v-if="x.sub" class="psub">{{ x.sub }}</p>
             <template v-if="!ready(x)">
               <p>{{ x.type === 'tutor' ? 'Занятие с репетитором — проходит на уроке.' : x.type === 'reward' ? 'Награда за пройденный Chapter.' : 'В этом уроке пока нет экранов — их собирают в редакторе («Интерактив»).' }}</p>
-              <button v-if="INTERACTIVE.includes(x.type)" class="pgo ghost" @click="edit">Открыть в редакторе</button>
+              <button v-if="canMark(x)" class="pgo" @click="markDone(x)">Готово — дальше</button>
+              <button v-else-if="INTERACTIVE.includes(x.type) && !student" class="pgo ghost" @click="edit">Открыть в редакторе</button>
             </template>
             <template v-else>
             <p>{{ screens(okSteps(x).length) }}{{ state(x) === 'done' ? ' · уже пройден' : '' }}</p>
@@ -140,6 +156,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <video v-if="x.type === 'video' && fileOf(x)" :src="fileOf(x)" class="kbig" autoplay playsinline @click="$event.target.paused ? $event.target.play() : $event.target.pause()" @ended="$event.target.currentTime = 0" />
             <img v-else-if="x.type === 'photo' && fileOf(x)" :src="fileOf(x)" class="pbig" alt="" />
             <p v-else class="hint">{{ x.type === 'video' ? 'Кружок ещё не загружен' : 'Фото ещё не загружено' }}</p>
+            <button v-if="canMark(x)" class="pgo" @click="markDone(x)">Посмотрел — дальше</button>
           </div>
         </div>
       </section>
@@ -149,7 +166,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
       <div v-if="open" class="full">
-        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" track @answer="onAnswer" @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" track @answer="onAnswer" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>
@@ -202,7 +219,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
 .vrow > .bead { margin: 31px 0 }
-.kin { flex: 0 0 100%; padding: 4px 0 18px 64px; position: relative; z-index: 1 }
+.kin { flex: 0 0 100%; padding: 4px 0 18px 64px; position: relative; z-index: 1 } .kin .pgo { margin-top: 10px; max-width: 280px; --d: #1a8bc9 }
 .kbig { display: block; width: 260px; height: 260px; border-radius: 50%; object-fit: cover; background: #000; cursor: pointer; box-shadow: 0 0 0 4px #fff, 0 0 0 7px #2aabee }
 .pbig { display: block; max-width: 100%; max-height: 420px; border-radius: 16px }
 .bead.open { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }

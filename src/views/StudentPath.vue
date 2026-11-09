@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { myPath } from '../store/app'
 import TaskPath from '../components/TaskPath.vue'
+import MyCourses from '../components/MyCourses.vue'          // назначенные преподавателем курсы — сверху
 import TaskSheet from '../components/TaskSheet.vue'
 import PaymentAlert from '../components/PaymentAlert.vue'
 import StatsGrid from '../components/StatsGrid.vue'
@@ -14,7 +15,7 @@ const sel = ref(null)
 </script>
 <template>
   <div class="layout">
-    <section class="main"><PaymentAlert /><TaskPath :units="myPath" @open="sel = $event" /></section>
+    <section class="main"><PaymentAlert /><MyCourses /><TaskPath :units="myPath" @open="sel = $event" /></section>
     <aside class="aside"><StatsGrid /><PaymentCard /></aside>
     <TaskSheet v-if="sel" :node="sel" @close="sel = null" @complete="n => { pathStore.complete(n, auth.currentStudentId); sel = null }" />
   </div>

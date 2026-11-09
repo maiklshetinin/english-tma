@@ -5,7 +5,7 @@
 //    файлов курса в S3 или https-ссылки (фото и озвучка карточек); остальное (файлы, которые пока только в браузере) выкидываем.
 //  • Общее рабочее пространство: все преподаватели (TEACHER_IDS) видят и правят все курсы — как учеников и расписание.
 //    teacherId — кто создал, updatedBy — кто правил последним (пригодится, когда преподаватели разделятся: claude/multi-tutor-plan.md).
-// Ученикам курсы пока не выдаются — это следующий шаг (назначить курс ученику → его «Путь»).
+// Ученикам курс назначает преподаватель (assigned — id учеников), проходят его в своём «Пути» — learn.ts.
 import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './login.js'
 import { isOurKey } from './storage.js'
@@ -23,7 +23,7 @@ export interface Step { id: string; kind: string; [k: string]: unknown }
 export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; hlw?: true; hlc?: string; hlo?: number; grp?: string; x?: number; y?: number; steps?: Step[] }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
-export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number }
+export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number; assigned?: string[] }
 export const INK_MAX = 300, INK_POINTS = 4000
 export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 
@@ -90,7 +90,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     return out
   }
   const pub = (id: string, d: Record<string, any>): Course => ({ id, title: d.title ?? '', mode: d.mode === 'line' ? 'line' : 'wave', progress: d.progress ?? 0,
-    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], ink: d.ink ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined })
+    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], ink: d.ink ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined, assigned: d.assigned ?? [] })          // assigned — кому назначен (learn.ts)
   const found = async (id: string) => {
     const s = await col().doc(id).get()
     if (!s.exists) throw fail(404, 'course not found')
@@ -101,7 +101,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     /** Список своих курсов (без заданий): [{ id, title, count, updatedAt }] */
     async list() {
       const docs = (await col().get()).docs
-      return docs.map((d) => { const c = pub(d.id, d.data()); return { id: c.id, title: c.title, count: c.items.length, updatedAt: c.updatedAt } })
+      return docs.map((d) => { const c = pub(d.id, d.data()); return { id: c.id, title: c.title, count: c.items.length, updatedAt: c.updatedAt, assigned: c.assigned?.length ?? 0 } })
         .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
     },
     async get(rawId: unknown) { const id = checkId(rawId), s = await found(id); return pub(id, s.data()!) },

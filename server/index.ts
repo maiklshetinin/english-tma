@@ -16,6 +16,7 @@ import { makeContent } from './content.js'
 import { makeSrs } from './srs.js'
 import { makeReview } from './review.js'
 import { makeCourses } from './courses.js'
+import { makeLearn } from './learn.js'
 import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
@@ -72,6 +73,7 @@ const content = makeContent({ db, FieldValue })
 const srs = makeSrs({ db, FieldValue })
 const review = makeReview({ db, FieldValue })
 const courses = makeCourses({ db, FieldValue })
+const learn = makeLearn({ db, FieldValue, get: (id) => courses.get(id), filesOf: (c) => courses.filesOf(c) })
 const storage = makeStorage(env)                // кружки курсов — в S3 (см. storage.ts); без переменных S3_* — выключено
 const schedule = makeSchedule({ db, FieldValue, tz: env.SCHEDULE_TZ || 'Europe/Moscow' })      // часовой пояс, по которому считаются «эта» и «следующая» неделя
 
@@ -168,6 +170,12 @@ app.delete('/decks/:id', requireUser, requireTeacher, wrap(async (req, res) => {
 }))
 // Группы учеников — отдельная сущность (создаются и меняются только преподавателем, из панели учеников)
 // Курсы (редактор «рельс») — только преподаватели; пространство общее (все видят все курсы)
+// Курс у ученика (learn.ts): преподаватель назначает и смотрит прохождение, ученик — только свои курсы и свой прогресс
+app.post('/courses/:id/assign', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.assign(req.params.id, req.body))))      // { studentId, on }
+app.get('/students/:id/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.ofStudent(req.params.id))))
+app.get('/my/courses', requireUser, wrap(async (req, res) => res.json(await learn.myList(req.user))))
+app.get('/my/courses/:id', requireUser, wrap(async (req, res) => res.json(await learn.myCourse(req.user, req.params.id))))
+app.post('/my/courses/:id/done', requireUser, wrap(async (req, res) => res.json(await learn.done(req.user, req.params.id, req.body))))      // { itemId, ok, all, sec }
 app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(), storage: storage.ready })))
 app.get('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.get(req.params.id))))
 app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.put(req.user.uid, req.params.id, req.body))))
@@ -183,7 +191,13 @@ app.post('/media/upload', requireUser, requireTeacher, wrap(async (req, res) => 
 // Фото и озвучка карточек: ссылка в колоде — сюда, без входа (как ссылка на Диск); пересылаем на временную ссылку хранилища.
 // Браузер запоминает пересылку на час — повторно сервер не дёргает.
 app.get(/^\/media\/f\/(.+)$/, wrap(async (req, res) => { res.set('Cache-Control', 'public, max-age=3600'); res.redirect(302, await storage.open(req.params[0])) }))
-app.post('/media/view', requireUser, requireTeacher, wrap(async (req, res) => res.json(await storage.viewUrls(req.user.uid, req.body))))
+app.post('/media/view', requireUser, wrap(async (req, res) => {            // ученик — только файлы назначенных ему курсов
+  if (req.user.role !== 'teacher') {
+    const allowed = await learn.allowedKeys(req.user), keys = (req.body as { keys?: unknown } | null)?.keys
+    if (!Array.isArray(keys) || keys.some((k) => !allowed.has(String(k)))) throw fail(403, 'forbidden')
+  }
+  res.json(await storage.viewUrls(req.user.uid, req.body))
+}))
 app.post('/media/delete', requireUser, requireTeacher, wrap(async (req, res) => { await storage.remove(req.user.uid, req.body?.key); res.json({ ok: true }) }))
 
 app.get('/groups', requireUser, requireTeacher, wrap(async (_req, res) => res.json(await groups.list())))
