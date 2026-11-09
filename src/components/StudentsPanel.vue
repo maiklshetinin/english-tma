@@ -25,6 +25,7 @@ const groups = useGroups()                     // группы учеников 
 const match = (s) => { const k = q.value.trim().toLowerCase(); return !k || (s.name + ' ' + (s.username || '')).toLowerCase().includes(k) }
 const shownGroups = computed(() => groups.value.map(g => ({ ...g, members: g.members.filter(match) })).filter(g => g.members.length))
 const solo = computed(() => { const inGroup = new Set(groups.value.flatMap(g => g.members.map(s => s.id))); return list.value.filter(s => !inGroup.has(s.id)) })
+// Урок, брошенный на панель, снимается (как и в любом месте за таблицей) — подсветку зоны рисует DragGhost
 const trash = computed(() => dnd.active && dnd.payload?.kind === 'lesson')
 const trashOver = computed(() => trash.value && dnd.over?.kind === 'panel')
 // Меню (группы или «Новая группа»): где показать — под элементом (не влезает — над ним), прижато к краям экрана
@@ -178,7 +179,6 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
         </div>
       </div>
     </Teleport>
-    <div v-if="trash" class="drophint"><AppIcon name="trash" :size="22" />Отпустите, чтобы снять урок</div>
   </aside>
 </template>
 
@@ -211,9 +211,6 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
 .ava { position: relative; display: inline-grid; transition: transform .08s }
 .nm { width: 100%; text-align: center; font-size: 11px; font-weight: 700; line-height: 1.2; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .empty { text-align: center; margin: 8px 0 }
-.drophint { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; text-align: center; padding: 12px; font-weight: 800; font-size: 14px;
-  background: color-mix(in srgb, var(--card) 92%, transparent); color: var(--red); border: 3px dashed var(--red); border-radius: 14px }
-.panel.over .drophint { background: var(--red-l) }
 
 /* Телефон: панель превращается в полоску учеников, прикреплённую к верху экрана */
 @media (max-width: 1023px) {
