@@ -6,7 +6,7 @@
 import type { Firestore } from 'firebase-admin/firestore'
 
 export interface NoteAuthor { uid: string; name: string; photo: string; color: string }
-export interface NoteMsg extends NoteAuthor { id: string; text: string; at: number; react: Record<string, string[]> }      // react: реакция → uid тех, кто поставил
+export interface NoteMsg extends NoteAuthor { id: string; text: string; at: number; react: Record<string, string[]>; edited?: number }      // edited — когда исправлено      // react: реакция → uid тех, кто поставил
 // seen: uid → когда человек последний раз прочитал заметку (закрыл всплывающее уведомление или открыл её) — для «Прочитано»
 export interface Note { id: string; path: string; where: string; sel: string; rx: number; ry: number; x: number; y: number; at: number; done: boolean; by: string; msgs: NoteMsg[]; seen: Record<string, number> }
 
@@ -63,6 +63,13 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
     seen(u: NoteAuthor, nid: unknown): Note | null {
       const n = notes.get(str(nid, 64)); if (!n) return null
       n.seen = { ...n.seen, [u.uid]: now() }; save(n); return n
+    },
+    /** Исправить своё сообщение (чужое нельзя) */
+    edit(u: NoteAuthor, nid: unknown, mid: unknown, m: Record<string, unknown>): Note | null {
+      const n = notes.get(str(nid, 64)), t = text(m.text)
+      const mm = n?.msgs.find((x) => x.id === str(mid, 64))
+      if (!n || !mm || mm.uid !== u.uid || !t) return null
+      mm.text = t; mm.edited = now(); save(n); return n
     },
     /** Перенести булавку на другое место (той же или другой страницы) — любой преподаватель */
     move(nid: unknown, m: Record<string, unknown>): Note | null {

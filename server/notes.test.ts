@@ -22,6 +22,8 @@ ok('чужая реакция не принимается', !N.react(misha, n.id
 ok('автор сразу «прочитал» свою заметку', n.seen['tg:1'] && n.seen['tg:2'] && !n.seen['tg:3'])
 N.seen({ ...stasya, uid: 'tg:3' }, n.id); ok('прочитал', n.seen['tg:3'])
 N.move(n.id, { sel: 'p:nth-child(2)', rx: 0.1, ry: 0.9, x: 5, y: 6 }); ok('перенос булавки', n.sel === 'p:nth-child(2)' && n.rx === 0.1 && n.path === '/')
+ok('чужое сообщение не исправить', !N.edit(misha, n.id, n.msgs[1].id, { text: 'x' }))
+N.edit(misha, n.id, n.msgs[0].id, { text: ' Перенеси Веру на пятницу ' }); ok('своё исправить', n.msgs[0].text === 'Перенеси Веру на пятницу' && n.msgs[0].edited)
 N.done(n.id, true); ok('готово', n.done)
 N.reply(misha, n.id, { text: 'ещё' }); ok('ответ снова открывает', !n.done)
 ok('удалить может только автор', !N.remove(stasya, n.id) && N.remove(misha, n.id) === n.id && !N.all().length)

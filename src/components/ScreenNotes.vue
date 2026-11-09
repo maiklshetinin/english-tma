@@ -1,6 +1,7 @@
 <script setup>
 // Заметки на общем экране — мини-чат преподавателей (логика: composables/useNotes.js, сервер: server/notes.ts).
 //  • Правый клик (или клавиша C) → «Оставить заметку здесь»: булавка приклеивается к месту на странице, у коллег — сразу.
+//  • Свои сообщения можно исправить (карандаш у сообщения) — у коллег пометка «изм.».
 //  • Булавку можно перетащить на другое место — у коллег она переедет сразу.
 //  • Нажал на булавку — карточка: сообщения, реакции, «печатает…», «Прочитано», поле ответа. «Готово» — заметка решена.
 //  • Колокольчик у кнопки «Отправить» — уведомлением: у коллеги всплывает плашка и висит, пока не закроет крестиком.
@@ -9,7 +10,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
 import { live, WHERE } from '../composables/useLive'
-import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, setDone, removeNote, typing, openNote, closePopup, wireNotes, moveNote } from '../composables/useNotes'
+import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, setDone, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
 
 wireNotes()
@@ -85,6 +86,11 @@ function onKey(e) {
 }
 watch(() => S.open || (S.draft && 'new'), (v) => { picker.value = ''; if (v) nextTick(() => ta.value?.focus()) })
 const mine = (m) => m.uid === S.me
+// Исправить своё сообщение: карандаш у сообщения → поле на месте текста; Enter — сохранить, Esc — отмена
+const editing = ref(''), editText = ref('')
+function startEdit(m) { editing.value = m.id; editText.value = m.text; nextTick(() => document.querySelector('.sn-card .ed')?.focus()) }
+function saveEdit() { if (editing.value && editText.value.trim()) editMsg(S.open, editing.value, editText.value); editing.value = '' }
+function onEditKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() } else if (e.key === 'Escape') { e.stopPropagation(); editing.value = '' } }
 const reacts = (m) => Object.entries(m.react || {}).map(([e, who]) => ({ e, n: who.length, me: who.includes(S.me) }))
 
 // --- правый клик → «Оставить заметку здесь» ---
@@ -155,9 +161,11 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
         <span class="av" :style="{ '--c': m.color }"><img v-if="m.photo" :src="m.photo" alt="" referrerpolicy="no-referrer" /><b v-else>{{ ini(m.name) }}</b></span>
         <span class="mb">
           <span class="mh">{{ mine(m) ? 'Вы' : m.name }}<small>{{ time(m.at) }}</small>
+            <button v-if="mine(m) && editing !== m.id" class="r add pen" type="button" title="Исправить" aria-label="Исправить сообщение" @click="startEdit(m)"><AppIcon name="pencil" :size="12" /></button>
             <button class="r add" type="button" :aria-expanded="picker === m.id" title="Реакция" aria-label="Реакция" @click="picker = picker === m.id ? '' : m.id">+ 🙂</button>
             <span v-if="picker === m.id" class="pick"><button v-for="e in REACTIONS" :key="e" type="button" @click="react(note.id, m.id, e); picker = ''">{{ e }}</button></span></span>
-          <span class="mt">{{ m.text }}</span>
+          <textarea v-if="editing === m.id" v-model="editText" class="ed" rows="2" maxlength="1000" @keydown="onEditKey" @blur="saveEdit" />
+          <span v-else class="mt">{{ m.text }}<small v-if="m.edited" class="edd"> (изм.)</small></span>
           <span v-if="reacts(m).length" class="re">
             <button v-for="r in reacts(m)" :key="r.e" class="r" :class="{ me: r.me }" type="button" @click="react(note.id, m.id, r.e)">{{ r.e }} {{ r.n }}</button>
           </span>
@@ -215,7 +223,10 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 .av { flex: none; width: 28px; height: 28px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--c); color: #fff; font-size: 12px; font-weight: 900 }
 .av img { width: 100%; height: 100%; object-fit: cover }
 .mb { flex: 1; min-width: 0; display: grid; gap: 2px }
-.mh { position: relative; display: flex; align-items: center; font-size: 12px; font-weight: 900; color: var(--text) } .mh .add { margin-left: auto; height: 22px; padding: 0 7px; font-size: 11px } .mh small { margin-left: 6px; font-weight: 700; color: var(--hint-2) }
+.mh { position: relative; display: flex; align-items: center; font-size: 12px; font-weight: 900; color: var(--text) } .mh .pen { margin-left: auto; display: inline-grid; place-items: center } .mh .pen + .add { margin-left: 4px } .mh .add:not(.pen):first-of-type { margin-left: auto }
+.ed { width: 100%; box-sizing: border-box; margin: 2px 0; padding: 6px 10px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--blue); font: inherit; font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--text); resize: none; field-sizing: content } .ed:focus { outline: none }
+.edd { font-size: 11px; font-weight: 700; color: var(--hint-2) }
+.mh .add { height: 22px; padding: 0 7px; font-size: 11px } .mh small { margin-left: 6px; font-weight: 700; color: var(--hint-2) }
 .mt { font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere }
 .re { position: relative; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px }
 .r { height: 24px; padding: 0 8px; border: 0; border-radius: 99px; background: var(--surface); font: inherit; font-size: 12.5px; font-weight: 800; color: var(--hint); cursor: pointer }

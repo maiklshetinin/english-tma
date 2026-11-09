@@ -60,6 +60,8 @@ export function reply(id, text, withNudge = false) {
 export const react = (id, mid, e) => liveSend({ t: 'note:react', id, mid, e })
 /** Перенести булавку: новое место ({ sel, rx, ry, x, y }) — у всех сразу */
 export function moveNote(id, at) { const n = byId(id); if (n) Object.assign(n, at); liveSend({ t: 'note:move', id, ...at }) }
+/** Исправить своё сообщение */
+export function editMsg(id, mid, text) { const t = text.trim(); if (!t) return; const m = byId(id)?.msgs.find((x) => x.id === mid); if (m) { m.text = t; m.edited = Date.now() } liveSend({ t: 'note:edit', id, mid, text: t }) }
 export const setDone = (id, done) => liveSend({ t: 'note:done', id, done })
 export const removeNote = (id) => liveSend({ t: 'note:del', id })
 export const nudge = (id, mid = '', to = '') => liveSend({ t: 'nudge', id, mid, to })
