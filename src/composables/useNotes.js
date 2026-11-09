@@ -6,6 +6,11 @@ import { reactive, computed } from 'vue'
 import { live, liveSend, onLive } from './useLive'
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '✅', '👀']
+/** Что спустить на парашюте (сундук рисуется отдельно, остальное — крупным эмодзи) */
+export const CARGO = [
+  { id: 'chest', title: 'Сундук', em: '' }, { id: 'gift', title: 'Подарок', em: '🎁' }, { id: 'poo', title: 'Какашка', em: '💩' },
+  { id: 'heart', title: 'Сердечко', em: '❤️' }, { id: 'cake', title: 'Торт', em: '🎂' }, { id: 'flowers', title: 'Цветы', em: '💐' },
+]
 export const notesState = reactive({
   me: '',                 // мой uid (из hello)
   list: [],               // все заметки, новые сверху
@@ -14,6 +19,8 @@ export const notesState = reactive({
   placing: false,         // «Новая заметка» из списка: следующее нажатие на экран ставит булавку
   typing: {},             // id заметки → { uid, name, color, until }
   popups: [],             // всплывающие уведомления: { id, mid, from, at }
+  drops: [],              // посылки на парашюте внизу экрана: { id, note, mid, cargo, x, by, to, at } (рисует ParachuteDrop.vue)
+  aim: null,              // посылка ждёт, куда её сбросить: { text, mode, note } — нажатие на экран выбирает место
 })
 const byId = (id) => notesState.list.find((n) => n.id === id)
 export const noteById = byId
@@ -26,7 +33,9 @@ export const unreadCount = computed(() => notesState.list.filter((n) => unread(n
 let wired = false
 export function wireNotes() {
   if (wired) return; wired = true
-  onLive('hello', (m) => { notesState.me = m.uid || ''; notesState.list = (m.notes || []).slice() })
+  onLive('hello', (m) => { notesState.me = m.uid || ''; notesState.list = (m.notes || []).slice(); notesState.drops = (m.drops || []).slice() })
+  onLive('drop', (m) => { notesState.drops = [...notesState.drops.filter((d) => d.id !== m.drop.id), m.drop] })
+  onLive('drop-', (m) => { notesState.drops = notesState.drops.filter((d) => d.id !== m.id) })
   onLive('note', (m) => {
     upsert(m.note)
     if (m.cid === live.cid && m.ref === 'new') { notesState.draft = null; notesState.open = m.note.id }      // моя новая заметка сохранилась — открыть её
@@ -42,19 +51,21 @@ export function wireNotes() {
   })
 }
 
-export function createNote(text, nudge = false) {
+// mode: '' — обычное сообщение; 'bell' — всплывающим уведомлением; id посылки (CARGO) — спустить на парашюте
+const dropOf = (mode) => (mode === 'bell' ? '' : mode)
+export function createNote(text, mode = '', x = 0.5) {
   const d = notesState.draft; if (!d || !text.trim()) return
   liveSend({ t: 'note+', ...d, text, ref: 'new' })
-  if (nudge) pendingNudge = true
+  pendingNudge = mode; pendingX = x
 }
-let pendingNudge = false
-// Новая заметка «уведомлением»: как только сервер вернул её id — позвать всех остальных
-onLive('note', (m) => { if (pendingNudge && m.cid === live.cid && m.ref === 'new') { pendingNudge = false; nudge(m.note.id, m.note.msgs.at(-1)?.id) } })
+let pendingNudge = '', pendingX = 0.5
+// Новая заметка уведомлением / посылкой: как только сервер вернул её id — позвать всех остальных
+onLive('note', (m) => { if (pendingNudge && m.cid === live.cid && m.ref === 'new') { const mode = pendingNudge; pendingNudge = ''; nudge(m.note.id, m.note.msgs.at(-1)?.id, '', dropOf(mode), pendingX) } })
 
-export function reply(id, text, withNudge = false) {
+export function reply(id, text, mode = '', x = 0.5) {
   if (!text.trim()) return
   liveSend({ t: 'note:reply', id, text })
-  if (withNudge) { const off = onLive('note', (m) => { if (m.note.id === id && m.cid === live.cid) { off(); nudge(id, m.note.msgs.at(-1)?.id) } }) }
+  if (mode) { const off = onLive('note', (m) => { if (m.note.id === id && m.cid === live.cid) { off(); nudge(id, m.note.msgs.at(-1)?.id, '', dropOf(mode), x) } }) }
 }
 export const react = (id, mid, e) => liveSend({ t: 'note:react', id, mid, e })
 /** Перенести булавку: новое место ({ sel, rx, ry, x, y }) — у всех сразу */
@@ -62,7 +73,9 @@ export function moveNote(id, at) { const n = byId(id); if (n) Object.assign(n, a
 /** Исправить своё сообщение */
 export function editMsg(id, mid, text) { const t = text.trim(); if (!t) return; const m = byId(id)?.msgs.find((x) => x.id === mid); if (m) { m.text = t; m.edited = Date.now() } liveSend({ t: 'note:edit', id, mid, text: t }) }
 export const removeNote = (id) => liveSend({ t: 'note:del', id })
-export const nudge = (id, mid = '', to = '') => liveSend({ t: 'nudge', id, mid, to })
+export const nudge = (id, mid = '', to = '', drop = '', x = 0.5) => liveSend({ t: 'nudge', id, mid, to, drop, x })
+/** Открыть чужую посылку: пропадает у всех, у отправителя — «Прочитано» */
+export const openDrop = (id) => liveSend({ t: 'drop:open', id })
 export function seen(id) { liveSend({ t: 'note:seen', id }) }
 let lastTyping = 0
 export function typing(id) { const t = Date.now(); if (t - lastTyping > 2000) { lastTyping = t; liveSend({ t: 'typing', id: id || 'new' }) } }

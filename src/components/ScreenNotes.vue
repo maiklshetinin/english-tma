@@ -5,12 +5,14 @@
 //  • Булавку можно перетащить на другое место — у коллег она переедет сразу.
 //  • Нажал на булавку — карточка: сообщения, реакции, «печатает…», «Прочитано», поле ответа. Корзина — удалить заметку у всех.
 //  • Колокольчик у кнопки «Отправить» — уведомлением: у коллеги всплывает плашка и висит, пока не закроет крестиком.
+//  • Парашют — посылкой: выбираешь груз, нажимаешь на экран — куда сбросить; у всех он падает вниз экрана стопкой (ParachuteDrop.vue).
 //  • На телефоне карточка — снизу во всю ширину; новую заметку ставят из списка у «Сейчас здесь» («Новая заметка» → нажать на экран).
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
+import ParachuteDrop from './ParachuteDrop.vue'
 import { live, WHERE } from '../composables/useLive'
-import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg } from '../composables/useNotes'
+import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
 import { ask } from '../composables/useDialog'
 
@@ -80,11 +82,15 @@ const time = (at) => new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit',
 const ini = (s) => (s || '?').trim()[0]?.toUpperCase() || '?'
 
 // --- поле ответа ---
-const text = ref(''), loud = ref(false), ta = ref(null), picker = ref('')
+// mode: '' — обычное сообщение, 'bell' — всплывающим уведомлением, id посылки — спустить на парашюте (меню «Что доставить»)
+const text = ref(''), mode = ref(''), ta = ref(null), picker = ref(''), cargoMenu = ref(false)
+const cargoOf = computed(() => CARGO.find((c) => c.id === mode.value))
+function pickCargo(id) { mode.value = mode.value === id ? '' : id; cargoMenu.value = false }
 function send() {
   const t = text.value.trim(); if (!t) return
-  if (S.draft) createNote(t, loud.value); else if (S.open) reply(S.open, t, loud.value)
-  text.value = ''; loud.value = false
+  if (cargoOf.value) { S.aim = { text: t, mode: mode.value, note: S.open, draft: S.draft }; text.value = ''; mode.value = ''; cargoMenu.value = false; return }      // посылка: сначала выбрать, куда сбросить
+  if (S.draft) createNote(t, mode.value); else if (S.open) reply(S.open, t, mode.value)
+  text.value = ''; mode.value = ''; cargoMenu.value = false
 }
 function onKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
@@ -114,13 +120,23 @@ function startAt(cx, cy) {
   text.value = ''; re()
 }
 let lastX = innerWidth / 2, lastY = innerHeight / 2
-const onMove = (e) => { lastX = e.clientX; lastY = e.clientY }
+const onMove = (e) => { lastX = e.clientX; lastY = e.clientY; if (S.aim) aimX.value = e.clientX }
 function onKeyGlobal(e) {
   if (!live.on || editable(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
   if (e.key === 'c' || e.key === 'с' || e.key === 'C' || e.key === 'С') { e.preventDefault(); startAt(lastX, lastY) }
-  else if (e.key === 'Escape') { close(); menu.value = null; S.placing = false }
+  else if (e.key === 'Escape') { close(); menu.value = null; S.placing = false; S.aim = null }
 }
-function onPlace(e) { if (S.placing) { e.preventDefault(); e.stopPropagation(); startAt(e.clientX, e.clientY) } }
+function onPlace(e) {
+  if (S.aim && !e.target.closest?.('.sn-aim .msg')) {        // посылка: нажатие выбирает, куда сбросить (по горизонтали)
+    e.preventDefault(); e.stopPropagation()
+    const a = S.aim, x = e.clientX / innerWidth; S.aim = null
+    if (a.note) reply(a.note, a.text, a.mode, x)
+    else if (a.draft) { S.draft = a.draft; createNote(a.text, a.mode, x) }
+    return
+  }
+  if (S.placing) { e.preventDefault(); e.stopPropagation(); startAt(e.clientX, e.clientY) }
+}
+const aimX = ref(0)
 
 // --- всплывающие уведомления ---
 const popups = computed(() => S.popups.map((p) => { const n = noteById(p.id); return n && { ...p, n, m: n.msgs.find((x) => x.id === p.mid) || n.msgs.at(-1) } }).filter(Boolean))
@@ -182,7 +198,17 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
     <div v-if="typer" class="typ" :style="{ '--c': typer.color }"><span class="dots"><i /><i /><i /></span>{{ typer.name }} печатает…</div>
     <div class="in">
       <textarea ref="ta" v-model="text" rows="1" :placeholder="note ? 'Ответить…' : 'Напишите — увидят все, кто в приложении'" maxlength="1000" @keydown="onKey" />
-      <button class="bell" :class="{ on: loud }" type="button" :aria-pressed="loud" :title="loud ? 'Отправится уведомлением: у коллег всплывёт плашка' : 'Отправить уведомлением — у коллег всплывёт плашка, пока не закроют'" @click="loud = !loud"><AppIcon name="bell" :size="16" /></button>
+      <button class="bell" :class="{ on: mode === 'bell' }" type="button" :aria-pressed="mode === 'bell'" :title="mode === 'bell' ? 'Отправится уведомлением: у коллег всплывёт плашка' : 'Отправить уведомлением — у коллег всплывёт плашка, пока не закроют'" @click="mode = mode === 'bell' ? '' : 'bell'; cargoMenu = false"><AppIcon name="bell" :size="16" /></button>
+      <span class="cw">
+        <button class="bell chute" :class="{ on: cargoOf }" type="button" :aria-pressed="!!cargoOf" :aria-expanded="cargoMenu" :title="cargoOf ? `Отправится на парашюте: ${cargoOf.title}` : 'Отправить на парашюте — посылкой'" @click="cargoMenu = !cargoMenu">
+          <template v-if="cargoOf"><svg v-if="!cargoOf.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ cargoOf.em }}</span></template>
+          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 0 1 18 0Z" /><path d="M3 11l8 8M21 11l-8 8M12 11v8" /><rect x="10" y="18" width="4" height="4" rx="1" /></svg>
+        </button>
+        <span v-if="cargoMenu" class="cmenu" role="menu" aria-label="Что доставить">
+          <b>Что доставить на парашюте</b>
+          <span class="cgrid"><button v-for="c in CARGO" :key="c.id" class="cg" :class="{ on: mode === c.id }" type="button" role="menuitemradio" :aria-checked="mode === c.id" @click="pickCargo(c.id)"><svg v-if="!c.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ c.em }}</span>{{ c.title }}</button></span>
+        </span>
+      </span>
       <button class="go" type="button" :disabled="!text.trim()" aria-label="Отправить" @click="send"><AppIcon name="send" :size="16" /></button>
     </div>
   </div>
@@ -196,6 +222,9 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
   <div v-if="S.placing" class="sn-place">Нажмите на экран, где оставить заметку <button type="button" @click="S.placing = false">Отмена</button></div>
 
   <!-- всплывающие уведомления: висят, пока не закроют крестиком -->
+  <ParachuteDrop v-if="live.on" />
+  <!-- посылка: куда сбросить — линия за курсором, нажатие отправляет -->
+  <div v-if="S.aim" class="sn-aim"><span class="ln" :style="{ left: aimX + 'px' }" /><span class="msg">Нажмите, куда сбросить посылку <button type="button" @click.stop="S.aim = null">Отмена</button></span></div>
   <div v-if="popups.length" class="sn-pops">
     <div v-for="p in popups" :key="p.id + p.at" class="pop" role="alert">
       <button class="x" type="button" aria-label="Закрыть — прочитано" @click="closePopup(p.id)"><AppIcon name="x" :size="13" /></button>
@@ -248,12 +277,22 @@ watch(() => route.fullPath, () => { menu.value = null; S.draft = null; re() })
 .in textarea:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue) }
 .bell, .go { flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer }
 .bell { background: none; color: var(--hint) } .bell:hover { background: var(--surface) } .bell.on { background: var(--orange-l); color: var(--orange-d) }
+.cw { position: relative; display: grid } .chute .ce { font-size: 18px; line-height: 1 } .chute .mc { width: 22px; height: 19px } .cg .mc { width: 32px; height: 32px } .bell.chute.on { background: #ffe6e6; color: #e5484d }
+.cmenu { position: absolute; right: -40px; bottom: calc(100% + 8px); z-index: 3; width: 236px; padding: 10px; border-radius: 14px; background: var(--card); box-shadow: 0 12px 34px rgba(0, 0, 0, .2), 0 0 0 1px var(--border) }
+.cmenu b { display: block; padding: 0 2px 8px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
+.cgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px }
+.cg { display: grid; justify-items: center; gap: 2px; padding: 8px 2px 6px; border: 0; border-radius: 10px; background: var(--surface); font: inherit; font-size: 11px; font-weight: 800; color: var(--hint); cursor: pointer }
+.cg .ce { font-size: 26px; line-height: 32px } .cg:hover { background: var(--border) } .cg.on { background: var(--blue-l); color: var(--blue); box-shadow: inset 0 0 0 2px var(--blue) }
 .go { background: var(--blue); color: #fff } .go:disabled { background: var(--border); color: var(--hint-2); cursor: default }
 /* Правый клик */
 .sn-bg { position: fixed; inset: 0; z-index: 70 }
 .sn-menu { position: fixed; z-index: 71; min-width: 240px; padding: 4px; border-radius: 12px; background: var(--card); box-shadow: 0 12px 34px rgba(0, 0, 0, .2), 0 0 0 1px var(--border) }
 .sn-menu button { display: flex; align-items: center; gap: 10px; width: 100%; height: 38px; padding: 0 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; font-weight: 800; color: var(--text); cursor: pointer }
 .sn-menu button:hover { background: var(--blue-l) } .sn-menu kbd { margin-left: auto; font-family: inherit; font-size: 11px; color: var(--hint) }
+.sn-aim { position: fixed; inset: 0; z-index: 69; cursor: crosshair; background: rgba(28, 176, 246, .04) }
+.sn-aim .ln { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--blue) }
+.sn-aim .msg { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; border-radius: 99px; background: var(--text); color: var(--card); font-size: 13px; font-weight: 800; box-shadow: 0 8px 24px rgba(0, 0, 0, .25) }
+.sn-aim .msg button { height: 28px; padding: 0 10px; border: 0; border-radius: 99px; background: rgba(255, 255, 255, .2); color: inherit; font: inherit; cursor: pointer }
 .sn-place { position: fixed; z-index: 70; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; border-radius: 99px; background: var(--text); color: var(--card); font-size: 13px; font-weight: 800; box-shadow: 0 8px 24px rgba(0, 0, 0, .25) }
 .sn-place button { height: 28px; padding: 0 10px; border: 0; border-radius: 99px; background: rgba(255, 255, 255, .2); color: inherit; font: inherit; cursor: pointer }
 /* Всплывающие уведомления — справа сверху, под «Сейчас здесь»; висят, пока не закроют */

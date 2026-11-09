@@ -13,7 +13,8 @@
 //  • Заметки на экране (мини-чат, notes.ts): note+ / note:reply / note:react / note:edit / note:move / note:del — сервер сохраняет и рассылает всем
 //    заметку целиком ({ t: 'note', note }); typing — «печатает…» (не храним); nudge — всплывающее уведомление у адресата (висит, пока
 //    не закроет крестиком); note:seen — прочитал (закрыл уведомление / открыл заметку) → у автора «Прочитано».
-//    Новичок получает все заметки в hello.notes.
+//    Посылка на парашюте (nudge с drop): { t: 'drop' } всем — падает вниз экрана в точку x (0…1 ширины), копится стопкой;
+//    drop:open — адресат открыл: { t: 'drop-' } всем + «прочитано». Новичок получает заметки и посылки в hello.
 import type { Server } from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
 import type { Notes, NoteAuthor } from './notes.js'
@@ -25,11 +26,16 @@ interface Conn { ws: WebSocket; cid: string; uid: string; dev: boolean; name: st
 const COLORS = ['#f24822', '#0d99ff', '#14ae5c', '#9747ff', '#ffa629', '#ff24bd', '#00b5ce', '#e5a000']
 const colorOf = (uid: string) => COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length]
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
+// Что можно «спустить на парашюте» вместо обычного уведомления (рисует ParachuteDrop.vue)
+const DROPS = ['chest', 'gift', 'poo', 'heart', 'cake', 'flowers'], DROPS_MAX = 60
+const frac01 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(0, Math.min(1, v)) * 1000) / 1000 : 0.5)
+interface Drop { id: string; note: string; mid: string; cargo: string; x: number; by: NoteAuthor; to: string; at: number }
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : 0)
 
 export function makeLive({ verify, origins, hello = () => ({}), notes }: { verify: Verify; origins: string[]; hello?: () => Record<string, unknown>; notes?: Notes }) {
   const conns = new Set<Conn>()
   let seq = 0, cursors = false, cursorsBy = ''
+  const drops: Drop[] = []          // посылки на парашюте, ещё не открытые (в памяти: перезапуск сервера их очищает)
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
   const people = () => [...conns].map(({ cid, uid, dev, name, photo, color, where, course }) => ({ cid, uid, dev, name, photo, color, where, course }))
   const presence = () => { const m = { t: 'presence', users: people() }; for (const c of conns) send(c, m) }
@@ -54,8 +60,25 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
     else if (m.t === 'typing') { const out = { t: 'typing', id: str(m.id, 64), uid: c.uid, name: c.name, color: c.color }; for (const o of conns) if (o.uid !== c.uid) send(o, out) }
     // «Позвать»: у адресата (или у всех, если не указан) заметка открывается сама и всплывает уведомление
     else if (m.t === 'nudge' && notes?.get(str(m.id, 64))) {
-      const to = str(m.to, 64), out = { t: 'nudge', id: str(m.id, 64), mid: str(m.mid, 64), from: { uid: c.uid, name: c.name, photo: c.photo, color: c.color } }
-      for (const o of conns) if (o.uid !== c.uid && (!to || o.uid === to)) send(o, out)
+      const to = str(m.to, 64), from = { uid: c.uid, name: c.name, photo: c.photo, color: c.color }
+      const cargo = DROPS.includes(str(m.drop, 16)) ? str(m.drop, 16) : ''
+      if (cargo) {
+        // Посылка на парашюте: падает вниз экрана у всех и копится там стопкой (как в тетрисе), пока адресат не откроет
+        const d = { id: 'd' + (++seq) + Date.now().toString(36), note: str(m.id, 64), mid: str(m.mid, 64), cargo, x: frac01(m.x), by: from, to, at: Date.now() }
+        drops.push(d); if (drops.length > DROPS_MAX) drops.shift()
+        for (const o of conns) send(o, { t: 'drop', drop: d })
+      } else {
+        const out = { t: 'nudge', id: str(m.id, 64), mid: str(m.mid, 64), from }
+        for (const o of conns) if (o.uid !== c.uid && (!to || o.uid === to)) send(o, out)
+      }
+    }
+    // Открыли посылку (не свою): убрать у всех, у отправителя — «Прочитано»
+    else if (m.t === 'drop:open') {
+      const i = drops.findIndex((d) => d.id === str(m.id, 64))
+      if (i < 0 || drops[i].by.uid === c.uid) return
+      const [d] = drops.splice(i, 1)
+      for (const o of conns) send(o, { t: 'drop-', id: d.id })
+      const n = notes?.seen(author(c), d.note); if (n) for (const o of conns) send(o, { t: 'note', note: n, by: c.uid, cid: c.cid, ref: '' })
     }
   }
   const author = (c: Conn): NoteAuthor => ({ uid: c.uid, name: c.name, photo: c.photo, color: c.color })
@@ -81,7 +104,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
         if (!u || u.role !== 'teacher') return ws.close(4401, 'unauthorized')
         const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
         conns.add(c)
-        send(c, { ...hello(), t: 'hello', cid: c.cid, uid: c.uid, cursors, cursorsBy, notes: notes?.all() ?? [] })
+        send(c, { ...hello(), t: 'hello', cid: c.cid, uid: c.uid, cursors, cursorsBy, notes: notes?.all() ?? [], drops })
         presence()
         ws.on('message', (d) => onMessage(c, String(d)))
         ws.on('pong', () => { c.alive = true })
