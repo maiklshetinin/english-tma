@@ -1,5 +1,5 @@
 <script setup>
-// Нагрузка недели — маленький «спидометр» рядом с переключателем недель.
+// Нагрузка недели — маленький квадратный прибор-«спидометр» рядом с переключателем недель (шкала сверху, часы под ней).
 //  • Стрелка и число — часы уроков выбранной недели (урок = 1 час; группа — тоже 1; отменённый всеми учениками не считается).
 //  • Зоны шкалы — от вашей нормы часов в неделю: до 80% — зелёная («Комфортно»), до 100% — оранжевая («Плотно»), выше — красная («Риск выгорания»).
 //  • Нажатие — маленькое меню: состояние и «Моя норма» − / + (запоминается на этом устройстве).
@@ -54,13 +54,13 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
 
 <style scoped>
 .wl { position: relative; flex: none }
-.g { display: flex; align-items: center; gap: 4px; padding: 2px 8px 2px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; cursor: pointer }
+.g { width: 54px; height: 54px; box-sizing: border-box; display: grid; justify-items: center; align-content: center; gap: 0; padding: 4px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--text); font: inherit; cursor: pointer }
 .g:hover { border-color: var(--hint-2) }
-.g svg { width: 58px; height: 32px; overflow: visible }
+.g svg { width: 42px; height: 23px; overflow: visible }
 .track { fill: none; stroke: var(--border); stroke-width: 7 }
 .z { fill: none; stroke-width: 7 } .z.ok { stroke: var(--green) } .z.warn { stroke: var(--orange) } .z.bad { stroke: var(--red) }
 .needle { transform-origin: 40px 38px; transition: transform .9s cubic-bezier(.3, 1.5, .5, 1) } .needle path, .needle circle { fill: var(--text) }
-.v { font-size: 12px; font-weight: 800; color: var(--hint); white-space: nowrap } .v b { display: inline-block; min-width: 2ch; text-align: right; font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums }      /* «6» и «38» — одной ширины, спидометр не прыгает */
+.v { font-size: 10px; font-weight: 800; color: var(--hint); white-space: nowrap; line-height: 1.1; margin-top: 1px } .v b { display: inline-block; font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums }      /* «6» и «38» — одной ширины, спидометр не прыгает */
 .ok .v b { color: var(--green-d) } .warn .v b { color: var(--orange-d) } .bad .v b { color: var(--red-d) }
 .pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: grid; gap: 8px; padding: 10px 12px; min-width: 210px;
   background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 10px 24px rgba(0, 0, 0, .14); font-size: 13px; font-weight: 700; color: var(--hint) }
