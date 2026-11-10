@@ -7,6 +7,9 @@ import { ask } from '../composables/useDialog'
 import { showToast } from '../composables/useToast'
 import { stateOf, LV_DAYS } from '../utils/review'
 import { algo } from '../stores/review'
+import WordCurve from './WordCurve.vue'
+import ReviewChart from './ReviewChart.vue'
+import { nextTick } from 'vue'
 
 const props = defineProps({
   resolve: { type: Function, required: true },
@@ -16,6 +19,11 @@ const props = defineProps({
 })
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
+const chartOn = ref((() => { try { return localStorage.getItem('tma.review.chart') !== '0' } catch { return true } })())
+const toggleChart = () => { chartOn.value = !chartOn.value; try { localStorage.setItem('tma.review.chart', chartOn.value ? '1' : '0') } catch { /* приватный режим */ } }
+const cfgNow = computed(() => ({ retention: algo.retention, maxDays: algo.maxDays }))
+// нажали слово на графике — открыть его строку с кривой памяти
+async function pick(key) { filter.value = 'all'; openKey.value = key; await nextTick(); document.querySelector(`[data-rk="${CSS.escape(key)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
 const list = computed(() => { const now = Date.now(), cfg = { ...algo }; return Object.values(props.items ?? review.items).map(x => { const st = stateOf(x, now, cfg); return { ...x, st, lv: st.level } })
   .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })) })
 const count = (lv) => list.value.filter(x => x.lv === lv).length
@@ -47,7 +55,9 @@ async function reset() {
           <span><b>{{ count(lv) }}</b>{{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</span>
         </div>
       </div>
-      <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button>
+      <ReviewChart v-if="chartOn && list.length" :items="items ?? review.items" :cfg="cfgNow" @pick="pick" />
+      <div class="hbs"><button class="howb" :aria-expanded="chartOn" @click="toggleChart">График <span>{{ chartOn ? '▴' : '▾' }}</span></button>
+      <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button></div>
       <div v-if="how" class="how">
         <p><b>1. Что сюда попадает.</b> Каждое слово и фраза из экранов уроков, которые ты прошёл: «Новое слово», «Подсказка», «Выбери ответ», «Пары», «Собери слово / фразу», «Заполни пропуск», «Повтори». Одно-два слова — это <i>слово</i>, длиннее — <i>фраза</i>. Одинаковые записи (без учёта регистра и точки в конце) — одна строка.</p>
         <p><b>2. Память по FSRS</b> — тот же алгоритм, что в Anki. У слова есть стабильность (за сколько дней вероятность вспомнить падает до 90 %) и сложность. Верный ответ — оценка «Хорошо», ошибка — «Снова». Экраны без проверки («Новое слово», «Подсказка», «Повтори») только знакомят — слово «новое». В «Парах» каждая пара считается отдельно. Повтор в тот же день память почти не растит — укрепляют повторы через паузу.</p>
@@ -76,7 +86,7 @@ async function reset() {
       <div v-else class="tbl">
         <div class="th"><span /><span>Английский</span><span>Перевод</span><span>Сила</span></div>
         <template v-for="x in shown" :key="x.key">
-          <div class="tr" :class="{ on: openKey === x.key }" role="button" tabindex="0" @click="openKey = openKey === x.key ? null : x.key">
+          <div class="tr" :data-rk="x.key" :class="{ on: openKey === x.key }" role="button" tabindex="0" @click="openKey = openKey === x.key ? null : x.key">
             <span class="pic"><img v-if="x.image && resolve(x.image, 'image')" :src="resolve(x.image, 'image')" alt="" /><i v-else>{{ x.kind === 'phrase' ? 'Фр' : 'Сл' }}</i></span>
             <span class="w"><button v-if="x.audio" class="pl" title="Послушать" @click.stop="play(x)"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></button><span class="wt">{{ x.text }}<small v-if="x.tr" class="mt">{{ x.tr }}</small></span></span>
             <span class="t">{{ x.tr }}</span>
@@ -85,6 +95,7 @@ async function reset() {
           <div v-if="openKey === x.key" class="det">
             <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
             <p v-else><b>Вспомнит сейчас: {{ x.st.recall }} %</b> · память ~{{ dd(x.st.stab) }} · повторить {{ days(x.st.due) }} · верно {{ x.ok }}, ошибок {{ x.bad }} · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
+            <WordCurve v-if="!x.st.isNew" :item="x" :cfg="cfgNow" />
             <ul><li v-for="(h, k) in x.hist" :key="k"><span :class="h.ok === null ? 'n' : h.ok ? 'y' : 'x'">{{ h.ok === null ? 'встретилось' : h.ok ? 'верно' : 'ошибка' }}</span>{{ h.ex }}<template v-if="h.lesson"> · {{ h.lesson }}</template><small>{{ when(h.t) }}</small></li></ul>
           </div>
         </template>
@@ -96,7 +107,8 @@ async function reset() {
 <style scoped>
 .sy { margin-left: 10px; font-size: 12px; font-weight: 800; color: var(--hint); vertical-align: middle } .sy.synced { color: #1fbe78 } .sy.error { color: #ff9600 }
 .al { color: #1cb0f6; font-weight: 800; text-decoration: none }
-.howb { all: unset; cursor: pointer; margin-top: 12px; font-size: 13px; font-weight: 800; color: #1cb0f6 } .howb span { font-size: 11px }
+.hbs { display: flex; gap: 18px; flex-wrap: wrap }
+.howb { all: unset; cursor: pointer; margin-top: 4px; font-size: 13px; font-weight: 800; color: #1cb0f6 } .howb span { font-size: 11px }
 .how { margin-top: 10px; display: grid; gap: 7px; padding: 12px 14px; border-radius: 12px; background: #f6f8fa } .how p { margin: 0; font-size: 13px; line-height: 1.45; color: #444 } .how b { color: #222 } .how .nt { color: #777; font-size: 12px }
 .rv { width: 100%; max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0 }          /* minmax(0) — на телефоне ничего не распирает за край */
 .rcard { min-width: 0; background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }

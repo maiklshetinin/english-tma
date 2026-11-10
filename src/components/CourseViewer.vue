@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
+import ReviewChart from './ReviewChart.vue'
 import { recordStep, syncReview, review, algo } from '../stores/review'
 import { hitsOf, keyOf, memOf, stateOf, levelOf, exName } from '../utils/review'
 import { useAuthStore } from '../stores/auth'
@@ -121,6 +122,7 @@ function go(x) { peek.value = null; open.value = x; t0 = Date.now(); misses.clea
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
 // итог урока: какие слова урок записал в Review и как изменилась их память (FSRS) — чтобы сверять с разделом Review строка в строку
+const rvChart = ref(false)                      // график слов сверху урока (преподаватель)
 const snap = reactive({})                      // ключ слова → стабильность памяти до урока, дни (null — новое, ещё без ответов)
 const rvLog = reactive({})                     // ключ слова → журнал: какой экран, как ответили, какая стала память
 const sOf = (k) => { const m = review.items[k] && memOf(review.items[k]); return m ? Math.round(m.s * 10) / 10 : null }
@@ -216,6 +218,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
       <div v-if="open" class="full">
+        <!-- преподаватель: график Review сверху урока — сразу видно, куда ушло слово после ответа (как график колоды в сессии) -->
+        <template v-if="steps.length && !of && auth.role === 'teacher'">
+          <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть график' : 'График слов' }}</button>
+          <div v-if="rvChart" class="rvd"><ReviewChart :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock /></div>
+        </template>
         <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
@@ -293,7 +300,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .pgo:active { transform: translateY(2px); box-shadow: none }
 /* во весь экран */
 .full { position: fixed; inset: 0; z-index: 1000; background: #fff; display: flex; flex-direction: column }
-.full :deep(.lp) { height: 100% }
+.full :deep(.lp) { flex: 1; min-height: 0; height: auto }
+.rvt { position: absolute; top: 12px; right: 14px; z-index: 3; border: 0; border-radius: 12px; padding: 8px 12px; background: #eaf6fe; color: #1278b0; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer } .rvt.on { background: #1cb0f6; color: #fff }
+.rvd { flex: none; max-height: 45vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid #eef0f3 }
+.rvd > * { max-width: 760px; margin: 0 auto }
 .sh { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 30px 24px; text-align: center }
 .sh p { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px } .sh b { font-size: 18px }
 .x { position: absolute; left: 18px; top: 18px }
