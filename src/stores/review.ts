@@ -74,9 +74,11 @@ export async function syncReview(owner?: string | number | null) {
 }
 
 /** Ответ на экран урока → в словарь */
-export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[] }, ctx: { lesson?: string; course?: string; topic?: Topic } = {}) {
+export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[] }, ctx: { lesson?: string; course?: string; topic?: Topic; screen?: { key: string; text: string; tr?: string } } = {}) {
   // слова экрана + его навыки и тема урока (вкладка «Грамматика и навыки»)
-  const hits = [...hitsOf(step, res), ...tagHits(step, res, ctx.topic)]; if (!hits.length) return
+  // + сам экран (память упражнения — для «Повторения» Chapter); только проверяемые ответы
+  const scr = ctx.screen && res.ok != null ? [{ key: ctx.screen.key, kind: 'screen' as const, text: ctx.screen.text, tr: ctx.screen.tr ?? '', ok: res.ok }] : []
+  const hits = [...hitsOf(step, res), ...tagHits(step, res, ctx.topic), ...scr]; if (!hits.length) return
   applyHits(review.items, hits, { ex: exName(step), lesson: ctx.lesson, course: ctx.course }, Date.now(), { ...algo })
   for (const h of hits) { const k = h.key ?? keyOf(h.text); if (review.items[k]) pending.add(k) }
   save(); if (online()) later(2000)

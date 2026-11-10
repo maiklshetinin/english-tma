@@ -12,7 +12,7 @@ import type { TokenUser } from './types.js'
 
 export interface ReviewHist { t: number; ok: boolean | null; ex: string; lesson?: string }
 export interface ReviewItem {
-  key: string; kind: 'word' | 'phrase' | 'skill' | 'topic'; text: string; tr: string; image?: string; audio?: string
+  key: string; kind: 'word' | 'phrase' | 'skill' | 'topic' | 'screen'; text: string; tr: string; image?: string; audio?: string
   s: number; due: number; seen: number; ok: number; bad: number; hist: ReviewHist[]; course?: string; lesson?: string
   f?: ReviewMem                     // память по FSRS (считает сайт); нет — слово только встречалось или запись старая
 }
@@ -35,9 +35,9 @@ export function cleanReviewItem(v: unknown): ReviewItem {
   if (!isObj(v)) throw fail(400, 'bad review item')
   const key = str(v.key, 'key', 200, true)
   if (key.startsWith('__')) throw fail(400, 'bad key')
-  if (!['word', 'phrase', 'skill', 'topic'].includes(v.kind as string)) throw fail(400, 'bad kind')
-  const tag = v.kind === 'skill' || v.kind === 'topic'                 // навык / тема грамматики — ключ «skill:…» / «topic:…»
-  if (tag ? !key.startsWith(v.kind + ':') : /^(skill|topic):/.test(key)) throw fail(400, 'bad key')
+  if (!['word', 'phrase', 'skill', 'topic', 'screen'].includes(v.kind as string)) throw fail(400, 'bad kind')
+  const tag = v.kind === 'skill' || v.kind === 'topic' || v.kind === 'screen'      // навык / тема грамматики / экран урока — ключ «skill:…» / «topic:…» / «screen:курс:урок:экран»
+  if (tag ? !key.startsWith(v.kind + ':') : /^(skill|topic|screen):/.test(key)) throw fail(400, 'bad key')
   const s = Number(v.s); if (!Number.isFinite(s) || s < 0 || s > 100) throw fail(400, 'bad strength')
   if (!Array.isArray(v.hist)) throw fail(400, 'bad hist')
   const hist = v.hist.slice(0, REVIEW_LIMITS.hist).map((h): ReviewHist => {

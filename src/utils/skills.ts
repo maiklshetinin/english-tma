@@ -86,6 +86,9 @@ export function tagHits(s: Step, res: { ok?: boolean | null }, topic?: Topic) {
 }
 
 /** Словарь без навыков и тем — для «слов» (таблица Review, графики слов) */
-export const wordsOnly = <T extends { kind?: string }>(items: Record<string, T>): Record<string, T> => { const o: Record<string, T> = {}; for (const k in items) if (!isTag(items[k])) o[k] = items[k]; return o }
+export const isWord = (x: { kind?: string }) => !x.kind || x.kind === 'word' || x.kind === 'phrase'
+export const wordsOnly = <T extends { kind?: string }>(items: Record<string, T>): Record<string, T> => { const o: Record<string, T> = {}; for (const k in items) if (isWord(items[k])) o[k] = items[k]; return o }
+/** Экран урока в словаре Review (память упражнения — для «Повторения» Chapter): ключ «screen:курс:урок:экран» */
+export const screenKey = (course: string, lesson: string, step: string) => `screen:${course}:${lesson}:${step}`
 /** Только навыки и темы */
 export const tagsOnly = <T extends { kind?: string }>(items: Record<string, T>): Record<string, T> => { const o: Record<string, T> = {}; for (const k in items) if (isTag(items[k])) o[k] = items[k]; return o }

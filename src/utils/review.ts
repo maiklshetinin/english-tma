@@ -28,7 +28,7 @@ export function schedulerOf(cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_D
 }
 const W = schedulerOf().parameters.w                                       // веса FSRS-6 (их 21; последний — форма кривой забывания)
 
-export type RKind = 'word' | 'phrase' | 'skill' | 'topic'      // skill / topic — навык и тема грамматики (utils/skills.ts)
+export type RKind = 'word' | 'phrase' | 'skill' | 'topic' | 'screen'      // skill / topic — навык и тема грамматики (utils/skills.ts)
 export type RLevel = 'weak' | 'medium' | 'strong'
 export interface RHist { t: number; ok: boolean | null; ex: string; lesson?: string }
 /** Память слова по FSRS: стабильность (дни), сложность 1–10, последний ответ (мс), ответов, провалов, состояние (1 изучение, 2 повторение, 3 переучивание) */

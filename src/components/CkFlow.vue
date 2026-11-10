@@ -13,7 +13,8 @@ const props = defineProps({
   dock: Boolean,
 })
 const hot = ref(new Set()), flash = ref(null); let t = null
-const sig = () => new Map(props.chapters.flatMap(c => c.cks.flatMap(k => k.fromErrors ? k.items.map(i => [k.id + ':' + i.id, { c, k, i }]) : [])))
+const sig = () => new Map([...props.chapters.flatMap(c => c.cks.flatMap(k => k.fromErrors ? k.items.map(i => [k.id + ':' + i.id, { c, k, i }]) : [])),
+  ...props.chapters.flatMap(c => (c.rv?.items ?? []).map(i => ['rv:' + c.id + ':' + i.id, { c, k: { title: 'Повторение' }, i }]))])
 let seen = sig()
 watch(() => props.chapters, () => {
   const cur = sig(), fresh = [...cur.keys()].filter(k => !seen.has(k)); seen = cur
@@ -40,6 +41,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'экран' : [2, 3, 4].i
             <span class="arr" aria-hidden="true" />
             <span class="ck" :class="[k.state, { err: k.fromErrors }]" :title="k.title"><svg viewBox="0 0 24 24"><path d="M5 21V4m0 0h11l-2 4 2 4H5" /></svg><b>{{ k.items.length + k.own }}</b></span>
           </template>
+          <template v-if="c.rv"><span class="arr" aria-hidden="true" /><span class="rvp" :class="{ due: c.rv.n }" title="Повторение Chapter"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></svg><b>{{ c.rv.n }}</b></span></template>
         </div>
         <div v-for="k in c.cks" :key="'l' + k.id" class="cl">
           <div class="clh"><b>{{ k.title }}</b><span class="tag" :class="{ err: k.fromErrors }">{{ k.fromErrors ? 'из ошибок' : k.items.length ? 'ошибок нет — авто' : 'пусто' }}</span><small>{{ k.items.length + k.own }} {{ word(k.items.length + k.own) }}</small></div>
@@ -48,6 +50,11 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'экран' : [2, 3, 4].i
           <p v-if="!k.items.length && !k.own" class="em">В уроках нет проверяемых экранов — чекпоинт пройдётся кнопкой «Готово — дальше».</p>
         </div>
         <p v-if="!c.cks.length" class="em">В этой Chapter нет чекпоинта.</p>
+        <!-- «Повторение» Chapter: слова и упражнения, которым по FSRS пора (проходится как урок, путь не держит) -->
+        <div v-if="c.rv" class="cl rv">
+          <div class="clh"><b>Повторение</b><span class="tag rvt" :class="{ due: c.rv.n }">{{ c.rv.n ? 'пора' : 'пока нечего' }}</span><small>{{ c.rv.n ? `${c.rv.words} сл. · ${c.rv.screens} упр.` : c.rv.next ? 'следующее ' + c.rv.next : '' }}</small></div>
+          <ul v-if="c.rv.items.length"><li v-for="i in c.rv.items" :key="i.id" :class="['rvi', i.kind, { hot: hot.has('rv:' + c.id + ':' + i.id) }]"><b>{{ i.w || '—' }}<em>{{ i.pct == null ? 'ошибка' : i.pct + '%' }}</em></b><span>{{ i.kind === 'screen' ? 'упражнение' : 'слово' }} · {{ i.ex }} · {{ i.from }}</span></li></ul>
+        </div>
       </section>
     </div>
   </div>
@@ -81,6 +88,11 @@ li { display: grid; padding: 4px 8px; border-radius: 8px; background: #fff5f5; b
 li b { font-size: 13px } li span { font-size: 11px; font-weight: 600; color: var(--hint) }
 li.hot { background: #fff0c2; animation: pop .5s ease-out }
 @keyframes pop { from { transform: scale(.94) } }
+.rvp { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 10px; background: #eef0f3; color: #8a8f98; margin-bottom: 12px } .rvp.due { background: #1cb0f6; color: #fff }
+.rvp svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round } .rvp b { font-size: 13px; font-weight: 900 }
+.tag.rvt.due { background: #dff2ff; color: #1278b0 }
+li.rvi { background: #f2f9ff; box-shadow: inset 3px 0 0 #1cb0f6 } li.rvi.screen { background: #f6f1ff; box-shadow: inset 3px 0 0 #9747ff }
+li.rvi b { display: flex; justify-content: space-between; gap: 6px } li.rvi em { font-style: normal; font-size: 11px; font-weight: 900; color: #e53935 }
 .em { margin: 0; font-size: 12px; color: var(--hint); font-weight: 600 }
 .dock .ch { width: min(300px, 80vw) }
 </style>

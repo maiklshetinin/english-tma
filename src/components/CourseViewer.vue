@@ -9,7 +9,7 @@ import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import ReviewChart from './ReviewChart.vue'
 import CkFlow from './CkFlow.vue'
-import { topicById, detectTopic, wordsOnly } from '../utils/skills'
+import { topicById, detectTopic, wordsOnly, screenKey } from '../utils/skills'
 import WordNow from './WordNow.vue'
 import MemoryChart from './MemoryChart.vue'
 import { recordStep, syncReview, review, algo } from '../stores/review'
@@ -37,7 +37,7 @@ const props = defineProps({
 const course = ref(null), err = ref(''), loading = ref(false)
 const onEsc = (e) => { if (e.key !== 'Escape') return; if (open.value) open.value = null; else peek.value = null }
 // нажали мимо карточки урока — она закрывается
-const onDown = (e) => { if (peek.value && !e.target.closest?.('.pv, .vrow.peek')) peek.value = null }
+const onDown = (e) => { if (peek.value && !e.target.closest?.('.pv, .vrow.peek, .rpt')) peek.value = null }
 const auth = useAuthStore()
 onMounted(() => { syncReview(auth.user?.id); addEventListener('keydown', onEsc); addEventListener('pointerdown', onDown) })
 onUnmounted(() => { removeEventListener('keydown', onEsc); removeEventListener('pointerdown', onDown) })
@@ -55,6 +55,7 @@ const T = {
   checkpoint: { t: 'Чекпоинт', c: '#ff9f1a', d: '#e07f00', ic: '<path d="M6 21V4"/><path d="M6 4.5h11l-2.2 3.7L17 12H6"/>' },
   reward: { t: 'Награда', c: 'var(--yellow)', d: 'var(--yellow-d)', ic: '<path d="M8 4.5h8v5.5a4 4 0 0 1-8 0z"/><path d="M8 6.5H4.5v.8A3.7 3.7 0 0 0 8 11M16 6.5h3.5v.8A3.7 3.7 0 0 1 16 11"/><path d="M12 14v4M8.5 20h7"/>' },
 }
+const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? few : many)
 const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'экрана' : 'экранов'}`
 const state = (x) => (x.n < done.value ? 'done' : x.n === done.value ? 'current' : 'todo')
 
@@ -96,7 +97,7 @@ const done = computed(() => Math.min(mine.value.done, total.value))
 // ученик прошёл задание (урок — по «Готово» в итоге; кружок, фото, занятие — кнопкой) → на сервер, «Сейчас» переезжает дальше
 let t0 = 0
 async function finish(x, sc = {}) {
-  if (props.of || !x) return
+  if (props.of || !x || x.virtual) return          // «Повторение» в прогресс курса не пишется
   const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0, ...(x.type !== 'checkpoint' && misses.size ? { miss: [...misses] } : {}) }
   if (self && !online) {                       // без сервера — те же правила, что на сервере (server/learn.ts), в этом браузере
     const r = run.value; if (x.n > r.done) return
@@ -129,8 +130,8 @@ const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 // ошибки урока: с сервера (ученик) / этого просмотра; у открытого сейчас урока — плюс ошибки, сделанные только что (в реальном времени)
 // тема грамматики открытого урока: своя (редактор), «без темы» или — по названию урока / его Chapter
 const dictWords = computed(() => wordsOnly(review.items))         // графики урока — только слова (навыки и темы — во вкладке Review)
-function topicOfOpen() {
-  const x = open.value; if (!x || x.topic === 'none') return undefined
+function topicOfOpen(x = open.value) {
+  if (!x || x.topic === 'none') return undefined
   const u = units.value.find(v => v.tasks.some(t => t.id === x.id))
   return topicById(x.topic) ?? detectTopic(x.title, u ? `${u.title} ${u.sub ?? ''}` : '')
 }
@@ -149,7 +150,7 @@ function ckParts(x) {
   }
   return { own, auto: auto.map(p => p.s), autoFrom: auto, fromErrors }
 }
-const stepsOf = (x) => { if (x.type !== 'checkpoint') return okSteps(x); const p = ckParts(x); return [...p.own, ...p.auto] }
+const stepsOf = (x) => { if (x.type === 'repeat') return x.steps; if (x.type !== 'checkpoint') return okSteps(x); const p = ckParts(x); return [...p.own, ...p.auto] }
 
 // открыто в рамке: урок (экраны), кружок, фото или «пусто» — объявлено выше (нужно сборке чекпоинта)
 // кружок и фото — открываются прямо тут, под строкой (как в Telegram), остальное — во весь экран
@@ -185,9 +186,45 @@ const onAnswer = (a) => {
   if (a.ok === false) misses.add(a.step.id)
   const hits = hitsOf(a.step, a), was = {}
   for (const h of hits) { const k = keyOf(h.text); was[k] = sOf(k); if (!(k in snap)) snap[k] = was[k] }
-  recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title, topic: topicOfOpen() })
+  // чекпоинт и «Повторение» собраны из экранов уроков — ответ пишется уроку, где экран живёт (его тема, память экрана)
+  const home = open.value?.type === 'checkpoint' || open.value?.virtual ? stepHome.value[a.step.id] ?? open.value : open.value
+  recordStep(a.step, a, { lesson: home?.title, course: course.value?.title, topic: topicOfOpen(home),
+    screen: home && cid.value ? { key: screenKey(cid.value, home.id, a.step.id), text: `${exName(a.step)} · ${stepWord(a.step) || '—'}`, tr: home.title || '' } : undefined })
   for (const h of hits) { const k = keyOf(h.text), now = sOf(k); (rvLog[k] ??= []).push({ ex: exName(a.step), ok: h.ok, now }) }
 }
+// ── «Повторение» после каждой Chapter (как «Повторяй изученный материал» в Busuu) ──
+// Собирается само: экраны уроков Chapter, у которых по FSRS подошёл срок (память экрана), и слова, которым пора, — экраном
+// урока, где это слово есть. Проходится как урок (до RV_MAX экранов), в прогресс курса не пишется и путь не держит.
+const RV_MAX = 10
+const tick = ref(Date.now()); let tickT = null
+onMounted(() => { tickT = setInterval(() => { tick.value = Date.now() }, 60_000) }); onUnmounted(() => clearInterval(tickT))
+const cid = computed(() => course.value?.id ?? props.id)
+const stepHome = computed(() => { const m = {}; for (const u of units.value) for (const t of u.tasks) if (t.type !== 'checkpoint') for (const st of t.steps ?? []) m[st.id] = t; return m })
+function repeatOf(u) {
+  const now = Math.max(tick.value, Date.now()), cfg = { retention: algo.retention, maxDays: algo.maxDays }
+  const pool = u.tasks.filter(t => t.type !== 'checkpoint' && INTERACTIVE.includes(t.type)).flatMap(t => okSteps(t).filter(st => GRADED.includes(st.kind)).map(st => ({ st, t })))
+  const mem = (x) => { if (!x) return null; const st = stateOf(x, now, cfg); return st.isNew ? null : st }
+  const isDue = (st) => st.failed || st.due <= now
+  const list = [], used = new Set(), words = new Set(); let next = Infinity, started = false
+  for (const p of pool) {                                   // упражнения, которым пора
+    const st = mem(review.items[cid.value ? screenKey(cid.value, p.t.id, p.st.id) : '']); if (!st) continue
+    started = true
+    if (isDue(st)) { list.push({ st: p.st, t: p.t, kind: 'screen', w: stepWord(p.st), pct: st.failed ? null : st.recall }); used.add(p.st.id) } else next = Math.min(next, st.due)
+  }
+  for (const p of pool) for (const h of hitsOf(p.st, { ok: true })) {          // слова, которым пора, — экраном их урока
+    const k = keyOf(h.text); if (words.has(k)) continue
+    const st = mem(review.items[k]); if (!st) continue
+    started = true
+    if (!isDue(st)) { next = Math.min(next, st.due); continue }
+    words.add(k)
+    if (!used.has(p.st.id)) { list.push({ st: p.st, t: p.t, kind: 'word', w: h.text, pct: st.failed ? null : st.recall }); used.add(p.st.id) }
+  }
+  return { id: 'rv-' + u.id, type: 'repeat', title: 'Повторение', virtual: true, list, steps: list.slice(0, RV_MAX).map(o => o.st), words: words.size, screens: list.filter(o => o.kind === 'screen').length, next: next === Infinity ? null : next, started }
+}
+const repeats = computed(() => Object.fromEntries(units.value.map(u => [u.id, repeatOf(u)])))
+const relDay = (t) => { if (!t) return ''; const d = Math.round((new Date(t).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86_400_000); return d <= 0 ? 'сегодня' : d === 1 ? 'завтра' : `через ${d} дн` }
+function goRepeat(rv) { if (rv.steps.length) go({ ...rv, steps: rv.steps.slice() }) }
+
 // курс по горизонтали: Chapter → уроки → чекпоинт и что в него попадёт сейчас (CkFlow) — для преподавателя, в реальном времени
 const titleOf = (id) => course.value?.items?.find(t => t.id === id)?.title || ''
 const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type === 'checkpoint') || u.title).map(u => ({
@@ -195,12 +232,13 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
   lessons: u.tasks.filter(t => t.type !== 'checkpoint' && INTERACTIVE.includes(t.type)).map(t => ({ id: t.id, title: t.title || (T[t.type] ?? T.lesson).t, state: state(t), miss: missOf(t.id).length, live: open.value?.id === t.id })),
   cks: u.tasks.filter(t => t.type === 'checkpoint').map(c => { const p = ckParts(c); return { id: c.id, title: c.title || 'Чекпоинт', state: state(c), fromErrors: p.fromErrors, own: p.own.length,
     items: p.autoFrom.map(a => ({ id: a.s.id, ex: exName(a.s), w: stepWord(a.s), from: titleOf(a.from) })) } }),
+  rv: (() => { const r = repeats.value[u.id]; return r?.started ? { n: r.steps.length, words: r.words, screens: r.screens, next: r.next ? relDay(r.next) : '', items: r.list.map(o => ({ id: o.st.id, kind: o.kind, ex: exName(o.st), w: o.w, from: o.t.title, pct: o.pct })) } : null })(),
 })))
 const showCk = ref(true), dockTab = ref('mem')
 // итог урока: что уйдёт в чекпоинт этой Chapter (экраны с ошибкой) — для проверки, что автоматика сработала
 const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || ''
 const ckLog = computed(() => {
-  const x = open.value; if (!x || x.type === 'checkpoint') return null
+  const x = open.value; if (!x || x.type === 'checkpoint' || x.virtual) return null
   const u = units.value.find(u => u.tasks.some(t => t.id === x.id))
   const ck = u?.tasks.slice(u.tasks.findIndex(t => t.id === x.id) + 1).find(t => t.type === 'checkpoint')
   if (!ck) return { none: true }
@@ -211,7 +249,7 @@ const rvWords = computed(() => Object.keys(snap).map(k => review.items[k] && { .
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value ? stepsOf(open.value) : []))
-watch(open, (x) => setQ({ l: x?.id, s: null }))
+watch(open, (x) => setQ({ l: x?.virtual ? null : x?.id, s: null }))
 watch(curStep, (st) => { if (!open.value || !st) return; const k = steps.value.indexOf(st); setQ({ s: k > 0 ? String(k) : null }) })
 watch(() => props.id, (id) => { if (id) setQ({ c: id }) }, { immediate: true })
 // курс загрузился — открыть задание из адреса (урок — на том же экране; кружок / фото — под строкой; остальное — карточкой)
@@ -249,7 +287,8 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
         <button class="cktg" :aria-expanded="showCk" @click="showCk = !showCk">Чекпоинты: что в них попадёт <span>{{ showCk ? '▴' : '▾' }}</span></button>
         <CkFlow v-if="showCk" :chapters="ckMap" />
       </template>
-      <section v-for="u in units" :key="u.id" class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
+      <template v-for="u in units" :key="u.id">
+      <section class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
         <template v-if="u.title">
           <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b><svg v-if="u.tasks.length && u.pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
           <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em :style="{ left: u.pct + '%', transform: `translate(-${u.pct}%, -50%)` }">{{ u.pct }}%</em></div>
@@ -293,6 +332,24 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           </div>
         </div>
       </section>
+      <!-- «Повторяй изученный материал» (как в Busuu): слова и упражнения Chapter, которым пора, — проходится как урок -->
+      <div v-if="repeats[u.id]?.started" class="rpt" :class="{ due: repeats[u.id].steps.length, on: peek === 'rv-' + u.id }" role="button" tabindex="0" @click="peek = peek === 'rv-' + u.id ? null : 'rv-' + u.id" @keydown.enter="peek = peek === 'rv-' + u.id ? null : 'rv-' + u.id">
+        <span class="rpi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /><path d="M9 12.5l2 2 4-4.5" /></svg></span>
+        <div class="rpt-t">
+          <span v-if="repeats[u.id].steps.length" class="rec">★ Рекомендовано</span>
+          <b>Повторяй изученный материал</b>
+          <p v-if="repeats[u.id].steps.length">Пора повторить: {{ repeats[u.id].words ? repeats[u.id].words + ' ' + plural(repeats[u.id].words, 'слово', 'слова', 'слов') : '' }}{{ repeats[u.id].words && repeats[u.id].screens ? ' и ' : '' }}{{ repeats[u.id].screens ? repeats[u.id].screens + ' ' + plural(repeats[u.id].screens, 'упражнение', 'упражнения', 'упражнений') : '' }}. Интервальное повторение (FSRS) возвращает то, что начинает забываться.</p>
+          <p v-else>Повторять пока нечего — всё свежее{{ repeats[u.id].next ? `, следующее ${relDay(repeats[u.id].next)}` : '' }}.</p>
+        </div>
+      </div>
+      <div v-if="peek === 'rv-' + u.id" class="pv rpv" style="--c: #9747ff; --d: #6b3fd1" @click.stop>
+        <div class="pth"><small>Повторение · {{ u.title || 'Chapter' }}</small><small v-if="repeats[u.id].steps.length">≈ {{ lessonMin(repeats[u.id].steps) }} мин</small></div>
+        <ul v-if="repeats[u.id].list.length" class="rpl"><li v-for="o in repeats[u.id].list.slice(0, RV_MAX)" :key="o.st.id"><i :class="o.kind" /><b>{{ o.w || '—' }}</b><span>{{ exName(o.st) }} · {{ o.t.title }}</span><em>{{ o.pct == null ? 'ошибка' : o.pct + '%' }}</em></li></ul>
+        <p v-if="repeats[u.id].list.length > RV_MAX" class="psub">и ещё {{ repeats[u.id].list.length - RV_MAX }} — в следующий раз</p>
+        <button v-if="repeats[u.id].steps.length && !of" class="pgo" @click="goRepeat(repeats[u.id])">Повторить</button>
+        <p v-else-if="!repeats[u.id].steps.length" class="psub">Слова и упражнения вернутся сюда сами, когда начнут забываться.</p>
+      </div>
+      </template>
       <p v-if="!units.length" class="hint none">В курсе пока нет заданий</p>
     </div>
 
@@ -405,6 +462,16 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .dtabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto; margin-bottom: 8px }
 .dtabs button { font: inherit; font-size: 12.5px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 12px; background: none; color: #5f6368; cursor: pointer } .dtabs button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: #f0f1f3; color: #555; font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
+.rpt { display: flex; align-items: center; gap: 16px; margin: 12px 0; padding: 16px 18px; border-radius: 18px; background: #f4f7fb; box-shadow: inset 0 0 0 1.5px #e3e8ef; cursor: pointer; transition: background .15s }
+.rpt:hover, .rpt.on { background: #ecf3fc } .rpt.due { background: #f3efff; box-shadow: inset 0 0 0 1.5px #ddd0ff } .rpt.due:hover, .rpt.due.on { background: #ebe4ff }
+.rpi { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: #fff; box-shadow: 0 2px 0 #dfe3e8 } .rpi svg { width: 28px; height: 28px; fill: none; stroke: #9747ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.rpt:not(.due) .rpi svg { stroke: #9aa0a8 }
+.rpt-t { display: grid; gap: 3px; min-width: 0 } .rpt-t b { font-size: 16px; font-weight: 900 } .rpt-t p { margin: 0; font-size: 13.5px; font-weight: 600; color: #5f6368; line-height: 1.45 }
+.rec { justify-self: start; font-size: 11px; font-weight: 900; color: #fff; background: #6b3fd1; padding: 2px 9px; border-radius: 8px }
+.rpv { margin: -4px 0 12px } .rpv::before { left: 40px }
+.rpl { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px }
+.rpl li { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 255, 255, .16); font-size: 13px } .rpl i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #8fdcff } .rpl i.screen { background: #fff }
+.pv .rpl b { flex: none; max-width: 40%; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .rpl span { flex: 1; min-width: 0; opacity: .85; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .rpl em { font-style: normal; font-weight: 900; font-size: 12px; background: rgba(255, 255, 255, .2); padding: 1px 6px; border-radius: 6px }
 .cktg { all: unset; cursor: pointer; font-size: 13px; font-weight: 800; color: #6b3fd1; margin: 4px 0 -2px } .cktg span { font-size: 11px }
 .sh { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 30px 24px; text-align: center }
 .sh p { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px } .sh b { font-size: 18px }
