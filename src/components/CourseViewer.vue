@@ -154,10 +154,10 @@ const focusKey = computed(() => { const h = curStep.value && hitsOf(curStep.valu
 const PW = 'tma.lessonPanelW'
 const panelW = ref((() => { try { return +localStorage.getItem(PW) || 560 } catch { return 560 } })())
 function dragSplit(e) {
-  e.preventDefault(); const el = e.currentTarget; el.setPointerCapture?.(e.pointerId); document.body.style.cursor = 'col-resize'
+  e.preventDefault(); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'
   const move = (ev) => { panelW.value = Math.round(Math.min(window.innerWidth * 0.72, Math.max(340, window.innerWidth - ev.clientX))) }
-  const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); document.body.style.cursor = ''; try { localStorage.setItem(PW, String(panelW.value)) } catch { /* приватный режим */ } }
-  el.addEventListener('pointermove', move); el.addEventListener('pointerup', up)
+  const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); document.body.style.cursor = ''; document.body.style.userSelect = ''; try { localStorage.setItem(PW, String(panelW.value)) } catch { /* приватный режим */ } }
+  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up)      // слушаем всё окно — мышь может уйти с перегородки
 }
 const snap = reactive({})                      // ключ слова → стабильность памяти до урока, дни (null — новое, ещё без ответов)
 const rvLog = reactive({})                     // ключ слова → журнал: какой экран, как ответили, какая стала память
@@ -364,11 +364,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .spl { display: none }
 @media (min-width: 900px) {                    /* компьютер: урок слева, графики справа, между ними — перегородка (тянется) */
   .full.split { flex-direction: row }
-  .full.split > :deep(.lp), .full.split > .sh { order: 1; flex: 1; min-width: 0 }
-  .full.split .spl { order: 2; display: block; flex: none; width: 7px; cursor: col-resize; background: #eef0f3; touch-action: none; position: relative }
-  .full.split .spl::after { content: ''; position: absolute; left: 2px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: #b5bac1 }
+  .full.split > :deep(.lp), .full.split > .sh { order: 1; flex: 1 1 0; min-width: 0; width: auto }
+  .full.split .spl { order: 2; display: block; flex: none; width: 10px; z-index: 2; cursor: col-resize; background: #eef0f3; touch-action: none; position: relative }
+  .full.split .spl::after { content: ''; position: absolute; left: 3.5px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: #b5bac1 }
   .full.split .spl:hover, .full.split .spl:active { background: #d6ecfb }
-  .full.split .rvd { order: 3; width: var(--pw); max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 16px }
+  .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); max-width: 72vw; max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 64px }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
   .full.split .rvd > * { max-width: none }
 }
 .dtabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto; margin-bottom: 8px }
