@@ -81,6 +81,8 @@ const time = (at) => new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit',
 const base = computed(() => (mobile.value ? 'calc(78px + var(--safe-b))' : '6px'))      // на телефоне — над нижним меню
 const btm = (p) => `calc(var(--base) + ${p.y}px)`
 const mid = (p) => p.left + size.value.w / 2 + 'px'
+// след за аистом: 'f' — перья, иначе эмодзи
+const TRAIL = { chest: 'f', heart: '❤️', flowers: '🌸' }
 const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'crane'))
 </script>
 
@@ -88,7 +90,7 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
   <div class="pile" :style="{ '--base': base, '--w': size.w + 'px', '--h': size.h + 'px', '--bs': mobile ? 0.62 : 0.8 }">
     <div v-if="craning" class="rail" aria-hidden="true" />
     <template v-for="p in pile" :key="p.d.id">
-      <button class="pk" :class="[{ fall: p.falling, mine: p.mine, on: opened === p.d.id }, p.falling ? 'via-' + p.via : '']" type="button"
+      <button class="pk" :class="[{ fall: p.falling, mine: p.mine, on: opened === p.d.id }, p.falling ? ['via-' + p.via, 'c-' + p.cargo.id] : '']" type="button"
         :style="{ left: p.left + 'px', bottom: btm(p), '--btm': btm(p), animationDelay: p.falling ? p.delay + 'ms' : '0ms', '--c': p.d.by.color }"
         :title="p.mine ? 'Ваша посылка — ждёт, пока откроют' : `Посылка от ${p.d.by.name} — нажмите, чтобы открыть`"
         :aria-label="p.mine ? 'Ваша посылка' : `Открыть посылку от ${p.d.by.name}`" @click="tap(p)">
@@ -136,10 +138,13 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
 
       <!-- птица: аист еле тащит посылку на верёвке, отпускает — его подбрасывает, летят перья -->
       <template v-if="p.falling && p.via === 'bird'">
-        <div class="fth" aria-hidden="true" :style="{ left: mid(p), bottom: btm(p), '--btm': btm(p) }">
+        <div v-if="TRAIL[p.cargo.id]" class="trail" :class="'c-' + p.cargo.id" aria-hidden="true" :style="{ left: mid(p), bottom: btm(p), '--btm': btm(p) }">
+          <i v-for="n in 4" :key="n" :class="'t' + n" :style="{ animationDelay: p.delay + n * 418 + 'ms' }"><svg v-if="TRAIL[p.cargo.id] === 'f'" viewBox="0 0 30 12"><path d="M1 6 Q10 -2 29 6 Q10 14 1 6 Z" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="1.5" /></svg><template v-else>{{ TRAIL[p.cargo.id] }}</template></i>
+        </div>
+        <div class="fth" :class="'c-' + p.cargo.id" aria-hidden="true" :style="{ left: mid(p), bottom: btm(p), '--btm': btm(p) }">
           <svg v-for="f in 2" :key="f" :class="'f' + f" viewBox="0 0 30 12" :style="{ animationDelay: p.delay + 'ms' }"><path d="M1 6 Q10 -2 29 6 Q10 14 1 6 Z" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="1.5" /><path d="M3 6 L27 6" stroke="#8fa3ad" stroke-width="1" fill="none" /></svg>
         </div>
-        <div class="bird" aria-hidden="true" :style="{ left: mid(p), bottom: btm(p), '--btm': btm(p), '--d': p.delay + 'ms', animationDelay: p.delay + 'ms' }">
+        <div class="bird" :class="'c-' + p.cargo.id" aria-hidden="true" :style="{ left: mid(p), bottom: btm(p), '--btm': btm(p), '--d': p.delay + 'ms', animationDelay: p.delay + 'ms' }">
           <span class="rope" />
           <svg viewBox="0 0 220 140">
             <g class="wing b"><path d="M104 68 Q92 18 46 8 Q58 24 54 36 Q68 34 70 46 Q82 46 86 62 Z" fill="#c9d5dc" stroke="#8fa3ad" stroke-width="2" /></g>
@@ -159,6 +164,7 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
               <path class="sw s1" d="M148 22 q-3 -6 0 -9 q3 3 0 9 Z" fill="#1cb0f6" /><path class="sw s2" d="M160 16 q-3 -6 0 -9 q3 3 0 9 Z" fill="#1cb0f6" /><path class="sw s3" d="M140 34 q-3 -6 0 -9 q3 3 0 9 Z" fill="#1cb0f6" />
             </g>
             <path class="easy" d="M159 37 Q165 30 171 37" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round" />
+            <path class="shut" d="M160 31 L169 36 L160 41" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
             <g class="wing a">
               <path d="M106 72 Q92 16 40 4 Q54 22 50 34 Q64 32 66 46 Q80 46 84 64 Z" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="2" />
               <path d="M40 4 Q54 22 50 34 Q64 32 66 46 L74 47 Q66 22 40 4 Z" fill="#3d3d3d" />
@@ -218,7 +224,7 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
 @keyframes craneY { 0%, 30% { height: calc(var(--len) - var(--lift)) } 60%, 64% { height: var(--len) } 78%, 100% { height: calc(var(--len) - var(--lift)) } }
 
 /* --- птица: --lift — на какой высоте несёт; до 55% птица и посылка летят одной волной, дальше посылка падает --- */
-.pk.via-bird, .bird, .fth { --lift: max(0px, min(58vh, calc(100vh - var(--btm) - var(--h) - 150px))) }
+.pk.via-bird, .bird, .fth, .trail { --lift: max(0px, min(58vh, calc(100vh - var(--btm) - var(--h) - 150px))) }
 .pk.fall.via-bird { animation: birdBox 3.8s ease-in-out both }
 @keyframes birdBox {
   0% { transform: translate(-110vw, calc(var(--lift) * -1 - 10px)) } 11% { transform: translate(-88vw, calc(var(--lift) * -1 + 14px)) }
@@ -255,6 +261,38 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
 .fth .f2 { left: -30px; top: 0; width: 20px; animation-name: feather2 }
 @keyframes feather { 0%, 55% { opacity: 0; transform: none } 57% { opacity: 1; transform: none } 70% { opacity: 1; transform: translate(-26px, 90px) rotate(50deg) } 84% { opacity: 1; transform: translate(18px, 180px) rotate(-40deg) } 100% { opacity: 0; transform: translate(-10px, 260px) rotate(30deg) } }
 @keyframes feather2 { 0%, 56% { opacity: 0; transform: none } 58% { opacity: 1; transform: none } 72% { opacity: 1; transform: translate(30px, 80px) rotate(-60deg) } 86% { opacity: 1; transform: translate(-14px, 160px) rotate(40deg) } 100% { opacity: 0; transform: translate(20px, 230px) rotate(-20deg) } }
+
+/* --- характер аиста зависит от груза (класс c-<груз> на посылке, птице, перьях и следе) ---
+   сундук — тяжело: проседает, перья сыплются всю дорогу, после сброса подбрасывает сильнее;
+   подарок и торт — несёт ровно, сам ставит на место и делает круг почёта; письмо — почтальон: бросает на лету, не тормозя;
+   записка — планирует листочком; какашка — зажмурился и улетает вдвое быстрее; сердечко и цветы — за ним след. */
+.pk.fall.via-bird.c-chest { animation-name: birdBoxH } .bird.c-chest { animation-name: birdFlyH }
+@keyframes birdBoxH { 0% { transform: translate(-110vw, calc(var(--lift) * -1 - 10px)) } 11% { transform: translate(-88vw, calc(var(--lift) * -1 + 34px)) } 22% { transform: translate(-66vw, calc(var(--lift) * -1 - 6px)) } 33% { transform: translate(-44vw, calc(var(--lift) * -1 + 44px)) } 44% { transform: translate(-22vw, calc(var(--lift) * -1 + 0px)) } 52% { transform: translate(0, calc(var(--lift) * -1 + 40px)) } 55% { transform: translate(0, calc(var(--lift) * -1 + 30px)); animation-timing-function: ease-in } 68% { transform: translate(0, 0); animation-timing-function: linear } 71% { transform: scale(1.2, .76) } 74% { transform: scale(.94, 1.06) } 77%, 100% { transform: none } }
+@keyframes birdFlyH { 0% { transform: translate(-110vw, calc(var(--lift) * -1 - 10px)) } 11% { transform: translate(-88vw, calc(var(--lift) * -1 + 34px)) } 22% { transform: translate(-66vw, calc(var(--lift) * -1 - 6px)) } 33% { transform: translate(-44vw, calc(var(--lift) * -1 + 44px)) } 44% { transform: translate(-22vw, calc(var(--lift) * -1 + 0px)) } 52% { transform: translate(0, calc(var(--lift) * -1 + 40px)) } 55% { transform: translate(0, calc(var(--lift) * -1 + 30px)) rotate(6deg) } 59% { transform: translate(4px, calc(var(--lift) * -1 - 90px)) rotate(-14deg) } 66% { transform: translate(14px, calc(var(--lift) * -1 - 50px)) rotate(0deg) } 100% { transform: translate(110vw, calc(var(--lift) * -1 - 26vh)) rotate(-6deg) } }
+.pk.fall.via-bird.c-gift, .pk.fall.via-bird.c-cake { animation-name: birdBoxG } .bird.c-gift, .bird.c-cake { animation-name: birdFlyG }
+@keyframes birdBoxG { 0% { transform: translate(-110vw, calc(var(--lift) * -1)) } 40% { transform: translate(0, calc(var(--lift) * -1)) } 62%, 100% { transform: translate(0, 0) } }
+@keyframes birdFlyG { 0% { transform: translate(-110vw, calc(var(--lift) * -1)) rotate(0deg) } 40% { transform: translate(0, calc(var(--lift) * -1)) rotate(0deg) } 62% { transform: translate(0, 0) rotate(0deg) } 70% { transform: translate(0, -60px) rotate(0deg) } 100% { transform: translate(110vw, -50vh) rotate(-360deg) } }
+.pk.fall.via-bird.c-mail { animation-name: birdBoxM; animation-timing-function: linear } .bird.c-mail { animation-name: birdFlyM; animation-timing-function: linear }
+@keyframes birdBoxM { 0% { transform: translate(-110vw, calc(var(--lift) * -1)) rotate(0deg) } 35% { transform: translate(-13.75vw, calc(var(--lift) * -1)) rotate(0deg) } 42% { transform: translate(-7vw, calc(var(--lift) * -.78)) rotate(-120deg) } 49% { transform: translate(-2.5vw, calc(var(--lift) * -.4)) rotate(-250deg) } 56% { transform: translate(0, 0) rotate(-360deg) } 59% { transform: translate(0, 0) rotate(-360deg) scale(1.15, .8) } 63%, 100% { transform: translate(0, 0) rotate(-360deg) } }
+@keyframes birdFlyM { 0% { transform: translate(-110vw, calc(var(--lift) * -1)) } 40% { transform: translate(0, calc(var(--lift) * -1)) } 80%, 100% { transform: translate(110vw, calc(var(--lift) * -1 - 12vh)) } }
+.pk.fall.via-bird.c-note { animation-name: birdBoxN }
+@keyframes birdBoxN { 0% { transform: translate(-110vw, calc(var(--lift) * -1 - 10px)) } 11% { transform: translate(-88vw, calc(var(--lift) * -1 + 14px)) } 22% { transform: translate(-66vw, calc(var(--lift) * -1 - 12px)) } 33% { transform: translate(-44vw, calc(var(--lift) * -1 + 16px)) } 44% { transform: translate(-22vw, calc(var(--lift) * -1 - 8px)) } 52% { transform: translate(0, calc(var(--lift) * -1 + 10px)) } 55% { transform: translate(0, calc(var(--lift) * -1 + 4px)) rotate(0deg) } 62% { transform: translate(-22px, calc(var(--lift) * -.62)) rotate(-14deg) } 70% { transform: translate(20px, calc(var(--lift) * -.3)) rotate(12deg) } 78% { transform: translate(-8px, calc(var(--lift) * -.08)) rotate(-6deg) } 84%, 100% { transform: translate(0, 0) rotate(0deg) } }
+.bird.c-poo { animation-name: birdFlyP }
+@keyframes birdFlyP { 0% { transform: translate(-110vw, calc(var(--lift) * -1 - 10px)) } 11% { transform: translate(-88vw, calc(var(--lift) * -1 + 14px)) } 22% { transform: translate(-66vw, calc(var(--lift) * -1 - 12px)) } 33% { transform: translate(-44vw, calc(var(--lift) * -1 + 16px)) } 44% { transform: translate(-22vw, calc(var(--lift) * -1 - 8px)) } 52% { transform: translate(0, calc(var(--lift) * -1 + 10px)) } 55% { transform: translate(0, calc(var(--lift) * -1 + 4px)) rotate(4deg) } 59% { transform: translate(4px, calc(var(--lift) * -1 - 64px)) rotate(-12deg) } 76%, 100% { transform: translate(110vw, calc(var(--lift) * -1 - 30vh)) rotate(-8deg) } }
+/* глаза: доволен с самого начала / зажмурился */
+.shut { display: none }
+.c-mail .hard, .c-note .hard, .c-heart .hard, .c-flowers .hard, .c-gift .hard, .c-poo .hard, .c-poo .easy { display: none }
+.c-mail .easy, .c-note .easy, .c-heart .easy, .c-flowers .easy, .c-gift .easy { animation: none; opacity: 1 }
+.c-poo .shut { display: inline }
+.fth.c-gift, .fth.c-cake, .fth.c-mail, .fth.c-note, .fth.c-heart, .fth.c-flowers { display: none }
+/* след за птицей: перья (сундук), сердечки, лепестки — появляются там, где она пролетела */
+.trail { position: absolute; width: 0; height: 0; margin-bottom: calc(var(--h) + 50px); transform: translateY(calc(var(--lift) * -1)) }
+.trail i { position: absolute; top: 0; font-style: normal; font-size: 20px; line-height: 1; opacity: 0; animation: trailFall 1.6s ease-in both }
+.trail svg { display: block; width: 24px; height: 10px }
+.trail .t1 { left: -88vw } .trail .t2 { left: -66vw } .trail .t3 { left: -44vw } .trail .t4 { left: -22vw }
+.trail.c-heart i { animation-name: trailRise; animation-timing-function: ease-out }
+@keyframes trailFall { 0% { opacity: 0; transform: none } 8% { opacity: 1 } 50% { opacity: 1; transform: translate(-20px, 110px) rotate(50deg) } 100% { opacity: 0; transform: translate(14px, 240px) rotate(-40deg) } }
+@keyframes trailRise { 0% { opacity: 0; transform: scale(.4) } 12% { opacity: 1; transform: scale(1) } 100% { opacity: 0; transform: translateY(-90px) scale(1.2) } }
 
 /* --- лежит и ждёт --- */
 .pk:not(.fall):not(.mine):not(.on) { animation: plop .45s cubic-bezier(.3, 1.6, .5, 1) both, wig 2.4s 1s ease-in-out infinite }
@@ -295,5 +333,5 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
 @keyframes hop2 { 0% { transform: none; animation-timing-function: ease-out } 42% { transform: translateY(-46vh) rotate(-180deg); animation-timing-function: ease-in } 82% { transform: rotate(-360deg); animation-timing-function: ease-out } 90% { transform: translateY(-18px) rotate(-360deg); animation-timing-function: ease-in } 100% { transform: rotate(-360deg) } }
 @keyframes hop3 { 0% { transform: none; animation-timing-function: ease-out } 42% { transform: translateY(-30vh); animation-timing-function: ease-in } 82% { transform: none; animation-timing-function: ease-out } 90% { transform: translateY(-12px); animation-timing-function: ease-in } 100% { transform: none } }
 @media (max-width: 719px) { .letter { width: calc(100vw - 20px); left: 10px !important } .st { font-size: 24px } }
-@media (prefers-reduced-motion: reduce) { .pk, .chute, .rig, .cable, .bird, .bird *, .fth svg, .bit, .bit i, .letter { animation: none !important } .rig, .bird, .fth { display: none } }
+@media (prefers-reduced-motion: reduce) { .pk, .chute, .rig, .cable, .bird, .bird *, .fth svg, .bit, .bit i, .letter { animation: none !important } .rig, .bird, .fth, .trail { display: none } }
 </style>

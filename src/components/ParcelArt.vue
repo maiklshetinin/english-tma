@@ -2,7 +2,8 @@
 // Картинки посылок: кто несёт (chute — парашют, crane — кран, bird — аист; flap — машет крыльями) и что несёт
 // (chest — сундук, mail — конверт, note — записка-стикер с текстом). Размер задаёт родитель.
 // Рисунки свои; в ParachuteDrop.vue — их «живые» версии с анимацией доставки.
-defineProps({ kind: { type: String, default: 'chest' }, text: { type: String, default: '' }, flap: Boolean })
+// mood аиста: hard — тяжело (глаз навыкате, пот), shut — зажмурился, happy — доволен; иначе обычный глаз
+defineProps({ kind: { type: String, default: 'chest' }, text: { type: String, default: '' }, flap: Boolean, mood: { type: String, default: '' } })
 </script>
 <template>
   <svg v-if="kind === 'chute'" viewBox="0 0 200 150" aria-hidden="true">
@@ -22,7 +23,13 @@ defineProps({ kind: { type: String, default: 'chest' }, text: { type: String, de
     <path d="M172 32 L210 46 Q213 50 207 51 L170 47 Z" fill="#ff8a00" />
     <circle cx="160" cy="40" r="15" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="2" />
     <path d="M132 70 Q160 70 158 46" fill="none" stroke="#f6f9fb" stroke-width="13" stroke-linecap="round" />
-    <circle cx="165" cy="36" r="2.6" fill="#222" />
+    <g v-if="mood === 'hard'">
+      <circle cx="165" cy="35" r="6.5" fill="#fff" stroke="#555" stroke-width="1.5" /><circle cx="167" cy="38" r="2" fill="#222" /><path d="M156 27 L170 23" fill="none" stroke="#555" stroke-width="2.2" stroke-linecap="round" />
+      <path class="pa-sw" d="M148 22 q-3 -6 0 -9 q3 3 0 9 Z" fill="#1cb0f6" /><path class="pa-sw s2" d="M160 16 q-3 -6 0 -9 q3 3 0 9 Z" fill="#1cb0f6" />
+    </g>
+    <path v-else-if="mood === 'shut'" d="M160 31 L169 36 L160 41" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+    <path v-else-if="mood === 'happy'" d="M159 37 Q165 30 171 37" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round" />
+    <circle v-else cx="165" cy="36" r="2.6" fill="#222" />
     <g class="pa-wing">
       <path d="M106 72 Q92 16 40 4 Q54 22 50 34 Q64 32 66 46 Q80 46 84 64 Z" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="2" />
       <path d="M40 4 Q54 22 50 34 Q64 32 66 46 L74 47 Q66 22 40 4 Z" fill="#3d3d3d" />
@@ -43,6 +50,8 @@ defineProps({ kind: { type: String, default: 'chest' }, text: { type: String, de
 .pa-bird { overflow: visible }
 .pa-wing { transform-box: fill-box; transform-origin: 94% 97% }
 .flap .pa-wing { animation: pa-flap .2s ease-in-out infinite alternate }
+.pa-sw { animation: pa-sweat .5s linear infinite } .pa-sw.s2 { animation-delay: .25s }
+@keyframes pa-sweat { from { transform: none; opacity: 1 } to { transform: translate(-16px, -12px); opacity: 0 } }
 @keyframes pa-flap { from { transform: rotate(14deg) } to { transform: rotate(-80deg) } }
 .pa-note { display: block; box-sizing: border-box; padding: 6px 4px; overflow: hidden; background: #ffe58a; box-shadow: 0 2px 5px rgba(0, 0, 0, .18); transform: rotate(-4deg); font-family: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive; font-size: 17px; font-weight: 700; line-height: 1; color: #3b2f00; text-align: center; overflow-wrap: anywhere }
 </style>

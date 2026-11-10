@@ -118,6 +118,8 @@ function dragWin(e) {
 const onWinResize = () => { if (cargoMenu.value) pos.value = clampPos(pos.value.x, pos.value.y) }
 onMounted(() => addEventListener('resize', onWinResize)); onUnmounted(() => removeEventListener('resize', onWinResize))
 // подпись под сценой: «Аист принесёт записку — текст видно сразу»
+// аист ведёт себя по-разному с разным грузом: настроение и след (перья 'f' или эмодзи) — как в ParachuteDrop.vue
+const MOOD = { chest: 'hard', cake: 'hard', poo: 'shut' }, TRAIL = { chest: 'f', heart: '❤️', flowers: '🌸' }
 const WHO = { chute: 'На парашюте спустится', crane: 'Кран привезёт', bird: 'Аист принесёт' }
 const WHAT = { chest: 'сундук с письмом', mail: 'конверт с письмом', note: 'записку — текст видно сразу' }
 const caption = computed(() => `${WHO[via.value]} ${WHAT[mode.value] || (cargoOf.value?.title || '').toLowerCase() + ' с письмом'}`)
@@ -274,13 +276,16 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
   <Teleport to="body">
     <div v-if="cargoMenu && cargoOf" ref="win" class="cmenu" :style="{ left: pos.x + 'px', top: pos.y + 'px' }" role="dialog" aria-label="Посылка" @pointerdown.stop @keydown.esc.stop="cargoMenu = false">
       <div class="chead" title="Потяните, чтобы передвинуть окно" @pointerdown="dragWin"><i class="grip" aria-hidden="true" />Посылка<button class="cx" type="button" title="Не посылкой — обычным сообщением" aria-label="Отменить посылку" @click="resetParcel"><AppIcon name="x" :size="14" /></button></div>
-      <div class="pv" aria-hidden="true"><div :key="via + mode" class="pvi">
+      <div class="pv" aria-hidden="true"><div :key="via + mode" class="pvi" :class="'k-' + mode">
         <span v-if="via === 'chute'" class="pv-chute"><ParcelArt kind="chute" class="pv-sway" /></span>
         <template v-else-if="via === 'crane'">
           <i class="pv-rail" />
           <span class="pv-cx"><i class="pv-tr" /><span class="pv-cy"><svg viewBox="0 0 36 36"><path d="M18 2 L18 18 Q30 18 30 26 Q30 34 20 34 Q11 34 10 26" fill="none" stroke="#e0b13a" stroke-width="5" stroke-linecap="round" /></svg></span></span>
         </template>
-        <span v-else class="pv-bird"><i class="pv-rope" /><ParcelArt kind="bird" flap /></span>
+        <template v-else>
+          <i v-for="n in (TRAIL[mode] ? 3 : 0)" :key="n" class="pv-t" :class="['n' + n, { rise: mode === 'heart' }]"><svg v-if="TRAIL[mode] === 'f'" viewBox="0 0 30 12"><path d="M1 6 Q10 -2 29 6 Q10 14 1 6 Z" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="1.5" /></svg><template v-else>{{ TRAIL[mode] }}</template></i>
+          <span class="pv-bird"><i class="pv-rope" /><ParcelArt kind="bird" flap :mood="MOOD[mode] || 'happy'" /></span>
+        </template>
         <span class="pv-box" :class="'by-' + via"><ParcelArt v-if="!cargoOf.em" :class="'pc-' + mode" :kind="mode" :text="mode === 'note' ? text.trim() || 'Ку-ку!' : ''" /><span v-else class="pv-em">{{ cargoOf.em }}</span></span>
       </div></div>
       <p class="ccap">{{ caption }}</p>
@@ -384,25 +389,45 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
 .cok { width: 100%; height: 44px; margin-top: 10px; border: 0; border-radius: 12px; background: var(--blue); color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
 /* сцена: мини-доставка по кругу (координаты — в макете 372×140, целиком ужата под ширину окна) */
 .pv { position: relative; height: 118px; border-radius: 12px; background: var(--surface); overflow: hidden }
-.pvi { position: absolute; left: 50%; top: 0; width: 372px; height: 140px; margin-left: -186px; transform: scale(.84); transform-origin: 50% 0 }
+.pvi { position: absolute; left: 50%; top: 20px; width: 372px; height: 140px; margin-left: -186px; transform: scale(.7); transform-origin: 50% 0 }      /* 20px сверху — запас высоты для полёта */
 .pvi > *, .pv-bird > *, .pv-cx > * { position: absolute }
 .pv-chute { left: 131px; top: 0; width: 110px; height: 82px; transform-origin: 50% 100%; animation: pv-chute 4.5s ease-in-out infinite }
 .pv-sway { width: 110px; height: 82px; transform-origin: 50% 100%; animation: pv-sway 1.3s ease-in-out infinite }
-.pv-rail { left: 0; right: 0; top: 0; height: 8px; background: #f2c94c; border-bottom: 2px solid #a8841f }
-.pv-cx { left: 160px; top: 0; width: 52px; height: 120px; animation: pv-cx 4.5s ease-in-out infinite }
+.pv-rail { left: -80px; right: -80px; top: -29px; height: 8px; background: #f2c94c; border-bottom: 2px solid #a8841f }
+.pv-cx { left: 160px; top: -29px; width: 52px; height: 149px; animation: pv-cx 4.5s ease-in-out infinite }
 .pv-tr { left: 0; top: 4px; width: 52px; height: 16px; border-radius: 4px; background: #4b4b4b }
-.pv-cy { left: 24px; top: 20px; width: 4px; height: 4px; background: #4b4b4b; animation: pv-cy 4.5s ease-in-out infinite }
+.pv-cy { left: 24px; top: 20px; width: 4px; height: 33px; background: #4b4b4b; animation: pv-cy 4.5s ease-in-out infinite }
 .pv-cy svg { position: absolute; left: -13px; bottom: -28px; width: 30px; height: 30px }
 .pv-bird { left: 120px; top: 2px; width: 132px; height: 90px; transform-origin: 70px 40px; animation: pv-bird 4.5s ease-in-out infinite }
 .pv-bird > svg { left: 0; top: 0; width: 132px; height: 84px } .pv-rope { left: 123px; top: 28px; width: 2px; height: 52px; background: #8a6a4a }
 .pv-box { left: 156px; top: 80px; width: 60px; height: 56px; display: grid; place-items: center; transform-origin: 50% 100% }
 .pv-box.by-chute { animation: pv-fall 4.5s ease-in-out infinite } .pv-box.by-crane { animation: pv-cbox 4.5s ease-in-out infinite } .pv-box.by-bird { left: 214px; animation: pv-bbox 4.5s ease-in-out infinite }
 .pv-box > svg { width: 60px; height: 50px } .pv-box > .pc-note { width: 60px; height: 54px } .pv-em { font-size: 44px; line-height: 1 }
+/* характер аиста по грузу — те же сценки, что при настоящей доставке (ParachuteDrop.vue), в миниатюре */
+.k-chest .pv-bird { animation-name: pv-birdH } .k-chest .pv-box.by-bird { animation-name: pv-bboxH }
+@keyframes pv-birdH { 0% { transform: translate(-320px, -18px) } 15% { transform: translate(-210px, 2px) } 30% { transform: translate(-105px, -16px) } 45% { transform: translate(0, 4px) rotate(6deg) } 50% { transform: translate(4px, -34px) rotate(-14deg) } 56% { transform: translate(20px, -20px) } 82%, 100% { transform: translate(330px, -70px) rotate(-6deg) } }
+@keyframes pv-bboxH { 0% { transform: translate(-320px, -18px); opacity: 1 } 15% { transform: translate(-210px, 2px) } 30% { transform: translate(-105px, -16px) } 45% { transform: translate(0, 4px) } 48% { transform: translate(0, 4px) scale(1.14, .82) } 52% { transform: translate(0, 4px) } 93% { transform: translate(0, 4px); opacity: 1 } 100% { transform: translate(0, 4px); opacity: 0 } }
+.k-gift .pv-bird, .k-cake .pv-bird { animation-name: pv-birdG } .k-gift .pv-box.by-bird, .k-cake .pv-box.by-bird { animation-name: pv-bboxG }
+@keyframes pv-birdG { 0% { transform: translate(-320px, -26px) rotate(0deg) } 32% { transform: translate(0, -26px) rotate(0deg) } 48% { transform: translate(0, 4px) rotate(0deg) } 56% { transform: translate(0, -20px) rotate(0deg) } 90%, 100% { transform: translate(330px, -80px) rotate(-360deg) } }
+@keyframes pv-bboxG { 0% { transform: translate(-320px, -26px); opacity: 1 } 32% { transform: translate(0, -26px) } 48% { transform: translate(0, 4px) } 93% { transform: translate(0, 4px); opacity: 1 } 100% { transform: translate(0, 4px); opacity: 0 } }
+.k-mail .pv-bird { animation-name: pv-birdM; animation-timing-function: linear } .k-mail .pv-box.by-bird { animation-name: pv-bboxM; animation-timing-function: linear }
+@keyframes pv-birdM { 0% { transform: translate(-320px, -30px) } 34% { transform: translate(0, -30px) } 70%, 100% { transform: translate(330px, -44px) } }
+@keyframes pv-bboxM { 0% { transform: translate(-320px, -30px) rotate(0deg); opacity: 1 } 29% { transform: translate(-47px, -30px) rotate(0deg) } 34% { transform: translate(-20px, -18px) rotate(-150deg) } 39% { transform: translate(0, 4px) rotate(-360deg) } 42% { transform: translate(0, 4px) rotate(-360deg) scale(1.1, .86) } 46% { transform: translate(0, 4px) rotate(-360deg) } 93% { transform: translate(0, 4px) rotate(-360deg); opacity: 1 } 100% { transform: translate(0, 4px) rotate(-360deg); opacity: 0 } }
+.k-note .pv-bird { animation-name: pv-birdN } .k-note .pv-box.by-bird { animation-name: pv-bboxN }
+@keyframes pv-birdN { 0% { transform: translate(-320px, -28px) } 15% { transform: translate(-210px, -16px) } 30% { transform: translate(-105px, -28px) } 45% { transform: translate(0, -24px) rotate(3deg) } 50% { transform: translate(4px, -44px) rotate(-10deg) } 56% { transform: translate(20px, -36px) } 82%, 100% { transform: translate(330px, -90px) rotate(-6deg) } }
+@keyframes pv-bboxN { 0% { transform: translate(-320px, -28px); opacity: 1 } 15% { transform: translate(-210px, -16px) } 30% { transform: translate(-105px, -28px) } 45% { transform: translate(0, -24px) rotate(0deg) } 52% { transform: translate(-12px, -14px) rotate(-12deg) } 59% { transform: translate(10px, -4px) rotate(10deg) } 66% { transform: translate(0, 4px) rotate(0deg) } 93% { transform: translate(0, 4px); opacity: 1 } 100% { transform: translate(0, 4px); opacity: 0 } }
+.k-poo .pv-bird { animation-name: pv-birdP }
+@keyframes pv-birdP { 0% { transform: translate(-320px, -6px) } 15% { transform: translate(-210px, 8px) } 30% { transform: translate(-105px, -6px) } 45% { transform: translate(0, 0) rotate(3deg) } 50% { transform: translate(4px, -22px) rotate(-10deg) } 66%, 100% { transform: translate(330px, -70px) rotate(-8deg) } }
+.pv-t { top: 46px; font-style: normal; font-size: 14px; line-height: 1; opacity: 0; animation: pv-tfall 4.5s linear infinite } .pv-t svg { display: block; width: 18px; height: 8px }
+.pv-t.n1 { left: 75px; animation-delay: 1.35s } .pv-t.n2 { left: 130px; animation-delay: 1.7s } .pv-t.n3 { left: 180px; animation-delay: 2s }
+.pv-t.rise { animation-name: pv-trise }
+@keyframes pv-tfall { 0% { opacity: 0; transform: none } 3% { opacity: 1 } 22% { opacity: 0; transform: translate(-8px, 70px) rotate(60deg) } 100% { opacity: 0 } }
+@keyframes pv-trise { 0% { opacity: 0; transform: scale(.5) } 3% { opacity: 1; transform: scale(1) } 22% { opacity: 0; transform: translateY(-40px) scale(1.2) } 100% { opacity: 0 } }
 @keyframes pv-fall { 0% { transform: translateY(-175px); opacity: 1 } 22% { transform: translateY(-110px) } 42% { transform: translateY(-45px) } 58% { transform: translateY(0) } 61% { transform: scale(1.12, .84) } 65% { transform: none } 93% { opacity: 1 } 100% { opacity: 0 } }
 @keyframes pv-chute { 0% { transform: translateY(-175px); opacity: 1 } 22% { transform: translateY(-110px) } 42% { transform: translateY(-45px) } 58% { transform: translateY(0); opacity: 1 } 66%, 100% { transform: translateY(8px) scaleY(.3); opacity: 0 } }
 @keyframes pv-sway { 0%, 100% { transform: rotate(-5deg) } 50% { transform: rotate(5deg) } }
 @keyframes pv-cx { 0% { transform: translateX(-280px) } 28%, 72% { transform: translateX(0) } 95%, 100% { transform: translateX(280px) } }
-@keyframes pv-cy { 0%, 28% { height: 4px } 52%, 58% { height: 34px } 70%, 100% { height: 4px } }
+@keyframes pv-cy { 0%, 28% { height: 33px } 52%, 58% { height: 63px } 70%, 100% { height: 33px } }
 @keyframes pv-cbox { 0% { transform: translate(-280px, -30px); opacity: 1 } 28% { transform: translate(0, -30px) } 52% { transform: translate(0, 0) } 55% { transform: scale(1.1, .86) } 59% { transform: none } 93% { opacity: 1 } 100% { opacity: 0 } }
 @keyframes pv-bird { 0% { transform: translate(-320px, -6px) } 15% { transform: translate(-210px, 8px) } 30% { transform: translate(-105px, -6px) } 45% { transform: translate(0, 0) rotate(3deg) } 50% { transform: translate(4px, -22px) rotate(-10deg) } 56% { transform: translate(20px, -14px) } 82%, 100% { transform: translate(330px, -70px) rotate(-6deg) } }
 @keyframes pv-bbox { 0% { transform: translate(-320px, -6px); opacity: 1 } 15% { transform: translate(-210px, 8px) } 30% { transform: translate(-105px, -6px) } 45% { transform: translate(0, 0) } 48% { transform: translate(0, 4px) scale(1.1, .86) } 52% { transform: translate(0, 4px) } 93% { transform: translate(0, 4px); opacity: 1 } 100% { transform: translate(0, 4px); opacity: 0 } }
