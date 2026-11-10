@@ -2,8 +2,8 @@
 // «Как видит ученик»: просмотрщик курсов на вкладке «Курсы». Курс — тем же рельсом, что в редакторе (юниты с процентом,
 // кружки заданий с теми же значками, «Сейчас»). Нажал урок — он запускается во весь экран, как в Busuu; кружок и фото — тоже во весь экран.
 // Ничего не правит: править — «Открыть в редакторе». Курсы — с сервера (без сервера — один курс из этого браузера, как в редакторе).
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
@@ -18,7 +18,13 @@ import { showToast } from '../composables/useToast'
 import BackButton from './BackButton.vue'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
 
-const router = useRouter()
+const router = useRouter(), route = useRoute()
+// где ты в курсе — в адресе (#/path?c=курс&l=задание&s=экран): перезагрузил страницу — открыт тот же урок на том же экране.
+// В карточке ученика (of) адрес не трогаем.
+const urlOn = () => !props.of
+const startAt = ref(0)
+let qNow = null                                // последний записанный адрес: router.replace асинхронный, route.query отстаёт
+const setQ = (q) => { if (!urlOn()) return; const next = { ...(qNow ?? route.query), ...q }; qNow = next; for (const k in next) if (next[k] == null || next[k] === '') delete next[k]; router.replace({ query: next }).catch(() => {}) }
 const online = !isDemo && !!API && !!fb
 const LOCAL = 'tma.courseRail.v1'
 const props = defineProps({
@@ -61,6 +67,7 @@ async function loadCourse(id) {
       if (self) { const q = await apiRequest(`/courses/${id}/run`).catch(() => null); run.value = q?.ok ? await q.json() : { done: 0, lessons: {} } }
     }
   } catch (e) { err.value = e.message } finally { loading.value = false }
+  nextTick(restore)
 }
 
 // путь: юниты с заданиями; прогресс курса — сколько заданий уже пройдено (как его видит ученик)
@@ -144,18 +151,21 @@ function tap(x) {
   if (x.type === 'video' || x.type === 'photo') { inline.value = inline.value === x.id ? null : x.id; return }
   peek.value = peek.value === x.id ? null : x.id          // всё остальное — карточкой под заданием, без перехода на отдельную страницу
 }
-function go(x) { peek.value = null; open.value = x; t0 = Date.now(); misses.clear(); for (const k in snap) delete snap[k]; for (const k in rvLog) delete rvLog[k] }
+function go(x, at = 0) { startAt.value = at; peek.value = null; open.value = x; t0 = Date.now(); misses.clear(); for (const k in snap) delete snap[k]; for (const k in rvLog) delete rvLog[k] }
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
 // итог урока: какие слова урок записал в Review и как изменилась их память (FSRS) — чтобы сверять с разделом Review строка в строку
-const rvChart = ref(false)                      // графики урока (преподаватель): справа от урока, ширина тянется как в DevTools
+const rvChart = ref((() => { try { return localStorage.getItem('tma.lessonGraphs') === '1' } catch { return false } })())
+watch(rvChart, (v) => { try { localStorage.setItem('tma.lessonGraphs', v ? '1' : '0') } catch { /* приватный режим */ } })
+// ↑ графики урока (преподаватель): справа от урока, ширина тянется как в DevTools
 const curStep = ref(null)                      // экран, открытый в уроке сейчас
 const focusKey = computed(() => { const h = curStep.value && hitsOf(curStep.value, { ok: true })[0]; return h ? keyOf(h.text) : '' })
 const PW = 'tma.lessonPanelW'
 const panelW = ref((() => { try { return +localStorage.getItem(PW) || 560 } catch { return 560 } })())
 function dragSplit(e) {
   e.preventDefault(); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'
-  const move = (ev) => { panelW.value = Math.round(Math.min(window.innerWidth * 0.72, Math.max(340, window.innerWidth - ev.clientX))) }
+  const x0 = e.clientX, w0 = Math.round(e.currentTarget.nextElementSibling?.getBoundingClientRect().width || panelW.value)                    // тянем от того места, где схватили, — перегородка идёт ровно за курсором
+  const move = (ev) => { panelW.value = Math.round(Math.min(window.innerWidth * 0.72, Math.max(340, w0 + x0 - ev.clientX))) }
   const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); document.body.style.cursor = ''; document.body.style.userSelect = ''; try { localStorage.setItem(PW, String(panelW.value)) } catch { /* приватный режим */ } }
   addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up)      // слушаем всё окно — мышь может уйти с перегородки
 }
@@ -192,6 +202,17 @@ const rvWords = computed(() => Object.keys(snap).map(k => review.items[k] && { .
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value ? stepsOf(open.value) : []))
+watch(open, (x) => setQ({ l: x?.id, s: null }))
+watch(curStep, (st) => { if (!open.value || !st) return; const k = steps.value.indexOf(st); setQ({ s: k > 0 ? String(k) : null }) })
+watch(() => props.id, (id) => { if (id) setQ({ c: id }) }, { immediate: true })
+// курс загрузился — открыть задание из адреса (урок — на том же экране; кружок / фото — под строкой; остальное — карточкой)
+function restore() {
+  const id = route.query.l; if (!urlOn() || !id || open.value) return
+  const x = units.value.flatMap(u => u.tasks).find(t => t.id === id); if (!x) return setQ({ l: null, s: null })
+  if (x.type === 'video' || x.type === 'photo') { inline.value = x.id; return }
+  if (ready(x) && state(x) !== 'todo') go(x, Math.min(Math.max(0, +route.query.s || 0), stepsOf(x).length - 1))
+  else peek.value = x.id
+}
 
 // файлы курса: свой ключ в S3, «idb:» из этого браузера, остальное — как в карточках (composables/useCourseMedia)
 const { resolve, local } = useCourseMedia(online)
@@ -280,7 +301,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <CkFlow v-else :chapters="ckMap" dock />
           </div>
         </template>
-        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @step="curStep = $event" @done="finish(open, $event)" @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :start="startAt" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @step="curStep = $event" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>
@@ -368,7 +389,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
   .full.split .spl { order: 2; display: block; flex: none; width: 10px; z-index: 2; cursor: col-resize; background: #eef0f3; touch-action: none; position: relative }
   .full.split .spl::after { content: ''; position: absolute; left: 3.5px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: #b5bac1 }
   .full.split .spl:hover, .full.split .spl:active { background: #d6ecfb }
-  .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); max-width: 72vw; max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 64px }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
+  .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); min-width: 0; max-width: 72vw; max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 64px }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
   .full.split .rvd > * { max-width: none }
 }
 .dtabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto; margin-bottom: 8px }

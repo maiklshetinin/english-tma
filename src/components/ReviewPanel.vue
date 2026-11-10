@@ -9,7 +9,6 @@ import { stateOf, LV_DAYS } from '../utils/review'
 import { algo } from '../stores/review'
 import WordCurve from './WordCurve.vue'
 import ReviewChart from './ReviewChart.vue'
-import WordNow from './WordNow.vue'
 import { nextTick } from 'vue'
 
 const props = defineProps({
@@ -21,7 +20,6 @@ const props = defineProps({
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
 const chartOn = ref((() => { try { return localStorage.getItem('tma.review.chart') !== '0' } catch { return true } })())
-const view = ref('word')                             // «Слово сейчас» (кривая) или «Где сейчас слова» (столбики)
 const toggleChart = () => { chartOn.value = !chartOn.value; try { localStorage.setItem('tma.review.chart', chartOn.value ? '1' : '0') } catch { /* приватный режим */ } }
 const cfgNow = computed(() => ({ retention: algo.retention, maxDays: algo.maxDays }))
 // нажали слово на графике — открыть его строку с кривой памяти
@@ -58,9 +56,7 @@ async function reset() {
         </div>
       </div>
       <template v-if="chartOn && list.length">
-        <div class="vt" role="tablist"><button v-for="[k, t] in [['word', 'Слово сейчас'], ['bars', 'Где сейчас слова']]" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" @click="view = k">{{ t }}</button></div>
-        <WordNow v-if="view === 'word'" :items="items ?? review.items" :cfg="cfgNow" />
-        <ReviewChart v-else :items="items ?? review.items" :cfg="cfgNow" @pick="pick" />
+        <ReviewChart :items="items ?? review.items" :cfg="cfgNow" @pick="pick" />
       </template>
       <div class="hbs"><button class="howb" :aria-expanded="chartOn" @click="toggleChart">График <span>{{ chartOn ? '▴' : '▾' }}</span></button>
       <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button></div>

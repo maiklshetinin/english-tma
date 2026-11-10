@@ -5,7 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 const apiRequest = vi.fn()
 vi.mock('../firebase', () => ({ isDemo: false, API: 'https://api', fb: 'key', apiRequest: (...a: unknown[]) => apiRequest(...a), apiFetch: vi.fn() }))
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(() => Promise.resolve()) }), useRoute: () => ({ query: {} }) }))
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: async () => body } as Response)
 
 import StudentCourses from './StudentCourses.vue'

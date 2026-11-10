@@ -3,9 +3,10 @@
 // двойное нажатие или «›» — редактор.
 // Пресеты пути (старый вид) убраны 05.11.2026 — путь ученика по-прежнему правится в его карточке.
 import { ref } from 'vue'
+import { useRoute } from 'vue-router'
 import CourseList from '../../components/CourseList.vue'
 import CourseViewer from '../../components/CourseViewer.vue'
-const sel = ref(null)                  // выбранный курс: показывается в «Как видит ученик»
+const sel = ref(useRoute().query.c ?? null)        // выбранный курс: показывается в «Как видит ученик» (из адреса — после перезагрузки тот же)
 </script>
 <template>
   <div class="page wide">

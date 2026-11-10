@@ -78,7 +78,7 @@ const pastD = computed(() => path(first.value, Math.min(now.value, range.value[1
 const pastFill = computed(() => pastD.value ? `${pastD.value} L${xOf(Math.min(now.value, range.value[1])).toFixed(1)} ${H - PADB} L${xOf(Math.max(first.value, range.value[0])).toFixed(1)} ${H - PADB} Z` : '')
 const progD = computed(() => path(Math.max(now.value, first.value), Math.min(due.value, range.value[1]), false))
 const nextD = computed(() => due.value < range.value[1] ? path(Math.max(due.value, now.value), range.value[1], true) : '')
-const dots = computed(() => answers.value.filter(x => x.t >= range.value[0] && x.t <= range.value[1]).map(x => ({ x: xOf(x.t), y: yOf(1), ok: x.ok })))
+const dots = computed(() => answers.value.filter(x => x.t >= range.value[0] && x.t <= range.value[1]).map(x => ({ x: xOf(x.t), y: x.ok ? yOf(1) : H - PADB - 4, ok: x.ok })))      // ошибка — точка внизу: «не вспомнил»
 const ticks = computed(() => {
   const [a, b] = range.value, span = b - a, out = []
   const step = span <= 2 * DAY ? 6 * HOUR : span <= 10 * DAY ? DAY : span <= 45 * DAY ? 7 * DAY : 30 * DAY
@@ -100,7 +100,9 @@ const ago = computed(() => {
   return d < 1 / 24 ? 'только что' : d < 1 ? `${Math.round(d * 24)} ч назад` : `${Math.round(d)} дн назад`
 })
 const dueTxt = computed(() => `Повтор · ${new Date(due.value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`)
-const nowTxt = computed(() => `${shift.value ? 'Будет' : 'Сейчас'} · ${Math.round((recallNow.value ?? 0) * 100)}%`)
+const nowTxt = computed(() => failNow.value ? 'Сейчас · ошибка' : `${shift.value ? 'Будет' : 'Сейчас'} · ${Math.round((recallNow.value ?? 0) * 100)}%`)
+// только что ошибся (до часа назад): «100 %» тут сбивает — показываем «не вспомнил»; дальше — обычная вероятность по кривой
+const failNow = computed(() => !shift.value && lastAns.value && !lastAns.value.ok && fresh.value)
 const pillW = (t) => t.length * 6.1 + 16                              // ширина «таблетки» под подпись (на глаз по шрифту 10–11 px)
 const pillX = (x, t) => Math.min(W - pillW(t) - 2, Math.max(PADL, x - pillW(t) / 2))
 // последний ответ: память до него → после (после ошибки резко падает) — «100 % сейчас» без этого вводит в заблуждение
@@ -115,10 +117,10 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
     <p v-if="!last" class="nt">Слово пока без ответов — кривая появится после первого проверенного ответа в уроке.</p>
     <template v-else>
       <div class="top">
-        <div class="kp" :class="tone(recallNow)" :title="fresh ? 'Сразу после любого ответа — 100 %: правильный ответ только что был перед глазами. Дальше тает: после ошибки — быстро' : ''"><small>Помнит сейчас</small><b>{{ Math.round(recallNow * 100) }}%</b></div>
+        <div class="kp" :class="failNow ? 'bad' : tone(recallNow)" :title="failNow ? 'Ответ был неверным — слово учится заново: память короткая, повтор скоро' : ''"><small>{{ failNow ? 'Сейчас' : 'Помнит сейчас' }}</small><b>{{ failNow ? 'не вспомнил' : Math.round(recallNow * 100) + '%' }}</b></div>
         <div v-if="lastAns" class="kp" :class="lastAns.ok ? 'ok' : 'bad'"><small>Последний ответ: {{ lastAns.ok ? 'верно' : 'ошибка' }}</small><b>память {{ dn(lastAns.before) }} → {{ dn(lastAns.s) }}</b></div>
         <div class="kp due" :class="{ bad: due <= now }"><small>Повторить</small><b>{{ rel(due) }}</b></div>
-        <span class="sub">последний ответ {{ ago }}<template v-if="fresh"> · сразу после ответа всегда 100 % — ответ только что был перед глазами; {{ lastAns && !lastAns.ok ? 'после ошибки память короткая — кривая падает быстро' : 'дальше тает по кривой' }}</template></span>
+        <span class="sub">последний ответ {{ ago }}<template v-if="failNow"> · ошибка — слово учится заново, кривая начинается с короткой памятью</template></span>
       </div>
       <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="[k, t] in ZOOMS" :key="k" role="tab" :aria-selected="zoom === k" :class="{ on: zoom === k }" @click="zoom = k">{{ t }}</button></div>
       <svg :viewBox="`0 0 ${W} ${H}`" class="gr" role="img" :aria-label="`Кривая памяти «${item.text}»: помнит сейчас ${Math.round(recallNow * 100)} %, повторить ${rel(due)}`">
