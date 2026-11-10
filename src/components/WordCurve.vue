@@ -103,6 +103,10 @@ const dueTxt = computed(() => `Повтор · ${new Date(due.value).toLocaleDat
 const nowTxt = computed(() => `${shift.value ? 'Будет' : 'Сейчас'} · ${Math.round((recallNow.value ?? 0) * 100)}%`)
 const pillW = (t) => t.length * 6.1 + 16                              // ширина «таблетки» под подпись (на глаз по шрифту 10–11 px)
 const pillX = (x, t) => Math.min(W - pillW(t) - 2, Math.max(PADL, x - pillW(t) / 2))
+// последний ответ: память до него → после (после ошибки резко падает) — «100 % сейчас» без этого вводит в заблуждение
+const dn = (d) => (d == null ? 'новое' : d < 1 ? `${Math.max(1, Math.round(d * 24))} ч` : d < 10 ? `${String(Math.round(d * 10) / 10).replace('.', ',')} дн` : `${Math.round(d)} дн`)
+const lastAns = computed(() => { const a = answers.value; if (!a.length) return null; const x = a.at(-1); return { ok: x.ok, s: x.s, before: a.length > 1 ? a.at(-2).s : null } })
+const fresh = computed(() => last.value && now.value - last.value.t < HOUR)
 const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r >= props.cfg.retention ? 'mid' : 'bad')
 </script>
 
@@ -111,9 +115,10 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
     <p v-if="!last" class="nt">Слово пока без ответов — кривая появится после первого проверенного ответа в уроке.</p>
     <template v-else>
       <div class="top">
-        <div class="kp" :class="tone(recallNow)"><small>Помнит сейчас</small><b>{{ Math.round(recallNow * 100) }}%</b></div>
+        <div class="kp" :class="tone(recallNow)" :title="fresh ? 'Сразу после любого ответа — 100 %: правильный ответ только что был перед глазами. Дальше тает: после ошибки — быстро' : ''"><small>Помнит сейчас</small><b>{{ Math.round(recallNow * 100) }}%</b></div>
+        <div v-if="lastAns" class="kp" :class="lastAns.ok ? 'ok' : 'bad'"><small>Последний ответ: {{ lastAns.ok ? 'верно' : 'ошибка' }}</small><b>память {{ dn(lastAns.before) }} → {{ dn(lastAns.s) }}</b></div>
         <div class="kp due" :class="{ bad: due <= now }"><small>Повторить</small><b>{{ rel(due) }}</b></div>
-        <span class="sub">последний ответ {{ ago }} · память ~{{ last.s < 10 ? (Math.round(last.s * 10) / 10).toString().replace('.', ',') : Math.round(last.s) }} дн</span>
+        <span class="sub">последний ответ {{ ago }}<template v-if="fresh"> · сразу после ответа всегда 100 % — ответ только что был перед глазами; {{ lastAns && !lastAns.ok ? 'после ошибки память короткая — кривая падает быстро' : 'дальше тает по кривой' }}</template></span>
       </div>
       <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="[k, t] in ZOOMS" :key="k" role="tab" :aria-selected="zoom === k" :class="{ on: zoom === k }" @click="zoom = k">{{ t }}</button></div>
       <svg :viewBox="`0 0 ${W} ${H}`" class="gr" role="img" :aria-label="`Кривая памяти «${item.text}»: помнит сейчас ${Math.round(recallNow * 100)} %, повторить ${rel(due)}`">
