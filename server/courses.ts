@@ -20,7 +20,7 @@ const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
 
 export interface Step { id: string; kind: string; [k: string]: unknown }
-export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; hlw?: true; hlc?: string; hlo?: number; grp?: string; x?: number; y?: number; steps?: Step[] }
+export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; hlw?: true; hlc?: string; hlo?: number; grp?: string; x?: number; y?: number; steps?: Step[]; topic?: string }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
 export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number; assigned?: string[] }
@@ -68,6 +68,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (!ID.test(String(r.id)) || !(COURSE_TYPES.includes(type) || (type === 'screen' && loose))) throw fail(400, 'bad item')
     const out: CourseItem = { id: String(r.id), type, title: str(r.title, 120) }
     if (type === 'unit' || (INTERACTIVE.includes(type) && typeof r.sub === 'string' && r.sub)) out.sub = str(r.sub, 120)          // у урока — описание под названием
+    // тема грамматики урока (id из src/utils/skills.ts TOPICS; 'none' — без темы; нет — угадать по названию)
+    if (INTERACTIVE.includes(type) && typeof r.topic === 'string' && /^[a-z0-9-]{1,40}$/.test(r.topic)) out.topic = r.topic
     // подсветка главы на доске: hl 'none' — без неё, hlw — вместе с ветками экранов, hlc — цвет (#rrggbb, по умолчанию зелёный)
     if (type === 'unit' && r.hl === 'none') out.hl = 'none'
     if (type === 'unit' && r.hlw === true) out.hlw = true

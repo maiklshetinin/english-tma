@@ -3,6 +3,7 @@
 // а на сервер уходят пачкой (только изменённые записи) через пару секунд; нет сети — ждут в этом браузере и уйдут потом.
 // Без сервера (демо, локальная разработка) — только в этом браузере (localStorage), как раньше.
 import { reactive } from 'vue'
+import { tagHits, type Topic } from '../utils/skills'
 import { applyHits, hitsOf, exName, keyOf, type RItem, type AlgoCfg } from '../utils/review'
 import { algo, ALGO_KEY as ALGO } from './algo'
 export { algo }
@@ -73,10 +74,11 @@ export async function syncReview(owner?: string | number | null) {
 }
 
 /** Ответ на экран урока → в словарь */
-export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[] }, ctx: { lesson?: string; course?: string } = {}) {
-  const hits = hitsOf(step, res); if (!hits.length) return
-  applyHits(review.items, hits, { ex: exName(step), ...ctx }, Date.now(), { ...algo })
-  for (const h of hits) { const k = keyOf(h.text); if (review.items[k]) pending.add(k) }
+export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[] }, ctx: { lesson?: string; course?: string; topic?: Topic } = {}) {
+  // слова экрана + его навыки и тема урока (вкладка «Грамматика и навыки»)
+  const hits = [...hitsOf(step, res), ...tagHits(step, res, ctx.topic)]; if (!hits.length) return
+  applyHits(review.items, hits, { ex: exName(step), lesson: ctx.lesson, course: ctx.course }, Date.now(), { ...algo })
+  for (const h of hits) { const k = h.key ?? keyOf(h.text); if (review.items[k]) pending.add(k) }
   save(); if (online()) later(2000)
 }
 

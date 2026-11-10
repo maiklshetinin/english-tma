@@ -10,6 +10,8 @@ import { algo } from '../stores/review'
 import WordCurve from './WordCurve.vue'
 import ReviewChart from './ReviewChart.vue'
 import MemoryChart from './MemoryChart.vue'
+import SkillsPanel from './SkillsPanel.vue'
+import { wordsOnly, tagsOnly } from '../utils/skills'
 import { nextTick } from 'vue'
 
 const props = defineProps({
@@ -27,7 +29,12 @@ const toggleChart = () => { chartOn.value = !chartOn.value; try { localStorage.s
 const cfgNow = computed(() => ({ retention: algo.retention, maxDays: algo.maxDays }))
 // нажали слово на графике — открыть его строку с кривой памяти
 async function pick(key) { filter.value = 'all'; openKey.value = key; await nextTick(); document.querySelector(`[data-rk="${CSS.escape(key)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
-const list = computed(() => { const now = Date.now(), cfg = { ...algo }; return Object.values(props.items ?? review.items).map(x => { const st = stateOf(x, now, cfg); return { ...x, st, lv: st.level } })
+// весь словарь: слова и фразы — вкладка «Словарь», навыки и темы — «Грамматика и навыки»
+const all = computed(() => props.items ?? review.items)
+const dict = computed(() => wordsOnly(all.value)), tags = computed(() => tagsOnly(all.value))
+const sec = ref((() => { try { return localStorage.getItem('tma.review.sec') || 'words' } catch { return 'words' } })())
+watch(sec, (v) => { try { localStorage.setItem('tma.review.sec', v) } catch { /* приватный режим */ } })
+const list = computed(() => { const now = Date.now(), cfg = { ...algo }; return Object.values(dict.value).map(x => { const st = stateOf(x, now, cfg); return { ...x, st, lv: st.level } })
   .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })) })
 const count = (lv) => list.value.filter(x => x.lv === lv).length
 const max = computed(() => Math.max(1, ...['weak', 'medium', 'strong'].map(count)))
@@ -50,6 +57,9 @@ async function reset() {
 
 <template>
   <div class="rv">
+    <div class="secs" role="tablist"><button v-for="[k, t] in [['words', 'Словарь'], ['skills', 'Грамматика и навыки']]" :key="k" role="tab" :aria-selected="sec === k" :class="{ on: sec === k }" @click="sec = k">{{ t }}</button></div>
+    <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" />
+    <template v-else>
     <div class="rcard">
       <h2>{{ title }}<small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></h2>
       <div class="lv3">
@@ -60,8 +70,8 @@ async function reset() {
       </div>
       <template v-if="chartOn && list.length">
         <div class="vt" role="tablist"><button v-for="[k, t] in [['mem', 'График запоминания'], ['piles', 'Где сейчас слова']]" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" @click="view = k">{{ t }}</button></div>
-        <MemoryChart v-if="view === 'mem'" :items="items ?? review.items" :cfg="cfgNow" @pick="pick" />
-        <ReviewChart v-else :items="items ?? review.items" :cfg="cfgNow" @pick="pick" />
+        <MemoryChart v-if="view === 'mem'" :items="dict" :cfg="cfgNow" @pick="pick" />
+        <ReviewChart v-else :items="dict" :cfg="cfgNow" @pick="pick" />
       </template>
       <div class="hbs"><button class="howb" :aria-expanded="chartOn" @click="toggleChart">График <span>{{ chartOn ? '▴' : '▾' }}</span></button>
       <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button></div>
@@ -108,12 +118,15 @@ async function reset() {
         </template>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .sy { margin-left: 10px; font-size: 12px; font-weight: 800; color: var(--hint); vertical-align: middle } .sy.synced { color: #1fbe78 } .sy.error { color: #ff9600 }
 .al { color: #1cb0f6; font-weight: 800; text-decoration: none }
+.secs { display: flex; gap: 22px; border-bottom: 1px solid #e8eaee; width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box }
+.secs button { all: unset; cursor: pointer; padding: 6px 0 9px; font-size: 16px; font-weight: 800; color: #5f6368; border-bottom: 2.5px solid transparent; margin-bottom: -1px } .secs button.on { color: #1278b0; border-color: #1cb0f6 }
 .vt { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100% }
 .vt button { font: inherit; font-size: 13px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 14px; background: none; color: #5f6368; cursor: pointer } .vt button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .vt { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto }

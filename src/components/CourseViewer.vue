@@ -9,6 +9,7 @@ import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import ReviewChart from './ReviewChart.vue'
 import CkFlow from './CkFlow.vue'
+import { topicById, detectTopic, wordsOnly } from '../utils/skills'
 import WordNow from './WordNow.vue'
 import MemoryChart from './MemoryChart.vue'
 import { recordStep, syncReview, review, algo } from '../stores/review'
@@ -126,6 +127,13 @@ const open = ref(null)                         // открытое во весь
 const misses = reactive(new Set())             // экраны с ошибкой в открытом сейчас уроке
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 // ошибки урока: с сервера (ученик) / этого просмотра; у открытого сейчас урока — плюс ошибки, сделанные только что (в реальном времени)
+// тема грамматики открытого урока: своя (редактор), «без темы» или — по названию урока / его Chapter
+const dictWords = computed(() => wordsOnly(review.items))         // графики урока — только слова (навыки и темы — во вкладке Review)
+function topicOfOpen() {
+  const x = open.value; if (!x || x.topic === 'none') return undefined
+  const u = units.value.find(v => v.tasks.some(t => t.id === x.id))
+  return topicById(x.topic) ?? detectTopic(x.title, u ? `${u.title} ${u.sub ?? ''}` : '')
+}
 const missOf = (id) => { const base = mine.value.lessons?.[id]?.miss ?? []; return open.value?.id === id && misses.size ? [...new Set([...base, ...misses])] : base }
 function ckParts(x) {
   const u = units.value.find(u => u.tasks.some(t => t.id === x.id))
@@ -177,7 +185,7 @@ const onAnswer = (a) => {
   if (a.ok === false) misses.add(a.step.id)
   const hits = hitsOf(a.step, a), was = {}
   for (const h of hits) { const k = keyOf(h.text); was[k] = sOf(k); if (!(k in snap)) snap[k] = was[k] }
-  recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title })
+  recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title, topic: topicOfOpen() })
   for (const h of hits) { const k = keyOf(h.text), now = sOf(k); (rvLog[k] ??= []).push({ ex: exName(a.step), ok: h.ok, now }) }
 }
 // курс по горизонтали: Chapter → уроки → чекпоинт и что в него попадёт сейчас (CkFlow) — для преподавателя, в реальном времени
@@ -297,9 +305,9 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
           <div v-if="rvChart" class="rvd">
             <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Экраны → чекпоинты</button></div>
-            <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
-            <WordNow v-else-if="dockTab === 'curve'" :focus="focusKey" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
-            <ReviewChart v-else-if="dockTab === 'words'" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
+            <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
+            <WordNow v-else-if="dockTab === 'curve'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
+            <ReviewChart v-else-if="dockTab === 'words'" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <CkFlow v-else :chapters="ckMap" dock />
           </div>
         </template>

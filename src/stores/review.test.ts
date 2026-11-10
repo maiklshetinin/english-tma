@@ -16,7 +16,7 @@ describe('stores/review', () => {
     expect(review.items['no problem'].f?.n).toBe(1)
     await vi.advanceTimersByTimeAsync(2500)
     const post = apiRequest.mock.calls.find((c) => c[0] === '/review' && c[1]?.method === 'POST')
-    expect(Object.keys(JSON.parse(post![1].body).items)).toEqual(['no problem'])
+    expect(Object.keys(JSON.parse(post![1].body).items)).toEqual(['no problem', 'skill:listening'])
   })
 
   it('загрузка с сервера: серверное + ещё не отправленное (оно новее)', async () => {
@@ -25,7 +25,7 @@ describe('stores/review', () => {
     localStorage.setItem('tma.review.owner.v1', JSON.stringify('1'))
     recordStep(choice, { ok: false })
     await syncReview(1)
-    expect(Object.keys(review.items).sort()).toEqual(['hello', 'no problem'])
+    expect(Object.keys(review.items).sort()).toEqual(['hello', 'no problem', 'skill:listening'])
     expect(review.sync).toBe('synced')
   })
 

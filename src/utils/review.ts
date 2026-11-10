@@ -28,7 +28,7 @@ export function schedulerOf(cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_D
 }
 const W = schedulerOf().parameters.w                                       // веса FSRS-6 (их 21; последний — форма кривой забывания)
 
-export type RKind = 'word' | 'phrase'
+export type RKind = 'word' | 'phrase' | 'skill' | 'topic'      // skill / topic — навык и тема грамматики (utils/skills.ts)
 export type RLevel = 'weak' | 'medium' | 'strong'
 export interface RHist { t: number; ok: boolean | null; ex: string; lesson?: string }
 /** Память слова по FSRS: стабильность (дни), сложность 1–10, последний ответ (мс), ответов, провалов, состояние (1 изучение, 2 повторение, 3 переучивание) */
@@ -40,7 +40,7 @@ export interface RItem {
   f?: RMem                       // нет — слово только встречалось (без проверки) или запись старая (тогда память пересчитаем из истории)
 }
 /** Что проверял экран: слово / фраза + как ответили (true / false; null — только показали, без оценки) */
-export interface RHit { text: string; tr?: string; image?: string; audio?: string; kind?: RKind; ok: boolean | null }
+export interface RHit { text: string; tr?: string; image?: string; audio?: string; kind?: RKind; key?: string; ok: boolean | null }      // key — свой ключ (у навыков и тем)
 
 const clean = (v?: string) => (v ?? '').replace(/\s+/g, ' ').trim()
 export const keyOf = (text: string) => clean(text).toLowerCase().replace(/[’‘`]/g, "'").replace(/[.!?…,;:]+$/g, '')
@@ -100,7 +100,7 @@ export function stateOf(x: Pick<RItem, 'f' | 'hist'>, now = Date.now(), cfg: Pic
 /** Записать ответы экрана в словарь (меняет items на месте). ctx — название упражнения, урока, курса */
 export function applyHits(items: Record<string, RItem>, hits: RHit[], ctx: { ex: string; lesson?: string; course?: string }, now = Date.now(), cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT) {
   for (const h of hits) {
-    const key = keyOf(h.text); if (!key) continue
+    const key = h.key ?? keyOf(h.text); if (!key) continue
     let x = items[key]
     if (!x) x = items[key] = { key, kind: h.kind ?? kindOf(h.text), text: h.text, tr: h.tr ?? '', image: h.image, audio: h.audio, s: 0, due: now, seen: now, ok: 0, bad: 0, hist: [], course: ctx.course, lesson: ctx.lesson }
     if (!x.tr && h.tr) x.tr = h.tr

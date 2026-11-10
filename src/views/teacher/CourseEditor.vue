@@ -25,6 +25,7 @@ import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
+import { TOPICS, detectTopic } from '../../utils/skills'
 import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
@@ -152,7 +153,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(loose && x.grp ? { grp: x.grp } : {}), ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.type === 'unit' && x.hlo != null ? { hlo: x.hlo } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(loose && x.grp ? { grp: x.grp } : {}), ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.type === 'unit' && x.hlo != null ? { hlo: x.hlo } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.topic ? { topic: x.topic } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -1438,6 +1439,10 @@ function renameDone() { renaming.value = null; editing.value = false; renOrig = 
 // Esc — вернуть название (и тему) как было до правки
 let renOrig = null
 function renameCancel() { const x = renOrig && findAny(renOrig.id); if (x) { x.title = renOrig.title; if (renOrig.sub === undefined) delete x.sub; else x.sub = renOrig.sub } renameDone() }
+// тема грамматики урока (вкладка Review «Грамматика и навыки»): своя из списка, «без темы» или авто — по названию урока
+const TLVLS = [...new Set(TOPICS.map(t => t.lvl))]
+const topicLbl = (x) => (x.topic === 'none' ? '' : (TOPICS.find(t => t.id === x.topic) ?? detectTopic(x.title))?.t ?? '')
+function setTopic(x, v) { if (v) x.topic = v; else delete x.topic; save() }
 const blurRen = (e) => e.relatedTarget?.classList?.contains('rin') || renameDone()
 const onKey = (e) => {
   if (dialog.open) return                                       // открыто окно подтверждения — клавиши его
@@ -1613,7 +1618,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <video v-if="x.type === 'video' && x.file && mediaUrl({ file: x.file })" :src="mediaUrl({ file: x.file })" class="vid" muted loop playsinline preload="metadata" />
               <img v-else-if="x.type === 'photo' && x.file && mediaUrl({ file: x.file })" :src="mediaUrl({ file: x.file })" class="vid img" alt="" draggable="false" />
               <svg v-if="!MEDIA.includes(x.type) || !x.file || !mediaUrl({ file: x.file })" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
-              <em class="cap">{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
+              <em class="cap">{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : '', INTERACTIVE.includes(x.type) ? topicLbl(x) : ''].filter(Boolean).join(' · ') }}</small></em>
             </template>
           </div>
         </template>
@@ -1648,7 +1653,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <template v-if="x.id in upPct"><svg class="upl" viewBox="0 0 88 88"><circle cx="44" cy="44" r="40" :style="{ strokeDasharray: 251, strokeDashoffset: 251 * (1 - upPct[x.id] / 100) }" /></svg><em class="upn">{{ upPct[x.id] }}%</em></template>
             <svg v-if="!covK(x) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <svg v-if="stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
-            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><template v-if="renaming === x.id && !peekOf(x)"><span class="rrow lren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin" placeholder="Название урока" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click.stop="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></span><input v-if="INTERACTIVE.includes(x.type)" v-model="x.sub" class="rin sub lren" placeholder="о чём урок, например: знакомство и приветствия" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /></template>
+            <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><template v-if="renaming === x.id && !peekOf(x)"><span class="rrow lren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin" placeholder="Название урока" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click.stop="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></span><input v-if="INTERACTIVE.includes(x.type)" v-model="x.sub" class="rin sub lren" placeholder="о чём урок, например: знакомство и приветствия" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><select v-if="INTERACTIVE.includes(x.type)" class="rin tsel lren" title="Тема грамматики — для вкладки Review «Грамматика и навыки»" :value="x.topic ?? ''" @pointerdown.stop @change="setTopic(x, $event.target.value)" @keydown.esc="renameCancel" @blur="blurRen"><option value="">Тема: авто — {{ detectTopic(x.title)?.t ?? 'не нашлась по названию' }}</option><option value="none">Без темы грамматики</option><optgroup v-for="lv in TLVLS" :key="lv" :label="lv"><option v-for="t in TOPICS.filter(t => t.lvl === lv)" :key="t.id" :value="t.id">{{ t.t }}</option></optgroup></select></template>
               <template v-else><span class="ctl">{{ x.title }}<button class="upen" title="Переименовать урок" @pointerdown.stop @dblclick.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button></span><span v-if="x.sub" class="csub">{{ x.sub }}</span></template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
             <!-- обложка выбранного урока: фото или кружок, как в Busuu -->
             <div v-if="sel === x.id && BRANCH.includes(x.type) && !drag.on" class="cov" @pointerdown.stop @dblclick.stop>
@@ -2065,7 +2070,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .cap { left: calc(100% + 22px); width: 190px; gap: 2px; font-size: 15px; font-weight: 800; color: #252a31 }
 .cap small { font-size: 12.5px; font-weight: 600; color: #6b7280 }
 .csub { font-size: 13.5px; font-weight: 500; color: #3b4048; line-height: 1.3 }      /* описание урока — как в Busuu: под жирным названием обычным шрифтом */
-.rin.sub { font-size: 13px; font-weight: 500 } .lpv .lps { margin: -2px 0 0; font-size: 15px; font-weight: 500; opacity: 1 }
+.rin.sub { font-size: 13px; font-weight: 500 } .rin.tsel { font-size: 12.5px; font-weight: 700; max-width: 100%; padding: 4px 6px; border-radius: 8px; cursor: pointer } .lpv .lps { margin: -2px 0 0; font-size: 15px; font-weight: 500; opacity: 1 }
 .bead.s-l .cap { right: calc(100% + 22px) }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; box-shadow: none }
 /* юнит: заголовок главы и полоска прогресса */
