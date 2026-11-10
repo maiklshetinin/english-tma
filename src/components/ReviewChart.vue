@@ -113,7 +113,7 @@ onUnmounted(() => clearTimeout(flashT))
       <p v-if="!open.items.length" class="em">Здесь пусто.</p>
       <button v-for="r in open.items" :key="r.x.key" class="wi" :class="{ hot: hot.has(r.x.key) }" @click="pickW(r.x.key)">
         <span class="wt"><b>{{ r.x.text }}</b><small>{{ r.x.tr }}<template v-if="r.x.lesson"> · {{ r.x.lesson }}</template></small></span>
-        <span class="wr"><b :class="r.st.level">{{ r.st.recall }}%</b><small>{{ LV[r.st.level] }} · {{ rel(r.st.due) }}</small></span>
+        <span class="wr"><b :class="r.st.failed ? 'weak' : r.st.level">{{ r.st.failed ? 'ошибка' : r.st.recall + '%' }}</b><small>{{ LV[r.st.level] }} · {{ rel(r.st.due) }}</small></span>
       </button>
     </div>
     <div v-if="dock && sel && items[sel]" class="cv"><WordCurve :item="items[sel]" :cfg="cfg" /></div>

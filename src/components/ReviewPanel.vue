@@ -96,7 +96,7 @@ async function reset() {
           </div>
           <div v-if="openKey === x.key" class="det">
             <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
-            <p v-else><b>Вспомнит сейчас: {{ x.st.recall }} %</b> · память ~{{ dd(x.st.stab) }} · повторить {{ days(x.st.due) }} · верно {{ x.ok }}, ошибок {{ x.bad }} · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
+            <p v-else><b>{{ x.st.failed ? 'Только что: ошибка' : `Вспомнит сейчас: ${x.st.recall} %` }}</b> · память ~{{ dd(x.st.stab) }} · повторить {{ days(x.st.due) }} · верно {{ x.ok }}, ошибок {{ x.bad }} · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
             <WordCurve v-if="!x.st.isNew" :item="x" :cfg="cfgNow" />
             <ul><li v-for="(h, k) in x.hist" :key="k"><span :class="h.ok === null ? 'n' : h.ok ? 'y' : 'x'">{{ h.ok === null ? 'встретилось' : h.ok ? 'верно' : 'ошибка' }}</span>{{ h.ex }}<template v-if="h.lesson"> · {{ h.lesson }}</template><small>{{ when(h.t) }}</small></li></ul>
           </div>

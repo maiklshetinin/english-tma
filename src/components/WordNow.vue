@@ -21,7 +21,7 @@ const list = computed(() => { now.value; return Object.values(props.items).map(x
   .sort((a, b) => (inLesson(b.x) - inLesson(a.x)) || last(b.x) - last(a.x)) })
 const sel = ref(null)
 const cur = computed(() => props.items[sel.value] ?? list.value.find(r => !r.st.isNew)?.x ?? list.value[0]?.x ?? null)
-const tone = (st) => (st.isNew ? 'nw' : st.recall >= Math.round(props.cfg.retention * 100) + 3 ? 'ok' : st.recall >= Math.round(props.cfg.retention * 100) ? 'mid' : 'bad')
+const tone = (st) => (st.isNew ? 'nw' : st.failed ? 'bad' : st.recall >= Math.round(props.cfg.retention * 100) + 3 ? 'ok' : st.recall >= Math.round(props.cfg.retention * 100) ? 'mid' : 'bad')
 
 // новый ответ → это слово выбирается само и подсвечивается
 const hot = ref(null); let t = null
@@ -44,7 +44,7 @@ const lastH = computed(() => cur.value?.hist[0])
       <b class="lt">Слова ученика</b>
       <button v-for="r in list" :key="r.x.key" class="li" :class="{ on: cur && cur.key === r.x.key, hot: hot === r.x.key }" @click="sel = r.x.key">
         <span class="t"><b>{{ r.x.text }}</b><small>{{ r.x.tr }}</small></span>
-        <em :class="tone(r.st)">{{ r.st.isNew ? 'новое' : r.st.recall + '%' }}</em>
+        <em :class="tone(r.st)">{{ r.st.isNew ? 'новое' : r.st.failed ? 'ошибка' : r.st.recall + '%' }}</em>
       </button>
       <p v-if="!list.length" class="em">Пока пусто — слова появятся после уроков.</p>
     </aside>

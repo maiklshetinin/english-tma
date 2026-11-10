@@ -100,6 +100,7 @@ const ago = computed(() => {
   return d < 1 / 24 ? 'только что' : d < 1 ? `${Math.round(d * 24)} ч назад` : `${Math.round(d)} дн назад`
 })
 const dueTxt = computed(() => `Повтор · ${new Date(due.value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`)
+const nowY = computed(() => (failNow.value ? H - PADB - 4 : yOf(recallNow.value)))      // только что ошибся — точка «сейчас» внизу, рядом с ошибкой
 const nowTxt = computed(() => failNow.value ? 'Сейчас · ошибка' : `${shift.value ? 'Будет' : 'Сейчас'} · ${Math.round((recallNow.value ?? 0) * 100)}%`)
 // только что ошибся (до часа назад): «100 %» тут сбивает — показываем «не вспомнил»; дальше — обычная вероятность по кривой
 const failNow = computed(() => !shift.value && lastAns.value && !lastAns.value.ok && fresh.value)
@@ -137,8 +138,8 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
         <circle v-for="(d, k) in dots" :key="'d' + k" :cx="d.x" :cy="d.y" r="4.5" :class="d.ok ? 'dy' : 'dx'" />
         <g v-if="due > range[0] && due < range[1]"><line class="dl" :x1="xOf(due)" y1="8" :x2="xOf(due)" :y2="H - PADB" /><circle class="dd" :cx="xOf(due)" :cy="yOf(cfg.retention)" r="5" />
           <g :transform="`translate(${pillX(xOf(due), dueTxt)} 6)`"><rect class="dp" :width="pillW(dueTxt)" height="18" rx="9" /><text class="dt" :x="pillW(dueTxt) / 2" y="12.5" text-anchor="middle">{{ dueTxt }}</text></g></g>
-        <g v-if="now > range[0] && now < range[1]"><line class="nl" :x1="xOf(now)" y1="26" :x2="xOf(now)" :y2="H - PADB" /><circle class="nd" :cx="xOf(now)" :cy="yOf(recallNow)" r="5.5" />
-          <g :transform="`translate(${pillX(xOf(now), nowTxt)} ${Math.max(28, yOf(recallNow) - 30)})`"><rect class="np" :width="pillW(nowTxt)" height="19" rx="9.5" /><text class="ntx" :x="pillW(nowTxt) / 2" y="13" text-anchor="middle">{{ nowTxt }}</text></g></g>
+        <g v-if="now > range[0] && now < range[1]"><line class="nl" :x1="xOf(now)" y1="26" :x2="xOf(now)" :y2="H - PADB" /><circle class="nd" :class="{ fail: failNow }" :cx="xOf(now)" :cy="nowY" r="5.5" />
+          <g :transform="`translate(${pillX(xOf(now), nowTxt)} ${failNow ? H - PADB - 34 : Math.max(28, yOf(recallNow) - 30)})`"><rect class="np" :width="pillW(nowTxt)" height="19" rx="9.5" /><text class="ntx" :x="pillW(nowTxt) / 2" y="13" text-anchor="middle">{{ nowTxt }}</text></g></g>
       </svg>
       <div class="leg"><span><i class="lp" />было</span><span><i class="lg" />прогноз, если не повторять</span><span><i class="ln" />после повтора — забывается медленнее</span><span><i class="lr" />ответ верно</span><span><i class="lx" />ошибка</span></div>
       <div class="sim">Посмотреть, что будет:<button @click="shift += HOUR">+1 час</button><button @click="shift += DAY">+1 день</button><button @click="shift += 3 * DAY">+3 дня</button><button class="back" :disabled="!shift" @click="shift = 0">Вернуться в сейчас</button></div>
@@ -162,7 +163,7 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
 .next { fill: none; stroke: #8cc9f7; stroke-width: 2; stroke-dasharray: 2 5; stroke-linecap: round }
 .dy { fill: #58cc02; stroke: #fff; stroke-width: 2 } .dx { fill: #ff4b4b; stroke: #fff; stroke-width: 2 }
 .dl { stroke: #ff9600; stroke-width: 1.2 } .dp { fill: #fff1e0; stroke: #ffd29a } .np { fill: #2f2f2f } .dd { fill: #ff9600; stroke: #fff; stroke-width: 2 } .gr .dt { fill: #e08600; font-weight: 900 }
-.nl { stroke: #2f2f2f; stroke-width: 1 } .nd { fill: #fff; stroke: #1c7ef6; stroke-width: 3 } .gr .ntx { fill: #fff; font-weight: 900; font-size: 11px }
+.nl { stroke: #2f2f2f; stroke-width: 1 } .nd { fill: #fff; stroke: #1c7ef6; stroke-width: 3 } .nd.fail { stroke: #ff4b4b } .gr .ntx { fill: #fff; font-weight: 900; font-size: 11px }
 .leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; font-weight: 700; color: var(--hint) } .leg span { display: inline-flex; align-items: center; gap: 5px }
 .leg i { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid #1c7ef6 } .leg .lg { border-top-style: dotted } .leg .ln { border-top: 2.5px dotted #8cc9f7 }
 .leg .lr, .leg .lx { width: 9px; height: 9px; border: 0; border-radius: 50%; background: #58cc02 } .leg .lx { background: #ff4b4b }

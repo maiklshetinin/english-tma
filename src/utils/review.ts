@@ -85,13 +85,16 @@ export const intervalOf = (stab: number, cfg: Pick<AlgoCfg, 'retention' | 'maxDa
 export const recallAt = (stab: number, days: number) => forgetting_curve(W, Math.max(0, days), stab)
 export const levelOf = (stab: number): RLevel => (stab < LV_DAYS.medium ? 'weak' : stab < LV_DAYS.strong ? 'medium' : 'strong')
 
-export interface RState { level: RLevel; recall: number | null; stab: number; due: number | null; ivl: number | null; isNew: boolean }
+export interface RState { level: RLevel; recall: number | null; stab: number; due: number | null; ivl: number | null; isNew: boolean; failed: boolean }
+/** Сколько после ошибки показываем «не вспомнил» вместо процента (сразу после любого ответа FSRS даёт 100 % — после ошибки это сбивает) */
+export const FAIL_SHOW = 3_600_000
 /** Слово сейчас: уровень, вероятность вспомнить (%), стабильность, когда повторить (по текущим настройкам) */
 export function stateOf(x: Pick<RItem, 'f' | 'hist'>, now = Date.now(), cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT): RState {
   const m = memOf(x)
-  if (!m) return { level: 'weak', recall: null, stab: 0, due: null, ivl: null, isNew: true }
+  if (!m) return { level: 'weak', recall: null, stab: 0, due: null, ivl: null, isNew: true, failed: false }
   const ivl = intervalOf(m.s, cfg)
-  return { level: levelOf(m.s), recall: Math.round(recallAt(m.s, (now - m.last) / DAY) * 100), stab: m.s, due: m.last + ivl * DAY, ivl, isNew: false }
+  const h = x.hist.find(e => e.ok !== null), failed = !!h && h.ok === false && now - h.t < FAIL_SHOW
+  return { level: levelOf(m.s), recall: Math.round(recallAt(m.s, (now - m.last) / DAY) * 100), stab: m.s, due: m.last + ivl * DAY, ivl, isNew: false, failed }
 }
 
 /** Записать ответы экрана в словарь (меняет items на месте). ctx — название упражнения, урока, курса */
