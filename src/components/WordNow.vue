@@ -11,6 +11,7 @@ const props = defineProps({
   cfg: { type: Object, required: true },               // { retention, maxDays }
   lesson: { type: String, default: '' },               // сверху урока — слова этого урока первыми
   dock: Boolean,
+  focus: { type: String, default: '' },                // ключ слова экрана, открытого в уроке сейчас — кривая сразу на нём
 })
 const now = ref(Date.now()); let clock = null
 onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 30_000) }); onUnmounted(() => clearInterval(clock))
@@ -33,11 +34,12 @@ watch(() => props.items, () => {
   sel.value = k; hot.value = k; clearTimeout(t); t = setTimeout(() => { hot.value = null }, 2500)
 }, { deep: true })
 onUnmounted(() => clearTimeout(t))
+watch(() => props.focus, (k) => { if (k && props.items[k]) sel.value = k }, { immediate: true })
 const lastH = computed(() => cur.value?.hist[0])
 </script>
 
 <template>
-  <div class="wn" :class="{ dock }">
+  <div class="wnc"><div class="wn" :class="{ dock }">
     <aside class="ls">
       <b class="lt">Слова ученика</b>
       <button v-for="r in list" :key="r.x.key" class="li" :class="{ on: cur && cur.key === r.x.key, hot: hot === r.x.key }" @click="sel = r.x.key">
@@ -50,7 +52,7 @@ const lastH = computed(() => cur.value?.hist[0])
       <div class="wh"><b>{{ cur.text }}</b><small>{{ cur.tr }}<template v-if="lastH"> · последний ответ: <span :class="lastH.ok === true ? 'y' : lastH.ok === false ? 'x' : ''">{{ lastH.ok === true ? 'верно' : lastH.ok === false ? 'ошибка' : 'встретилось' }}</span> ({{ lastH.ex }})</template></small></div>
       <WordCurve :key="cur.key" :item="cur" :cfg="cfg" />
     </section>
-  </div>
+  </div></div>
 </template>
 
 <style scoped>
@@ -65,7 +67,8 @@ em { font-style: normal; font-size: 13px; font-weight: 900 } em.ok { color: #46a
 .rt { display: grid; align-content: start; gap: 8px; min-width: 0 }
 .wh { display: grid } .wh b { font-size: 22px; font-weight: 900 } .wh small { font-size: 12.5px; font-weight: 700; color: var(--hint) } .wh .y { color: #46a302 } .wh .x { color: #e53935 }
 .em { margin: 0; font-size: 13px; color: var(--hint) }
-@media (max-width: 640px) {
+.wnc { container-type: inline-size; min-width: 0 }
+@container (max-width: 600px) {
   .wn { grid-template-columns: minmax(0, 1fr) } .ls { display: flex; overflow-x: auto; max-height: none; padding-bottom: 4px } .lt { display: none }
   .li { flex: none; max-width: 170px } .dock .ls { max-height: none }
 }

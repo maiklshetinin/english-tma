@@ -30,7 +30,7 @@ const props = defineProps({
   ckLog: { type: Object, default: null },                 // итог: что уйдёт в чекпоинт Chapter — { title, items: [{ ex, w }] } или { none: true }
   review: { type: Array, default: null },                 // итог: слова, которые урок записал в Review, — { text, tr, kind, audio, before, now, lv } (CourseViewer)
 })
-const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer', 'miss'])
+const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer', 'miss', 'step'])
 
 const i = ref(props.start), t0 = Date.now(), endT = ref(0)
 const dn = (d) => (d < 10 ? String(Math.round(d * 10) / 10).replace('.', ',') : Math.round(d)) + ' дн'      // память слова (стабильность FSRS) в днях
@@ -39,8 +39,10 @@ const score = reactive({ ok: 0, all: 0 })
 const retry = !props.single && !props.embedded
 const seq = ref(props.steps.map((_, k) => k))                          // очередь экранов: номера в steps, ошибочные добавляются в конец
 watch(() => props.steps, (v) => { seq.value = v.map((_, k) => k) })
+
 const cur = computed(() => (retry ? seq.value[i.value] : i.value))
 const step = computed(() => props.steps[cur.value])
+watch(step, (v) => emit('step', v ?? null), { immediate: true })          // какой экран сейчас — графики сверху урока переключаются на его слово
 const isFinal = computed(() => i.value >= (retry ? seq.value.length : props.steps.length))
 const pct = computed(() => props.pct != null ? props.pct : props.single ? (props.steps.length ? Math.round(Math.min(i.value + 1, props.steps.length) / (props.steps.length + 1) * 100) : 0)
   : Math.round(i.value / ((retry ? seq.value.length : props.steps.length) || 1) * 100))

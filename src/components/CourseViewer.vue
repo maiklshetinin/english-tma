@@ -148,7 +148,17 @@ function go(x) { peek.value = null; open.value = x; t0 = Date.now(); misses.clea
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
 // итог урока: какие слова урок записал в Review и как изменилась их память (FSRS) — чтобы сверять с разделом Review строка в строку
-const rvChart = ref(false)                      // график слов сверху урока (преподаватель)
+const rvChart = ref(false)                      // графики урока (преподаватель): справа от урока, ширина тянется как в DevTools
+const curStep = ref(null)                      // экран, открытый в уроке сейчас
+const focusKey = computed(() => { const h = curStep.value && hitsOf(curStep.value, { ok: true })[0]; return h ? keyOf(h.text) : '' })
+const PW = 'tma.lessonPanelW'
+const panelW = ref((() => { try { return +localStorage.getItem(PW) || 560 } catch { return 560 } })())
+function dragSplit(e) {
+  e.preventDefault(); const el = e.currentTarget; el.setPointerCapture?.(e.pointerId); document.body.style.cursor = 'col-resize'
+  const move = (ev) => { panelW.value = Math.round(Math.min(window.innerWidth * 0.72, Math.max(340, window.innerWidth - ev.clientX))) }
+  const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); document.body.style.cursor = ''; try { localStorage.setItem(PW, String(panelW.value)) } catch { /* приватный режим */ } }
+  el.addEventListener('pointermove', move); el.addEventListener('pointerup', up)
+}
 const snap = reactive({})                      // ключ слова → стабильность памяти до урока, дни (null — новое, ещё без ответов)
 const rvLog = reactive({})                     // ключ слова → журнал: какой экран, как ответили, какая стала память
 const sOf = (k) => { const m = review.items[k] && memOf(review.items[k]); return m ? Math.round(m.s * 10) / 10 : null }
@@ -258,18 +268,19 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
-      <div v-if="open" class="full">
+      <div v-if="open" class="full" :class="{ split: rvChart && steps.length && !of && auth.role === 'teacher' }" :style="{ '--pw': panelW + 'px' }">
         <!-- преподаватель: график Review сверху урока — сразу видно, куда ушло слово после ответа (как график колоды в сессии) -->
         <template v-if="steps.length && !of && auth.role === 'teacher'">
           <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
+          <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
           <div v-if="rvChart" class="rvd">
             <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Экраны → чекпоинты</button></div>
-            <WordNow v-if="dockTab === 'curve'" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
+            <WordNow v-if="dockTab === 'curve'" :focus="focusKey" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <ReviewChart v-else-if="dockTab === 'words'" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <CkFlow v-else :chapters="ckMap" dock />
           </div>
         </template>
-        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @done="finish(open, $event)" @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @step="curStep = $event" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>
@@ -350,6 +361,16 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .rvt { position: absolute; top: 12px; right: 14px; z-index: 3; border: 0; border-radius: 12px; padding: 8px 12px; background: #eaf6fe; color: #1278b0; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer } .rvt.on { background: #1cb0f6; color: #fff }
 .rvd { flex: none; max-height: 55vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid #eef0f3 }
 .rvd > * { max-width: 760px; margin: 0 auto }
+.spl { display: none }
+@media (min-width: 900px) {                    /* компьютер: урок слева, графики справа, между ними — перегородка (тянется) */
+  .full.split { flex-direction: row }
+  .full.split > :deep(.lp), .full.split > .sh { order: 1; flex: 1; min-width: 0 }
+  .full.split .spl { order: 2; display: block; flex: none; width: 7px; cursor: col-resize; background: #eef0f3; touch-action: none; position: relative }
+  .full.split .spl::after { content: ''; position: absolute; left: 2px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: #b5bac1 }
+  .full.split .spl:hover, .full.split .spl:active { background: #d6ecfb }
+  .full.split .rvd { order: 3; width: var(--pw); max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 16px }
+  .full.split .rvd > * { max-width: none }
+}
 .dtabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto; margin-bottom: 8px }
 .dtabs button { font: inherit; font-size: 12.5px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 12px; background: none; color: #5f6368; cursor: pointer } .dtabs button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: #f0f1f3; color: #555; font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
@@ -359,6 +380,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .x { position: absolute; left: 18px; top: 18px }
 /* на компьютере меню приложения слева остаётся видно поверх урока — в любой момент можно уйти в другой раздел */
 @media (min-width: 1024px) { .full { z-index: 9; padding-left: 116px } .x { left: 134px } }
+@media (min-width: 1024px) { .rvt { top: auto; right: auto; bottom: 24px; left: 140px } }      /* справа сверху на компьютере — панель «Сейчас здесь» (курсор, чат); кнопка — внизу слева, у «Продолжить» */
 .kr { width: min(360px, 80vw); height: min(360px, 80vw); border-radius: 50%; object-fit: cover; background: #000 }
 .ph { max-width: min(900px, 92vw); max-height: 75vh; border-radius: 14px }
 .bi { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; background: var(--c); color: #fff }
