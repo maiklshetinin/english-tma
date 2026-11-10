@@ -11,6 +11,11 @@ export const CARGO = [
   { id: 'chest', title: 'Сундук', em: '' }, { id: 'gift', title: 'Подарок', em: '🎁' }, { id: 'poo', title: 'Какашка', em: '💩' },
   { id: 'heart', title: 'Сердечко', em: '❤️' }, { id: 'cake', title: 'Торт', em: '🎂' }, { id: 'flowers', title: 'Цветы', em: '💐' },
 ]
+/** Чем доставить посылку (анимации — в ParachuteDrop.vue) */
+export const VIAS = [{ id: 'chute', title: 'Парашют' }, { id: 'crane', title: 'Кран' }, { id: 'bird', title: 'Птица' }]
+/** Эмодзи, которые можно положить в посылку (ещё любые — с клавиатуры); при открытии вылетают фонтаном */
+export const PARCEL_EMOJI = ['🎉', '🎂', '❤️', '🎈', '🥳', '⭐', '🔥', '👍', '😂', '🌸', '🍀', '☕', '🍕', '🚀', '💎', '👏', '🙏', '😱', '💩', '👻', '🐱', '🦄', '🌈', '❄️', '💰', '🏆', '💤']
+export const PARCEL_EMOJI_MAX = 8
 export const notesState = reactive({
   me: '',                 // мой uid (из hello)
   list: [],               // все заметки, новые сверху
@@ -19,8 +24,8 @@ export const notesState = reactive({
   placing: false,         // «Новая заметка» из списка: следующее нажатие на экран ставит булавку
   typing: {},             // id заметки → { uid, name, color, until }
   popups: [],             // всплывающие уведомления: { id, mid, from, at }
-  drops: [],              // посылки на парашюте внизу экрана: { id, note, mid, cargo, x, by, to, at } (рисует ParachuteDrop.vue)
-  aim: null,              // посылка ждёт, куда её сбросить: { text, mode, note } — нажатие на экран выбирает место
+  drops: [],              // посылки внизу экрана: { id, note, mid, cargo, via, emoji, x, by, to, at } (рисует ParachuteDrop.vue)
+  aim: null,              // посылка ждёт, куда её сбросить: { text, mode, note, pack: { via, emoji } } — нажатие на экран выбирает место
 })
 const byId = (id) => notesState.list.find((n) => n.id === id)
 export const noteById = byId
@@ -57,19 +62,20 @@ export function wireNotes() {
 
 // mode: '' — обычное сообщение; 'bell' — всплывающим уведомлением; id посылки (CARGO) — спустить на парашюте
 const dropOf = (mode) => (mode === 'bell' ? '' : mode)
-export function createNote(text, mode = '', x = 0.5) {
+// pack: { via, emoji } — чем доставить и какие эмодзи внутри (только для посылки)
+export function createNote(text, mode = '', x = 0.5, pack = null) {
   const d = notesState.draft; if (!d || !text.trim()) return
   liveSend({ t: 'note+', ...d, text, ref: 'new' })
-  pendingNudge = mode; pendingX = x
+  pendingNudge = mode; pendingX = x; pendingPack = pack
 }
-let pendingNudge = '', pendingX = 0.5
+let pendingNudge = '', pendingX = 0.5, pendingPack = null
 // Новая заметка уведомлением / посылкой: как только сервер вернул её id — позвать всех остальных
-onLive('note', (m) => { if (pendingNudge && m.cid === live.cid && m.ref === 'new') { const mode = pendingNudge; pendingNudge = ''; nudge(m.note.id, m.note.msgs.at(-1)?.id, '', dropOf(mode), pendingX) } })
+onLive('note', (m) => { if (pendingNudge && m.cid === live.cid && m.ref === 'new') { const mode = pendingNudge; pendingNudge = ''; nudge(m.note.id, m.note.msgs.at(-1)?.id, '', dropOf(mode), pendingX, pendingPack) } })
 
-export function reply(id, text, mode = '', x = 0.5) {
+export function reply(id, text, mode = '', x = 0.5, pack = null) {
   if (!text.trim()) return
   liveSend({ t: 'note:reply', id, text })
-  if (mode) { const off = onLive('note', (m) => { if (m.note.id === id && m.cid === live.cid) { off(); nudge(id, m.note.msgs.at(-1)?.id, '', dropOf(mode), x) } }) }
+  if (mode) { const off = onLive('note', (m) => { if (m.note.id === id && m.cid === live.cid) { off(); nudge(id, m.note.msgs.at(-1)?.id, '', dropOf(mode), x, pack) } }) }
 }
 export const react = (id, mid, e) => liveSend({ t: 'note:react', id, mid, e })
 /** Перенести булавку: новое место ({ sel, rx, ry, x, y }) — у всех сразу */
@@ -77,7 +83,7 @@ export function moveNote(id, at) { const n = byId(id); if (n) Object.assign(n, a
 /** Исправить своё сообщение */
 export function editMsg(id, mid, text) { const t = text.trim(); if (!t) return; const m = byId(id)?.msgs.find((x) => x.id === mid); if (m) { m.text = t; m.edited = Date.now() } liveSend({ t: 'note:edit', id, mid, text: t }) }
 export const removeNote = (id) => liveSend({ t: 'note:del', id })
-export const nudge = (id, mid = '', to = '', drop = '', x = 0.5) => liveSend({ t: 'nudge', id, mid, to, drop, x })
+export const nudge = (id, mid = '', to = '', drop = '', x = 0.5, pack = null) => liveSend({ t: 'nudge', id, mid, to, drop, x, via: pack?.via || 'chute', emoji: pack?.emoji || [] })
 /** Открыть чужую посылку: пропадает у всех, у отправителя — «Прочитано» */
 export const openDrop = (id) => liveSend({ t: 'drop:open', id })
 export function seen(id) { liveSend({ t: 'note:seen', id }) }

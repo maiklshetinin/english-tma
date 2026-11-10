@@ -13,7 +13,7 @@
 //  • Заметки на экране (мини-чат, notes.ts): note+ / note:reply / note:react / note:edit / note:move / note:del — сервер сохраняет и рассылает всем
 //    заметку целиком ({ t: 'note', note }); typing — «печатает…» (не храним); nudge — всплывающее уведомление у адресата (висит, пока
 //    не закроет крестиком); note:seen — прочитал (закрыл уведомление / открыл заметку) → у автора «Прочитано».
-//    Посылка на парашюте (nudge с drop): { t: 'drop' } всем — падает вниз экрана в точку x (0…1 ширины), копится стопкой;
+//    Посылка (nudge с drop; via — парашют / кран / птица, emoji — что внутри): { t: 'drop' } всем — опускается вниз экрана в точку x (0…1 ширины), копится стопкой;
 //    drop:open — адресат открыл: { t: 'drop-' } всем + «прочитано». Новичок получает заметки и посылки в hello.
 import type { Server } from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
@@ -29,7 +29,10 @@ const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max
 // Что можно «спустить на парашюте» вместо обычного уведомления (рисует ParachuteDrop.vue)
 const DROPS = ['chest', 'gift', 'poo', 'heart', 'cake', 'flowers'], DROPS_MAX = 60
 const frac01 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(0, Math.min(1, v)) * 1000) / 1000 : 0.5)
-interface Drop { id: string; note: string; mid: string; cargo: string; x: number; by: NoteAuthor; to: string; at: number }
+// Чем доставить (парашют, кран, птица) и какие эмодзи лежат внутри — при открытии они вылетают фонтаном
+const VIAS = ['chute', 'crane', 'bird'], EMOJI_MAX = 8
+const emojiList = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((e): e is string => typeof e === 'string' && e.length > 0 && e.length <= 16 && !/[\s<>&\w]/.test(e)))].slice(0, EMOJI_MAX) : [])
+interface Drop { id: string; note: string; mid: string; cargo: string; via: string; emoji: string[]; x: number; by: NoteAuthor; to: string; at: number }
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : 0)
 
 export function makeLive({ verify, origins, hello = () => ({}), notes }: { verify: Verify; origins: string[]; hello?: () => Record<string, unknown>; notes?: Notes }) {
@@ -64,7 +67,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
       const cargo = DROPS.includes(str(m.drop, 16)) ? str(m.drop, 16) : ''
       if (cargo) {
         // Посылка на парашюте: падает вниз экрана у всех и копится там стопкой (как в тетрисе), пока адресат не откроет
-        const d = { id: 'd' + (++seq) + Date.now().toString(36), note: str(m.id, 64), mid: str(m.mid, 64), cargo, x: frac01(m.x), by: from, to, at: Date.now() }
+        const d = { id: 'd' + (++seq) + Date.now().toString(36), note: str(m.id, 64), mid: str(m.mid, 64), cargo, via: VIAS.includes(str(m.via, 8)) ? str(m.via, 8) : 'chute', emoji: emojiList(m.emoji), x: frac01(m.x), by: from, to, at: Date.now() }
         drops.push(d); if (drops.length > DROPS_MAX) drops.shift()
         for (const o of conns) send(o, { t: 'drop', drop: d })
       } else {

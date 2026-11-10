@@ -51,4 +51,20 @@ D.ws.close(); E.ws.close()
 B.ws.close(); await wait(150)
 ok('ушёл — пропал из списка', A.last('presence').users.length === 1)
 A.ws.close(); srv.close()
+// Посылки: чем доставить (via) и эмодзи внутри — сервер пропускает только известное
+{
+  const live2 = makeLive({ origins: [], verify: async (t) => users[t] ?? null, notes: { get: () => ({}), all: () => [], seen: () => null } as any })
+  const srv2 = createServer(); live2.attach(srv2)
+  await new Promise<void>((r) => srv2.listen(0, r))
+  const p2 = (srv2.address() as any).port
+  const mk = (t: string) => { const ws = new WebSocket(`ws://localhost:${p2}/live?t=${t}`), got: any[] = []; ws.on('message', (d) => got.push(JSON.parse(String(d)))); return { ws, got } }
+  const P = mk('a'), Q = mk('b'); await wait(150)
+  P.ws.send(JSON.stringify({ t: 'nudge', id: 'n1', drop: 'chest', via: 'bird', x: 0.3, emoji: ['🎉', '🎉', '<b>', 'abc', 7, '❤️', '1', '2', '3', '🎂', '⭐', '🔥', '👍', '😂', '🌸', '🍀'] })); await wait(100)
+  const d1 = Q.got.find((m) => m.t === 'drop')?.drop
+  ok('посылка птицей: способ доставки и эмодзи (без повторов, мусора и не больше восьми)', d1?.via === 'bird' && d1?.cargo === 'chest' && d1?.emoji.join('') === '🎉❤️🎂⭐🔥👍😂🌸')
+  P.ws.send(JSON.stringify({ t: 'nudge', id: 'n1', drop: 'gift', via: 'rocket', emoji: 'nope' })); await wait(100)
+  const d2 = Q.got.filter((m) => m.t === 'drop').at(-1)?.drop
+  ok('незнакомый способ доставки — парашют, эмодзи не список — пусто', d2?.via === 'chute' && d2?.emoji.length === 0)
+  P.ws.close(); Q.ws.close(); srv2.close()
+}
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else { console.log('\nвсё ок'); process.exit(0) }

@@ -7,14 +7,15 @@
 //  • Булавку можно перетащить на другое место — у коллег она переедет сразу.
 //  • Нажал на булавку — карточка: сообщения, реакции, «печатает…», «Прочитано», поле ответа. Корзина — удалить заметку у всех.
 //  • Колокольчик у кнопки «Отправить» — уведомлением: у коллеги всплывает плашка и висит, пока не закроет крестиком.
-//  • Парашют — посылкой: выбираешь груз, нажимаешь на экран — куда сбросить; у всех он падает вниз экрана стопкой (ParachuteDrop.vue).
+//  • Посылка: собираешь её (чем доставить — парашют / кран / птица, во что упаковать, какие эмодзи внутрь), нажимаешь на экран — куда сбросить;
+//    у всех она опускается вниз экрана стопкой (ParachuteDrop.vue).
 //  • На телефоне карточка — снизу во всю ширину; новую заметку ставят из списка у «Сейчас здесь» («Новая заметка» → нажать на экран).
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
 import ParachuteDrop from './ParachuteDrop.vue'
 import { live, WHERE } from '../composables/useLive'
-import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO, CHAT_PATH } from '../composables/useNotes'
+import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO, CHAT_PATH, VIAS, PARCEL_EMOJI, PARCEL_EMOJI_MAX } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
 import { ask } from '../composables/useDialog'
 
@@ -95,15 +96,29 @@ function togglePick(e, id) {
 function toggleCargo(e) {
   cargoMenu.value = !cargoMenu.value
   if (!cargoMenu.value) return
-  const r = e.currentTarget.getBoundingClientRect(), W = 236
+  const r = e.currentTarget.getBoundingClientRect(), W = 300
   cmenuAt.value = { left: Math.max(8, Math.min(innerWidth - W - 8, r.right + 40 - W)) + 'px', bottom: innerHeight - r.top + 8 + 'px' }
 }
-function pickCargo(id) { mode.value = mode.value === id ? '' : id; cargoMenu.value = false }
+function pickCargo(id) { mode.value = mode.value === id ? '' : id }
+// Посылка: чем доставить и какие эмодзи положить внутрь (при открытии вылетают фонтаном). Эмодзи без груза не бывает — берём сундук.
+const via = ref('chute'), emo = ref([]), emoText = ref('')
+function toggleEmo(e) {
+  if (emo.value.includes(e)) emo.value = emo.value.filter((x) => x !== e)
+  else if (emo.value.length < PARCEL_EMOJI_MAX) emo.value = [...emo.value, e]
+  if (emo.value.length && !cargoOf.value) mode.value = 'chest'
+}
+// любые эмодзи с клавиатуры: из набранного берём только сами эмодзи
+function onEmoInput() {
+  const parts = typeof Intl !== 'undefined' && Intl.Segmenter ? [...new Intl.Segmenter().segment(emoText.value)].map((x) => x.segment) : [...emoText.value]
+  for (const g of parts) if (/\p{Extended_Pictographic}/u.test(g) && !emo.value.includes(g)) toggleEmo(g)
+  emoText.value = ''
+}
+const resetParcel = () => { mode.value = ''; cargoMenu.value = false; emo.value = [] }
 function send() {
   const t = text.value.trim(); if (!t) return
-  if (cargoOf.value) { S.aim = { text: t, mode: mode.value, note: S.open, draft: S.draft }; text.value = ''; mode.value = ''; cargoMenu.value = false; return }      // посылка: сначала выбрать, куда сбросить
+  if (cargoOf.value) { S.aim = { text: t, mode: mode.value, note: S.open, draft: S.draft, pack: { via: via.value, emoji: [...emo.value] } }; text.value = ''; resetParcel(); return }      // посылка: сначала выбрать, куда сбросить
   if (S.draft) createNote(t, mode.value); else if (S.open) reply(S.open, t, mode.value)
-  text.value = ''; mode.value = ''; cargoMenu.value = false
+  text.value = ''; resetParcel()
 }
 function onKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
@@ -147,8 +162,8 @@ function onPlace(e) {
   if (S.aim && !e.target.closest?.('.sn-aim .msg')) {        // посылка: нажатие выбирает, куда сбросить (по горизонтали)
     e.preventDefault(); e.stopPropagation()
     const a = S.aim, x = e.clientX / innerWidth; S.aim = null
-    if (a.note) reply(a.note, a.text, a.mode, x)
-    else if (a.draft) { S.draft = a.draft; createNote(a.text, a.mode, x) }
+    if (a.note) reply(a.note, a.text, a.mode, x, a.pack)
+    else if (a.draft) { S.draft = a.draft; createNote(a.text, a.mode, x, a.pack) }
     return
   }
   if (S.placing) { e.preventDefault(); e.stopPropagation(); startAt(e.clientX, e.clientY) }
@@ -217,13 +232,20 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
       <textarea ref="ta" v-model="text" rows="1" :placeholder="'Сообщение — увидят все, кто в приложении'" maxlength="1000" @keydown="onKey" />
       <button class="bell" :class="{ on: mode === 'bell' }" type="button" :aria-pressed="mode === 'bell'" :title="mode === 'bell' ? 'Отправится уведомлением: у коллег всплывёт плашка' : 'Отправить уведомлением — у коллег всплывёт плашка, пока не закроют'" @click="mode = mode === 'bell' ? '' : 'bell'; cargoMenu = false"><AppIcon name="bell" :size="16" /></button>
       <span class="cw">
-        <button class="bell chute" :class="{ on: cargoOf }" type="button" :aria-pressed="!!cargoOf" :aria-expanded="cargoMenu" :title="cargoOf ? `Отправится на парашюте: ${cargoOf.title}` : 'Отправить на парашюте — посылкой'" @click="toggleCargo">
+        <button class="bell chute" :class="{ on: cargoOf }" type="button" :aria-pressed="!!cargoOf" :aria-expanded="cargoMenu" :title="cargoOf ? `Отправится посылкой: ${cargoOf.title}` : 'Собрать посылку — доставка, упаковка, эмодзи'" @click="toggleCargo">
           <template v-if="cargoOf"><svg v-if="!cargoOf.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ cargoOf.em }}</span></template>
           <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 0 1 18 0Z" /><path d="M3 11l8 8M21 11l-8 8M12 11v8" /><rect x="10" y="18" width="4" height="4" rx="1" /></svg>
         </button>
-        <span v-if="cargoMenu" class="cmenu" :style="cmenuAt" role="menu" aria-label="Что доставить">
-          <b>Что доставить на парашюте</b>
-          <span class="cgrid"><button v-for="c in CARGO" :key="c.id" class="cg" :class="{ on: mode === c.id }" type="button" role="menuitemradio" :aria-checked="mode === c.id" @click="pickCargo(c.id)"><svg v-if="!c.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ c.em }}</span>{{ c.title }}</button></span>
+        <span v-if="cargoMenu" class="cmenu" :style="cmenuAt" role="dialog" aria-label="Посылка">
+          <b>Чем доставить</b>
+          <span class="cvia"><button v-for="v in VIAS" :key="v.id" class="cv" :class="{ on: via === v.id }" type="button" :aria-pressed="via === v.id" @click="via = v.id">{{ v.title }}</button></span>
+          <b>Во что упаковать</b>
+          <span class="cgrid"><button v-for="c in CARGO" :key="c.id" class="cg" :class="{ on: mode === c.id }" type="button" :title="c.title" :aria-label="c.title" :aria-pressed="mode === c.id" @click="pickCargo(c.id)"><svg v-if="!c.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ c.em }}</span>{{ c.title }}</button></span>
+          <b>Эмодзи внутрь<small v-if="emo.length"> · {{ emo.length }} из {{ PARCEL_EMOJI_MAX }}</small></b>
+          <span v-if="emo.length" class="cpick"><button v-for="e in emo" :key="e" type="button" :title="`Убрать ${e}`" @click="toggleEmo(e)">{{ e }}</button></span>
+          <span class="cemo"><button v-for="e in PARCEL_EMOJI" :key="e" type="button" :class="{ on: emo.includes(e) }" :aria-pressed="emo.includes(e)" @click="toggleEmo(e)">{{ e }}</button></span>
+          <input v-model="emoText" class="cin" type="text" placeholder="Или любые — с клавиатуры" maxlength="40" aria-label="Свои эмодзи" @input="onEmoInput" @keydown.stop />
+          <button class="cok" type="button" @click="cargoMenu = false; ta?.focus()">Готово</button>
         </span>
       </span>
       <button class="go" type="button" :disabled="!text.trim()" aria-label="Отправить" @click="send"><AppIcon name="send" :size="16" /></button>
@@ -297,11 +319,22 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
 .bell, .go { flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer }
 .bell { background: none; color: var(--hint) } .bell:hover { background: var(--surface) } .bell.on { background: var(--orange-l); color: var(--orange-d) }
 .cw { position: relative; display: grid } .chute .ce { font-size: 18px; line-height: 1 } .chute .mc { width: 22px; height: 19px } .cg .mc { width: 32px; height: 32px } .bell.chute.on { background: #ffe6e6; color: #e5484d }
-.cmenu { position: fixed; z-index: 70; width: 236px; padding: 10px; border-radius: 14px; background: var(--card); box-shadow: 0 12px 34px rgba(0, 0, 0, .2), 0 0 0 1px var(--border) }
-.cmenu b { display: block; padding: 0 2px 8px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
-.cgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px }
-.cg { display: grid; justify-items: center; gap: 2px; padding: 8px 2px 6px; border: 0; border-radius: 10px; background: var(--surface); font: inherit; font-size: 11px; font-weight: 800; color: var(--hint); cursor: pointer }
-.cg .ce { font-size: 26px; line-height: 32px } .cg:hover { background: var(--border) } .cg.on { background: var(--blue-l); color: var(--blue); box-shadow: inset 0 0 0 2px var(--blue) }
+.cmenu { position: fixed; z-index: 70; width: 300px; max-height: calc(100vh - 80px); overflow: auto; padding: 10px; border-radius: 14px; background: var(--card); box-shadow: 0 12px 34px rgba(0, 0, 0, .2), 0 0 0 1px var(--border) }
+.cmenu b { display: block; padding: 0 2px 6px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
+.cgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 10px }
+.cmenu b small { font: inherit; text-transform: none; letter-spacing: 0; color: var(--hint-2) }
+.cvia { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 10px }
+.cv { height: 34px; border: 0; border-radius: 10px; background: var(--surface); font: inherit; font-size: 13px; font-weight: 800; color: var(--text); cursor: pointer }
+.cv.on { background: var(--blue-l); color: var(--blue-d) }
+.cpick { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px }
+.cpick button { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: var(--blue-l); font-size: 18px; line-height: 1; cursor: pointer }
+.cemo { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px }
+.cemo button { height: 30px; padding: 0; border: 0; border-radius: 8px; background: none; font-size: 19px; line-height: 1; cursor: pointer }
+.cemo button:hover { background: var(--surface) } .cemo button.on { background: var(--blue-l) }
+.cin { width: 100%; height: 32px; margin-top: 6px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 700 }
+.cok { width: 100%; height: 34px; margin-top: 8px; border: 0; border-radius: 10px; background: var(--blue); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
+.cg { display: grid; justify-items: center; gap: 2px; padding: 6px 0 4px; overflow: hidden; white-space: nowrap; font-size: 0 !important; border: 0; border-radius: 10px; background: var(--surface); font: inherit; font-size: 11px; font-weight: 800; color: var(--hint); cursor: pointer }
+.cg .ce { font-size: 24px; line-height: 32px } .cg:hover { background: var(--border) } .cg.on { background: var(--blue-l); color: var(--blue); box-shadow: inset 0 0 0 2px var(--blue) }
 .go { background: var(--blue); color: #fff } .go:disabled { background: var(--border); color: var(--hint-2); cursor: default }
 /* Правый клик */
 .sn-bg { position: fixed; inset: 0; z-index: 70 }
