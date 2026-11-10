@@ -74,6 +74,13 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
       if (!n || !mm || mm.uid !== u.uid || !t) return null
       mm.text = t; mm.edited = now(); save(n); return n
     },
+    /** Удалить своё сообщение (чужое нельзя). Единственное сообщение заметки-булавки так не убрать — удаляют саму заметку */
+    delMsg(u: NoteAuthor, nid: unknown, mid: unknown): Note | null {
+      const n = notes.get(str(nid, 64))
+      const i = n ? n.msgs.findIndex((x) => x.id === str(mid, 64)) : -1
+      if (!n || i < 0 || n.msgs[i].uid !== u.uid || (n.msgs.length < 2 && n.path !== CHAT_PATH)) return null
+      n.msgs.splice(i, 1); save(n); return n
+    },
     /** Перенести булавку на другое место (той же или другой страницы) — любой преподаватель */
     move(nid: unknown, m: Record<string, unknown>): Note | null {
       const n = notes.get(str(nid, 64)), path = str(m.path, 200) || n?.path || ''

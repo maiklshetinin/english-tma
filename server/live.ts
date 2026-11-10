@@ -10,7 +10,7 @@
 //    Так преподавателю не нужно раз в минуту перечитывать список учеников из базы.
 //  • После любой правки через обычные маршруты (ученики, расписание, группы…) остальным уходит «changed» — они перезагружают
 //    эти данные. Всё в памяти одного процесса: на Render один экземпляр сервера, этого достаточно.
-//  • Заметки на экране (мини-чат, notes.ts): note+ / note:reply / note:react / note:edit / note:move / note:del — сервер сохраняет и рассылает всем
+//  • Заметки на экране (мини-чат, notes.ts): note+ / note:reply / note:react / note:edit / note:msgdel (своё сообщение) / note:move / note:del — сервер сохраняет и рассылает всем
 //    заметку целиком ({ t: 'note', note }); typing — «печатает…» (не храним); nudge — всплывающее уведомление у адресата (висит, пока
 //    не закроет крестиком); note:seen — прочитал (закрыл уведомление / открыл заметку) → у автора «Прочитано».
 //    Посылка (nudge с drop; via — парашют / кран / птица, emoji — что внутри): { t: 'drop' } всем — опускается вниз экрана в точку x (0…1 ширины), копится стопкой;
@@ -89,7 +89,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
     const n = m.t === 'note+' ? notes!.create(author(c), m) : m.t === 'note:reply' ? notes!.reply(author(c), m.id, m)
       : m.t === 'note:react' ? notes!.react(author(c), m.id, m.mid, m.e)
       : m.t === 'note:seen' ? notes!.seen(author(c), m.id) : m.t === 'note:move' ? notes!.move(m.id, m)
-      : m.t === 'note:edit' ? notes!.edit(author(c), m.id, m.mid, m) : null
+      : m.t === 'note:edit' ? notes!.edit(author(c), m.id, m.mid, m) : m.t === 'note:msgdel' ? notes!.delMsg(author(c), m.id, m.mid) : null
     if (n) { const out = { t: 'note', note: n, by: c.uid, cid: c.cid, ref: str(m.ref, 40) }; for (const o of conns) send(o, out); return }
     if (m.t === 'note:del') { const gone = notes!.remove(m.id); if (gone) for (const o of conns) send(o, { t: 'note-', id: gone }) }
   }

@@ -17,7 +17,7 @@ import ParachuteDrop from './ParachuteDrop.vue'
 import ParcelArt from './ParcelArt.vue'
 import { showToast } from '../composables/useToast'
 import { live, WHERE } from '../composables/useLive'
-import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO, CHAT_PATH, VIAS, PARCEL_EMOJI, PARCEL_EMOJI_MAX } from '../composables/useNotes'
+import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, removeMsg, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO, CHAT_PATH, VIAS, PARCEL_EMOJI, PARCEL_EMOJI_MAX } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
 import { ask } from '../composables/useDialog'
 
@@ -62,7 +62,7 @@ const pinAt = (p) => (drag.value?.id === p.n.id ? drag.value : p.at)
 const note = computed(() => (S.open ? noteById(S.open) : null))
 const anchor = computed(() => ((note.value || S.draft) ? { x: 0, y: 0 } : null))          // чат прикреплён к правому краю, не к месту на странице
 const mobile = ref(innerWidth < 720)
-const cardPos = computed(() => null)          // чат — справа во всю высоту (класс dock), на телефоне — снизу
+const cardPos = computed(() => null)          // чат — справа, в половину высоты экрана (класс dock), на телефоне — снизу
 const close = () => { S.open = null; S.draft = null }
 // Удалить заметку целиком — у всех; спрашиваем, как обычно
 async function del(n) {
@@ -166,6 +166,8 @@ const editing = ref(''), editText = ref('')
 function startEdit(m) { editing.value = m.id; editText.value = m.text; nextTick(() => document.querySelector('.sn-card .ed')?.focus()) }
 function saveEdit() { if (editing.value && editText.value.trim()) editMsg(S.open, editing.value, editText.value); editing.value = '' }
 function onEditKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() } else if (e.key === 'Escape') { e.stopPropagation(); editing.value = '' } }
+// Удалить своё сообщение — с подтверждением, пропадает у всех
+async function dropMsg(m) { if (await ask('Удалить сообщение?', { text: 'Оно пропадёт у всех.', ok: 'Удалить', danger: true })) removeMsg(S.open, m.id) }
 const reacts = (m) => Object.entries(m.react || {}).map(([e, who]) => ({ e, n: who.length, me: who.includes(S.me) }))
 
 // --- правый клик → «Оставить заметку здесь» ---
@@ -247,6 +249,7 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
         <span class="mb">
           <span class="mh">{{ mine(m) ? 'Вы' : m.name }}<small>{{ time(m.at) }}</small>
             <button v-if="mine(m) && editing !== m.id" class="r add pen" type="button" title="Исправить" aria-label="Исправить сообщение" @click="startEdit(m)"><AppIcon name="pencil" :size="12" /></button>
+            <button v-if="mine(m) && editing !== m.id" class="r add pen" type="button" title="Удалить" aria-label="Удалить сообщение" @click="dropMsg(m)"><AppIcon name="trash" :size="12" /></button>
             <button class="r add" type="button" :aria-expanded="picker === m.id" title="Реакция" aria-label="Реакция" @click="togglePick($event, m.id)">+ 🙂</button>
             <span v-if="picker === m.id" class="pick" :style="pickAt"><button v-for="e in REACTIONS" :key="e" type="button" @click="react(note.id, m.id, e); picker = ''">{{ e }}</button></span></span>
           <textarea v-if="editing === m.id" v-model="editText" class="ed" rows="2" maxlength="1000" @keydown="onEditKey" @blur="saveEdit" />
@@ -333,7 +336,7 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
 .sn-pin.on { box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) }
 .sn-pin.new { pointer-events: none; color: var(--blue); box-shadow: 0 0 0 2px var(--blue), 0 3px 10px rgba(0, 0, 0, .25) }
 /* Карточка */
-.sn-card.dock:not(.sheet) { left: auto !important; top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 60px); right: 14px; bottom: 16px; width: 340px; max-height: none }          /* общий чат — справа во всю высоту */
+.sn-card.dock:not(.sheet) { left: auto !important; top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 60px); right: 14px; bottom: auto; width: 340px; height: calc((100vh - 76px) / 2); min-height: min(340px, calc(100vh - 76px)); max-height: none }          /* общий чат — справа, в половину высоты экрана */
 .hd .cnt { font-weight: 700; color: var(--hint) }
 .sn-card { position: fixed; z-index: 60; width: 320px; max-height: 440px; display: flex; flex-direction: column; border-radius: 16px; background: var(--card); box-shadow: 0 14px 40px rgba(0, 0, 0, .2), 0 0 0 1px var(--border); overflow: hidden; animation: snp .14s ease-out }
 @keyframes snp { from { opacity: 0; transform: scale(.96) } }
