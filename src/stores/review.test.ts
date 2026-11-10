@@ -13,7 +13,7 @@ describe('stores/review', () => {
     apiRequest.mockImplementation(() => ok({ items: {} }))
     const { recordStep, review } = await import('./review')
     recordStep(choice, { ok: true })
-    expect(review.items['no problem'].s).toBe(35)
+    expect(review.items['no problem'].f?.n).toBe(1)
     await vi.advanceTimersByTimeAsync(2500)
     const post = apiRequest.mock.calls.find((c) => c[0] === '/review' && c[1]?.method === 'POST')
     expect(Object.keys(JSON.parse(post![1].body).items)).toEqual(['no problem'])

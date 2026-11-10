@@ -33,6 +33,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer', 'miss'])
 
 const i = ref(props.start), t0 = Date.now(), endT = ref(0)
+const dn = (d) => (d < 10 ? String(Math.round(d * 10) / 10).replace('.', ',') : Math.round(d)) + ' дн'      // память слова (стабильность FSRS) в днях
 const score = reactive({ ok: 0, all: 0 })
 // Как в Busuu: ошибся в упражнении — оно встаёт в конец урока, пока не ответишь верно (только при прохождении урока, не в редакторе)
 const retry = !props.single && !props.embedded
@@ -173,16 +174,16 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       <svg class="thumb" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="var(--yellow)" /><path d="M20 30h7l6-12c3 0 4.5 2 4 5l-1.5 6H45a3.5 3.5 0 0 1 3.4 4.3l-3 11A4 4 0 0 1 41.5 47H27l-7-2z" fill="#fff" /><rect x="15" y="29" width="7" height="18" rx="2" fill="#fff" /></svg>
       <h2>Отлично{{ name ? ', ' + name : '' }}!</h2>
       <div class="tiles"><div><small>Время</small><b>{{ single || (embedded && !stats) ? '—' : time }}</b></div><div><small>Верно</small><b>{{ single || (embedded && !stats) ? '—' : acc + '%' }}</b></div><div><small>Экранов</small><b>{{ steps.length }}</b></div></div>
-      <!-- слова урока так, как они легли в Review: уровень и изменение силы (сверять с разделом Review строка в строку) -->
+      <!-- слова урока так, как они легли в Review: уровень и как изменилась память (FSRS: стабильность в днях) — сверять с разделом Review -->
       <div v-if="review?.length" class="wl rvw">
         <div class="wh">Слова урока → Review<span class="rsum">окрепло {{ review.filter(x => x.before != null && x.now > x.before).length }} · новых {{ review.filter(x => x.before == null).length }} · ослабло {{ review.filter(x => x.before != null && x.now < x.before).length }}</span></div>
         <div v-for="x in review" :key="x.key" class="wr rv">
           <button v-if="x.audio" class="say" title="Послушать" @click="say(x.audio)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button><span v-else class="say no" />
-          <span class="rt"><b>{{ x.text }}</b><small>{{ x.kind === 'phrase' ? 'Фраза' : 'Слово' }}{{ x.tr ? ' · ' + x.tr : '' }}</small></span>
-          <span class="rs" :class="x.lv"><i class="f" /><i :class="{ f: x.lv !== 'weak' }" /><i :class="{ f: x.lv === 'strong' }" />{{ { weak: 'Слабое', medium: 'Среднее', strong: 'Сильное' }[x.lv] }}</span>
-          <span class="rd" :class="x.before == null ? 'nw' : x.now > x.before ? 'up' : x.now < x.before ? 'dn' : ''">{{ x.before == null ? `новое · ${x.now}` : x.now === x.before ? `${x.now} · без изм.` : `${x.before} → ${x.now} ${x.now > x.before ? '↑' : '↓'}` }}</span>
-          <!-- журнал: каждый экран урока, где было слово, и что он дал силе -->
-          <span v-if="x.log?.length" class="rlog"><span v-for="(e, n) in x.log" :key="n" :class="e.ok === true ? 'ly' : e.ok === false ? 'lx' : ''">{{ e.ex }}: {{ e.ok === true ? 'верно' : e.ok === false ? 'ошибка' : 'встретилось' }}{{ e.d == null ? ` → ${e.now} (новое)` : e.d ? ` ${e.d > 0 ? '+' : ''}${e.d} → ${e.now}` : '' }}</span></span>
+          <span class="rt"><b>{{ x.text }}</b><small>{{ x.kind === 'phrase' ? 'Фраза' : 'Слово' }}{{ x.tr ? ' · ' + x.tr : '' }}{{ x.next ? ` · повтор через ${x.next} дн` : '' }}</small></span>
+          <span class="rs" :class="x.lv"><i :class="{ f: x.now != null }" /><i :class="{ f: x.lv !== 'weak' }" /><i :class="{ f: x.lv === 'strong' }" />{{ x.now == null ? 'Новое' : { weak: 'Слабое', medium: 'Среднее', strong: 'Сильное' }[x.lv] }}</span>
+          <span class="rd" :class="x.before == null ? 'nw' : x.now > x.before ? 'up' : x.now < x.before ? 'dn' : ''" title="Память (стабильность): за сколько дней вероятность вспомнить упадёт до 90 %">{{ x.now == null ? 'новое' : x.before == null ? `новое · память ${dn(x.now)}` : x.now === x.before ? `память ${dn(x.now)} · без изм.` : `${dn(x.before)} → ${dn(x.now)} ${x.now > x.before ? '↑' : '↓'}` }}</span>
+          <!-- журнал: каждый экран урока, где было слово, и какой после него стала память -->
+          <span v-if="x.log?.length" class="rlog"><span v-for="(e, n) in x.log" :key="n" :class="e.ok === true ? 'ly' : e.ok === false ? 'lx' : ''">{{ e.ex }}: {{ e.ok === true ? 'верно' : e.ok === false ? 'ошибка' : 'встретилось' }}{{ e.ok !== null && e.now != null ? ` → ${dn(e.now)}` : '' }}</span></span>
         </div>
       </div>
       <!-- что уйдёт в чекпоинт Chapter -->

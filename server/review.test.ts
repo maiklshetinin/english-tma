@@ -1,6 +1,6 @@
 // Запуск: npx tsx review.test.ts — «Твой словарь» (без Firebase — база в памяти)
 import { store, db, FieldValue } from './fake-db.js'
-import { makeReview, cleanReviewItem, REVIEW_LIMITS } from './review.js'
+import { makeReview, cleanReviewItem, cleanAlgo, ALGO_DEFAULT, REVIEW_LIMITS } from './review.js'
 import type { TokenUser } from './types.js'
 
 const R = makeReview({ db, FieldValue })
@@ -36,6 +36,13 @@ ok('история обрезается', cleanReviewItem(it('Hi', { hist: Array
 ok('сила вне 0–100 → 400', (await code(R.save(masha, { items: { a: it('a', { s: 140 }) } }))) === 400)
 ok('плохой kind → 400', (await code(R.save(masha, { items: { a: it('a', { kind: 'x' }) } }))) === 400)
 ok('ключ «__…» → 400', (await code(R.save(masha, { items: { a: it('a', { key: '__name__' }) } }))) === 400)
+const mem = { s: 2.31, d: 2.1, last: T0, n: 1, l: 0, st: 2 }
+ok('память FSRS сохраняется', JSON.stringify(cleanReviewItem(it('Hi', { f: mem })).f) === JSON.stringify(mem))
+ok('плохая память → 400', (await code(R.save(masha, { items: { a: it('a', { f: { ...mem, d: 40 } }) } }))) === 400)
+ok('настройки по умолчанию', JSON.stringify(await R.algo()) === JSON.stringify(ALGO_DEFAULT))
+await R.setAlgo({ retention: 0.85, maxDays: 365, evil: 1 })
+ok('настройки сохраняются', (await R.algo()).retention === 0.85 && (await R.algo()).maxDays === 365 && !('evil' in cleanAlgo({ retention: 0.85, maxDays: 365, evil: 1 })))
+ok('запоминание вне 0.70–0.97 → 400', (await code(R.setAlgo({ retention: 0.99, maxDays: 365 }))) === 400)
 ok('нет items → 400', (await code(R.save(masha, {}))) === 400)
 ok('слишком большая пачка → 413', (await code(R.save(masha, { items: Object.fromEntries(Array.from({ length: REVIEW_LIMITS.batch + 1 }, (_, k) => ['w' + k, it('w' + k)])) }))) === 413)
 

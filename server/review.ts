@@ -2,6 +2,7 @@
 // Документ review/<пользователь> (как srs: id ученика, у преподавателя — 'teacher_<uid>'), поле items — { ключ: запись }.
 // Сайт присылает только изменённые записи (пачкой, в конце урока или раз в пару секунд); сервер проверяет форму и пишет
 // ТОЛЬКО в документ самого пользователя. Преподаватель может прочитать словарь своего ученика (для карточки ученика).
+// Настройки алгоритма (FSRS: желаемое запоминание, максимальный интервал) — config/reviewAlgo, общие для всех.
 // Размер: документ Firestore — до 1 МБ, поэтому записей не больше LIMIT_ITEMS, история у слова — последние HIST.
 import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './errors.js'
@@ -13,7 +14,13 @@ export interface ReviewHist { t: number; ok: boolean | null; ex: string; lesson?
 export interface ReviewItem {
   key: string; kind: 'word' | 'phrase'; text: string; tr: string; image?: string; audio?: string
   s: number; due: number; seen: number; ok: number; bad: number; hist: ReviewHist[]; course?: string; lesson?: string
+  f?: ReviewMem                     // память по FSRS (считает сайт); нет — слово только встречалось или запись старая
 }
+/** FSRS: стабильность (дни), сложность 1–10, время последнего ответа, ответов, провалов, состояние 0–3 */
+export interface ReviewMem { s: number; d: number; last: number; n: number; l: number; st: number }
+/** Настройки алгоритма повторений (общие для всех учеников; меняет преподаватель) */
+export interface ReviewAlgo { retention: number; maxDays: number }
+export const ALGO_DEFAULT: ReviewAlgo = { retention: 0.9, maxDays: 36500 }
 export interface ReviewResponse { items: Record<string, ReviewItem> }
 export interface ReviewDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 
@@ -38,9 +45,24 @@ export function cleanReviewItem(v: unknown): ReviewItem {
   })
   const out: ReviewItem = { key, kind: v.kind, text: str(v.text, 'text', 200, true), tr: str(v.tr, 'translation', 200),
     s: Math.round(s * 10) / 10, due: ms(v.due, 'due'), seen: ms(v.seen, 'seen'), ok: cnt(v.ok, 'ok'), bad: cnt(v.bad, 'bad'), hist }
+  if (v.f != null) out.f = cleanMem(v.f)
   for (const k of ['image', 'audio'] as const) { const x = str(v[k], k, 500); if (x) out[k] = x }
   for (const k of ['course', 'lesson'] as const) { const x = str(v[k], k, 120); if (x) out[k] = x }
   return out
+}
+
+function cleanMem(v: unknown): ReviewMem {
+  if (!isObj(v)) throw fail(400, 'bad memory')
+  const n = (x: unknown, what: string, a: number, b: number) => { const k = Number(x); if (!Number.isFinite(k) || k < a || k > b) throw fail(400, `bad ${what}`); return k }
+  return { s: n(v.s, 'stability', 0, 1e6), d: n(v.d, 'difficulty', 1, 10), last: ms(v.last, 'time'), n: cnt(v.n, 'reps'), l: cnt(v.l, 'lapses'), st: Math.round(n(v.st, 'state', 0, 3)) }
+}
+/** Настройки: желаемое запоминание 0.70–0.97, максимальный интервал 7–36500 дней */
+export function cleanAlgo(v: unknown): ReviewAlgo {
+  if (!isObj(v)) throw fail(400, 'bad settings')
+  const r = Number(v.retention), m = Number(v.maxDays)
+  if (!Number.isFinite(r) || r < 0.7 || r > 0.97) throw fail(400, 'bad retention')
+  if (!Number.isInteger(m) || m < 7 || m > 36500) throw fail(400, 'bad max interval')
+  return { retention: Math.round(r * 100) / 100, maxDays: m }
 }
 
 export function makeReview({ db, FieldValue }: ReviewDeps) {
@@ -80,6 +102,18 @@ export function makeReview({ db, FieldValue }: ReviewDeps) {
         tx.set(ref, { items: cur, updatedAt: FieldValue.serverTimestamp() })
       })
       return { count }
+    },
+
+    /** Настройки алгоритма (читают все — по ним сайт считает повторы) */
+    async algo(): Promise<ReviewAlgo> {
+      const d = (await db.collection('config').doc('reviewAlgo').get()).data()
+      try { return d ? cleanAlgo(d) : ALGO_DEFAULT } catch { return ALGO_DEFAULT }
+    },
+    /** Изменить настройки (только преподаватель — проверка в маршруте) */
+    async setAlgo(input: unknown): Promise<ReviewAlgo> {
+      const a = cleanAlgo(input)
+      await db.collection('config').doc('reviewAlgo').set({ ...a, updatedAt: FieldValue.serverTimestamp() })
+      return a
     },
 
     /** «Очистить»: свой словарь целиком */

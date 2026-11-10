@@ -5,7 +5,8 @@ import { ref, computed } from 'vue'
 import { review, resetReview } from '../stores/review'
 import { ask } from '../composables/useDialog'
 import { showToast } from '../composables/useToast'
-import { strengthNow, levelOf, R } from '../utils/review'
+import { stateOf, LV_DAYS } from '../utils/review'
+import { algo } from '../stores/review'
 
 const props = defineProps({
   resolve: { type: Function, required: true },
@@ -15,8 +16,8 @@ const props = defineProps({
 })
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
-const list = computed(() => Object.values(props.items ?? review.items).map(x => { const s = strengthNow(x); return { ...x, now: s, lv: levelOf(s) } })
-  .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })))
+const list = computed(() => { const now = Date.now(), cfg = { ...algo }; return Object.values(props.items ?? review.items).map(x => { const st = stateOf(x, now, cfg); return { ...x, st, lv: st.level } })
+  .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })) })
 const count = (lv) => list.value.filter(x => x.lv === lv).length
 const max = computed(() => Math.max(1, ...['weak', 'medium', 'strong'].map(count)))
 const shown = computed(() => list.value.filter(x => filter.value === 'all' || x.kind === filter.value || x.lv === filter.value))
@@ -24,6 +25,7 @@ const FILTERS = computed(() => [['all', 'Все'], ['word', 'Слова'], ['phr
   .map(([k, t]) => ({ k, t: `${t} (${k === 'all' ? list.value.length : list.value.filter(x => x.kind === k || x.lv === k).length})` })))
 let au = null
 const play = (x) => { if (!x.audio) return; au?.pause(); au = new Audio(props.resolve(x.audio, 'audio')); au.play().catch(() => {}) }
+const dd = (d) => d < 1 ? 'меньше дня' : d < 31 ? `${Math.round(d)} дн.` : d < 365 ? `${Math.round(d / 30.4)} мес.` : `${(d / 365).toFixed(1).replace('.0', '')} г.`
 const days = (t) => { const d = Math.round((t - Date.now()) / 86_400_000); return d <= 0 ? 'сегодня' : d === 1 ? 'завтра' : `через ${d} дн.` }
 const when = (t) => new Date(t).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 // «Очистить» — с подтверждением; удаляется весь словарь (и на сервере), прохождение курса не меняется
@@ -48,13 +50,14 @@ async function reset() {
       <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button>
       <div v-if="how" class="how">
         <p><b>1. Что сюда попадает.</b> Каждое слово и фраза из экранов уроков, которые ты прошёл: «Новое слово», «Подсказка», «Выбери ответ», «Пары», «Собери слово / фразу», «Заполни пропуск», «Повтори». Одно-два слова — это <i>слово</i>, длиннее — <i>фраза</i>. Одинаковые записи (без учёта регистра и точки в конце) — одна строка.</p>
-        <p><b>2. Сила 0–100.</b> Новое слово появляется с силой {{ R.NEW }}. Верный ответ — +{{ R.OK }}, ошибка — {{ R.BAD }}. Экраны без проверки («Новое слово», «Подсказка», «Повтори») только отмечают «встретилось» — силу не меняют. В «Парах» каждая пара считается отдельно: перепутал — ошибка только у неё.</p>
-        <p><b>3. Уровни.</b> До {{ R.WEAK }} — слабое, {{ R.WEAK }}–{{ R.STRONG - 1 }} — среднее, от {{ R.STRONG }} — сильное. Банки сверху показывают, сколько слов в каждом; нажми банку — список отфильтруется.</p>
-        <p><b>4. Когда повторить.</b> После верного ответа срок повтора: слабое — через {{ R.DUE.weak }} день, среднее — через {{ R.DUE.medium }} дня, сильное — через {{ R.DUE.strong }} дней. После ошибки — завтра.</p>
-        <p><b>5. Забывание.</b> Если срок повтора прошёл, сила тает на {{ R.DECAY }} в день — сильное слово без повторов со временем снова станет средним, потом слабым.</p>
+        <p><b>2. Память по FSRS</b> — тот же алгоритм, что в Anki. У слова есть стабильность (за сколько дней вероятность вспомнить падает до 90 %) и сложность. Верный ответ — оценка «Хорошо», ошибка — «Снова». Экраны без проверки («Новое слово», «Подсказка», «Повтори») только знакомят — слово «новое». В «Парах» каждая пара считается отдельно. Повтор в тот же день память почти не растит — укрепляют повторы через паузу.</p>
+        <p><b>3. Уровни.</b> Стабильность меньше {{ LV_DAYS.medium }} дней — слабое, {{ LV_DAYS.medium }}–{{ LV_DAYS.strong - 1 }} — среднее, от {{ LV_DAYS.strong }} — сильное. Банки сверху показывают, сколько слов в каждом; нажми банку — список отфильтруется.</p>
+        <p><b>4. Когда повторить.</b> Когда вероятность вспомнить упадёт до {{ Math.round(algo.retention * 100) }} % (настройка преподавателя). После первого верного ответа это пара дней, дальше — недели и месяцы.</p>
+        <p><b>5. Забывание.</b> Вероятность вспомнить тает каждый день по кривой забывания; ошибка снижает стабильность, и повтор приближается.</p>
         <p><b>6. Ошибка в уроке.</b> Экран повторяется в конце урока, пока не ответишь верно (каждая попытка записывается сюда), и попадает в чекпоинт своей Chapter — чекпоинт собирается сам, когда его открываешь.</p>
         <p><b>7. Чекпоинт.</b> Итог Chapter собирается сам, когда его открываешь: экраны её уроков, где ты ошибался; ошибок не было — до 8 проверяемых заданий из её уроков; в уроках нет проверяемых экранов — чекпоинт проходится кнопкой «Готово — дальше». Пока засчитывается при любом результате (порог 80 % — в планах). </p>
         <p><b>8. Нажми на строку</b> — увидишь историю: где встречалось, верно или ошибка, когда повторить.</p>
+        <p><router-link :to="{ name: 'review-algo' }" class="al">Алгоритм повторений — настройки, описание и история ›</router-link></p>
         <p class="nt">Словарь хранится на сервере у каждого ученика (без сети ответы ждут в браузере и уходят потом); преподаватель видит его в карточке ученика → «Review». «Повторить сейчас» — короткая тренировка из слабых слов — следующим шагом.</p>
       </div>
     </div>
@@ -77,10 +80,11 @@ async function reset() {
             <span class="pic"><img v-if="x.image && resolve(x.image, 'image')" :src="resolve(x.image, 'image')" alt="" /><i v-else>{{ x.kind === 'phrase' ? 'Фр' : 'Сл' }}</i></span>
             <span class="w"><button v-if="x.audio" class="pl" title="Послушать" @click.stop="play(x)"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></button><span class="wt">{{ x.text }}<small v-if="x.tr" class="mt">{{ x.tr }}</small></span></span>
             <span class="t">{{ x.tr }}</span>
-            <span class="str" :class="x.lv"><i v-for="n in 3" :key="n" :class="{ f: n <= LV[x.lv].n }" />{{ LV[x.lv].t }}</span>
+            <span class="str" :class="x.lv"><i v-for="n in 3" :key="n" :class="{ f: !x.st.isNew && n <= LV[x.lv].n }" />{{ x.st.isNew ? 'Новое' : LV[x.lv].t }}</span>
           </div>
           <div v-if="openKey === x.key" class="det">
-            <p><b>Сила {{ x.now }}/100</b> · верно {{ x.ok }}, ошибок {{ x.bad }} · повторить {{ days(x.due) }} · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
+            <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
+            <p v-else><b>Вспомнит сейчас: {{ x.st.recall }} %</b> · память ~{{ dd(x.st.stab) }} · повторить {{ days(x.st.due) }} · верно {{ x.ok }}, ошибок {{ x.bad }} · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
             <ul><li v-for="(h, k) in x.hist" :key="k"><span :class="h.ok === null ? 'n' : h.ok ? 'y' : 'x'">{{ h.ok === null ? 'встретилось' : h.ok ? 'верно' : 'ошибка' }}</span>{{ h.ex }}<template v-if="h.lesson"> · {{ h.lesson }}</template><small>{{ when(h.t) }}</small></li></ul>
           </div>
         </template>
@@ -91,6 +95,7 @@ async function reset() {
 
 <style scoped>
 .sy { margin-left: 10px; font-size: 12px; font-weight: 800; color: var(--hint); vertical-align: middle } .sy.synced { color: #1fbe78 } .sy.error { color: #ff9600 }
+.al { color: #1cb0f6; font-weight: 800; text-decoration: none }
 .howb { all: unset; cursor: pointer; margin-top: 12px; font-size: 13px; font-weight: 800; color: #1cb0f6 } .howb span { font-size: 11px }
 .how { margin-top: 10px; display: grid; gap: 7px; padding: 12px 14px; border-radius: 12px; background: #f6f8fa } .how p { margin: 0; font-size: 13px; line-height: 1.45; color: #444 } .how b { color: #222 } .how .nt { color: #777; font-size: 12px }
 .rv { width: 100%; max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0 }          /* minmax(0) — на телефоне ничего не распирает за край */

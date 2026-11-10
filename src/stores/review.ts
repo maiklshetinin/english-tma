@@ -3,11 +3,11 @@
 // а на сервер уходят пачкой (только изменённые записи) через пару секунд; нет сети — ждут в этом браузере и уйдут потом.
 // Без сервера (демо, локальная разработка) — только в этом браузере (localStorage), как раньше.
 import { reactive } from 'vue'
-import { applyHits, hitsOf, exName, keyOf, type RItem } from '../utils/review'
+import { applyHits, hitsOf, exName, keyOf, ALGO_DEFAULT, type RItem, type AlgoCfg } from '../utils/review'
 import type { Step } from '../utils/lesson'
 import { apiRequest, isDemo, API, fb } from '../firebase'
 
-const KEY = 'tma.review.v1', PEND = 'tma.review.pending.v1', OWNER = 'tma.review.owner.v1'
+const ALGO = 'tma.review.algo.v1', KEY = 'tma.review.v1', PEND = 'tma.review.pending.v1', OWNER = 'tma.review.owner.v1'
 const BATCH = 200                                     // как REVIEW_LIMITS.batch на сервере
 const online = () => !isDemo && !!API && !!fb
 const read = <T>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d } catch { return d } }
@@ -16,6 +16,20 @@ const write = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.st
 export const review = reactive<{ items: Record<string, RItem>; sync: 'local' | 'loading' | 'synced' | 'error' }>({
   items: read(KEY, {}), sync: online() ? 'loading' : 'local',
 })
+/** Настройки алгоритма (FSRS): с сервера; без сервера — в этом браузере */
+export const algo = reactive<AlgoCfg>({ ...ALGO_DEFAULT, ...read<Partial<AlgoCfg>>(ALGO, {}) })
+let algoLoaded = false
+export async function loadAlgo(force = false) {
+  if (!online() || (algoLoaded && !force)) return
+  try { const r = await apiRequest('/review/settings'); if (r.ok) { Object.assign(algo, await r.json()); write(ALGO, { ...algo }); algoLoaded = true } } catch { /* сеть — останутся прежние */ }
+}
+/** Сохранить настройки (преподаватель). true — сохранено */
+export async function saveAlgo(cfg: AlgoCfg): Promise<boolean> {
+  if (online()) {
+    try { const r = await apiRequest('/review/settings', { method: 'PUT', body: JSON.stringify(cfg) }); if (!r.ok) return false; Object.assign(algo, await r.json()) } catch { return false }
+  } else Object.assign(algo, cfg)
+  write(ALGO, { ...algo }); return true
+}
 const pending = new Set<string>(read<string[]>(PEND, []))            // ключи, которые ещё не ушли на сервер
 const save = () => { write(KEY, review.items); write(PEND, [...pending]) }
 
@@ -46,6 +60,7 @@ export async function syncReview(owner?: string | number | null) {
     write(OWNER, me); save()
   }
   review.sync = 'loading'
+  loadAlgo()
   try {
     const r = await apiRequest('/review')
     if (!r.ok) throw new Error(String(r.status))
@@ -59,7 +74,7 @@ export async function syncReview(owner?: string | number | null) {
 /** Ответ на экран урока → в словарь */
 export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[] }, ctx: { lesson?: string; course?: string } = {}) {
   const hits = hitsOf(step, res); if (!hits.length) return
-  applyHits(review.items, hits, { ex: exName(step), ...ctx })
+  applyHits(review.items, hits, { ex: exName(step), ...ctx }, Date.now(), { ...algo })
   for (const h of hits) { const k = keyOf(h.text); if (review.items[k]) pending.add(k) }
   save(); if (online()) later(2000)
 }

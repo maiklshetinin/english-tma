@@ -7,8 +7,8 @@ import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
-import { recordStep, syncReview, review } from '../stores/review'
-import { hitsOf, keyOf, strengthNow, levelOf, exName } from '../utils/review'
+import { recordStep, syncReview, review, algo } from '../stores/review'
+import { hitsOf, keyOf, memOf, stateOf, levelOf, exName } from '../utils/review'
 import { useAuthStore } from '../stores/auth'
 import BackButton from './BackButton.vue'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
@@ -120,16 +120,16 @@ function tap(x) {
 function go(x) { peek.value = null; open.value = x; t0 = Date.now(); misses.clear(); for (const k in snap) delete snap[k]; for (const k in rvLog) delete rvLog[k] }
 // «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
-// итог урока: какие слова урок записал в Review и как изменилась их сила — чтобы сверять с разделом Review строка в строку
-const snap = reactive({})                      // ключ слова → сила до урока (null — новое)
-const rvLog = reactive({})                     // ключ слова → журнал: какой экран, как ответили, сколько силы (+15 / −20 / встретилось)
-const sOf = (k) => (review.items[k] ? Math.round(strengthNow(review.items[k])) : null)
+// итог урока: какие слова урок записал в Review и как изменилась их память (FSRS) — чтобы сверять с разделом Review строка в строку
+const snap = reactive({})                      // ключ слова → стабильность памяти до урока, дни (null — новое, ещё без ответов)
+const rvLog = reactive({})                     // ключ слова → журнал: какой экран, как ответили, какая стала память
+const sOf = (k) => { const m = review.items[k] && memOf(review.items[k]); return m ? Math.round(m.s * 10) / 10 : null }
 const onAnswer = (a) => {
   if (a.ok === false) misses.add(a.step.id)
   const hits = hitsOf(a.step, a), was = {}
   for (const h of hits) { const k = keyOf(h.text); was[k] = sOf(k); if (!(k in snap)) snap[k] = was[k] }
   recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title })
-  for (const h of hits) { const k = keyOf(h.text), now = sOf(k); (rvLog[k] ??= []).push({ ex: exName(a.step), ok: h.ok, d: was[k] == null ? null : now - was[k], now }) }
+  for (const h of hits) { const k = keyOf(h.text), now = sOf(k); (rvLog[k] ??= []).push({ ex: exName(a.step), ok: h.ok, now }) }
 }
 // итог урока: что уйдёт в чекпоинт этой Chapter (экраны с ошибкой) — для проверки, что автоматика сработала
 const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || ''
@@ -140,8 +140,8 @@ const ckLog = computed(() => {
   if (!ck) return { none: true }
   return { title: ck.title || 'Чекпоинт', items: (x.steps ?? []).filter(s => misses.has(s.id)).map(s => ({ id: s.id, ex: exName(s), w: stepWord(s) })) }
 })
-const rvWords = computed(() => Object.keys(snap).map(k => review.items[k] && { ...review.items[k], before: snap[k], now: Math.round(strengthNow(review.items[k])), log: rvLog[k] ?? [] }).filter(Boolean)
-  .map(x => ({ ...x, lv: levelOf(x.now) })).sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })))
+const rvWords = computed(() => Object.keys(snap).map(k => review.items[k] && { ...review.items[k], before: snap[k], now: sOf(k), next: stateOf(review.items[k], Date.now(), { ...algo }).ivl, log: rvLog[k] ?? [] }).filter(Boolean)
+  .map(x => ({ ...x, lv: x.now == null ? 'weak' : levelOf(x.now) })).sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })))
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value ? stepsOf(open.value) : []))

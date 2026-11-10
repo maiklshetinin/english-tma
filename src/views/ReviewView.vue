@@ -15,11 +15,12 @@ onMounted(() => syncReview(auth.user?.id))                 // свой слов�
 
 <template>
   <div class="page wide review">
-    <h1>Review</h1>
+    <div class="hrow"><h1>Review</h1><router-link :to="{ name: 'review-algo' }" class="alg">Алгоритм повторений ›</router-link></div>
     <ReviewPanel :resolve="resolve" />
   </div>
 </template>
 
 <style scoped>
-.review h1 { width: 100%; max-width: 760px; margin-left: auto; margin-right: auto }
+.hrow { width: 100%; max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap } .hrow h1 { flex: 1 }
+.alg { font-size: 14px; font-weight: 800; color: #1cb0f6; text-decoration: none; white-space: nowrap }
 </style>
