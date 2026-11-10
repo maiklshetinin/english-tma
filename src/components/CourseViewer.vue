@@ -8,6 +8,8 @@ import { API, apiRequest, fb, isDemo } from '../firebase'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import ReviewChart from './ReviewChart.vue'
+import CkFlow from './CkFlow.vue'
+import WordNow from './WordNow.vue'
 import { recordStep, syncReview, review, algo } from '../stores/review'
 import { hitsOf, keyOf, memOf, stateOf, levelOf, exName } from '../utils/review'
 import { useAuthStore } from '../stores/auth'
@@ -88,28 +90,29 @@ const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 // Экраны учителя (если положил) + экраны из уроков этой Chapter, где ученик ошибся (прогресс с сервера; в «Как видит ученик» — ошибки
 // этого просмотра). Ошибок нет — проверяемые экраны из уроков Chapter, до CK_MAX, равномерно — чекпоинт не бывает пустым.
 const GRADED = ['choice', 'order', 'gap', 'pairs'], CK_MAX = 8
+const open = ref(null)                         // открытое во весь экран задание
 const misses = reactive(new Set())             // экраны с ошибкой в открытом сейчас уроке
 const localMiss = reactive({})                 // «Как видит ученик»: урок → экраны с ошибкой
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
+// ошибки урока: с сервера (ученик) / этого просмотра; у открытого сейчас урока — плюс ошибки, сделанные только что (в реальном времени)
+const missOf = (id) => { const base = (props.student || props.of ? mine.value.lessons?.[id]?.miss : localMiss[id]) ?? []; return open.value?.id === id && misses.size ? [...new Set([...base, ...misses])] : base }
 function ckParts(x) {
   const u = units.value.find(u => u.tasks.some(t => t.id === x.id))
   const before = u ? u.tasks.slice(0, u.tasks.findIndex(t => t.id === x.id)) : []
   const pool = before.filter(t => t.type !== 'checkpoint').flatMap(t => okSteps(t).filter(s => GRADED.includes(s.kind)).map(s => ({ s, from: t.id })))
-  const missOf = (id) => (props.student || props.of ? mine.value.lessons?.[id]?.miss : localMiss[id]) ?? []
-  const weak = pool.filter(p => missOf(p.from).includes(p.s.id)).map(p => p.s)
+  const weak = pool.filter(p => missOf(p.from).includes(p.s.id))
   const own = okSteps(x), seen = new Set(own.map(s => s.id))
-  let auto = weak.filter(s => !seen.has(s.id))
+  let auto = weak.filter(p => !seen.has(p.s.id))
   const fromErrors = auto.length > 0
   if (!fromErrors && pool.length) {            // ошибок нет — по экрану из каждого урока по очереди, до CK_MAX
     const step = Math.max(1, pool.length / CK_MAX)
-    auto = Array.from({ length: Math.min(CK_MAX, pool.length) }, (_, k) => pool[Math.floor(k * step)].s).filter(s => !seen.has(s.id))
+    auto = Array.from({ length: Math.min(CK_MAX, pool.length) }, (_, k) => pool[Math.floor(k * step)]).filter(p => !seen.has(p.s.id))
   }
-  return { own, auto, fromErrors }
+  return { own, auto: auto.map(p => p.s), autoFrom: auto, fromErrors }
 }
 const stepsOf = (x) => { if (x.type !== 'checkpoint') return okSteps(x); const p = ckParts(x); return [...p.own, ...p.auto] }
 
-// открыто в рамке: урок (экраны), кружок, фото или «пусто»
-const open = ref(null)
+// открыто в рамке: урок (экраны), кружок, фото или «пусто» — объявлено выше (нужно сборке чекпоинта)
 // кружок и фото — открываются прямо тут, под строкой (как в Telegram), остальное — во весь экран
 const inline = ref(null)
 // урок с экранами — сначала карточка, как в Busuu: тип, примерное время (сумма времён экранов), «Поехали!»
@@ -133,6 +136,15 @@ const onAnswer = (a) => {
   recordStep(a.step, a, { lesson: open.value?.title, course: course.value?.title })
   for (const h of hits) { const k = keyOf(h.text), now = sOf(k); (rvLog[k] ??= []).push({ ex: exName(a.step), ok: h.ok, now }) }
 }
+// курс по горизонтали: Chapter → уроки → чекпоинт и что в него попадёт сейчас (CkFlow) — для преподавателя, в реальном времени
+const titleOf = (id) => course.value?.items?.find(t => t.id === id)?.title || ''
+const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type === 'checkpoint') || u.title).map(u => ({
+  id: u.id, title: u.title ? u.title + (u.sub ? ': ' + u.sub : '') : '',
+  lessons: u.tasks.filter(t => t.type !== 'checkpoint' && INTERACTIVE.includes(t.type)).map(t => ({ id: t.id, title: t.title || (T[t.type] ?? T.lesson).t, state: state(t), miss: missOf(t.id).length, live: open.value?.id === t.id })),
+  cks: u.tasks.filter(t => t.type === 'checkpoint').map(c => { const p = ckParts(c); return { id: c.id, title: c.title || 'Чекпоинт', state: state(c), fromErrors: p.fromErrors, own: p.own.length,
+    items: p.autoFrom.map(a => ({ id: a.s.id, ex: exName(a.s), w: stepWord(a.s), from: titleOf(a.from) })) } }),
+})))
+const showCk = ref(true), dockTab = ref('curve')
 // итог урока: что уйдёт в чекпоинт этой Chapter (экраны с ошибкой) — для проверки, что автоматика сработала
 const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || ''
 const ckLog = computed(() => {
@@ -168,6 +180,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <div v-else class="cr">
       <h2 class="ctl">{{ course.title }}</h2>
       <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ done }} из {{ total }}</b><span>·</span><b>{{ total ? Math.round(done / total * 100) : 0 }}%</b></div>
+      <!-- преподаватель: курс по горизонтали — что попадёт в каждый чекпоинт (у ученика — по его ошибкам) -->
+      <template v-if="!student && ckMap.some(c => c.cks.length)">
+        <button class="cktg" :aria-expanded="showCk" @click="showCk = !showCk">Чекпоинты: что в них попадёт <span>{{ showCk ? '▴' : '▾' }}</span></button>
+        <CkFlow v-if="showCk" :chapters="ckMap" />
+      </template>
       <section v-for="u in units" :key="u.id" class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
         <template v-if="u.title">
           <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b><svg v-if="u.tasks.length && u.pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
@@ -220,8 +237,13 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
       <div v-if="open" class="full">
         <!-- преподаватель: график Review сверху урока — сразу видно, куда ушло слово после ответа (как график колоды в сессии) -->
         <template v-if="steps.length && !of && auth.role === 'teacher'">
-          <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть график' : 'График слов' }}</button>
-          <div v-if="rvChart" class="rvd"><ReviewChart :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock /></div>
+          <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
+          <div v-if="rvChart" class="rvd">
+            <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Экраны → чекпоинты</button></div>
+            <WordNow v-if="dockTab === 'curve'" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
+            <ReviewChart v-else-if="dockTab === 'words'" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
+            <CkFlow v-else :chapters="ckMap" dock />
+          </div>
         </template>
         <LessonPlayer v-if="steps.length" :key="open.id" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
@@ -302,8 +324,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .full { position: fixed; inset: 0; z-index: 1000; background: #fff; display: flex; flex-direction: column }
 .full :deep(.lp) { flex: 1; min-height: 0; height: auto }
 .rvt { position: absolute; top: 12px; right: 14px; z-index: 3; border: 0; border-radius: 12px; padding: 8px 12px; background: #eaf6fe; color: #1278b0; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer } .rvt.on { background: #1cb0f6; color: #fff }
-.rvd { flex: none; max-height: 45vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid #eef0f3 }
+.rvd { flex: none; max-height: 55vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid #eef0f3 }
 .rvd > * { max-width: 760px; margin: 0 auto }
+.dtabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto; margin-bottom: 8px }
+.dtabs button { font: inherit; font-size: 12.5px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 12px; background: none; color: #5f6368; cursor: pointer } .dtabs button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
+.cktg { all: unset; cursor: pointer; font-size: 13px; font-weight: 800; color: #6b3fd1; margin: 4px 0 -2px } .cktg span { font-size: 11px }
 .sh { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 30px 24px; text-align: center }
 .sh p { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px } .sh b { font-size: 18px }
 .x { position: absolute; left: 18px; top: 18px }

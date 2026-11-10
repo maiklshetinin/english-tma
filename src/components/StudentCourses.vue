@@ -1,7 +1,7 @@
 <script setup>
 // Карточка ученика → «Путь и слова» → «Курсы»: назначить курс ученику и смотреть, как он его проходит
 // (сколько пройдено, где он сейчас, результат и дата каждого урока). Сервер — server/learn.ts.
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
@@ -12,13 +12,20 @@ const props = defineProps({ studentId: { type: [String, Number], required: true 
 const online = !isDemo && !!API && !!fb
 const list = ref(null), err = ref(''), openId = ref(null), busy = ref(null)
 const TYPE = { lesson: 'Урок', checkpoint: 'Чекпоинт', words: 'Слова', hw: 'Домашка', test: 'Тест', tutor: 'С репетитором', video: 'Кружок', photo: 'Фото', reward: 'Награда' }
-async function load() {
+async function load(quiet = false) {
   if (!online) { list.value = []; return }
-  try { const r = await apiRequest(`/students/${encodeURIComponent(props.studentId)}/courses`); if (!r.ok) throw new Error(`(${r.status})`); list.value = (await r.json()).courses; err.value = ''
+  try { const r = await apiRequest(`/students/${encodeURIComponent(props.studentId)}/courses`); if (!r.ok) throw new Error(`(${r.status})`)
+    const next = (await r.json()).courses
+    if (quiet && JSON.stringify(next) === JSON.stringify(list.value)) return          // ничего не изменилось — путь не перерисовываем
+    list.value = next; err.value = ''
     if (openId.value == null) openId.value = list.value.find(c => c.assigned)?.id ?? null }      /* путь назначенного курса — сразу открыт */
   catch (e) { err.value = e.message; list.value ??= [] }
 }
-watch(() => props.studentId, load, { immediate: true })
+watch(() => props.studentId, () => load(), { immediate: true })
+// в реальном времени: пока открыт путь курса, прохождение ученика (и что уйдёт в чекпоинты) подтягивается раз в 6 с
+let poll = null
+onMounted(() => { poll = setInterval(() => { if (openId.value != null && document.visibilityState === 'visible') load(true) }, 6000) })
+onUnmounted(() => clearInterval(poll))
 async function toggle(c) {
   busy.value = c.id
   try {
