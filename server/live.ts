@@ -27,7 +27,7 @@ const COLORS = ['#f24822', '#0d99ff', '#14ae5c', '#9747ff', '#ffa629', '#ff24bd'
 const colorOf = (uid: string) => COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length]
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 // Что можно «спустить на парашюте» вместо обычного уведомления (рисует ParachuteDrop.vue)
-const DROPS = ['chest', 'gift', 'poo', 'heart', 'cake', 'flowers'], DROPS_MAX = 60
+const DROPS = ['chest', 'gift', 'mail', 'note', 'poo', 'heart', 'cake', 'flowers'], DROPS_MAX = 60
 const frac01 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(0, Math.min(1, v)) * 1000) / 1000 : 0.5)
 // Чем доставить (парашют, кран, птица) и какие эмодзи лежат внутри — при открытии они вылетают фонтаном
 const VIAS = ['chute', 'crane', 'bird'], EMOJI_MAX = 8

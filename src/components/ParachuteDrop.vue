@@ -4,6 +4,7 @@
 //  • У всех, кто в приложении, посылка прибывает вниз экрана и копится стопкой, как в тетрисе. Доставка (d.via):
 //    парашют — спускается, покачиваясь; кран — тележка по балке вверху экрана привозит и опускает на крюке;
 //    птица — аист еле тащит посылку на верёвке, над местом отпускает и улетает.
+//  • Груз: сундук, подарок, конверт, записка-стикер (текст виден сразу, ещё в полёте) и крупные эмодзи.
 //  • Адресат нажимает на посылку — сундук открывается, эмодзи из неё бьют фонтаном и падают вокруг, следом выезжает письмо;
 //    «Закрыть» — посылка пропадает у всех, у отправителя «Прочитано». Свою посылку открыть нельзя — она ждёт.
 // Экран не темнеет и не перекрывается: посылки живут у нижнего края, клики мимо них проходят в приложение.
@@ -73,6 +74,8 @@ function reply() {
   if (router.currentRoute.value.fullPath !== o.n.path) router.push(o.n.path)
   setTimeout(() => openNote(o.n.id), 60)
 }
+// записка-стикер: её текст виден сразу, ещё в полёте
+const textOf = (d) => { const n = noteById(d.note); return (n?.msgs.find((x) => x.id === d.mid) || n?.msgs.at(-1))?.text || '' }
 const ini = (s) => (s || '?').trim()[0]?.toUpperCase() || '?'
 const time = (at) => new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 const base = computed(() => (mobile.value ? 'calc(78px + var(--safe-b))' : '6px'))      // на телефоне — над нижним меню
@@ -112,6 +115,13 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
             <rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" stroke="#a8841f" stroke-width="2" /><circle cx="60" cy="43" r="2.5" fill="#6b4a12" />
           </g>
         </svg>
+        <svg v-else-if="p.cargo.id === 'mail'" class="cargo mail" viewBox="0 0 60 44" aria-hidden="true">
+          <path v-if="opened === p.d.id" d="M3 6 L30 -16 L57 6 Z" fill="#fffdf5" stroke="#b9a66e" stroke-width="2" stroke-linejoin="round" />
+          <rect x="2" y="4" width="56" height="38" rx="4" fill="#fffdf5" stroke="#b9a66e" stroke-width="2" />
+          <template v-if="opened !== p.d.id"><path d="M3 7 L30 27 L57 7" fill="none" stroke="#b9a66e" stroke-width="2" /><circle cx="30" cy="28" r="6" fill="#e5484d" /></template>
+          <path v-else d="M3 7 L30 24 L57 7" fill="none" stroke="#d8cba0" stroke-width="2" />
+        </svg>
+        <span v-else-if="p.cargo.id === 'note'" class="cargo sticky">{{ textOf(p.d) }}</span>
         <span v-else class="cargo em">{{ p.cargo.em }}</span>
         <span v-if="!p.falling" class="tag" aria-hidden="true">{{ ini(p.d.by.name) }}</span>
       </button>
@@ -179,6 +189,9 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
 .pk.mine { cursor: default }
 .cargo { width: var(--w); height: var(--h) } .em { font-size: calc(var(--h) * .95); line-height: var(--h); text-align: center }
 .chest { overflow: visible }
+.mail { overflow: visible; height: calc(var(--h) * .86) }
+.sticky { display: block; box-sizing: border-box; padding: 7px 5px; overflow: hidden; background: #ffe58a; transform: rotate(-3deg); font-family: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive; font-size: 17px; font-weight: 700; line-height: 1; color: #3b2f00; text-align: center; overflow-wrap: anywhere }
+@media (max-width: 719px) { .sticky { padding: 4px 3px; font-size: 13px } }
 .pk.fall { pointer-events: none }
 
 /* --- парашют --- */

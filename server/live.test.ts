@@ -65,6 +65,8 @@ A.ws.close(); srv.close()
   P.ws.send(JSON.stringify({ t: 'nudge', id: 'n1', drop: 'gift', via: 'rocket', emoji: 'nope' })); await wait(100)
   const d2 = Q.got.filter((m) => m.t === 'drop').at(-1)?.drop
   ok('незнакомый способ доставки — парашют, эмодзи не список — пусто', d2?.via === 'chute' && d2?.emoji.length === 0)
+  P.ws.send(JSON.stringify({ t: 'nudge', id: 'n1', drop: 'note', via: 'bird' })); await wait(100)
+  ok('записка и письмо — тоже посылки', Q.got.filter((m) => m.t === 'drop').at(-1)?.drop.cargo === 'note')
   P.ws.close(); Q.ws.close(); srv2.close()
 }
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else { console.log('\nвсё ок'); process.exit(0) }

@@ -6,13 +6,13 @@ import { reactive, computed } from 'vue'
 import { live, liveSend, onLive } from './useLive'
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '✅', '👀']
-/** Что спустить на парашюте (сундук рисуется отдельно, остальное — крупным эмодзи) */
+/** Что несут в посылке: сундук, конверт и записка (её текст виден сразу) рисуются отдельно, остальное — крупным эмодзи */
 export const CARGO = [
-  { id: 'chest', title: 'Сундук', em: '' }, { id: 'gift', title: 'Подарок', em: '🎁' }, { id: 'poo', title: 'Какашка', em: '💩' },
+  { id: 'chest', title: 'Сундук', em: '' }, { id: 'gift', title: 'Подарок', em: '🎁' }, { id: 'mail', title: 'Письмо', em: '' }, { id: 'note', title: 'Записка', em: '' }, { id: 'poo', title: 'Какашка', em: '💩' },
   { id: 'heart', title: 'Сердечко', em: '❤️' }, { id: 'cake', title: 'Торт', em: '🎂' }, { id: 'flowers', title: 'Цветы', em: '💐' },
 ]
 /** Чем доставить посылку (анимации — в ParachuteDrop.vue) */
-export const VIAS = [{ id: 'chute', title: 'Парашют' }, { id: 'crane', title: 'Кран' }, { id: 'bird', title: 'Птица' }]
+export const VIAS = [{ id: 'chute', title: 'Парашют' }, { id: 'crane', title: 'Кран' }, { id: 'bird', title: 'Аист' }]
 /** Эмодзи, которые можно положить в посылку (ещё любые — с клавиатуры); при открытии вылетают фонтаном */
 export const PARCEL_EMOJI = ['🎉', '🎂', '❤️', '🎈', '🥳', '⭐', '🔥', '👍', '😂', '🌸', '🍀', '☕', '🍕', '🚀', '💎', '👏', '🙏', '😱', '💩', '👻', '🐱', '🦄', '🌈', '❄️', '💰', '🏆', '💤']
 export const PARCEL_EMOJI_MAX = 8

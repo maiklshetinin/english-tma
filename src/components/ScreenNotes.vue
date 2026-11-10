@@ -14,6 +14,8 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
 import ParachuteDrop from './ParachuteDrop.vue'
+import ParcelArt from './ParcelArt.vue'
+import { showToast } from '../composables/useToast'
 import { live, WHERE } from '../composables/useLive'
 import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO, CHAT_PATH, VIAS, PARCEL_EMOJI, PARCEL_EMOJI_MAX } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
@@ -83,8 +85,6 @@ const ini = (s) => (s || '?').trim()[0]?.toUpperCase() || '?'
 // mode: '' — обычное сообщение, 'bell' — всплывающим уведомлением, id посылки — спустить на парашюте (меню «Что доставить»)
 const text = ref(''), mode = ref(''), ta = ref(null), picker = ref(''), cargoMenu = ref(false)
 const cargoOf = computed(() => CARGO.find((c) => c.id === mode.value))
-// меню посылок — position: fixed по кнопке: карточка обрезает всё, что выходит за её края (у новой заметки она низкая)
-const cmenuAt = ref({})
 // выбор реакции — тоже position: fixed над кнопкой: список сообщений прокручивается и обрезает всплывашку у верхнего сообщения
 const pickAt = ref({})
 function togglePick(e, id) {
@@ -93,15 +93,43 @@ function togglePick(e, id) {
   pickAt.value = { left: Math.max(8, Math.min(innerWidth - W - 8, r.right - W)) + 'px', bottom: innerHeight - r.top + 4 + 'px' }
   picker.value = id
 }
-function toggleCargo(e) {
-  cargoMenu.value = !cargoMenu.value
-  if (!cargoMenu.value) return
-  const r = e.currentTarget.getBoundingClientRect(), W = 300
-  cmenuAt.value = { left: Math.max(8, Math.min(innerWidth - W - 8, r.right + 40 - W)) + 'px', bottom: innerHeight - r.top + 8 + 'px' }
+// Окно «Посылка»: открывается над кнопкой, целиком в пределах экрана; за шапку его можно перетащить — место запоминается
+const win = ref(null), pos = ref({ x: 8, y: 8 })
+let winMoved = false, lastCargo = 'chest'
+function clampPos(x, y) {
+  const w = win.value?.offsetWidth || 340, h = win.value?.offsetHeight || 520
+  return { x: Math.max(8, Math.min(innerWidth - w - 8, x)), y: Math.max(8, Math.min(innerHeight - h - 8, y)) }
 }
-function pickCargo(id) { mode.value = mode.value === id ? '' : id }
+function toggleCargo(e) {
+  if (cargoMenu.value) { cargoMenu.value = false; return }
+  if (!cargoOf.value) mode.value = lastCargo
+  const r = e.currentTarget.getBoundingClientRect()
+  cargoMenu.value = true
+  nextTick(() => { pos.value = winMoved ? clampPos(pos.value.x, pos.value.y) : clampPos(r.right + 40 - (win.value?.offsetWidth || 340), r.top - 8 - (win.value?.offsetHeight || 520)) })
+}
+function dragWin(e) {
+  if (e.target.closest('button')) return
+  e.preventDefault()
+  const dx = e.clientX - pos.value.x, dy = e.clientY - pos.value.y
+  const move = (ev) => { winMoved = true; pos.value = clampPos(ev.clientX - dx, ev.clientY - dy) }
+  const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up) }
+  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up)
+}
+const onWinResize = () => { if (cargoMenu.value) pos.value = clampPos(pos.value.x, pos.value.y) }
+onMounted(() => addEventListener('resize', onWinResize)); onUnmounted(() => removeEventListener('resize', onWinResize))
+// подпись под сценой: «Аист принесёт записку — текст видно сразу»
+const WHO = { chute: 'На парашюте спустится', crane: 'Кран привезёт', bird: 'Аист принесёт' }
+const WHAT = { chest: 'сундук с письмом', mail: 'конверт с письмом', note: 'записку — текст видно сразу' }
+const caption = computed(() => `${WHO[via.value]} ${WHAT[mode.value] || (cargoOf.value?.title || '').toLowerCase() + ' с письмом'}`)
+const mainCargo = CARGO.filter((c) => ['chest', 'gift', 'mail', 'note'].includes(c.id)), moreCargo = CARGO.filter((c) => !mainCargo.includes(c))
+// «Выбрать, куда сбросить»: текст уже набран — к выбору места; нет — закрыть окно и ждать текст в поле чата
+function goAim() {
+  if (text.value.trim()) return send()
+  cargoMenu.value = false; ta.value?.focus(); showToast('Напишите сообщение — и Enter')
+}
+function pickCargo(id) { mode.value = id; lastCargo = id }
 // Посылка: чем доставить и какие эмодзи положить внутрь (при открытии вылетают фонтаном). Эмодзи без груза не бывает — берём сундук.
-const via = ref('chute'), emo = ref([]), emoText = ref('')
+const via = ref('bird'), emo = ref([]), emoText = ref('')
 function toggleEmo(e) {
   if (emo.value.includes(e)) emo.value = emo.value.filter((x) => x !== e)
   else if (emo.value.length < PARCEL_EMOJI_MAX) emo.value = [...emo.value, e]
@@ -113,6 +141,7 @@ function onEmoInput() {
   for (const g of parts) if (/\p{Extended_Pictographic}/u.test(g) && !emo.value.includes(g)) toggleEmo(g)
   emoText.value = ''
 }
+watch(() => S.open || S.draft, (v) => { if (!v) cargoMenu.value = false })          // чат закрыли — окно посылки тоже
 const resetParcel = () => { mode.value = ''; cargoMenu.value = false; emo.value = [] }
 function send() {
   const t = text.value.trim(); if (!t) return
@@ -232,25 +261,40 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
       <textarea ref="ta" v-model="text" rows="1" :placeholder="'Сообщение — увидят все, кто в приложении'" maxlength="1000" @keydown="onKey" />
       <button class="bell" :class="{ on: mode === 'bell' }" type="button" :aria-pressed="mode === 'bell'" :title="mode === 'bell' ? 'Отправится уведомлением: у коллег всплывёт плашка' : 'Отправить уведомлением — у коллег всплывёт плашка, пока не закроют'" @click="mode = mode === 'bell' ? '' : 'bell'; cargoMenu = false"><AppIcon name="bell" :size="16" /></button>
       <span class="cw">
-        <button class="bell chute" :class="{ on: cargoOf }" type="button" :aria-pressed="!!cargoOf" :aria-expanded="cargoMenu" :title="cargoOf ? `Отправится посылкой: ${cargoOf.title}` : 'Собрать посылку — доставка, упаковка, эмодзи'" @click="toggleCargo">
-          <template v-if="cargoOf"><svg v-if="!cargoOf.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ cargoOf.em }}</span></template>
+        <button class="bell chute" :class="{ on: cargoOf }" type="button" :aria-pressed="!!cargoOf" :aria-expanded="cargoMenu" :title="cargoOf ? `Отправится посылкой: ${cargoOf.title}` : 'Отправить посылкой — аист, кран или парашют'" @click="toggleCargo">
+          <template v-if="cargoOf"><ParcelArt v-if="!cargoOf.em" class="mc" :kind="cargoOf.id" /><span v-else class="ce">{{ cargoOf.em }}</span></template>
           <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 0 1 18 0Z" /><path d="M3 11l8 8M21 11l-8 8M12 11v8" /><rect x="10" y="18" width="4" height="4" rx="1" /></svg>
         </button>
-        <span v-if="cargoMenu" class="cmenu" :style="cmenuAt" role="dialog" aria-label="Посылка">
-          <b>Чем доставить</b>
-          <span class="cvia"><button v-for="v in VIAS" :key="v.id" class="cv" :class="{ on: via === v.id }" type="button" :aria-pressed="via === v.id" @click="via = v.id">{{ v.title }}</button></span>
-          <b>Во что упаковать</b>
-          <span class="cgrid"><button v-for="c in CARGO" :key="c.id" class="cg" :class="{ on: mode === c.id }" type="button" :title="c.title" :aria-label="c.title" :aria-pressed="mode === c.id" @click="pickCargo(c.id)"><svg v-if="!c.em" class="mc" viewBox="0 0 120 100" aria-hidden="true"><rect x="10" y="44" width="100" height="50" rx="6" fill="#a0612b" /><path d="M10 44 Q10 14 60 14 Q110 14 110 44 Z" fill="#b8722f" /><rect x="24" y="16" width="10" height="78" fill="#e0b13a" /><rect x="86" y="16" width="10" height="78" fill="#e0b13a" /><rect x="52" y="34" width="16" height="18" rx="3" fill="#f2c94c" /></svg><span v-else class="ce">{{ c.em }}</span>{{ c.title }}</button></span>
-          <b>Эмодзи внутрь<small v-if="emo.length"> · {{ emo.length }} из {{ PARCEL_EMOJI_MAX }}</small></b>
-          <span v-if="emo.length" class="cpick"><button v-for="e in emo" :key="e" type="button" :title="`Убрать ${e}`" @click="toggleEmo(e)">{{ e }}</button></span>
-          <span class="cemo"><button v-for="e in PARCEL_EMOJI" :key="e" type="button" :class="{ on: emo.includes(e) }" :aria-pressed="emo.includes(e)" @click="toggleEmo(e)">{{ e }}</button></span>
-          <input v-model="emoText" class="cin" type="text" placeholder="Или любые — с клавиатуры" maxlength="40" aria-label="Свои эмодзи" @input="onEmoInput" @keydown.stop />
-          <button class="cok" type="button" @click="cargoMenu = false; ta?.focus()">Готово</button>
-        </span>
       </span>
       <button class="go" type="button" :disabled="!text.trim()" aria-label="Отправить" @click="send"><AppIcon name="send" :size="16" /></button>
     </div>
   </div>
+
+  <!-- окно «Посылка»: сцена с мини-доставкой, кто несёт, что несёт, эмодзи; двигается за шапку -->
+  <Teleport to="body">
+    <div v-if="cargoMenu && cargoOf" ref="win" class="cmenu" :style="{ left: pos.x + 'px', top: pos.y + 'px' }" role="dialog" aria-label="Посылка" @pointerdown.stop @keydown.esc.stop="cargoMenu = false">
+      <div class="chead" title="Потяните, чтобы передвинуть окно" @pointerdown="dragWin"><i class="grip" aria-hidden="true" />Посылка<button class="cx" type="button" title="Не посылкой — обычным сообщением" aria-label="Отменить посылку" @click="resetParcel"><AppIcon name="x" :size="14" /></button></div>
+      <div class="pv" aria-hidden="true"><div :key="via + mode" class="pvi">
+        <span v-if="via === 'chute'" class="pv-chute"><ParcelArt kind="chute" class="pv-sway" /></span>
+        <template v-else-if="via === 'crane'">
+          <i class="pv-rail" />
+          <span class="pv-cx"><i class="pv-tr" /><span class="pv-cy"><svg viewBox="0 0 36 36"><path d="M18 2 L18 18 Q30 18 30 26 Q30 34 20 34 Q11 34 10 26" fill="none" stroke="#e0b13a" stroke-width="5" stroke-linecap="round" /></svg></span></span>
+        </template>
+        <span v-else class="pv-bird"><i class="pv-rope" /><ParcelArt kind="bird" flap /></span>
+        <span class="pv-box" :class="'by-' + via"><ParcelArt v-if="!cargoOf.em" :class="'pc-' + mode" :kind="mode" :text="mode === 'note' ? text.trim() || 'Ку-ку!' : ''" /><span v-else class="pv-em">{{ cargoOf.em }}</span></span>
+      </div></div>
+      <p class="ccap">{{ caption }}</p>
+      <b>Кто несёт</b>
+      <div class="ctiles c3"><button v-for="v in VIAS" :key="v.id" class="ct" :class="{ on: via === v.id }" type="button" :aria-pressed="via === v.id" @click="via = v.id"><ParcelArt :kind="v.id" />{{ v.title }}</button></div>
+      <b>Что несёт</b>
+      <div class="ctiles c4"><button v-for="c in mainCargo" :key="c.id" class="ct" :class="{ on: mode === c.id }" type="button" :aria-pressed="mode === c.id" @click="pickCargo(c.id)"><ParcelArt v-if="!c.em" :kind="c.id" /><span v-else class="ce">{{ c.em }}</span>{{ c.title }}</button></div>
+      <div class="cmore"><button v-for="c in moreCargo" :key="c.id" type="button" :class="{ on: mode === c.id }" :title="c.title" :aria-label="c.title" :aria-pressed="mode === c.id" @click="pickCargo(c.id)">{{ c.em }}</button></div>
+      <b>Эмодзи внутрь — вылетят при открытии<small v-if="emo.length"> · {{ emo.length }} из {{ PARCEL_EMOJI_MAX }}</small></b>
+      <div class="cemo"><button v-for="e in [...PARCEL_EMOJI, ...emo.filter((x) => !PARCEL_EMOJI.includes(x))]" :key="e" type="button" :class="{ on: emo.includes(e) }" :aria-pressed="emo.includes(e)" @click="toggleEmo(e)">{{ e }}</button></div>
+      <input v-model="emoText" class="cin" type="text" placeholder="Или любые — с клавиатуры" maxlength="40" aria-label="Свои эмодзи" @input="onEmoInput" />
+      <button class="cok" type="button" @click="goAim">Выбрать, куда сбросить</button>
+    </div>
+  </Teleport>
 
   <!-- правый клик -->
   <div v-if="menu" class="sn-bg" @pointerdown="menu = null" @contextmenu.prevent="menu = null" />
@@ -318,23 +362,50 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
 .in textarea:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue) }
 .bell, .go { flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer }
 .bell { background: none; color: var(--hint) } .bell:hover { background: var(--surface) } .bell.on { background: var(--orange-l); color: var(--orange-d) }
-.cw { position: relative; display: grid } .chute .ce { font-size: 18px; line-height: 1 } .chute .mc { width: 22px; height: 19px } .cg .mc { width: 32px; height: 32px } .bell.chute.on { background: #ffe6e6; color: #e5484d }
-.cmenu { position: fixed; z-index: 70; width: 300px; max-height: calc(100vh - 80px); overflow: auto; padding: 10px; border-radius: 14px; background: var(--card); box-shadow: 0 12px 34px rgba(0, 0, 0, .2), 0 0 0 1px var(--border) }
-.cmenu b { display: block; padding: 0 2px 6px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
-.cgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 10px }
-.cmenu b small { font: inherit; text-transform: none; letter-spacing: 0; color: var(--hint-2) }
-.cvia { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 10px }
-.cv { height: 34px; border: 0; border-radius: 10px; background: var(--surface); font: inherit; font-size: 13px; font-weight: 800; color: var(--text); cursor: pointer }
-.cv.on { background: var(--blue-l); color: var(--blue-d) }
-.cpick { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px }
-.cpick button { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: var(--blue-l); font-size: 18px; line-height: 1; cursor: pointer }
+.cw { position: relative; display: grid } .chute .ce { font-size: 18px; line-height: 1 } .chute .mc { width: 22px; height: 19px; font-size: 0 } .bell.chute.on { background: #ffe6e6; color: #e5484d }
+/* окно «Посылка» (в body, поверх всего; двигается за шапку) */
+.cmenu { position: fixed; z-index: 70; width: min(340px, calc(100vw - 16px)); max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow: auto; box-sizing: border-box; padding: 0 12px 12px; border-radius: 16px; background: var(--card); color: var(--text); box-shadow: 0 12px 34px rgba(0, 0, 0, .2), 0 0 0 1px var(--border); font: 700 14px/1.3 var(--font) }
+.chead { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; height: 40px; margin: 0 -12px; padding: 0 6px 0 12px; background: var(--card); font-size: 14px; font-weight: 800; cursor: grab; touch-action: none; user-select: none }
+.chead:active { cursor: grabbing }
+.grip { width: 10px; height: 14px; opacity: .45; background: radial-gradient(circle, currentColor 1.2px, transparent 1.6px) 0 0 / 5px 5px }
+.cx { margin-left: auto; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--hint); display: grid; place-items: center; cursor: pointer } .cx:hover { background: var(--surface) }
+.cmenu > b { display: block; margin: 10px 0 6px; font-size: 12px; font-weight: 900; color: var(--hint) }
+.cmenu > b small { font: inherit; color: var(--hint-2) }
+.ccap { margin: 8px 0 0; min-height: 18px; text-align: center; font-size: 13px; font-weight: 800 }
+.ctiles { display: grid; gap: 6px } .c3 { grid-template-columns: repeat(3, 1fr) } .c4 { grid-template-columns: repeat(4, 1fr) }
+.ct { height: 68px; padding: 0; border: 0; border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font: inherit; font-size: 12px; font-weight: 800; color: var(--text); cursor: pointer }
+.ct > svg { width: 50px; height: 35px } .ct .ce { font-size: 28px; line-height: 35px } .ct.on { background: var(--blue-l) }
+.cmore { display: flex; gap: 4px; margin-top: 6px } .cmore button { width: 36px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: none; font-size: 20px; line-height: 1; cursor: pointer }
+.cmore button:hover { background: var(--surface) } .cmore button.on { background: var(--blue-l) }
 .cemo { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px }
-.cemo button { height: 30px; padding: 0; border: 0; border-radius: 8px; background: none; font-size: 19px; line-height: 1; cursor: pointer }
+.cemo button { height: 32px; padding: 0; border: 0; border-radius: 8px; background: none; font-size: 19px; line-height: 1; cursor: pointer }
 .cemo button:hover { background: var(--surface) } .cemo button.on { background: var(--blue-l) }
-.cin { width: 100%; height: 32px; margin-top: 6px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 700 }
-.cok { width: 100%; height: 34px; margin-top: 8px; border: 0; border-radius: 10px; background: var(--blue); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
-.cg { display: grid; justify-items: center; gap: 2px; padding: 6px 0 4px; overflow: hidden; white-space: nowrap; font-size: 0 !important; border: 0; border-radius: 10px; background: var(--surface); font: inherit; font-size: 11px; font-weight: 800; color: var(--hint); cursor: pointer }
-.cg .ce { font-size: 24px; line-height: 32px } .cg:hover { background: var(--border) } .cg.on { background: var(--blue-l); color: var(--blue); box-shadow: inset 0 0 0 2px var(--blue) }
+.cin { width: 100%; height: 34px; margin-top: 6px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 700 }
+.cok { width: 100%; height: 44px; margin-top: 10px; border: 0; border-radius: 12px; background: var(--blue); color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
+/* сцена: мини-доставка по кругу (координаты — в макете 372×140, целиком ужата под ширину окна) */
+.pv { position: relative; height: 118px; border-radius: 12px; background: var(--surface); overflow: hidden }
+.pvi { position: absolute; left: 50%; top: 0; width: 372px; height: 140px; margin-left: -186px; transform: scale(.84); transform-origin: 50% 0 }
+.pvi > *, .pv-bird > *, .pv-cx > * { position: absolute }
+.pv-chute { left: 131px; top: 0; width: 110px; height: 82px; transform-origin: 50% 100%; animation: pv-chute 4.5s ease-in-out infinite }
+.pv-sway { width: 110px; height: 82px; transform-origin: 50% 100%; animation: pv-sway 1.3s ease-in-out infinite }
+.pv-rail { left: 0; right: 0; top: 0; height: 8px; background: #f2c94c; border-bottom: 2px solid #a8841f }
+.pv-cx { left: 160px; top: 0; width: 52px; height: 120px; animation: pv-cx 4.5s ease-in-out infinite }
+.pv-tr { left: 0; top: 4px; width: 52px; height: 16px; border-radius: 4px; background: #4b4b4b }
+.pv-cy { left: 24px; top: 20px; width: 4px; height: 4px; background: #4b4b4b; animation: pv-cy 4.5s ease-in-out infinite }
+.pv-cy svg { position: absolute; left: -13px; bottom: -28px; width: 30px; height: 30px }
+.pv-bird { left: 120px; top: 2px; width: 132px; height: 90px; transform-origin: 70px 40px; animation: pv-bird 4.5s ease-in-out infinite }
+.pv-bird > svg { left: 0; top: 0; width: 132px; height: 84px } .pv-rope { left: 123px; top: 28px; width: 2px; height: 52px; background: #8a6a4a }
+.pv-box { left: 156px; top: 80px; width: 60px; height: 56px; display: grid; place-items: center; transform-origin: 50% 100% }
+.pv-box.by-chute { animation: pv-fall 4.5s ease-in-out infinite } .pv-box.by-crane { animation: pv-cbox 4.5s ease-in-out infinite } .pv-box.by-bird { left: 214px; animation: pv-bbox 4.5s ease-in-out infinite }
+.pv-box > svg { width: 60px; height: 50px } .pv-box > .pc-note { width: 60px; height: 54px } .pv-em { font-size: 44px; line-height: 1 }
+@keyframes pv-fall { 0% { transform: translateY(-175px); opacity: 1 } 22% { transform: translateY(-110px) } 42% { transform: translateY(-45px) } 58% { transform: translateY(0) } 61% { transform: scale(1.12, .84) } 65% { transform: none } 93% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes pv-chute { 0% { transform: translateY(-175px); opacity: 1 } 22% { transform: translateY(-110px) } 42% { transform: translateY(-45px) } 58% { transform: translateY(0); opacity: 1 } 66%, 100% { transform: translateY(8px) scaleY(.3); opacity: 0 } }
+@keyframes pv-sway { 0%, 100% { transform: rotate(-5deg) } 50% { transform: rotate(5deg) } }
+@keyframes pv-cx { 0% { transform: translateX(-280px) } 28%, 72% { transform: translateX(0) } 95%, 100% { transform: translateX(280px) } }
+@keyframes pv-cy { 0%, 28% { height: 4px } 52%, 58% { height: 34px } 70%, 100% { height: 4px } }
+@keyframes pv-cbox { 0% { transform: translate(-280px, -30px); opacity: 1 } 28% { transform: translate(0, -30px) } 52% { transform: translate(0, 0) } 55% { transform: scale(1.1, .86) } 59% { transform: none } 93% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes pv-bird { 0% { transform: translate(-320px, -6px) } 15% { transform: translate(-210px, 8px) } 30% { transform: translate(-105px, -6px) } 45% { transform: translate(0, 0) rotate(3deg) } 50% { transform: translate(4px, -22px) rotate(-10deg) } 56% { transform: translate(20px, -14px) } 82%, 100% { transform: translate(330px, -70px) rotate(-6deg) } }
+@keyframes pv-bbox { 0% { transform: translate(-320px, -6px); opacity: 1 } 15% { transform: translate(-210px, 8px) } 30% { transform: translate(-105px, -6px) } 45% { transform: translate(0, 0) } 48% { transform: translate(0, 4px) scale(1.1, .86) } 52% { transform: translate(0, 4px) } 93% { transform: translate(0, 4px); opacity: 1 } 100% { transform: translate(0, 4px); opacity: 0 } }
 .go { background: var(--blue); color: #fff } .go:disabled { background: var(--border); color: var(--hint-2); cursor: default }
 /* Правый клик */
 .sn-bg { position: fixed; inset: 0; z-index: 70 }
