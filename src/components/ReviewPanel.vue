@@ -1,7 +1,7 @@
 <script setup>
 // Review — как «Your vocabulary» в Busuu: слова и фразы из пройденных уроков, сила каждого (слабое / среднее / сильное).
 // Нажал на строку — история: где встречалось, верно / ошибка, когда повторить. Пока — данные этого браузера (stores/review.ts).
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { review, resetReview } from '../stores/review'
 import { ask } from '../composables/useDialog'
 import { showToast } from '../composables/useToast'
@@ -9,6 +9,7 @@ import { stateOf, LV_DAYS } from '../utils/review'
 import { algo } from '../stores/review'
 import WordCurve from './WordCurve.vue'
 import ReviewChart from './ReviewChart.vue'
+import MemoryChart from './MemoryChart.vue'
 import { nextTick } from 'vue'
 
 const props = defineProps({
@@ -20,6 +21,8 @@ const props = defineProps({
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
 const chartOn = ref((() => { try { return localStorage.getItem('tma.review.chart') !== '0' } catch { return true } })())
+const view = ref((() => { try { return localStorage.getItem('tma.review.view') || 'mem' } catch { return 'mem' } })())      // «График запоминания» / «Где сейчас слова»
+watch(view, (v) => { try { localStorage.setItem('tma.review.view', v) } catch { /* приватный режим */ } })
 const toggleChart = () => { chartOn.value = !chartOn.value; try { localStorage.setItem('tma.review.chart', chartOn.value ? '1' : '0') } catch { /* приватный режим */ } }
 const cfgNow = computed(() => ({ retention: algo.retention, maxDays: algo.maxDays }))
 // нажали слово на графике — открыть его строку с кривой памяти
@@ -56,7 +59,9 @@ async function reset() {
         </div>
       </div>
       <template v-if="chartOn && list.length">
-        <ReviewChart :items="items ?? review.items" :cfg="cfgNow" @pick="pick" />
+        <div class="vt" role="tablist"><button v-for="[k, t] in [['mem', 'График запоминания'], ['piles', 'Где сейчас слова']]" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" @click="view = k">{{ t }}</button></div>
+        <MemoryChart v-if="view === 'mem'" :items="items ?? review.items" :cfg="cfgNow" @pick="pick" />
+        <ReviewChart v-else :items="items ?? review.items" :cfg="cfgNow" @pick="pick" />
       </template>
       <div class="hbs"><button class="howb" :aria-expanded="chartOn" @click="toggleChart">График <span>{{ chartOn ? '▴' : '▾' }}</span></button>
       <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button></div>
@@ -111,6 +116,8 @@ async function reset() {
 .al { color: #1cb0f6; font-weight: 800; text-decoration: none }
 .vt { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100% }
 .vt button { font: inherit; font-size: 13px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 14px; background: none; color: #5f6368; cursor: pointer } .vt button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
+.vt { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto }
+.vt button { font: inherit; font-size: 13px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 14px; background: none; color: #5f6368; cursor: pointer; white-space: nowrap } .vt button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .hbs { display: flex; gap: 18px; flex-wrap: wrap }
 .howb { all: unset; cursor: pointer; margin-top: 4px; font-size: 13px; font-weight: 800; color: #1cb0f6 } .howb span { font-size: 11px }
 .how { margin-top: 10px; display: grid; gap: 7px; padding: 12px 14px; border-radius: 12px; background: #f6f8fa } .how p { margin: 0; font-size: 13px; line-height: 1.45; color: #444 } .how b { color: #222 } .how .nt { color: #777; font-size: 12px }

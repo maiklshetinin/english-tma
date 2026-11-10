@@ -10,6 +10,7 @@ import LessonPlayer from './LessonPlayer.vue'
 import ReviewChart from './ReviewChart.vue'
 import CkFlow from './CkFlow.vue'
 import WordNow from './WordNow.vue'
+import MemoryChart from './MemoryChart.vue'
 import { recordStep, syncReview, review, algo } from '../stores/review'
 import { hitsOf, keyOf, memOf, stateOf, levelOf, exName } from '../utils/review'
 import { useAuthStore } from '../stores/auth'
@@ -187,7 +188,7 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
   cks: u.tasks.filter(t => t.type === 'checkpoint').map(c => { const p = ckParts(c); return { id: c.id, title: c.title || 'Чекпоинт', state: state(c), fromErrors: p.fromErrors, own: p.own.length,
     items: p.autoFrom.map(a => ({ id: a.s.id, ex: exName(a.s), w: stepWord(a.s), from: titleOf(a.from) })) } }),
 })))
-const showCk = ref(true), dockTab = ref('curve')
+const showCk = ref(true), dockTab = ref('mem')
 // итог урока: что уйдёт в чекпоинт этой Chapter (экраны с ошибкой) — для проверки, что автоматика сработала
 const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || ''
 const ckLog = computed(() => {
@@ -295,8 +296,9 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
           <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
           <div v-if="rvChart" class="rvd">
-            <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Экраны → чекпоинты</button></div>
-            <WordNow v-if="dockTab === 'curve'" :focus="focusKey" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
+            <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Экраны → чекпоинты</button></div>
+            <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
+            <WordNow v-else-if="dockTab === 'curve'" :focus="focusKey" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <ReviewChart v-else-if="dockTab === 'words'" :items="review.items" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <CkFlow v-else :chapters="ckMap" dock />
           </div>
