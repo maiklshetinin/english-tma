@@ -1,107 +1,83 @@
-// Планировщик повторений как в Anki (FSRS-5 — алгоритм, который Anki использует при включённом FSRS) с шагами изучения Anki по умолчанию.
+// Планировщик колод как в Anki: FSRS-6 из библиотеки ts-fsrs (та же, что считает Review — utils/review.ts),
+// с шагами изучения Anki по умолчанию.
 //
 //  • Новая карточка проходит «шаги изучения» 1 мин → 10 мин (как в Anki): «Снова» — заново через 1 мин, «Трудно» — через ~6 мин,
 //    «Хорошо» — следующий шаг, после последнего шага карточка «выпускается» в повторения на N дней; «Легко» — сразу в повторения.
-//  • Повторение: интервал считается из «стабильности» памяти S (через сколько дней вероятность вспомнить упадёт до 90 %).
-//    «Хорошо» растит S, «Трудно» — меньше, «Легко» — сильнее; «Снова» — ошибка (lapse), карточка уходит на «переучивание» (шаг 10 мин),
-//    стабильность падает. Сложность D (1–10) слова тоже меняется от ответов.
-//  • Интервалы «Трудно < Хорошо < Легко» всегда растут, как в Anki.
-// Чисто вычисления, без хранилища. Время — в мс (Date.now()), дни — локальные календарные.
+//  • Повторение: интервал считается из «стабильности» памяти S (через сколько дней вероятность вспомнить упадёт до 90 %) и
+//    «желаемого запоминания» (настройка преподавателя для колод). «Хорошо» растит S, «Трудно» — меньше, «Легко» — сильнее;
+//    «Снова» — ошибка (lapse), карточка уходит на «переучивание» (шаг 10 мин), стабильность падает. Сложность D (1–10) тоже меняется.
+//  • Интервалы «Трудно < Хорошо < Легко» всегда растут, как в Anki (это делает библиотека).
+// Своих формул здесь нет — только перевод состояния карточки (SrsState, как его хранит сервер) в карточку ts-fsrs и обратно.
+// Время — в мс (Date.now()), дни — локальные календарные (повторение назначается на начало дня, как в Anki).
+import { fsrs, generatorParameters, createEmptyCard, forgetting_curve, State, type Card, type FSRS, type Grade as FGrade } from 'ts-fsrs'
 import type { SrsState } from '../../server/types'
 
-/** Параметры FSRS-5 по умолчанию (как в Anki до оптимизации под пользователя). */
-export const W = [0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621]
-export const RETENTION = 0.9                       // желаемая вероятность вспомнить (Anki: Desired retention 0.90)
-export const LEARN_STEPS = [1, 10]                 // минуты (Anki: Learning steps 1m 10m)
-export const RELEARN_STEPS = [10]                  // минуты (Anki: Relearning steps 10m)
-export const MAX_IVL = 36500                       // дней
 export const LEARN_AHEAD = 20                      // минут: если больше нечего учить, карточку на шаге можно показать раньше (как в Anki)
-const DECAY = -0.5, FACTOR = 19 / 81, MIN = 60_000, DAY = 86_400_000
+const MIN = 60_000, DAY = 86_400_000
+
+/** Настройки колод: желаемое запоминание и максимальный интервал (как в Anki: Desired retention 0.90) */
+export interface DeckCfg { retention: number; maxDays: number }
+export const DECK_DEFAULT: DeckCfg = { retention: 0.9, maxDays: 36500 }
 
 export type Grade = 1 | 2 | 3 | 4                  // 1 Снова, 2 Трудно, 3 Хорошо, 4 Легко
 export type Phase = 'new' | 'learning' | 'review' | 'relearning'
+
+const cache = new Map<string, FSRS>()
+function schedulerOf(cfg: DeckCfg = DECK_DEFAULT): FSRS {
+  const k = cfg.retention + '/' + cfg.maxDays
+  let f = cache.get(k)
+  if (!f) cache.set(k, f = fsrs(generatorParameters({ request_retention: cfg.retention, maximum_interval: cfg.maxDays, enable_fuzz: false,
+    enable_short_term: true, learning_steps: ['1m', '10m'], relearning_steps: ['10m'] })))
+  return f
+}
 
 const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x))
 const pad = (n: number) => String(n).padStart(2, '0')
 export const ymdOf = (ms: number): string => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
 const dayStart = (ymd: string) => new Date(ymd + 'T00:00').getTime()
-/** Полных календарных дней между двумя датами 'YYYY-MM-DD' (b − a). */
-export const daysBetween = (a: string, b: string) => Math.round((dayStart(b) - dayStart(a)) / DAY)
 const addDaysYmd = (ymd: string, n: number) => { const d = new Date(ymd + 'T12:00'); d.setDate(d.getDate() + n); return ymdOf(d.getTime()) }
 
-// ── формулы FSRS-5 ──
-export const retrievability = (t: number, s: number) => Math.pow(1 + FACTOR * t / s, DECAY)
-export const nextInterval = (s: number) => clamp(Math.round(s / FACTOR * (Math.pow(RETENTION, 1 / DECAY) - 1)), 1, MAX_IVL)
-const initS = (g: Grade) => W[g - 1]
-const initD = (g: Grade) => W[4] - Math.exp(W[5] * (g - 1)) + 1
-const nextD = (d: number, g: Grade) => {
-  const d1 = d + (-W[6] * (g - 3)) * (10 - d) / 9                          // линейное затухание к 10
-  return clamp(W[7] * initD(4) + (1 - W[7]) * d1, 1, 10)                    // возврат к среднему
-}
-const recallS = (d: number, s: number, r: number, g: Grade) =>
-  s * (1 + Math.exp(W[8]) * (11 - d) * Math.pow(s, -W[9]) * (Math.exp(W[10] * (1 - r)) - 1) * (g === 2 ? W[15] : 1) * (g === 4 ? W[16] : 1))
-const forgetS = (d: number, s: number, r: number) =>
-  Math.min(W[11] * Math.pow(d, -W[12]) * (Math.pow(s + 1, W[13]) - 1) * Math.exp(W[14] * (1 - r)), s / Math.exp(W[17] * W[18]))
-const shortTermS = (s: number, g: Grade) => s * Math.exp(W[17] * (g - 3 + W[18]))   // повтор в тот же день (шаги изучения)
-
 export const phaseOf = (s: SrsState | null): Phase => !s ? 'new' : s.phase ?? (s.interval === 0 ? 'learning' : 'review')
+const STATE: Record<Phase, State> = { new: State.New, learning: State.Learning, review: State.Review, relearning: State.Relearning }
 
 /** Память карточки (S, D) — у старых записей (до FSRS) оцениваем по интервалу и «лёгкости» SM-2. */
-function memoryOf(s: SrsState): { stab: number; diff: number } {
+export function memoryOf(s: SrsState): { stab: number; diff: number } {
   if (s.stab && s.diff) return { stab: s.stab, diff: s.diff }
-  return { stab: Math.max(0.1, s.interval || W[2]), diff: clamp(1 + (3 - (s.ease || 2.5)) / 1.7 * 9, 1, 10) }
+  return { stab: Math.max(0.1, s.interval || 3), diff: clamp(1 + (3 - (s.ease || 2.5)) / 1.7 * 9, 1, 10) }
+}
+/** Когда карточку пора показывать (мс). */
+export const dueMs = (s: SrsState) => s.dueAt ?? dayStart(s.due)
+
+/** Состояние, как его хранит сервер → карточка ts-fsrs */
+function cardOf(s: SrsState | null, now: number): Card {
+  if (!s) return createEmptyCard(new Date(now))
+  const m = memoryOf(s), ph = phaseOf(s)
+  return { due: new Date(dueMs(s)), stability: m.stab, difficulty: m.diff, elapsed_days: 0, scheduled_days: s.interval, learning_steps: s.step ?? 0,
+    reps: s.reps, lapses: s.lapses, state: STATE[ph], last_review: new Date(Math.min(now, s.lastAt ?? dayStart(s.last))) }
 }
 
-/** Новая память после ответа g в момент now. */
-function memoryAfter(s: SrsState | null, g: Grade, now: number) {
-  if (!s || (!s.stab && phaseOf(s) !== 'review' && !s.reps)) return { stab: initS(g), diff: clamp(initD(g), 1, 10) }
-  const m = memoryOf(s), elapsed = daysBetween(s.last, ymdOf(now))
-  if (elapsed <= 0) return { stab: shortTermS(m.stab, g), diff: nextD(m.diff, g) }
-  const r = retrievability(elapsed, m.stab)
-  return { stab: g === 1 ? forgetS(m.diff, m.stab, r) : recallS(m.diff, m.stab, r, g), diff: nextD(m.diff, g) }
-}
-
-/** Задержка шага «Трудно» (как в Anki): на первом шаге — среднее первых двух шагов (или ×1,5, если шаг один), дальше — текущий шаг. */
-const hardDelay = (steps: number[], step: number) => step > 0 ? steps[step] : steps.length > 1 ? (steps[0] + steps[1]) / 2 : steps[0] * 1.5
-
-/** Что будет после ответа: фаза, шаг, задержка (минуты на шаге или дни в повторении). Без записи — для подписей на кнопках. */
-export function plan(s: SrsState | null, g: Grade, now = Date.now()) {
-  const ph = phaseOf(s), mem = memoryAfter(s, g, now)
-  const ivl = (st: number) => nextInterval(st)
-  // Интервалы трёх «успешных» ответов — чтобы соблюсти Трудно < Хорошо < Легко (как в Anki)
-  const ivls = () => {
-    const h = ivl(memoryAfter(s, 2, now).stab), gd = ivl(memoryAfter(s, 3, now).stab), e = ivl(memoryAfter(s, 4, now).stab)
-    const hh = Math.min(h, gd), gg = Math.max(gd, hh + 1)
-    return { 2: hh, 3: gg, 4: Math.max(e, gg + 1) } as Record<2 | 3 | 4, number>
-  }
-  if (ph === 'new' || ph === 'learning' || ph === 'relearning') {
-    const steps = ph === 'relearning' ? RELEARN_STEPS : LEARN_STEPS, step = ph === 'new' ? 0 : s?.step ?? 0, phase = ph === 'relearning' ? 'relearning' : 'learning'
-    if (g === 1) return { ...mem, phase, step: 0, minutes: steps[0], days: 0 }
-    if (g === 2) return { ...mem, phase, step, minutes: hardDelay(steps, step), days: 0 }
-    if (g === 3 && step + 1 < steps.length) return { ...mem, phase, step: step + 1, minutes: steps[step + 1], days: 0 }
-    const good = ivl(memoryAfter(s, 3, now).stab)
-    const days = g === 3 ? good : Math.max(ivl(mem.stab), good + 1)               // «выпуск» в повторения
-    return { ...mem, phase: 'review' as const, step: 0, minutes: 0, days }
-  }
-  if (g === 1) return { ...mem, phase: 'relearning' as const, step: 0, minutes: RELEARN_STEPS[0], days: 0 }
-  return { ...mem, phase: 'review' as const, step: 0, minutes: 0, days: ivls()[g] }
+/** Что будет после ответа: карточка ts-fsrs, минуты на шаге изучения или дни в повторении. Без записи — для подписей на кнопках. */
+function plan(s: SrsState | null, g: Grade, now: number, cfg?: DeckCfg) {
+  const c = schedulerOf(cfg).next(cardOf(s, now), new Date(now), g as FGrade).card
+  const step = c.state === State.Learning || c.state === State.Relearning
+  return { c, minutes: step ? Math.max(0, (c.due.getTime() - now) / MIN) : 0, days: step ? 0 : clamp(c.scheduled_days, 1, (cfg ?? DECK_DEFAULT).maxDays) }      // «Легко» библиотека может отодвинуть за максимум — держим
 }
 
 /** Ответ на карточку: новое состояние (q: 0 Снова … 3 Легко, как кнопки). Пишет и короткую историю ответов для графика. */
-export function answer(s: SrsState | null, q: number, now = Date.now()): SrsState {
-  const g = (q + 1) as Grade, p = plan(s, g, now), t = ymdOf(now), ph = phaseOf(s)
-  const lapse = ph === 'review' && g === 1
-  const due = p.minutes ? ymdOf(now + p.minutes * MIN) : addDaysYmd(t, p.days)
-  const hist = [...(s?.hist ?? []).filter((h) => !Array.isArray(h)), { t: now, q, i: p.minutes ? -Math.round(p.minutes) : p.days }].slice(-12)
+export function answer(s: SrsState | null, q: number, now = Date.now(), cfg?: DeckCfg): SrsState {
+  const g = (q + 1) as Grade, { c, minutes, days } = plan(s, g, now, cfg), t = ymdOf(now)
+  const due = minutes ? ymdOf(now + minutes * MIN) : addDaysYmd(t, days)
+  const hist = [...(s?.hist ?? []).filter((h) => !Array.isArray(h)), { t: now, q, i: minutes ? -Math.round(minutes) : days }].slice(-12)
+  const phase = c.state === State.Relearning ? 'relearning' : c.state === State.Review ? 'review' : 'learning'
   return {
-    ease: Math.round(clamp(3 - (p.diff - 1) / 9 * 1.7, 1.3, 5) * 100) / 100,         // для совместимости со старыми записями
-    interval: p.minutes ? 0 : p.days,
+    ease: Math.round(clamp(3 - (c.difficulty - 1) / 9 * 1.7, 1.3, 5) * 100) / 100,      // для совместимости со старыми записями
+    interval: minutes ? 0 : days,
     reps: (s?.reps ?? 0) + 1,
-    lapses: (s?.lapses ?? 0) + (lapse ? 1 : 0),
+    lapses: c.lapses,
     first: s?.first ?? t, last: t, due,
-    phase: p.phase as Exclude<Phase, 'new'>, step: p.step,
-    dueAt: p.minutes ? now + Math.round(p.minutes * MIN) : dayStart(due),
-    stab: Math.round(p.stab * 1000) / 1000, diff: Math.round(p.diff * 1000) / 1000,
+    phase, step: minutes ? c.learning_steps : 0,
+    dueAt: minutes ? now + Math.round(minutes * MIN) : dayStart(due),
+    stab: Math.round(c.stability * 1000) / 1000, diff: Math.round(clamp(c.difficulty, 1, 10) * 1000) / 1000,
     lastAt: now, hist,
   }
 }
@@ -112,12 +88,12 @@ export function fmtSpan(minutes: number, days: number): string {
   if (minutes) return minutes < 60 ? `<${Math.max(1, Math.round(minutes))} мин.` : `${n1(minutes / 60)} ч.`
   return days < 30 ? `${days} дн.` : days < 365 ? `${n1(days / 30)} мес.` : `${n1(days / 365)} г.`
 }
-export const label = (s: SrsState | null, q: number, now = Date.now()) => { const p = plan(s, (q + 1) as Grade, now); return fmtSpan(p.minutes, p.days) }
+export const label = (s: SrsState | null, q: number, now = Date.now(), cfg?: DeckCfg) => { const p = plan(s, (q + 1) as Grade, now, cfg); return fmtSpan(p.minutes, p.days) }
 
-/** Когда карточку пора показывать (мс). */
-export const dueMs = (s: SrsState) => s.dueAt ?? dayStart(s.due)
-/** Сколько сейчас вероятность вспомнить (0–1) — для графика колоды. */
+/** Сколько сейчас вероятность вспомнить (0–1) — для графика колоды; кривая забывания FSRS-6. */
 export function recallNow(s: SrsState, now = Date.now()) {
-  const { stab } = memoryOf(s); return retrievability(Math.max(0, (now - (s.lastAt ?? dayStart(s.last))) / DAY), stab)
+  const { stab } = memoryOf(s)
+  return forgetting_curve(schedulerOf().parameters.w, Math.max(0, (now - (s.lastAt ?? dayStart(s.last))) / DAY), stab)
 }
-export { memoryOf }
+
+

@@ -3,11 +3,13 @@
 // а на сервер уходят пачкой (только изменённые записи) через пару секунд; нет сети — ждут в этом браузере и уйдут потом.
 // Без сервера (демо, локальная разработка) — только в этом браузере (localStorage), как раньше.
 import { reactive } from 'vue'
-import { applyHits, hitsOf, exName, keyOf, ALGO_DEFAULT, type RItem, type AlgoCfg } from '../utils/review'
+import { applyHits, hitsOf, exName, keyOf, type RItem, type AlgoCfg } from '../utils/review'
+import { algo, ALGO_KEY as ALGO } from './algo'
+export { algo }
 import type { Step } from '../utils/lesson'
 import { apiRequest, isDemo, API, fb } from '../firebase'
 
-const ALGO = 'tma.review.algo.v1', KEY = 'tma.review.v1', PEND = 'tma.review.pending.v1', OWNER = 'tma.review.owner.v1'
+const KEY = 'tma.review.v1', PEND = 'tma.review.pending.v1', OWNER = 'tma.review.owner.v1'
 const BATCH = 200                                     // как REVIEW_LIMITS.batch на сервере
 const online = () => !isDemo && !!API && !!fb
 const read = <T>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d } catch { return d } }
@@ -17,7 +19,6 @@ export const review = reactive<{ items: Record<string, RItem>; sync: 'local' | '
   items: read(KEY, {}), sync: online() ? 'loading' : 'local',
 })
 /** Настройки алгоритма (FSRS): с сервера; без сервера — в этом браузере */
-export const algo = reactive<AlgoCfg>({ ...ALGO_DEFAULT, ...read<Partial<AlgoCfg>>(ALGO, {}) })
 let algoLoaded = false
 export async function loadAlgo(force = false) {
   if (!online() || (algoLoaded && !force)) return

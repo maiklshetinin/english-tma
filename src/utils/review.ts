@@ -13,14 +13,14 @@ import { gapParts, orderParts, KINDS, type Step } from './lesson'
 const DAY = 86_400_000
 
 /** Настройки алгоритма (меняет преподаватель: «Алгоритм повторений»; хранятся на сервере) */
-export interface AlgoCfg { retention: number; maxDays: number }
-export const ALGO_DEFAULT: AlgoCfg = { retention: 0.9, maxDays: 36500 }
+export interface AlgoCfg { retention: number; maxDays: number; deckRetention: number; deckMaxDays: number }      // deck… — для колод (карточек)
+export const ALGO_DEFAULT: AlgoCfg = { retention: 0.9, maxDays: 36500, deckRetention: 0.9, deckMaxDays: 36500 }
 export const ALGO_LIMITS = { retention: [0.7, 0.97] as const, maxDays: [7, 36500] as const }
 /** Пороги уровней по стабильности памяти (дни) */
 export const LV_DAYS = { medium: 3, strong: 21 }
 
 const cache = new Map<string, FSRS>()
-export function schedulerOf(cfg: AlgoCfg = ALGO_DEFAULT): FSRS {
+export function schedulerOf(cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT): FSRS {
   const k = cfg.retention + '/' + cfg.maxDays
   let f = cache.get(k)
   if (!f) cache.set(k, f = fsrs(generatorParameters({ request_retention: cfg.retention, maximum_interval: cfg.maxDays, enable_fuzz: false, enable_short_term: false })))
@@ -66,13 +66,13 @@ const cardOf = (m: RMem): Card => ({ due: new Date(m.last), stability: m.s, diff
 const memOfCard = (c: Card, t: number): RMem => ({ s: Math.round(c.stability * 1000) / 1000, d: Math.round(c.difficulty * 1000) / 1000, last: t, n: c.reps, l: c.lapses, st: c.state })
 
 /** Один ответ: память до (нет — первое знакомство) → память после */
-export function rate(m: RMem | undefined, ok: boolean, t: number, cfg: AlgoCfg = ALGO_DEFAULT): RMem {
+export function rate(m: RMem | undefined, ok: boolean, t: number, cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT): RMem {
   const at = m ? Math.max(t, m.last) : t
   const card = m ? cardOf(m) : createEmptyCard(new Date(at))
   return memOfCard(schedulerOf(cfg).next(card, new Date(at), ok ? Rating.Good : Rating.Again).card, at)
 }
 /** Записи до FSRS: память — из истории ответов (она хранится от новых к старым) */
-export function replay(x: Pick<RItem, 'hist'>, cfg: AlgoCfg = ALGO_DEFAULT): RMem | undefined {
+export function replay(x: Pick<RItem, 'hist'>, cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT): RMem | undefined {
   let m: RMem | undefined
   for (const h of [...x.hist].reverse()) if (h.ok !== null) m = rate(m, h.ok, h.t, cfg)
   return m
@@ -80,14 +80,14 @@ export function replay(x: Pick<RItem, 'hist'>, cfg: AlgoCfg = ALGO_DEFAULT): RMe
 export const memOf = (x: Pick<RItem, 'f' | 'hist'>): RMem | undefined => x.f ?? replay(x)
 
 /** Интервал (дни), через который вероятность вспомнить упадёт до желаемой */
-export const intervalOf = (stab: number, cfg: AlgoCfg = ALGO_DEFAULT) => schedulerOf(cfg).next_interval(stab, 0)
+export const intervalOf = (stab: number, cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT) => schedulerOf(cfg).next_interval(stab, 0)
 /** Вероятность вспомнить (0–1) через t дней после ответа при стабильности stab — кривая забывания FSRS */
 export const recallAt = (stab: number, days: number) => forgetting_curve(W, Math.max(0, days), stab)
 export const levelOf = (stab: number): RLevel => (stab < LV_DAYS.medium ? 'weak' : stab < LV_DAYS.strong ? 'medium' : 'strong')
 
 export interface RState { level: RLevel; recall: number | null; stab: number; due: number | null; ivl: number | null; isNew: boolean }
 /** Слово сейчас: уровень, вероятность вспомнить (%), стабильность, когда повторить (по текущим настройкам) */
-export function stateOf(x: Pick<RItem, 'f' | 'hist'>, now = Date.now(), cfg: AlgoCfg = ALGO_DEFAULT): RState {
+export function stateOf(x: Pick<RItem, 'f' | 'hist'>, now = Date.now(), cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT): RState {
   const m = memOf(x)
   if (!m) return { level: 'weak', recall: null, stab: 0, due: null, ivl: null, isNew: true }
   const ivl = intervalOf(m.s, cfg)
@@ -95,7 +95,7 @@ export function stateOf(x: Pick<RItem, 'f' | 'hist'>, now = Date.now(), cfg: Alg
 }
 
 /** Записать ответы экрана в словарь (меняет items на месте). ctx — название упражнения, урока, курса */
-export function applyHits(items: Record<string, RItem>, hits: RHit[], ctx: { ex: string; lesson?: string; course?: string }, now = Date.now(), cfg: AlgoCfg = ALGO_DEFAULT) {
+export function applyHits(items: Record<string, RItem>, hits: RHit[], ctx: { ex: string; lesson?: string; course?: string }, now = Date.now(), cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT) {
   for (const h of hits) {
     const key = keyOf(h.text); if (!key) continue
     let x = items[key]

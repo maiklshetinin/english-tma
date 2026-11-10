@@ -5,6 +5,7 @@ import type { Card, Deck, SrsState } from '../../server/types'
 import { useSrsStore } from '../stores/srs'
 import { ymd, relDay } from '../utils/dates'
 import { answer, label, dueMs, phaseOf, LEARN_AHEAD } from '../utils/fsrs'
+import { deckCfg } from '../stores/algo'           // настройки колод — «Алгоритм повторений»
 
 export const LEARNED_DAYS = 21         // слово «выучено» (как «зрелые» в Anki), когда интервал повторения ≥ 21 дня
 export const today = (): string => ymd(new Date())
@@ -18,7 +19,7 @@ export const srsOf = (userKey: Key, card: Card): SrsState | null => cardsOf(user
 export const kindOf = (s: SrsState | null): 'new' | 'learn' | 'review' => { const p = phaseOf(s); return p === 'new' ? 'new' : p === 'review' ? 'review' : 'learn' }
 
 /** Состояние после ответа q (0–3) — FSRS как в Anki. */
-export const nextSrs = (srs: SrsState | null, q: number, now = Date.now()): SrsState => answer(srs, q, now)
+export const nextSrs = (srs: SrsState | null, q: number, now = Date.now()): SrsState => answer(srs, q, now, deckCfg())
 
 /** Оценить карточку: считает новое состояние и записывает ответ (на сервер уходит только свой прогресс). */
 export function rate(userKey: string, card: Card, q: number, now = Date.now()): void {
@@ -37,7 +38,7 @@ export function resetDeck(userKey: string, deck: Deck): number {
 export const snapshot = (userKey: Key, card: Card): SrsState | null => { const s = srsOf(userKey, card); return s ? { ...s } : null }
 
 /** Подпись на кнопке оценки, как в Anki: «<1 мин.», «<10 мин.», «4 дн.», «3,6 мес.». */
-export const intervalLabel = (userKey: Key, card: Card, q: number, now = Date.now()): string => label(srsOf(userKey, card), q, now)
+export const intervalLabel = (userKey: Key, card: Card, q: number, now = Date.now()): string => label(srsOf(userKey, card), q, now, deckCfg())
 
 // --- Очередь и счётчики колоды (как «Новые / Изучаю / К повторению» в Anki) ---
 const endOfToday = () => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime() }

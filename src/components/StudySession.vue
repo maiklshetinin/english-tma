@@ -4,6 +4,7 @@
 // счётчики «новые / изучаю / к повторению». Сверху — общая панель: график колоды и ✏️ правка карточки. Клавиши: Пробел — ответ/«Хорошо», 1–4 — оценка, R — звук.
 // Используется и во вкладке «Слова», и внутри кружка пути (embedded).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { loadAlgo } from '../stores/review'
 import { buildQueue, srsOf, kindOf, rate, intervalLabel, nextDueInfo, deckCounts, nextLearnAt } from '../composables/useSrs'
 import { imageSrc, audioSrc } from '../utils/media'
 import AppIcon from './AppIcon.vue'
@@ -74,6 +75,7 @@ function onKey(e) {
 }
 onMounted(() => { addEventListener('keydown', onKey); clock = setInterval(() => { tick.value = Date.now(); refill() }, 1000) })
 onUnmounted(() => { removeEventListener('keydown', onKey); au?.pause(); clearInterval(clock) })
+loadAlgo()                                          // настройки колод (желаемое запоминание) — с сервера
 </script>
 
 <template>

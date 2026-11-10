@@ -1,13 +1,14 @@
 <script setup>
-// «Алгоритм повторений» (#/review/algo): как Review решает, когда повторить слово, — FSRS (тот же, что в Anki).
-// Преподаватель меняет две настройки (желаемое запоминание и максимальный интервал) — они общие для всех учеников
-// и хранятся на сервере (GET/PUT /review/settings). Ученик видит ту же страницу без кнопок — описание и историю.
-// Расчёт — utils/review.ts (ts-fsrs). Колоды (карточки) считаются отдельно и эти настройки не меняют.
+// «Алгоритм повторений» (#/review/algo): как приложение решает, когда повторить слово, — FSRS-6 (тот же, что в Anki).
+// Одна библиотека ts-fsrs и для Review (utils/review.ts), и для колод (utils/fsrs.ts); прогресс у них раздельный.
+// Преподаватель меняет желаемое запоминание и максимальный интервал — отдельно для Review и для колод; настройки общие
+// для всех учеников и хранятся на сервере (GET/PUT /review/settings). Ученик видит ту же страницу без кнопок — описание и историю.
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import BackButton from '../components/BackButton.vue'
 import { algo, loadAlgo, saveAlgo } from '../stores/review'
 import { ALGO_DEFAULT, ALGO_LIMITS, LV_DAYS, rate, intervalOf, recallAt } from '../utils/review'
+import { answer, dueMs } from '../utils/fsrs'
 import { useAuthStore } from '../stores/auth'
 import { showToast } from '../composables/useToast'
 
@@ -16,16 +17,26 @@ const canEdit = computed(() => auth.role === 'teacher')
 const cfg = reactive({ ...algo })
 const busy = ref(false)
 onMounted(async () => { await loadAlgo(true); Object.assign(cfg, algo) })
-const changed = computed(() => cfg.retention !== algo.retention || cfg.maxDays !== algo.maxDays)
-const isDefault = computed(() => cfg.retention === ALGO_DEFAULT.retention && cfg.maxDays === ALGO_DEFAULT.maxDays)
+const KEYS = ['retention', 'maxDays', 'deckRetention', 'deckMaxDays']
+const changed = computed(() => KEYS.some(k => cfg[k] !== algo[k]))
+const isDefault = computed(() => KEYS.every(k => cfg[k] === ALGO_DEFAULT[k]))
+const mode = ref('review')                                    // какие настройки крутим: Review или колоды
+const RK = computed(() => (mode.value === 'review' ? 'retention' : 'deckRetention')), MK = computed(() => (mode.value === 'review' ? 'maxDays' : 'deckMaxDays'))
+const maxSel = computed({ get: () => cfg[MK.value], set: (v) => { cfg[MK.value] = v } })
 const MAXES = [[30, '1 месяц'], [90, '3 месяца'], [180, 'полгода'], [365, '1 год'], [1825, '5 лет'], [36500, 'без ограничения (100 лет)']]
-const pct = computed({ get: () => Math.round(cfg.retention * 100), set: (v) => { cfg.retention = Math.round(v) / 100 } })
+const pct = computed({ get: () => Math.round(cfg[RK.value] * 100), set: (v) => { cfg[RK.value] = Math.round(v) / 100 } })
 
 const DAY = 86_400_000
-const fmt = (d) => d < 1 ? 'сегодня' : d < 31 ? `${d} дн` : d < 365 ? `${Math.round(d / 30.4)} мес` : `${(d / 365).toFixed(d < 3650 ? 1 : 0).replace('.0', '')} г`
+const fmt = (d) => d < 1 ? 'сегодня' : d < 31 ? `${d} дн` : d < 365 ? `${Math.round(d / 30.4)} мес` : `${(d / 365).toFixed(d < 3650 ? 1 : 0).replace('.0', '').replace('.', ',')} г`
 // Слово, на которое ученик каждый раз отвечает верно в день повтора: через сколько дней повторы и сколько их за год
 const chain = computed(() => {
-  const c = { ...cfg }, out = []
+  const c = { retention: cfg[RK.value], maxDays: cfg[MK.value] }, out = []
+  if (mode.value === 'decks') {                                // колоды: шаги 1 мин → 10 мин («Хорошо»), потом повторения по дням
+    const T0 = new Date(2026, 0, 5, 10).getTime()
+    let st = answer(null, 2, T0, c); st = answer(st, 2, dueMs(st), c)
+    while (out.length < 8) { out.push({ ivl: st.interval, at: (dueMs(st) - T0) / DAY, s: st.stab }); st = answer(st, 2, dueMs(st) + 10 * 3_600_000, c) }
+    return out
+  }
   let m = rate(undefined, true, 0, c), t = 0
   while (out.length < 8) {
     const ivl = intervalOf(m.s, c); out.push({ ivl, at: t / DAY + ivl, s: m.s })
@@ -53,7 +64,7 @@ const saw = computed(() => {
   return 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L')
 })
 const marks = computed(() => chain.value.filter(x => x.at <= SPAN.value).map(x => ({ x: x.at / SPAN.value * W, t: fmt(Math.round(x.at)) })))
-const lineY = computed(() => yOf(cfg.retention))
+const lineY = computed(() => yOf(cfg[RK.value]))
 
 async function save() {
   busy.value = true
@@ -77,6 +88,7 @@ const ebLbl = (d) => d < 1 / 24 + 0.001 ? (d < 0.02 ? '20 мин' : '1 ч') : d 
 
     <section class="card">
       <h2>Настройки<small v-if="!canEdit"> · меняет преподаватель</small></h2>
+      <div class="seg" role="tablist" aria-label="Чьи настройки"><button v-for="[k, t] in [['review', 'Review'], ['decks', 'Колоды']]" :key="k" role="tab" :aria-selected="mode === k" :class="{ on: mode === k }" @click="mode = k">{{ t }}</button></div>
       <div class="row">
         <label for="al-ret"><b>Желаемое запоминание</b><span>Повтор назначается, когда вероятность вспомнить слово падает до этого уровня. Выше — повторы чаще, память крепче; ниже — реже, но больше забываний.</span></label>
         <div class="val">{{ pct }} %</div>
@@ -86,11 +98,11 @@ const ebLbl = (d) => d < 1 / 24 + 0.001 ? (d < 0.02 ? '20 мин' : '1 ч') : d 
 
       <div class="row">
         <label for="al-max"><b>Максимальный интервал</b><span>Дальше этого срока повтор не отодвигается, даже если слово выучено крепко.</span></label>
-        <select id="al-max" v-model.number="cfg.maxDays" :disabled="!canEdit"><option v-for="[d, t] in MAXES" :key="d" :value="d">{{ t }}</option></select>
+        <select id="al-max" v-model.number="maxSel" :disabled="!canEdit"><option v-for="[d, t] in MAXES" :key="d" :value="d">{{ t }}</option></select>
       </div>
 
       <div class="prev">
-        <p><b>Пример:</b> слово, на которое ученик каждый раз отвечает верно, повторяется через
+        <p><b>Пример:</b> {{ mode === 'decks' ? 'карточка: «Хорошо» на шагах 1 мин → 10 мин, потом «Хорошо» в каждый повтор —' : 'слово, на которое ученик каждый раз отвечает верно,' }} повторяется через
           <template v-for="(x, k) in chain.slice(0, 6)" :key="k"><span class="ch">{{ fmt(x.ivl) }}</span>{{ k < 5 ? ' → ' : '' }}</template>
           … — <b>{{ perYear }}</b> {{ perYear % 10 === 1 && perYear !== 11 ? 'повтор' : perYear % 10 >= 2 && perYear % 10 <= 4 && (perYear < 10 || perYear > 20) ? 'повтора' : 'повторов' }} за первый год.</p>
         <svg :viewBox="`-28 -6 ${W + 36} ${H + 26}`" class="gr" role="img" :aria-label="`Вероятность вспомнить между повторами, ${SPAN} дней`">
@@ -109,12 +121,12 @@ const ebLbl = (d) => d < 1 / 24 + 0.001 ? (d < 0.02 ? '20 мин' : '1 ч') : d 
         <span class="sp" />
         <button class="go" :disabled="!changed || busy" @click="save">{{ busy ? 'Сохраняю…' : 'Сохранить' }}</button>
       </div>
-      <p class="nt">Настройки общие для всех учеников и действуют сразу: сроки повторов в Review пересчитываются, история ответов не меняется. Колоды (карточки) считаются отдельно — у них свой прогресс.</p>
+      <p class="nt">Настройки общие для всех учеников и действуют сразу: в Review сроки повторов пересчитываются, в колодах новые сроки — со следующего ответа; история ответов не меняется. Прогресс Review и колод раздельный.</p>
     </section>
 
     <section class="card txt">
       <h2>Что это за алгоритм</h2>
-      <p>Review считает память по <b>FSRS</b> (Free Spaced Repetition Scheduler — «свободный планировщик интервальных повторений»). Это тот же алгоритм, что включается в Anki, версия FSRS-6, библиотека <i>ts-fsrs</i>.</p>
+      <p>Review считает память по <b>FSRS</b> (Free Spaced Repetition Scheduler — «свободный планировщик интервальных повторений»). Это тот же алгоритм, что включается в Anki, версия FSRS-6, библиотека <i>ts-fsrs</i> — одна и для Review, и для колод (у колод ещё шаги изучения 1 мин → 10 мин и четыре кнопки «Снова / Трудно / Хорошо / Легко», как в Anki).</p>
       <p>У каждого слова две величины:</p>
       <ul>
         <li><b>Стабильность S</b> — за сколько дней вероятность вспомнить слово упадёт до 90 %. Сразу после первого верного ответа это пара дней, после нескольких удачных повторов — недели и месяцы.</li>
@@ -141,7 +153,7 @@ const ebLbl = (d) => d < 1 / 24 + 0.001 ? (d < 0.02 ? '20 мин' : '1 ч') : d 
         <li><b>1987 — SuperMemo SM-2.</b> Пётр Возняк вывел формулу: каждый интервал — прошлый × «лёгкость» (около 2,5). Её взяла Anki (2006) и использовала почти 20 лет. Минус: множитель один на всех, он не знает, какова вероятность вспомнить.</li>
         <li><b>2022 — FSRS.</b> Джарретт Е (Jarrett Ye, компания MaiMemo) построил модель памяти «сложность — стабильность — вероятность вспомнить» на миллионах реальных повторов и опубликовал её с открытым кодом.</li>
         <li><b>2023 — FSRS в Anki.</b> С версии 23.10 FSRS встроен в Anki как замена SM-2. По замерам сообщества, при том же запоминании он требует заметно меньше повторов.</li>
-        <li><b>Сейчас.</b> FSRS-6 — в Review этого приложения. Колоды (карточки) тоже считаются по FSRS — со своими шагами изучения 1 мин → 10 мин, как в Anki.</li>
+        <li><b>Сейчас.</b> FSRS-6 считает и Review, и колоды этого приложения — одна библиотека, прогресс раздельный. У колод — шаги изучения 1 мин → 10 мин, как в Anki.</li>
       </ol>
     </section>
   </div>
@@ -168,6 +180,8 @@ select { width: auto; flex: none; font: inherit; font-weight: 700; padding: 7px 
 .gr .mk { stroke: #b5bac1; stroke-width: 1; stroke-dasharray: 2 3 }
 .gr .saw { fill: none; stroke: #1cb0f6; stroke-width: 2.4; stroke-linejoin: round }
 .gr .ebl { fill: none; stroke: #9747ff; stroke-width: 2.2 } .gr.eb circle { fill: #9747ff } .gr .ev { fill: #9747ff; font-weight: 900 }
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: #f2f3f5; justify-self: start }
+.seg button { font: inherit; font-size: 14px; font-weight: 800; border: 0; border-radius: 10px; padding: 7px 16px; background: none; color: #5f6368; cursor: pointer } .seg button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .nt { margin: 0; font-size: 12.5px; font-weight: 600; color: #777; line-height: 1.45 }
 .bar { display: flex; gap: 8px; align-items: center } .sp { flex: 1 }
 .go, .ghost { border: 0; border-radius: 12px; padding: 10px 16px; font: inherit; font-weight: 900; cursor: pointer }

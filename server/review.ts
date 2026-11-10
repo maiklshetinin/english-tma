@@ -19,8 +19,8 @@ export interface ReviewItem {
 /** FSRS: стабильность (дни), сложность 1–10, время последнего ответа, ответов, провалов, состояние 0–3 */
 export interface ReviewMem { s: number; d: number; last: number; n: number; l: number; st: number }
 /** Настройки алгоритма повторений (общие для всех учеников; меняет преподаватель) */
-export interface ReviewAlgo { retention: number; maxDays: number }
-export const ALGO_DEFAULT: ReviewAlgo = { retention: 0.9, maxDays: 36500 }
+export interface ReviewAlgo { retention: number; maxDays: number; deckRetention: number; deckMaxDays: number }      // deck… — для колод
+export const ALGO_DEFAULT: ReviewAlgo = { retention: 0.9, maxDays: 36500, deckRetention: 0.9, deckMaxDays: 36500 }
 export interface ReviewResponse { items: Record<string, ReviewItem> }
 export interface ReviewDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 
@@ -56,13 +56,13 @@ function cleanMem(v: unknown): ReviewMem {
   const n = (x: unknown, what: string, a: number, b: number) => { const k = Number(x); if (!Number.isFinite(k) || k < a || k > b) throw fail(400, `bad ${what}`); return k }
   return { s: n(v.s, 'stability', 0, 1e6), d: n(v.d, 'difficulty', 1, 10), last: ms(v.last, 'time'), n: cnt(v.n, 'reps'), l: cnt(v.l, 'lapses'), st: Math.round(n(v.st, 'state', 0, 3)) }
 }
-/** Настройки: желаемое запоминание 0.70–0.97, максимальный интервал 7–36500 дней */
+/** Настройки: желаемое запоминание 0.70–0.97, максимальный интервал 7–36500 дней — для Review и отдельно для колод */
 export function cleanAlgo(v: unknown): ReviewAlgo {
   if (!isObj(v)) throw fail(400, 'bad settings')
-  const r = Number(v.retention), m = Number(v.maxDays)
-  if (!Number.isFinite(r) || r < 0.7 || r > 0.97) throw fail(400, 'bad retention')
-  if (!Number.isInteger(m) || m < 7 || m > 36500) throw fail(400, 'bad max interval')
-  return { retention: Math.round(r * 100) / 100, maxDays: m }
+  const ret = (x: unknown) => { const r = Number(x); if (!Number.isFinite(r) || r < 0.7 || r > 0.97) throw fail(400, 'bad retention'); return Math.round(r * 100) / 100 }
+  const max = (x: unknown) => { const m = Number(x); if (!Number.isInteger(m) || m < 7 || m > 36500) throw fail(400, 'bad max interval'); return m }
+  const retention = ret(v.retention), maxDays = max(v.maxDays)
+  return { retention, maxDays, deckRetention: v.deckRetention == null ? ALGO_DEFAULT.deckRetention : ret(v.deckRetention), deckMaxDays: v.deckMaxDays == null ? ALGO_DEFAULT.deckMaxDays : max(v.deckMaxDays) }
 }
 
 export function makeReview({ db, FieldValue }: ReviewDeps) {

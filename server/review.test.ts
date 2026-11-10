@@ -42,6 +42,7 @@ ok('плохая память → 400', (await code(R.save(masha, { items: { a: 
 ok('настройки по умолчанию', JSON.stringify(await R.algo()) === JSON.stringify(ALGO_DEFAULT))
 await R.setAlgo({ retention: 0.85, maxDays: 365, evil: 1 })
 ok('настройки сохраняются', (await R.algo()).retention === 0.85 && (await R.algo()).maxDays === 365 && !('evil' in cleanAlgo({ retention: 0.85, maxDays: 365, evil: 1 })))
+ok('колоды: свои числа, без них — стандартные', cleanAlgo({ retention: 0.85, maxDays: 365 }).deckRetention === 0.9 && cleanAlgo({ retention: 0.85, maxDays: 365, deckRetention: 0.8, deckMaxDays: 90 }).deckMaxDays === 90)
 ok('запоминание вне 0.70–0.97 → 400', (await code(R.setAlgo({ retention: 0.99, maxDays: 365 }))) === 400)
 ok('нет items → 400', (await code(R.save(masha, {}))) === 400)
 ok('слишком большая пачка → 413', (await code(R.save(masha, { items: Object.fromEntries(Array.from({ length: REVIEW_LIMITS.batch + 1 }, (_, k) => ['w' + k, it('w' + k)])) }))) === 413)

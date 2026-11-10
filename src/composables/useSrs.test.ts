@@ -20,11 +20,11 @@ describe('алгоритм повторений (как в Anki)', () => {
   it('новая карточка: шаги изучения 1 мин → 10 мин, «Легко» — сразу в повторения', () => {
     const again = nextSrs(null, 0, T)
     expect(again.phase).toBe('learning'); expect(again.dueAt).toBe(T + MIN); expect(again.interval).toBe(0); expect(kindOf(again)).toBe('learn')
-    expect(nextSrs(null, 1, T).dueAt).toBe(T + 5.5 * MIN)                   // «Трудно» на первом шаге — среднее 1 и 10 мин
+    expect(nextSrs(null, 1, T).dueAt).toBe(T + 6 * MIN)                   // «Трудно» на первом шаге — среднее 1 и 10 мин (5,5 → ts-fsrs округляет до минут)
     const good = nextSrs(null, 2, T)
     expect(good.phase).toBe('learning'); expect(good.step).toBe(1); expect(good.dueAt).toBe(T + 10 * MIN)
     const easy = nextSrs(null, 3, T)
-    expect(easy.phase).toBe('review'); expect(easy.interval).toBeGreaterThanOrEqual(15)      // FSRS: стабильность «Легко» ≈ 15,7 дня
+    expect(easy.phase).toBe('review'); expect(easy.interval).toBeGreaterThanOrEqual(7)       // FSRS-6: стабильность «Легко» ≈ 8,3 дня
   })
 
   it('последний шаг «Хорошо» — выпуск в повторения на несколько дней', () => {

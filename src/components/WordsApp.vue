@@ -42,7 +42,7 @@ function addDeck() { const d = deckStore.add('Новая колода'); router.
     <DeckChart v-else-if="screen === 'chart' && deck" :deck="deck" :user-key="userKey" @back="back" />
     <CardBrowser v-else-if="screen === 'browse' && deck" :deck="deck" :user-key="userKey" :can-manage="canManage" @back="back" />
     <template v-else>
-      <div v-if="canManage" class="top"><button class="btn sm add" @click="addDeck"><AppIcon name="plus" :size="16" /> Добавить</button></div>
+      <div class="top"><router-link :to="{ name: 'review-algo' }" class="alg" title="Колоды считаются по FSRS — как в Anki">Как считаются повторы ›</router-link><button v-if="canManage" class="btn sm add" @click="addDeck"><AppIcon name="plus" :size="16" /> Добавить</button></div>
 
       <div v-for="d in decks" :key="d.id" class="card deck" title="Учить" @click="open('study', d)">
         <div class="info">
@@ -76,7 +76,8 @@ function addDeck() { const d = deckStore.add('Новая колода'); router.
 </template>
 
 <style scoped>
-.top { display: flex; justify-content: flex-end }
+.top { display: flex; justify-content: flex-end; align-items: center; gap: 12px }
+.alg { margin-right: auto; font-size: 13px; font-weight: 800; color: var(--blue-d, #1278b0); text-decoration: none }
 .add { display: inline-flex; align-items: center; gap: 6px }
 /* Ряд карточек внахлёст в середине строки */
 .row-pile { --w: 90px; --h: 60px; --step: min(30px, (100% - var(--w)) / max(1, var(--n) - 1)); position: relative; flex: 1; min-width: 80px; height: var(--h) }
