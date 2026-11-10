@@ -68,6 +68,14 @@ await L.assign('k1', { studentId: 's1', on: false })
 ok('снят: курс пропал у ученика', (await L.myList(masha)).courses.length === 0 && (await code(L.myCourse(masha, 'k1'))) === 404)
 ok('прогресс сохранился (назначат снова — продолжит)', store.get('courseProgress/s1').c.k1.done === 2)
 
+const teacher: TokenUser = { uid: 'tg:1', role: 'teacher' }
+ok('преподаватель: своё прохождение пустое', (await L.teacherRun(teacher, 'k1')).done === 0)
+ok('преподаватель: вперёд нельзя — как ученику (409)', (await code(L.teacherDone(teacher, 'k1', { itemId: 'b' }))) === 409)
+await L.teacherDone(teacher, 'k1', { itemId: 'a', ok: 1, all: 2, miss: ['s1'] })
+ok('преподаватель: ошибки сохраняются, курс не назначен — не важно', (await L.teacherRun(teacher, 'k1')).lessons.a.miss?.join() === 's1' && store.has('courseProgress/teacher_tg:1'))
+ok('прохождение преподавателя не трогает ученика', store.get('courseProgress/s1')?.c?.k1?.lessons?.a?.miss?.join() !== 's1')
+await L.teacherReset(teacher, 'k1')
+ok('преподаватель: сброс своего прохождения', (await L.teacherRun(teacher, 'k1')).done === 0)
 await L.reset('s1', { what: 'all' })
 ok('сброс всего: прохождение и словарь ученика удалены', !store.has('courseProgress/s1') && !store.has('review/s1'))
 

@@ -3,6 +3,8 @@
 //  • done — сколько заданий курса подряд пройдено (как progress у курса в редакторе): следующее — «Сейчас». Перескочить вперёд нельзя,
 //    пройти заново уже пройденное — можно (результат обновится).
 //  • Ученик видит только назначенные ему курсы и только их файлы; пишет только свой прогресс. Преподаватель видит прогресс любого ученика.
+//  • Преподаватель проходит любой курс («Как видит ученик») по тем же правилам, что ученик: по порядку, ошибки уходят
+//    в чекпоинт, прогресс хранится (courseProgress/teacher_<uid>, как словарь Review) и сбрасывается кнопкой.
 import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './errors.js'
 import { makeAccess } from './access.js'
@@ -30,6 +32,30 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
     return c
   }
   const runsOf = async (sid: string): Promise<Record<string, CourseRun>> => (await progress().doc(sid).get()).data()?.c ?? {}
+
+  /** Записать результат задания в прохождение who (id ученика или teacher_<uid>) */
+  async function save(who: string, c: Course, input: unknown): Promise<CourseRun> {
+      const b = (input ?? {}) as Record<string, unknown>
+      const itemId = String(b.itemId ?? ''), n = tasksOf(c).findIndex((x) => x.id === itemId)
+      if (n < 0) throw fail(400, 'bad item')
+      const res: LessonRun = { ok: int(b.ok, 1000), all: int(b.all, 1000), sec: int(b.sec, 24 * 3600), at: now() }
+      if (res.ok > res.all) throw fail(400, 'bad score')
+      if (b.miss != null) {                      // экраны с ошибкой — только этого задания
+        if (!Array.isArray(b.miss) || b.miss.length > 200) throw fail(400, 'bad miss')
+        const own = new Set((tasksOf(c)[n].steps ?? []).map((s) => (s as { id?: string }).id))
+        const miss = [...new Set(b.miss.map(String))].filter((x) => own.has(x))
+        if (miss.length) res.miss = miss
+      }
+      let out: CourseRun = { done: 0, lessons: {} }
+      await db.runTransaction(async (tx) => {
+        const ref = progress().doc(who), all: Record<string, CourseRun> = (await tx.get(ref)).data()?.c ?? {}
+        const r = run(all[c.id])
+        if (n > r.done) throw fail(409, 'not yet')                     // перескочить вперёд нельзя — ни ученику, ни преподавателю
+        out = { done: Math.max(r.done, n + 1), lessons: { ...r.lessons, [itemId]: res } }
+        tx.set(ref, { c: { ...all, [c.id]: out }, updatedAt: FieldValue.serverTimestamp() })
+      })
+      return out
+  }
 
   return {
     /** Преподаватель: назначить курс ученику / снять */
@@ -63,29 +89,30 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
       return { id: c.id, title: c.title, items: c.items, run: run((await runsOf(sid))[c.id]) }
     },
 
+    /** Преподаватель: своё прохождение курса (для проверки чекпоинтов) */
+    async teacherRun(user: TokenUser, rawId: unknown) {
+      const c = await get(rawId)
+      return run((await runsOf(`teacher_${user.uid}`))[c.id])
+    },
+    /** Преподаватель прошёл задание сам — так же, как ученик (по порядку), но любой курс */
+    async teacherDone(user: TokenUser, rawId: unknown, input: unknown) {
+      return save(`teacher_${user.uid}`, await get(rawId), input)
+    },
+    /** Преподаватель: стереть своё прохождение курса */
+    async teacherReset(user: TokenUser, rawId: unknown) {
+      const cid = cleanId(rawId, 'course id'), ref = progress().doc(`teacher_${user.uid}`)
+      await db.runTransaction(async (tx) => {
+        const all: Record<string, CourseRun> = { ...((await tx.get(ref)).data()?.c ?? {}) }
+        if (!(cid in all)) return
+        delete all[cid]; tx.set(ref, { c: all, updatedAt: FieldValue.serverTimestamp() })
+      })
+      return run(undefined)
+    },
+
     /** Ученик прошёл задание: { itemId, ok, all, sec } → прогресс */
     async done(user: TokenUser, rawId: unknown, input: unknown) {
-      const sid = await me(user), c = await mineCourse(sid, rawId)
-      const b = (input ?? {}) as Record<string, unknown>
-      const itemId = String(b.itemId ?? ''), n = tasksOf(c).findIndex((x) => x.id === itemId)
-      if (n < 0) throw fail(400, 'bad item')
-      const res: LessonRun = { ok: int(b.ok, 1000), all: int(b.all, 1000), sec: int(b.sec, 24 * 3600), at: now() }
-      if (res.ok > res.all) throw fail(400, 'bad score')
-      if (b.miss != null) {                      // экраны с ошибкой — только этого задания
-        if (!Array.isArray(b.miss) || b.miss.length > 200) throw fail(400, 'bad miss')
-        const own = new Set((tasksOf(c)[n].steps ?? []).map((s) => (s as { id?: string }).id))
-        const miss = [...new Set(b.miss.map(String))].filter((x) => own.has(x))
-        if (miss.length) res.miss = miss
-      }
-      let out: CourseRun = { done: 0, lessons: {} }
-      await db.runTransaction(async (tx) => {
-        const ref = progress().doc(sid), all: Record<string, CourseRun> = (await tx.get(ref)).data()?.c ?? {}
-        const r = run(all[c.id])
-        if (n > r.done) throw fail(409, 'not yet')                     // перескочить вперёд нельзя
-        out = { done: Math.max(r.done, n + 1), lessons: { ...r.lessons, [itemId]: res } }
-        tx.set(ref, { c: { ...all, [c.id]: out }, updatedAt: FieldValue.serverTimestamp() })
-      })
-      return out
+      const sid = await me(user)
+      return save(sid, await mineCourse(sid, rawId), input)
     },
 
     /** Ученик: может ли он смотреть эти файлы (только файлы своих курсов) */

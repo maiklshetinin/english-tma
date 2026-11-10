@@ -13,6 +13,8 @@ import WordNow from './WordNow.vue'
 import { recordStep, syncReview, review, algo } from '../stores/review'
 import { hitsOf, keyOf, memOf, stateOf, levelOf, exName } from '../utils/review'
 import { useAuthStore } from '../stores/auth'
+import { ask } from '../composables/useDialog'
+import { showToast } from '../composables/useToast'
 import BackButton from './BackButton.vue'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
 
@@ -53,8 +55,11 @@ async function loadCourse(id) {
   loading.value = true
   try {
     if (props.student) { const r = await apiRequest(`/my/courses/${id}`); if (!r.ok) throw new Error(`(${r.status})`); const d = await r.json(); course.value = d; run.value = d.run }
-    else if (!online) course.value = JSON.parse(localStorage.getItem(LOCAL))
-    else { const r = await apiRequest(`/courses/${id}`); if (!r.ok) throw new Error(`(${r.status})`); course.value = await r.json() }
+    else if (!online) { course.value = JSON.parse(localStorage.getItem(LOCAL)); if (self) run.value = readRun(id) }
+    else {
+      const r = await apiRequest(`/courses/${id}`); if (!r.ok) throw new Error(`(${r.status})`); course.value = await r.json()
+      if (self) { const q = await apiRequest(`/courses/${id}/run`).catch(() => null); run.value = q?.ok ? await q.json() : { done: 0, lessons: {} } }
+    }
   } catch (e) { err.value = e.message } finally { loading.value = false }
 }
 
@@ -72,18 +77,37 @@ const units = computed(() => {
 const total = computed(() => (course.value?.items ?? []).filter(x => x.type !== 'unit').length)
 // у ученика — свой прогресс (сколько заданий подряд пройдено); в «Как видит ученик» — прогресс из редактора
 const run = ref({ done: 0, lessons: {} })
+// преподаватель в «Как видит ученик» проходит курс по тем же правилам, что ученик: по порядку, ошибки → чекпоинт, прогресс хранится
+// (на сервере — courseProgress/teacher_<uid>; без сервера — в этом браузере) и сбрасывается кнопкой «Сбросить моё прохождение»
+const self = !props.student && !props.of
+const RUNK = (id) => 'tma.courseRun.' + id
+const readRun = (id) => { try { return JSON.parse(localStorage.getItem(RUNK(id))) ?? { done: 0, lessons: {} } } catch { return { done: 0, lessons: {} } } }
 const mine = computed(() => (props.of ? { done: 0, lessons: {}, ...props.of } : run.value))          // чьё прохождение показываем
-const done = computed(() => Math.min(props.student || props.of ? mine.value.done : course.value?.progress ?? 0, total.value))
+const done = computed(() => Math.min(mine.value.done, total.value))
 // ученик прошёл задание (урок — по «Готово» в итоге; кружок, фото, занятие — кнопкой) → на сервер, «Сейчас» переезжает дальше
 let t0 = 0
 async function finish(x, sc = {}) {
-  if (x && x.type !== 'checkpoint') localMiss[x.id] = [...misses]           // «Как видит ученик»: чекпоинт соберётся из этих ошибок
-  if (!props.student || !x) return
+  if (props.of || !x) return
   const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0, ...(x.type !== 'checkpoint' && misses.size ? { miss: [...misses] } : {}) }
-  try { const r = await apiRequest(`/my/courses/${props.id}/done`, { method: 'POST', body: JSON.stringify(body) }); if (r.ok) run.value = await r.json() } catch { /* без сети — пройдёт ещё раз */ }
+  if (self && !online) {                       // без сервера — те же правила, что на сервере (server/learn.ts), в этом браузере
+    const r = run.value; if (x.n > r.done) return
+    const res = { ok: body.ok, all: body.all, sec: body.sec, at: Date.now(), ...(body.miss ? { miss: body.miss } : {}) }
+    run.value = { done: Math.max(r.done, x.n + 1), lessons: { ...r.lessons, [x.id]: res } }
+    try { localStorage.setItem(RUNK(props.id), JSON.stringify(run.value)) } catch { /* приватный режим */ }
+    return
+  }
+  const url = self ? `/courses/${props.id}/run/done` : `/my/courses/${props.id}/done`
+  try { const r = await apiRequest(url, { method: 'POST', body: JSON.stringify(body) }); if (r.ok) run.value = await r.json() } catch { /* без сети — пройдёт ещё раз */ }
+}
+/** Преподаватель: стереть своё прохождение курса (с подтверждением) */
+async function resetMine() {
+  if (!(await ask('Сбросить своё прохождение курса?', { text: 'Пройденные задания и ошибки для чекпоинтов в этом курсе начнутся с нуля. Словарь Review не меняется.', ok: 'Сбросить', danger: true }))) return
+  if (online) { const r = await apiRequest(`/courses/${props.id}/run/reset`, { method: 'POST', body: '{}' }).catch(() => null); if (!r?.ok) return showToast('Не удалось сбросить — попробуйте ещё раз', null, 'bad') }
+  else try { localStorage.removeItem(RUNK(props.id)) } catch { /* приватный режим */ }
+  run.value = { done: 0, lessons: {} }; showToast('Прохождение сброшено')
 }
 const markDone = (x) => { finish(x); peek.value = null; inline.value = null }
-const canMark = (x) => props.student && state(x) === 'current'
+const canMark = (x) => !props.of && state(x) === 'current'
 const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 
 // ---------- Чекпоинт собирается сам ----------
@@ -92,10 +116,9 @@ const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 const GRADED = ['choice', 'order', 'gap', 'pairs'], CK_MAX = 8
 const open = ref(null)                         // открытое во весь экран задание
 const misses = reactive(new Set())             // экраны с ошибкой в открытом сейчас уроке
-const localMiss = reactive({})                 // «Как видит ученик»: урок → экраны с ошибкой
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 // ошибки урока: с сервера (ученик) / этого просмотра; у открытого сейчас урока — плюс ошибки, сделанные только что (в реальном времени)
-const missOf = (id) => { const base = (props.student || props.of ? mine.value.lessons?.[id]?.miss : localMiss[id]) ?? []; return open.value?.id === id && misses.size ? [...new Set([...base, ...misses])] : base }
+const missOf = (id) => { const base = mine.value.lessons?.[id]?.miss ?? []; return open.value?.id === id && misses.size ? [...new Set([...base, ...misses])] : base }
 function ckParts(x) {
   const u = units.value.find(u => u.tasks.some(t => t.id === x.id))
   const before = u ? u.tasks.slice(0, u.tasks.findIndex(t => t.id === x.id)) : []
@@ -179,6 +202,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <!-- как в Busuu: узкая колонка по центру, название курса, плашка с прогрессом, юниты — карточками -->
     <div v-else class="cr">
       <h2 class="ctl">{{ course.title }}</h2>
+      <div v-if="!student && !of && done" class="mrs"><span>Ваше прохождение — по тем же правилам, что у ученика</span><button @click="resetMine">Сбросить моё прохождение</button></div>
       <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ done }} из {{ total }}</b><span>·</span><b>{{ total ? Math.round(done / total * 100) : 0 }}%</b></div>
       <!-- преподаватель: курс по горизонтали — что попадёт в каждый чекпоинт (у ученика — по его ошибкам) -->
       <template v-if="!student && ckMap.some(c => c.cks.length)">
@@ -216,7 +240,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
               <button class="pgo" @click="peek = null; router.push({ name: 'review' })">Повторить навыки</button>
               <button class="pgo ghost" @click="go(x)">Пройти заново</button>
             </template>
-            <button v-else-if="student && state(x) === 'todo'" class="pgo" disabled title="Ученик идёт по курсу по порядку">Сначала пройдите предыдущие</button>
+            <button v-else-if="!of && state(x) === 'todo'" class="pgo" disabled title="Курс проходится по порядку — и учеником, и преподавателем">Сначала пройдите предыдущие</button>
             <button v-else class="pgo" @click="go(x)">Поехали!</button>
             </template>
           </div>
@@ -328,6 +352,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .rvd > * { max-width: 760px; margin: 0 auto }
 .dtabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto; margin-bottom: 8px }
 .dtabs button { font: inherit; font-size: 12.5px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 12px; background: none; color: #5f6368; cursor: pointer } .dtabs button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
+.mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: #f0f1f3; color: #555; font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
 .cktg { all: unset; cursor: pointer; font-size: 13px; font-weight: 800; color: #6b3fd1; margin: 4px 0 -2px } .cktg span { font-size: 11px }
 .sh { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 30px 24px; text-align: center }
 .sh p { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px } .sh b { font-size: 18px }
