@@ -129,7 +129,8 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .dc { display: grid; gap: 12px }
 .bar { display: flex; align-items: center; gap: 10px } .dt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; text-align: center; margin-right: 90px }
 .ch { position: relative; display: grid; gap: 8px; padding: 12px 12px 10px; min-width: 0 }
-.dc.docked .ch { animation: down .25s ease } @keyframes down { from { transform: translateY(-12px); opacity: 0 } }
+.dc.docked .ch { animation: down .25s ease; gap: 4px; padding: 6px 10px 6px }      /* сверху сессии — минимум отступов, место отдано графику */
+.dc.docked .x { width: 26px; height: 26px } @keyframes down { from { transform: translateY(-12px); opacity: 0 } }
 .cnt { font-size: 12px; font-weight: 700; color: var(--hint) }
 .x { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: none; color: var(--hint); cursor: pointer } .x:hover { background: var(--surface) }
 .none { margin: 0; text-align: center; font-size: 13px }

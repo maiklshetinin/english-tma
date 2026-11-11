@@ -54,7 +54,7 @@ const bins = computed(() => {
   return out
 })
 // Стопка: каждое слово — мини-карточка 3:2, лежат друг на друге чуть вразнобой; самая высокая стопка влезает в график.
-const BMAX = computed(() => wide.value ? (props.tall ? 330 : 210) : props.tall && !narrow.value ? 220 : props.dock && narrow.value ? 52 : props.dock ? 110 : 120)
+const BMAX = computed(() => wide.value ? (props.tall ? 330 : props.dock ? 244 : 210) : props.tall && !narrow.value ? 220 : props.dock && narrow.value ? 52 : props.dock ? 110 : 120)
 const pileMax = computed(() => Math.max(1, ...bins.value.slice(0, -1).map(b => b.items.length)))      // «позже» в масштаб не берём
 const mq = (q) => typeof matchMedia !== 'undefined' && matchMedia(q).matches
 const wide = ref(mq('(min-width: 720px)')), narrow = ref(mq('(max-width: 520px)'))
@@ -250,6 +250,9 @@ onUnmounted(() => cancelAnimationFrame(raf))
   .pch.docked .top { gap: 4px 6px } .pch.docked .scl { margin-right: auto }
   .pch.docked .plot { height: 76px; padding-top: 12px } .pch.docked .grid { inset: 12px 0 0 }
 }
-@media (min-width: 720px) { .pch, .pch.docked { --bmax: 210px } .plot, .pch.docked .plot { height: 250px } .pch.tall { --bmax: 330px } .pch.tall .plot { height: 370px } }
+/* компактная шапка сверху сессии колоды: отступы сняты — на их высоту выше сам график */
+.pch.docked { gap: 4px } .pch.docked .scl { padding: 2px } .pch.docked .scl button { padding: 3px 9px }
+.pch.docked .plot { padding-top: 6px } .pch.docked .grid { inset: 6px 0 0 }
+@media (min-width: 720px) { .pch { --bmax: 210px } .plot { height: 250px } .pch.docked { --bmax: 244px } .pch.docked .plot { height: 280px } .pch.tall { --bmax: 330px } .pch.tall .plot { height: 370px } }
 @media (min-width: 521px) and (max-width: 719px) { .pch.tall { --bmax: 220px } .pch.tall .plot { height: 260px } }
 </style>
