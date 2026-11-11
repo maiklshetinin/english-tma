@@ -57,7 +57,7 @@ async function reset() {
 
 <template>
   <div class="rv">
-    <div class="secs" role="tablist"><button v-for="[k, t] in [['words', 'Словарь'], ['skills', 'Грамматика и навыки']]" :key="k" role="tab" :aria-selected="sec === k" :class="{ on: sec === k }" @click="sec = k">{{ t }}</button></div>
+    <div class="secs" role="tablist"><button v-for="[k, t] in [['words', 'Словарь'], ['skills', 'Грамматика и навыки']]" :key="k" role="tab" :aria-selected="sec === k" :class="{ on: sec === k }" @click="sec = k">{{ t }}</button><span class="se"><slot name="end" /></span></div>
     <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" />
     <template v-else>
     <div class="rcard">
@@ -128,7 +128,7 @@ async function reset() {
 .sy { margin-left: 10px; font-size: 12px; font-weight: 800; color: var(--hint); vertical-align: middle } .sy.synced { color: #1fbe78 } .sy.error { color: #ff9600 }
 .al { color: #1cb0f6; font-weight: 800; text-decoration: none }
 .secs { display: flex; gap: 22px; border-bottom: 1px solid #e8eaee; width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box }
-.secs button { all: unset; cursor: pointer; padding: 6px 0 9px; font-size: 16px; font-weight: 800; color: #5f6368; border-bottom: 2.5px solid transparent; margin-bottom: -1px } .secs button.on { color: #1278b0; border-color: #1cb0f6 }
+.secs button { all: unset; cursor: pointer; padding: 6px 0 9px; font-size: 16px; font-weight: 800; color: #5f6368; border-bottom: 2.5px solid transparent; margin-bottom: -1px } .secs button.on { color: #1278b0; border-color: #1cb0f6 } .se { margin-left: auto; align-self: center }
 .vt { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100% }
 .vt button { font: inherit; font-size: 13px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 14px; background: none; color: #5f6368; cursor: pointer } .vt button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .vt { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto }

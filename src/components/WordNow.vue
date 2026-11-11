@@ -50,7 +50,7 @@ const lastH = computed(() => cur.value?.hist[0])
     </aside>
     <section v-if="cur" class="rt">
       <div class="wh"><b>{{ cur.text }}</b><small>{{ cur.tr }}<template v-if="lastH"> · последний ответ: <span :class="lastH.ok === true ? 'y' : lastH.ok === false ? 'x' : ''">{{ lastH.ok === true ? 'верно' : lastH.ok === false ? 'ошибка' : 'встретилось' }}</span> ({{ lastH.ex }})</template></small></div>
-      <WordCurve :key="cur.key" :item="cur" :cfg="cfg" />
+      <WordCurve :key="cur.key" :item="cur" :cfg="cfg" :fill="dock" />
     </section>
   </div></div>
 </template>
@@ -59,6 +59,8 @@ const lastH = computed(() => cur.value?.hist[0])
 .wn { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; min-width: 0; padding: 12px; border-radius: 16px; background: #fff; box-shadow: inset 0 0 0 1px #eef0f3 }
 .ls { display: grid; align-content: start; gap: 6px; max-height: 470px; overflow: auto; padding-right: 2px }
 .dock .ls { max-height: 330px }
+/* в панели «Графики» курса: график на всю ширину, список слов — под ним плиткой */
+.wn.dock { grid-template-columns: minmax(0, 1fr) } .dock .rt { order: 1 } .dock .ls { order: 2; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); max-height: 220px } .dock .lt { grid-column: 1 / -1 }
 .lt { font-size: 12px; font-weight: 900; color: var(--hint); padding: 2px 4px }
 .li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 12px; background: #f6f7f9; font: inherit; text-align: left; cursor: pointer; transition: background .3s, box-shadow .3s }
 .li:hover { background: #eef4fb } .li.on { background: #eaf6fe; box-shadow: inset 0 0 0 2px #1cb0f6 } .li.hot { background: #fff3c4 }

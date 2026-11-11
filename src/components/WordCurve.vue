@@ -8,14 +8,18 @@
 // Расчёт — utils/review.ts (ts-fsrs), данные — запись словаря (f — память, hist — ответы).
 import { ref, computed } from 'vue'
 import { rate, recallAt, intervalOf } from '../utils/review'
+import { useFitHeight } from '../composables/useFitHeight'
 
 const props = defineProps({
   item: { type: Object, required: true },             // запись Review (RItem)
   cfg: { type: Object, required: true },              // { retention, maxDays }
+  fill: Boolean,                                      // в панели «Графики» курса — по высоте до низа окна
 })
 const DAY = 86_400_000, HOUR = 3_600_000
 const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 520px)').matches      // телефон: уже холст — крупнее подписи
-const W = narrow ? 360 : 600, H = narrow ? 200 : 210, PADL = 36, PADB = 22
+const W = narrow ? 360 : 600, PADL = 36, PADB = 22
+const svg = ref(null)
+const H = useFitHeight(svg, W, narrow ? 200 : 210, () => props.fill, 104)          // снизу — легенда и «Посмотреть, что будет»
 const zoom = ref('due'), shift = ref(0)
 const gid = 'wcg' + Math.random().toString(36).slice(2)              // id заливки — своё у каждого графика
 const ZOOMS = [['due', 'До повтора'], ['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год']]
@@ -68,17 +72,17 @@ const y0 = computed(() => {
   for (const t of samples.value) { const r = rAt(t, true); if (r != null) min = Math.min(min, r) }
   return Math.max(0, Math.min(Math.floor((min - 0.05) * 10) / 10, props.cfg.retention - 0.1))
 })
-const yOf = (r) => 8 + (1 - (r - y0.value) / (1 - y0.value)) * (H - PADB - 8)
+const yOf = (r) => 8 + (1 - (r - y0.value) / (1 - y0.value)) * (H.value - PADB - 8)
 const path = (from, to, future) => {
   const pts = samples.value.filter(t => t >= from && t <= to).map(t => [t, rAt(t, future)]).filter(p => p[1] != null)
   return pts.length > 1 ? 'M' + pts.map(([t, r]) => `${xOf(t).toFixed(1)} ${yOf(r).toFixed(1)}`).join(' L') : ''
 }
 const first = computed(() => answers.value[0]?.t ?? 0)
 const pastD = computed(() => path(first.value, Math.min(now.value, range.value[1]), false))
-const pastFill = computed(() => pastD.value ? `${pastD.value} L${xOf(Math.min(now.value, range.value[1])).toFixed(1)} ${H - PADB} L${xOf(Math.max(first.value, range.value[0])).toFixed(1)} ${H - PADB} Z` : '')
+const pastFill = computed(() => pastD.value ? `${pastD.value} L${xOf(Math.min(now.value, range.value[1])).toFixed(1)} ${H.value - PADB} L${xOf(Math.max(first.value, range.value[0])).toFixed(1)} ${H.value - PADB} Z` : '')
 const progD = computed(() => path(Math.max(now.value, first.value), Math.min(due.value, range.value[1]), false))
 const nextD = computed(() => due.value < range.value[1] ? path(Math.max(due.value, now.value), range.value[1], true) : '')
-const dots = computed(() => answers.value.filter(x => x.t >= range.value[0] && x.t <= range.value[1]).map(x => ({ x: xOf(x.t), y: x.ok ? yOf(1) : H - PADB - 4, ok: x.ok })))      // ошибка — точка внизу: «не вспомнил»
+const dots = computed(() => answers.value.filter(x => x.t >= range.value[0] && x.t <= range.value[1]).map(x => ({ x: xOf(x.t), y: x.ok ? yOf(1) : H.value - PADB - 4, ok: x.ok })))      // ошибка — точка внизу: «не вспомнил»
 const ticks = computed(() => {
   const [a, b] = range.value, span = b - a, out = []
   const step = span <= 2 * DAY ? 6 * HOUR : span <= 10 * DAY ? DAY : span <= 45 * DAY ? 7 * DAY : 30 * DAY
@@ -100,7 +104,7 @@ const ago = computed(() => {
   return d < 1 / 24 ? 'только что' : d < 1 ? `${Math.round(d * 24)} ч назад` : `${Math.round(d)} дн назад`
 })
 const dueTxt = computed(() => `Повтор · ${new Date(due.value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`)
-const nowY = computed(() => (failNow.value ? H - PADB - 4 : yOf(recallNow.value)))      // только что ошибся — точка «сейчас» внизу, рядом с ошибкой
+const nowY = computed(() => (failNow.value ? H.value - PADB - 4 : yOf(recallNow.value)))      // только что ошибся — точка «сейчас» внизу, рядом с ошибкой
 const nowTxt = computed(() => failNow.value ? 'Сейчас · ошибка' : `${shift.value ? 'Будет' : 'Сейчас'} · ${Math.round((recallNow.value ?? 0) * 100)}%`)
 // только что ошибся (до часа назад): «100 %» тут сбивает — показываем «не вспомнил»; дальше — обычная вероятность по кривой
 const failNow = computed(() => !shift.value && lastAns.value && !lastAns.value.ok && fresh.value)
@@ -124,7 +128,7 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
         <span class="sub">последний ответ {{ ago }}<template v-if="failNow"> · ошибка — слово учится заново, кривая начинается с короткой памятью</template></span>
       </div>
       <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="[k, t] in ZOOMS" :key="k" role="tab" :aria-selected="zoom === k" :class="{ on: zoom === k }" @click="zoom = k">{{ t }}</button></div>
-      <svg :viewBox="`0 0 ${W} ${H}`" class="gr" role="img" :aria-label="`Кривая памяти «${item.text}»: помнит сейчас ${Math.round(recallNow * 100)} %, повторить ${rel(due)}`">
+      <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" class="gr" role="img" :aria-label="`Кривая памяти «${item.text}»: помнит сейчас ${Math.round(recallNow * 100)} %, повторить ${rel(due)}`">
         <defs><linearGradient :id="gid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1cb0f6" stop-opacity=".28" /><stop offset="1" stop-color="#1cb0f6" stop-opacity="0" /></linearGradient></defs>
         <g class="ax"><line :x1="PADL" :y1="H - PADB" :x2="W" :y2="H - PADB" />
           <text v-for="(t, k) in yTicks" :key="'y' + k" :x="PADL - 6" :y="t.y + 3" text-anchor="end">{{ t.t }}</text>

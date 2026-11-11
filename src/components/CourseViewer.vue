@@ -456,11 +456,13 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
   .full.split .spl { order: 2; display: block; flex: none; width: 10px; z-index: 2; cursor: col-resize; background: #eef0f3; touch-action: none; position: relative }
   .full.split .spl::after { content: ''; position: absolute; left: 3.5px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: #b5bac1 }
   .full.split .spl:hover, .full.split .spl:active { background: #d6ecfb }
-  .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); min-width: 0; max-width: 72vw; max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 64px }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
-  .full.split .rvd > * { max-width: none }
+  .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); min-width: 0; max-width: 72vw; max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 0 }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
+  .full.split .rvd > * { max-width: none } .full.split .dtabs { padding-right: 150px }      /* справа сверху — кнопки «Сейчас здесь» */
 }
-.dtabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto; margin-bottom: 8px }
-.dtabs button { font: inherit; font-size: 12.5px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 12px; background: none; color: #5f6368; cursor: pointer } .dtabs button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
+/* вкладки панели — как в DevTools: плоская полоса сверху, активная подчёркнута */
+.dtabs { position: sticky; top: 0; z-index: 3; display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 10px; padding: 0 8px; background: #f7f8fa; border-bottom: 1px solid #e3e6ea }
+.dtabs button { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 11px 7px; background: none; color: #5f6368; cursor: pointer; white-space: nowrap }
+.dtabs button:hover { background: #eceef1; color: #303338 } .dtabs button.on { color: #1a73e8; border-bottom-color: #1a73e8 }
 .mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: #f0f1f3; color: #555; font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
 .rpt { display: flex; align-items: center; gap: 16px; margin: 12px 0; padding: 16px 18px; border-radius: 18px; background: #f4f7fb; box-shadow: inset 0 0 0 1.5px #e3e8ef; cursor: pointer; transition: background .15s }
 .rpt:hover, .rpt.on { background: #ecf3fc } .rpt.due { background: #f3efff; box-shadow: inset 0 0 0 1.5px #ddd0ff } .rpt.due:hover, .rpt.due.on { background: #ebe4ff }

@@ -10,6 +10,7 @@
 // Расчёт — utils/review.ts (ts-fsrs); прошлое восстанавливается по истории ответов слова, сервер не нужен.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { rate, recallAt, stateOf } from '../utils/review'
+import { useFitHeight } from '../composables/useFitHeight'
 
 const props = defineProps({
   items: { type: Object, required: true },             // словарь { ключ: RItem }
@@ -41,13 +42,16 @@ const words = computed(() => Object.values(props.items).map(x => {
 const rAt = (w, t) => { let a = null; for (const x of w.ans) { if (x.t > t) break; a = x } return a ? recallAt(a.s, (t - a.t) / DAY) : null }
 
 // ── сетка по времени ──
-const W = 640, H = props.tall ? 330 : 230, PL = 38, PB = 40, PT = 10, BARH = 16
+const W = 640, PL = 38, PB = 40, PT = 10, BARH = 16
 const N = 140
 const ts = computed(() => { const [a, b] = range.value, out = []; for (let k = 0; k <= N; k++) out.push(a + (b - a) * k / N); return out })
 const xOf = (t) => PL + (t - range.value[0]) / (range.value[1] - range.value[0]) * (W - PL - 10)
-const plotB = H - PB
+// высота: в Review — 330; в панели «Графики» курса на широком экране — до низа окна (было много пустого места); иначе 230
+const svg = ref(null)
+const H = useFitHeight(svg, W, props.tall ? 330 : 230, () => props.dock)
+const plotB = computed(() => H.value - PB)
 const y0 = ref(0.5)
-const yOf = (r) => PT + (1 - (Math.max(y0.value, r) - y0.value) / (1 - y0.value)) * (plotB - PT)
+const yOf = (r) => PT + (1 - (Math.max(y0.value, r) - y0.value) / (1 - y0.value)) * (plotB.value - PT)
 const many = computed(() => words.value.length > 40)
 
 // точки линии слова: по сетке + ступенька на каждом ответе (вертикальный подскок)
@@ -112,7 +116,7 @@ const nowStat = computed(() => { const rs = words.value.map(w => rAt(w, nowT.val
 const today = computed(() => { const d = new Date(nowT.value); d.setHours(0, 0, 0, 0); let n = 0; for (const w of words.value) for (const x of w.ans) if (x.t >= d.getTime()) n++; return n })
 
 // ── наведение: подсказка за момент ──
-const hov = ref(null), svg = ref(null)
+const hov = ref(null)
 function move(e) {
   const r = svg.value?.getBoundingClientRect(); if (!r) return
   const x = (e.clientX - r.left) / r.width * W; if (x < PL) { hov.value = null; return }
