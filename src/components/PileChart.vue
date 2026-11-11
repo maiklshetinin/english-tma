@@ -141,6 +141,7 @@ const sweeping = ref(false); let sweepT = 0
 const enter = (i) => { if (performance.now() > stirUntil && hover.value !== i) hover.value = i }
 const calm = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
 function stir(e) {
+  if (mode.value === 'tiles') return                  // «плашки» — без веника
   const t = performance.now()
   if (!last || t - last.t > 120) { last = { x: e.clientX, y: e.clientY, t }; return }
   const dt = Math.max(8, t - last.t), dx = e.clientX - last.x, dy = e.clientY - last.y
@@ -194,7 +195,7 @@ onUnmounted(() => cancelAnimationFrame(raf))
       <slot name="actions" />
     </div>
     <div ref="plotw" class="plotw">
-      <div class="plot" :class="{ sweep: sweeping }" :style="{ '--n': bins.length }" @mouseleave="hover = null" @pointermove="stir">
+      <div class="plot" :class="{ sweep: sweeping, tiles: mode === 'tiles' }" :style="{ '--n': bins.length }" @mouseleave="hover = null" @pointermove="stir">
         <div class="grid"><i /><i /><i /></div>
         <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, pin: pinned === b.i, later: b.i === sc.n, hot: b.items.some(r => r.id === fresh) }"
           :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="enter(b.i)" @mousemove="enter(b.i)" @click="pin(b.i)">
@@ -230,6 +231,7 @@ onUnmounted(() => cancelAnimationFrame(raf))
 .scl { flex: none; padding: 2px } .scl button { padding: 4px 9px; font-size: 12px }
 .plot { --broom: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg transform=''%3E%3Cpath d='M30.5 1.5L15 17' stroke='%239c7a4c' stroke-width='2.4' stroke-linecap='round'/%3E%3Cpath d='M30 2L15.5 16.5' stroke='%23e2c792' stroke-width='.9' stroke-linecap='round'/%3E%3Cpath d='M16.5 15.5L13 12.5L.8 23.5L8.5 31.2z' fill='%23e8c66a' stroke='%23a8823a' stroke-width='.8' stroke-linejoin='round'/%3E%3Cpath d='M13.6 13.4L2.5 24.5M14.5 14.3L4.4 26.4M15.3 15.1L6.4 28.4M16 16L8.2 29.6' stroke='%23c9a24a' stroke-width='.5'/%3E%3Cpath d='M.8 23.5l.9 1.4-.2 1.6 1.2.7.2 1.4 1.3.4.5 1.3 1.4.2.8 1.2 1.6-.3' fill='none' stroke='%23a8823a' stroke-width='.7' stroke-linejoin='round'/%3E%3Cpath d='M10.6 14.8l5.1 4.6' stroke='%23d33a3a' stroke-width='1.1'/%3E%3Cpath d='M9.2 16.2l5.1 4.6' stroke='%232f8fd8' stroke-width='1.1'/%3E%3Cpath d='M7.8 17.6l5.1 4.6' stroke='%23d33a3a' stroke-width='1.1'/%3E%3Cpath d='M13.4 12.9l3.6 3.1M14.2 12.1l3.6 3.1' stroke='%236d6d6d' stroke-width='.9'/%3E%3C/g%3E%3C/svg%3E") 4 28, auto; --broom-go: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg transform='rotate%28-16 5 28%29'%3E%3Cpath d='M30.5 1.5L15 17' stroke='%239c7a4c' stroke-width='2.4' stroke-linecap='round'/%3E%3Cpath d='M30 2L15.5 16.5' stroke='%23e2c792' stroke-width='.9' stroke-linecap='round'/%3E%3Cpath d='M16.5 15.5L13 12.5L.8 23.5L8.5 31.2z' fill='%23e8c66a' stroke='%23a8823a' stroke-width='.8' stroke-linejoin='round'/%3E%3Cpath d='M13.6 13.4L2.5 24.5M14.5 14.3L4.4 26.4M15.3 15.1L6.4 28.4M16 16L8.2 29.6' stroke='%23c9a24a' stroke-width='.5'/%3E%3Cpath d='M.8 23.5l.9 1.4-.2 1.6 1.2.7.2 1.4 1.3.4.5 1.3 1.4.2.8 1.2 1.6-.3' fill='none' stroke='%23a8823a' stroke-width='.7' stroke-linejoin='round'/%3E%3Cpath d='M10.6 14.8l5.1 4.6' stroke='%23d33a3a' stroke-width='1.1'/%3E%3Cpath d='M9.2 16.2l5.1 4.6' stroke='%232f8fd8' stroke-width='1.1'/%3E%3Cpath d='M7.8 17.6l5.1 4.6' stroke='%23d33a3a' stroke-width='1.1'/%3E%3Cpath d='M13.4 12.9l3.6 3.1M14.2 12.1l3.6 3.1' stroke='%236d6d6d' stroke-width='.9'/%3E%3C/g%3E%3Ccircle cx='24.5' cy='26' r='1.3' fill='%23d9cdb4'/%3E%3Ccircle cx='28' cy='29' r='.9' fill='%23e6dcc6'/%3E%3Ccircle cx='21' cy='30' r='.8' fill='%23e6dcc6'/%3E%3Cpath d='M26 21.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z' fill='%23ffd54a'/%3E%3C/svg%3E") 4 28, auto }
 .plot, .plot .bc { cursor: var(--broom) } .plot.sweep, .plot.sweep .bc { cursor: var(--broom-go) }
+.plot.tiles, .plot.tiles .bc { cursor: pointer }      /* строгий вид «плашки» — обычный курсор, без веника */
 .plot { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; align-items: end; height: 165px; padding-top: 14px }
 .pch.docked .plot { height: 150px }
 .grid { position: absolute; inset: 14px 0 0; display: grid; grid-template-rows: repeat(3, 1fr); pointer-events: none } .grid i { border-top: 1px dashed var(--border) }
