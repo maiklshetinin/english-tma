@@ -282,14 +282,14 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <button class="wk-now" :class="{ on: week === 0 }" :title="week === 0 ? 'Эта неделя' : 'Вернуться к этой неделе'" @click="week = 0"><b>{{ weekName }}</b><small>{{ weekRange(dates) }}</small></button>
             <button class="icon-btn wk-next" :disabled="week >= maxWeek" :title="week >= maxWeek ? 'Дальше — следующий месяц' : 'Следующая неделя'" aria-label="Следующая неделя" @click="week++"><AppIcon name="back" :size="20" /></button>
             <WeekLoad class="wload" :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
-            <i class="brk" aria-hidden="true" />
+            <i class="brk" aria-hidden="true" /><i class="brk b2" aria-hidden="true" />
             <GridStyleButton />
             <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Стикер: перетащите в свободную ячейку" aria-label="Стикер: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i v-for="(s, k) in pack" :key="s.id" :style="{ '--c': s.c, '--bg': s.bg, left: 8 + k * 6 + 'px', transform: `rotate(${k * 5 - 6}deg)` }" /></button>
             <button class="af-sw" role="switch" :aria-checked="autoFill" :aria-label="`Автоподстановка расписания: ${autoFill ? 'включена' : 'выключена'}`" :title="`Автоподстановка (тест): уроки этой недели сами ставятся на следующие недели до конца месяца (сейчас — ${spreadTo}) — настоящими уроками, только в свободное время. Ученики их видят`" @click="toggleAuto"><i :class="{ on: autoFill }" aria-hidden="true" /><span><b>авто</b><small>{{ spreadTo }}</small></span></button>
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
-            <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i><span><span class="ask-w">Укажите </span><span class="ask-t">статус</span> · {{ noStatus.length }}</span></button>
+            <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i>Статус · {{ noStatus.length }}</button>
             <WeekMoney class="money" :m="money" />
-            <div class="mplan" :title="`План на ${monthName}: проведено ${fmtMoney(monthMoney.real)}, всего с запланированными ${fmtMoney(monthMoney.plan)}`"><b>{{ fmtMoney(monthMoney.plan) }}</b><small>план на {{ monthName }}</small></div>
+            <div class="mplan" :title="`План на ${monthName}: проведено ${fmtMoney(monthMoney.real)}, всего с запланированными ${fmtMoney(monthMoney.plan)}`"><b>{{ fmtMoney(monthMoney.plan) }}</b><small>за {{ monthName }}</small></div>
           </div>
           <WeekGrid class="wgrid" :dates="dates" :ghosts="ghosts" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost"
             :fresh-trial="freshTrial" @trial-edited="freshTrial = null" @trial-save="saveTrial" @trial-remove="removeTrial" />
@@ -310,7 +310,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
    Голубая — только текущая неделя; серая — вы на другой неделе, нажатие вернёт. «›» — та же стрелка «назад», повёрнутая. */
 .wk-back { border-color: var(--border) }
 .wk-next { border-color: var(--border) } .wk-next :deep(svg) { transform: rotate(180deg) }
-.wk-now { flex: none; width: 128px; height: 40px; display: grid; align-content: center; justify-items: center; padding: 0 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.2; white-space: nowrap; cursor: pointer }
+.wk-now { flex: none; width: 116px; height: 40px; display: grid; align-content: center; justify-items: center; padding: 0 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.2; white-space: nowrap; cursor: pointer }
 .wk-now b { font-size: 13px; font-weight: 800 } .wk-now small { font-size: 11px; font-weight: 700; color: var(--hint) }
 .wk-now.on { background: var(--blue-l); border-color: var(--blue-l); cursor: default } .wk-now.on b, .wk-now.on small { color: var(--blue) }
 /* «План на месяц» — в пару к деньгам недели; «авто · до 6 дек» — выключатель автоподстановки расписания (как в iPhone) */
@@ -328,7 +328,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 .trial-pad { position: relative; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none }
 .trial-pad i { position: absolute; top: 7px; width: 12px; height: 25px; border-radius: 2px 2px 3px 3px; background: var(--bg); box-shadow: inset 0 6px 0 var(--c), 0 1px 3px rgba(0, 0, 0, .2); transform-origin: 50% 100% }
 .trial-pad:hover { border-color: var(--hint-2) } .trial-pad.held { opacity: .55 }
-@media (min-width: 1024px) { .wh > * { flex: none } .ask .ask-w, .af-sw small { display: none } .ask .ask-t { display: inline-block; text-transform: capitalize } }      /* в одну строку, пока помещается; с «Укажите статус» деньги уходят на вторую — ничего не обрезается */
+@media (min-width: 1024px) { .wh > * { flex: none } .af-sw small { display: none } .wh .mplan { margin-left: auto } .wh .money + .mplan { margin-left: 0 } }      /* в одну строку, пока помещается; с «Укажите статус» деньги уходят на вторую — ничего не обрезается */
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
 .gall { position: relative; border-color: var(--border); color: var(--blue) } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .ask { display: inline-flex; align-items: center; gap: 6px; background: var(--orange-l); color: var(--orange-d) } .ask i { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: #fff; font-style: normal; font-size: 11px; font-weight: 900 }
@@ -344,13 +344,15 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
   .side { grid-area: side; padding: 4px 0 6px }
   .side :deep(.nm) { display: none }
   .wk-back { order: 1 } .wk-now { order: 2; flex: 1; width: auto; min-width: 0 } .wk-next { order: 3 }
-  .brk { display: block; order: 4; flex-basis: 100%; height: 0 }
+  .brk { display: block; order: 4; flex-basis: 100%; height: 0 } .brk.b2 { order: 7 }
   .wload { order: 5 }
-  .wh .money { order: 6; margin-left: 0; display: flex; gap: 6px; padding: 0; border: 0; background: none }
-  .wh .money :deep(.top), .wh .money :deep(.lost) { height: 54px; box-sizing: border-box; display: grid; align-content: center; justify-items: start; padding: 0 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); line-height: 1.15; white-space: nowrap }
+  /* вторая строка: спидометр и три плашки денег (факт недели, отмены, план месяца) — поровну на всю ширину; .money «растворяется», её плашки встают в общий ряд */
+  .wh .money { display: contents }
+  .wh .money :deep(.top), .wh .money :deep(.lost) { order: 6; flex: 1 0 auto; height: 54px; box-sizing: border-box; display: grid; align-content: center; justify-items: start; padding: 0 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); line-height: 1.15; white-space: nowrap }
   .wh .money :deep(b), .wh .money :deep(.lost em) { font-size: 15px; font-weight: 900 } .wh .money :deep(small), .wh .money :deep(.lost) { font-size: 11px }
-  .mplan { order: 6; height: 54px; box-sizing: border-box; align-content: center; justify-items: start; padding: 0 10px; border-radius: 14px } .wh .mplan b { font-size: 15px }
-  .wh :deep(.gsb) { order: 7; margin-left: auto } .trial-pad { order: 8 } .af-sw { order: 9; height: 40px } .gall { order: 9 } .ask { order: 10 }          /* GridStyleButton — без одного корня, поэтому :deep */
+  .mplan { order: 6; flex: 1 0 auto; height: 54px; box-sizing: border-box; align-content: center; justify-items: start; padding: 0 10px; border-radius: 14px } .wh .mplan b { font-size: 15px }
+  /* третья строка: слева «авто» и «Статус», справа — вид таблицы и стикеры */
+  .af-sw { order: 8; height: 40px } .ask { order: 9 } .gall { order: 10 } .wh :deep(.gsb) { order: 11; margin-left: auto } .trial-pad { order: 12 }          /* GridStyleButton — без одного корня, поэтому :deep */
 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */
