@@ -295,11 +295,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <!-- курс тем же рельсом, что в редакторе -->
     <!-- как в Busuu: узкая колонка по центру, название курса, плашка с прогрессом, юниты — карточками -->
     <div v-else class="cr">
-      <!-- преподаватель: одна тонкая строка — прогресс, «как видит ученик» (пояснение — в подсказке), «Сбросить моё прохождение»; курс уже выделен карточкой выше -->
+      <!-- преподаватель: одна тонкая строка — прогресс и кружок «Сбросить моё прохождение» (подпись — в подсказке); курс уже выделен карточкой выше -->
       <div v-if="!student && !of" class="tbar">
         <b>{{ done }} из {{ total }} · {{ total ? Math.round(done / total * 100) : 0 }}%</b><span class="tpr"><i :style="{ width: (total ? done / total * 100 : 0) + '%' }" /></span>
-        <span class="tvw" title="Так курс видит ученик: нажмите на урок — покажется его время и «Поехали!». Ваше прохождение — по тем же правилам, что у ученика: по порядку, ошибки уходят в чекпоинт">как видит ученик <i>i</i></span>
-        <button v-if="done" class="trs" @click="resetMine"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></svg>Сбросить моё прохождение</button>
+        <button v-if="done" class="trs" title="Сбросить моё прохождение" aria-label="Сбросить моё прохождение" @click="resetMine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></svg></button>
       </div>
       <template v-else>
       <h2 class="ctl">{{ course.title }}</h2>
@@ -463,8 +462,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .ctl { margin: 0; font-size: 30px; font-weight: 900 }
 .tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px }
 .tbar > b { white-space: nowrap } .tpr { flex: 1; min-width: 80px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden } .tpr i { display: block; height: 100%; background: #1fbe78; transition: width .3s }
-.tvw { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--hint); cursor: help; white-space: nowrap } .tvw i { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid currentColor; font-size: 10px; font-style: normal; font-weight: 800 }
-.trs { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font: inherit; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; white-space: nowrap } .trs:hover { background: var(--surface) }
+.trs { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card); font: inherit; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; white-space: nowrap } .trs:hover { background: var(--surface) }
 .trs svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .cpill { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 14px; font-size: 16px }
 .cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
