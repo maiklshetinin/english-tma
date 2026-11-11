@@ -40,7 +40,7 @@ describe('все экраны в демо-режиме', () => {
     await go('students')
 
     // Вкладка «Курсы» преподавателя (список и просмотр курса) и «Слова» с колодами
-    await go('path'); await visit('courses'); expect(w.text()).toContain('Как видит ученик')
+    await go('path'); await visit('courses'); expect(w.text()).toContain('Курсы')      // «Как видит ученик» — теперь подсказка в строке прогресса (видна, когда выбран курс)
     await go('words'); await visit('words'); expect(w.text()).toContain('Business Basics')
 
     // Ученик: все вкладки

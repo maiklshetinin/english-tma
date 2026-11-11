@@ -235,7 +235,10 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
   rv: (() => { const r = repeats.value[u.id]; return r?.started ? { n: r.steps.length, words: r.words, screens: r.screens, next: r.next ? relDay(r.next) : '', items: r.list.map(o => ({ id: o.st.id, kind: o.kind, ex: exName(o.st), w: o.w, from: o.t.title, pct: o.pct })) } : null })(),
 })))
 const dockTab = ref('mem')
-// тема панели «Графики» — как у всего приложения (кнопка темы вверху справа); тёмная — палитра как в DevTools dark
+// тема панели «Графики» — своя, как в DevTools: «Как в приложении» / «Светлая» / «Тёмная» (переключатель в полосе вкладок, запоминается)
+const gTheme = ref((() => { try { return localStorage.getItem('tma.graphsTheme') || 'app' } catch { return 'app' } })())
+watch(gTheme, (v) => { try { localStorage.setItem('tma.graphsTheme', v) } catch { /* приватный режим */ } })
+const gDark = computed(() => (gTheme.value === 'app' ? theme.value : gTheme.value) === 'dark')
 // «Где сейчас слова»: список слов под графиком (как в Review); нажал — его кривая в «Слово сейчас»
 const pickedKey = ref(null)
 watch(focusKey, () => { pickedKey.value = null })
@@ -283,7 +286,6 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
 <template>
   <div class="cv">
-    <h3 v-if="!student && !of" class="vh">Как видит ученик <small>нажмите на урок — покажется его время и «Поехали!»</small></h3>
     <!-- как в Busuu: «Уроки» и «Review» (слова и фразы из пройденных уроков) -->
     <p v-if="err" class="hint">Не удалось загрузить курс {{ err }}</p>
     <div v-if="loading || !course" class="card hint none">{{ loading ? 'Загрузка…' : 'Выберите курс выше' }}</div>
@@ -291,9 +293,16 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <!-- курс тем же рельсом, что в редакторе -->
     <!-- как в Busuu: узкая колонка по центру, название курса, плашка с прогрессом, юниты — карточками -->
     <div v-else class="cr">
+      <!-- преподаватель: одна тонкая строка — прогресс, «как видит ученик» (пояснение — в подсказке), «Сбросить моё прохождение»; курс уже выделен карточкой выше -->
+      <div v-if="!student && !of" class="tbar">
+        <b>{{ done }} из {{ total }} · {{ total ? Math.round(done / total * 100) : 0 }}%</b><span class="tpr"><i :style="{ width: (total ? done / total * 100 : 0) + '%' }" /></span>
+        <span class="tvw" title="Так курс видит ученик: нажмите на урок — покажется его время и «Поехали!». Ваше прохождение — по тем же правилам, что у ученика: по порядку, ошибки уходят в чекпоинт">как видит ученик <i>i</i></span>
+        <button v-if="done" class="trs" @click="resetMine"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></svg>Сбросить моё прохождение</button>
+      </div>
+      <template v-else>
       <h2 class="ctl">{{ course.title }}</h2>
-      <div v-if="!student && !of && done" class="mrs"><span>Ваше прохождение — по тем же правилам, что у ученика</span><button @click="resetMine">Сбросить моё прохождение</button></div>
       <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ done }} из {{ total }}</b><span>·</span><b>{{ total ? Math.round(done / total * 100) : 0 }}%</b></div>
+      </template>
       <!-- «что попадёт в чекпоинты» — только в панели «Графики» урока (вкладка «Экраны → чекпоинты»), над путём курса не показываем -->
       <template v-for="u in units" :key="u.id">
       <section class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
@@ -368,8 +377,8 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
         <template v-if="steps.length && !of && auth.role === 'teacher'">
           <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
           <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
-          <div v-if="rvChart" class="rvd" :class="{ dark: theme === 'dark' }">
-            <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
+          <div v-if="rvChart" class="rvd" :class="{ dark: gDark }">
+            <div class="dtabs" role="tablist"><div class="gth" role="radiogroup" aria-label="Тема панели"><button v-for="[k, t, d] in [['app', 'Авто', 'Как в приложении'], ['light', 'Светлая', 'Светлая тема панели'], ['dark', 'Тёмная', 'Тёмная тема панели']]" :key="k" role="radio" :aria-checked="gTheme === k" :class="{ on: gTheme === k }" :title="d" @click="gTheme = k">{{ t }}</button></div><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
             <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
             <WordNow v-else-if="dockTab === 'curve'" :focus="pickedKey || focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <div v-else-if="dockTab === 'words'" class="gw">
@@ -450,6 +459,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 /* курс — как рельс в редакторе */
 .cr { display: grid; gap: 16px; width: 100%; max-width: 620px; margin: 6px auto 0 }
 .ctl { margin: 0; font-size: 30px; font-weight: 900 }
+.tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px }
+.tbar > b { white-space: nowrap } .tpr { flex: 1; min-width: 80px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden } .tpr i { display: block; height: 100%; background: #1fbe78; transition: width .3s }
+.tvw { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--hint); cursor: help; white-space: nowrap } .tvw i { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid currentColor; font-size: 10px; font-style: normal; font-weight: 800 }
+.trs { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font: inherit; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; white-space: nowrap } .trs:hover { background: var(--surface) }
+.trs svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .cpill { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 14px; font-size: 16px }
 .cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
 .un { display: grid; padding: 22px 24px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: var(--card) }
@@ -522,11 +536,13 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
   .full.split .spl::after { content: ''; position: absolute; left: 3.5px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: #b5bac1 }
   .full.split .spl:hover, .full.split .spl:active { background: #d6ecfb }
   .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); min-width: 0; max-width: 72vw; max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 0 }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
-  .full.split .rvd > * { max-width: none } .full.split .dtabs { padding-right: 190px }      /* справа сверху — кнопки «Сейчас здесь» */
+  .full.split .rvd > * { max-width: none } .full.split .dtabs { padding-right: 150px }      /* справа сверху — кнопки «Сейчас здесь» */
 }
 /* вкладки панели — как в DevTools: плоская полоса сверху, активная подчёркнута */
 .dtabs { position: sticky; top: 0; z-index: 3; display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 10px; padding: 0 8px; background: var(--g-bar); border-bottom: 1px solid var(--g-bd) }
 .dtabs button { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 11px 7px; background: none; color: var(--g-mu); cursor: pointer; white-space: nowrap }
+.dtabs .gth { flex: none; display: flex; align-self: center; margin: 0 8px 0 0; border: 1px solid var(--g-bd); border-radius: 6px; overflow: hidden }      /* тема панели — сегменты, первыми слева (справа сверху — «Сейчас здесь») */
+.dtabs .gth button { padding: 3px 8px; border: 0; margin: 0; font-size: 11.5px; font-weight: 600 } .dtabs .gth button + button { border-left: 1px solid var(--g-bd) } .dtabs .gth button.on { background: var(--g-seg); color: var(--g-tx) }
 .dtabs button:hover { background: var(--g-hov); color: var(--g-tx) } .dtabs button.on { color: var(--g-acc); border-bottom-color: var(--g-acc) }
 .mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: var(--border); color: var(--hint); font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
 /* «Где сейчас слова» в панели: график + таблица слов (как в Review) */

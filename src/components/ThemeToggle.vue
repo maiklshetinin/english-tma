@@ -16,3 +16,8 @@ import { theme, toggleTheme } from '../composables/useTelegram'
 .tt svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 @media (max-width: 719px) { .tt { width: 30px; height: 30px } .tt svg { width: 15px; height: 15px } }
 </style>
+
+<style>
+/* открыта панель «Графики» урока — у неё свой переключатель темы, круглая кнопка не мешает вкладкам */
+body:has(.full.split) .tt { display: none }
+</style>
