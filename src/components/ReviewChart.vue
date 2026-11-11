@@ -63,7 +63,7 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
     <div class="fl" :class="{ on: flash }" aria-live="polite"><template v-if="flash"><i :class="flash.ok === true ? 'y' : flash.ok === false ? 'x' : 'n'" /><b>{{ flash.text }}</b> · {{ flash.what }}<span v-if="flash.more"> · и ещё {{ flash.more }}</span></template></div>
     <PileChart :items="rows" :dock="dock" :tall="tall" :fresh="hotId" :order="['strong', 'medium', 'weak']" @pick="pickW">
       <template #top>
-        <template v-if="!tall"><b class="ttl2">Где сейчас слова</b>
+        <template v-if="!tall || dock"><b class="ttl2">Где сейчас слова</b>
         <span class="cnt">{{ count.weak }} слабых · {{ count.medium }} средних · {{ count.strong }} сильных<template v-if="fresh"> · {{ fresh }} новых без ответа</template></span></template>
         <span v-else-if="fresh" class="cnt">{{ fresh }} новых без ответа</span>
         <select v-model="filter" aria-label="Какие слова"><option value="all">Все</option><option value="word">Слова</option><option value="phrase">Фразы</option><option v-for="l in lessons" :key="l" :value="'lesson:' + l">Урок: {{ l }}</option></select>
@@ -75,12 +75,14 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
 </template>
 
 <style scoped>
-.rc { display: grid; gap: 8px; min-width: 0; padding: 12px; border-radius: 16px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px #eef0f3 }
+.rc { display: grid; gap: 8px; min-width: 0; padding: 12px; border-radius: 16px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px var(--border, #eef0f3) }
+.rc.dock { padding: 12px 14px; border-radius: 8px; box-shadow: none; border: 1px solid var(--border) }      /* в панели «Графики» курса — строже, как остальные графики панели */
+.rc.dock .ttl2 { font-size: 13.5px; font-weight: 700 } .rc.dock .cnt { font-weight: 500 }
 .ttl2 { font-size: 15px; font-weight: 900; color: var(--text) }
 .cnt { font-size: 12px; font-weight: 700; color: var(--hint) }
-select { justify-self: start; width: auto; max-width: 220px; font: inherit; font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 9px; border: 1.5px solid #e3e6ea; background: #fff; color: var(--text) }
-.fl { height: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; border-radius: 10px; background: #fff; transition: height .2s; padding: 0 10px }
+select { justify-self: start; width: auto; max-width: 220px; font: inherit; font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 9px; border: 1px solid var(--border, #e3e6ea); background: var(--card, #fff); color: var(--text) }
+.fl { height: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; border-radius: 10px; background: var(--card, #fff); transition: height .2s; padding: 0 10px }
 .fl.on { height: 30px; box-shadow: 0 0 0 1.5px #1cb0f6 } .fl i { flex: none; width: 9px; height: 9px; border-radius: 50% } .fl .y { background: #58cc02 } .fl .x { background: #ff4b4b } .fl .n { background: #b5bac1 }
 .em { margin: 0; font-size: 13px; color: var(--hint); text-align: center }
-.cv { padding: 10px; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px #eef0f3 }
+.cv { padding: 10px; border-radius: 12px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px var(--border, #eef0f3) }
 </style>

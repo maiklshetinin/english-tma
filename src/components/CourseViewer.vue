@@ -234,6 +234,17 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
   rv: (() => { const r = repeats.value[u.id]; return r?.started ? { n: r.steps.length, words: r.words, screens: r.screens, next: r.next ? relDay(r.next) : '', items: r.list.map(o => ({ id: o.st.id, kind: o.kind, ex: exName(o.st), w: o.w, from: o.t.title, pct: o.pct })) } : null })(),
 })))
 const dockTab = ref('mem')
+// тема панели «Графики»: светлая / тёмная (как в DevTools), запоминается в браузере
+const gTheme = ref((() => { try { return localStorage.getItem('tma.graphsTheme') || 'light' } catch { return 'light' } })())
+watch(gTheme, (v) => { try { localStorage.setItem('tma.graphsTheme', v) } catch { /* приватный режим */ } })
+// «Где сейчас слова»: список слов под графиком (как в Review); нажал — его кривая в «Слово сейчас»
+const pickedKey = ref(null)
+watch(focusKey, () => { pickedKey.value = null })
+const pickWord = (k) => { pickedKey.value = k; dockTab.value = 'curve' }
+const LV_ORD = { weak: 0, medium: 1, strong: 2, new: 3 }
+const wordRows = computed(() => Object.values(dictWords.value).map(x => { const st = stateOf(x, Date.now(), { retention: algo.retention, maxDays: algo.maxDays }); return { x, st, lv: st.isNew ? 'new' : st.failed ? 'weak' : st.level } })
+  .sort((a, b) => LV_ORD[a.lv] - LV_ORD[b.lv] || (a.st.recall ?? 101) - (b.st.recall ?? 101)))
+const dueIn = (t) => { const d = (t - Date.now()) / 86_400_000; return d <= 0 ? 'пора' : d < 1 ? `через ${Math.max(1, Math.round(d * 24))} ч` : `через ${Math.round(d)} дн` }
 const missItems = (t) => { const m = missOf(t.id); return m.length ? okSteps(t).filter(s => m.includes(s.id)).map(s => ({ id: s.id, w: stepWord(s), ex: exName(s), hot: open.value?.id === t.id && misses.has(s.id) })) : [] }
 const ckInfo = (id) => ckMap.value.flatMap(c => c.cks).find(k => k.id === id)
 const rvInfo = (uid) => ckMap.value.find(c => c.id === uid)?.rv
@@ -358,11 +369,23 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
         <template v-if="steps.length && !of && auth.role === 'teacher'">
           <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
           <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
-          <div v-if="rvChart" class="rvd">
-            <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
+          <div v-if="rvChart" class="rvd" :class="{ dark: gTheme === 'dark' }">
+            <div class="dtabs" role="tablist"><button class="thm" :title="gTheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'" :aria-label="gTheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'" @click="gTheme = gTheme === 'dark' ? 'light' : 'dark'"><svg v-if="gTheme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg><svg v-else viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg></button><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
             <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
-            <WordNow v-else-if="dockTab === 'curve'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
-            <ReviewChart v-else-if="dockTab === 'words'" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
+            <WordNow v-else-if="dockTab === 'curve'" :focus="pickedKey || focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
+            <div v-else-if="dockTab === 'words'" class="gw">
+              <ReviewChart :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock tall />
+              <!-- список слов — как в Review «Словарь»: слабые сверху; нажал — кривая слова во вкладке «Слово сейчас» -->
+              <div v-if="wordRows.length" class="wt" role="table" aria-label="Слова ученика">
+                <div class="wtr wth" role="row"><span>Слово</span><span>Перевод</span><span>Сила</span><span class="r">Помнит</span><span class="r">Повтор</span></div>
+                <button v-for="r in wordRows" :key="r.x.key" class="wtr" role="row" :class="{ on: r.x.key === (pickedKey || focusKey) }" @click="pickWord(r.x.key)">
+                  <span class="w1">{{ r.x.text }}</span><span class="w2">{{ r.x.tr }}</span>
+                  <span class="w3"><i class="sb" :class="r.lv"><b /><b /><b /></i>{{ { new: 'Новое', weak: 'Слабое', medium: 'Среднее', strong: 'Сильное' }[r.lv] }}</span>
+                  <span class="r" :class="r.st.failed || (r.st.recall != null && r.st.recall < algo.retention * 100) ? 'bad' : ''">{{ r.st.isNew ? '—' : r.st.failed ? 'ошибка' : r.st.recall + '%' }}</span>
+                  <span class="r mu">{{ r.st.isNew ? '—' : dueIn(r.st.due) }}</span>
+                </button>
+              </div>
+            </div>
             <!-- путь курса, как у ученика; справа: у урока — экраны с ошибкой (→ в чекпоинт), у чекпоинта и «Повторения» — что в них сейчас -->
             <div v-else class="ckp">
               <p class="ckh">Ошибка в уроке → экран уходит в чекпоинт своей Chapter. Слова и упражнения, которым пора по FSRS, — в «Повторение».</p>
@@ -482,7 +505,15 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .full { position: fixed; inset: 0; z-index: 1000; background: #fff; display: flex; flex-direction: column }
 .full :deep(.lp) { flex: 1; min-height: 0; height: auto }
 .rvt { position: absolute; top: 12px; right: 14px; z-index: 3; border: 0; border-radius: 12px; padding: 8px 12px; background: #eaf6fe; color: #1278b0; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer } .rvt.on { background: #1cb0f6; color: #fff }
-.rvd { flex: none; max-height: 55vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid #eef0f3 }
+.rvd { flex: none; max-height: 55vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid #eef0f3; color: var(--g-tx); background: var(--g-page);
+  --g-page: #fff; --g-bg: #fff; --g-tx: #1f2328; --g-mu: #6b7280; --g-bd: #e5e7eb; --g-grid: #f0f1f3; --g-seg: #f3f4f6; --g-sub: #f6f7f9; --g-avg: #7c3aed; --g-sel: #2563eb; --g-bar: #f7f8fa; --g-hov: #eceef1; --g-acc: #1a73e8 }
+/* тёмная тема панели — свои оттенки (не простое «инвертирование») */
+.rvd.dark { --g-page: #17191c; --g-bg: #1e2023; --g-tx: #e8eaed; --g-mu: #9aa0a6; --g-bd: #33373d; --g-grid: #2a2d32; --g-seg: #2f3338; --g-sub: #26292d; --g-avg: #a78bfa; --g-sel: #60a5fa; --g-bar: #202225; --g-hov: #2a2d31; --g-acc: #8ab4f8; border-color: #33373d; color-scheme: dark;
+  --card: #1e2023; --surface: #26292d; --border: #33373d; --text: #e8eaed; --hint: #9aa0a6; --hint-2: #6b7078; --blue-l: #263447; --blue: #8ab4f8 }      /* темы приложения внутри панели — для «Где сейчас слова» и пути */
+.rvd.dark .ckp .un { background: var(--g-bg); border-color: var(--g-bd) } .rvd.dark .ckp .un.all { background: #17251e; border-color: #1f6f4a } .rvd.dark .ckp .uh b, .rvd.dark .ckp .cap { color: var(--g-tx) } .rvd.dark .ckp .cap small { color: var(--g-mu) }
+.rvd.dark .ckp .ubar, .rvd.dark .ckp .vrow::before { background: #33373d } .rvd.dark .ckp .bead.todo { background: #2a2d31; color: #6b7078; box-shadow: 0 0 0 3px var(--g-page), 0 0 0 6px #33373d } .rvd.dark .ckp .bead { box-shadow: 0 0 0 3px var(--g-page), 0 0 0 6px #1fbe78 }
+.rvd.dark .chp { background: #3a2326 } .rvd.dark .chp.au, .rvd.dark .chp.no { background: #2a2d31 } .rvd.dark .chp.wd { background: #1f2d3d } .rvd.dark .chp.sc { background: #2a2340 } .rvd.dark .chp.own { background: #2a2340; color: #c4b5fd }
+.rvd.dark .sbx { background: #2a2216; box-shadow: inset 0 0 0 1px #5c4316 } .rvd.dark .sbx.rv { background: #221d33; box-shadow: inset 0 0 0 1px #3f3266 } .rvd.dark .ckp .rvr { background: #221d33; box-shadow: inset 0 0 0 1px #3f3266 } .rvd.dark .rpi { background: #2a2d31; box-shadow: none }
 .rvd > * { max-width: 760px; margin: 0 auto }
 .spl { display: none }
 @media (min-width: 900px) {                    /* компьютер: урок слева, графики справа, между ними — перегородка (тянется) */
@@ -495,10 +526,23 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
   .full.split .rvd > * { max-width: none } .full.split .dtabs { padding-right: 150px }      /* справа сверху — кнопки «Сейчас здесь» */
 }
 /* вкладки панели — как в DevTools: плоская полоса сверху, активная подчёркнута */
-.dtabs { position: sticky; top: 0; z-index: 3; display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 10px; padding: 0 8px; background: #f7f8fa; border-bottom: 1px solid #e3e6ea }
-.dtabs button { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 11px 7px; background: none; color: #5f6368; cursor: pointer; white-space: nowrap }
-.dtabs button:hover { background: #eceef1; color: #303338 } .dtabs button.on { color: #1a73e8; border-bottom-color: #1a73e8 }
+.dtabs { position: sticky; top: 0; z-index: 3; display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 10px; padding: 0 8px; background: var(--g-bar); border-bottom: 1px solid var(--g-bd) }
+.dtabs button { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 11px 7px; background: none; color: var(--g-mu); cursor: pointer; white-space: nowrap }
+.dtabs button:hover { background: var(--g-hov); color: var(--g-tx) } .dtabs button.on { color: var(--g-acc); border-bottom-color: var(--g-acc) }
+.dtabs .thm { display: grid; place-items: center; padding: 6px 9px; border-right: 1px solid var(--g-bd) }      /* тема — первой кнопкой слева, как иконки в DevTools (справа сверху — «Сейчас здесь») */ .thm svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: #f0f1f3; color: #555; font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
+/* «Где сейчас слова» в панели: график + таблица слов (как в Review) */
+.gw { display: grid; gap: 12px; container-type: inline-size }
+.wt { display: grid; border: 1px solid var(--g-bd); border-radius: 8px; overflow: hidden; background: var(--g-bg); font-variant-numeric: tabular-nums }
+.wtr { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) 110px 64px 84px; gap: 10px; align-items: center; padding: 7px 12px; border: 0; border-top: 1px solid var(--g-bd); background: none; font: inherit; font-size: 12.5px; color: var(--g-tx); text-align: left; cursor: pointer }
+.wtr:first-child { border-top: 0 } .wtr:hover:not(.wth) { background: var(--g-sub) } .wtr.on { background: var(--g-seg); box-shadow: inset 2px 0 0 var(--g-sel) }
+.wth { cursor: default; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--g-mu); background: var(--g-bar) }
+.wtr .r { text-align: right } .wtr .bad { color: #ef4444 } .wtr .mu { color: var(--g-mu) }
+.w1 { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .w2 { color: var(--g-mu); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.w3 { display: inline-flex; align-items: center; gap: 7px; color: var(--g-mu) }
+.sb { display: inline-flex; align-items: flex-end; gap: 2px; height: 11px } .sb b { width: 3px; border-radius: 1px; background: var(--g-grid) } .sb b:nth-child(1) { height: 5px } .sb b:nth-child(2) { height: 8px } .sb b:nth-child(3) { height: 11px }
+.sb.weak b:nth-child(1) { background: #ef4444 } .sb.medium b:nth-child(-n+2) { background: #f59e0b } .sb.strong b { background: #22c55e }
+@container (max-width: 520px) { .wtr { grid-template-columns: minmax(0, 1fr) 96px 56px } .wtr .w2, .wtr > :last-child { display: none } }
 /* «Путь → чекпоинты» в панели: тот же путь, компактнее, справа — что куда попадает */
 .ckp { display: grid; gap: 10px } .ckh { margin: 0; font-size: 12px; font-weight: 700; color: var(--hint) }
 .ckp .un { padding: 14px 16px 6px; border-radius: 16px } .ckp .uh b { font-size: 17px } .ckp .ubar { height: 8px; margin: 10px 0 6px }

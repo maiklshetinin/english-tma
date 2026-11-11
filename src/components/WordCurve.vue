@@ -6,9 +6,8 @@
 //  • оранжевая линия — «желаемое запоминание»: ниже — пора повторить (настройка «Алгоритм повторений»);
 //  • «+1 час / +1 день / +3 дня» — посмотреть, что будет; масштаб «До повтора / Неделя / Месяц / Год».
 // Расчёт — utils/review.ts (ts-fsrs), данные — запись словаря (f — память, hist — ответы).
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { rate, recallAt, intervalOf } from '../utils/review'
-import { useFitHeight } from '../composables/useFitHeight'
 
 const props = defineProps({
   item: { type: Object, required: true },             // запись Review (RItem)
@@ -16,13 +15,23 @@ const props = defineProps({
   fill: Boolean,                                      // в панели «Графики» курса — по высоте до низа окна
 })
 const DAY = 86_400_000, HOUR = 3_600_000
-const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 520px)').matches      // телефон: уже холст — крупнее подписи
-const W = narrow ? 360 : 600, PADL = 36, PADB = 22
-const svg = ref(null)
-const H = useFitHeight(svg, W, narrow ? 200 : 210, () => props.fill, 104)          // снизу — легенда и «Посмотреть, что будет»
+// размер — в настоящих пикселях (viewBox = ширина блока): подписи всегда 11 px, а не растут вместе с графиком
+const PADL = 40, PADR = 10, PADB = 24, PADT = 22
+const cw = ref(null), W = ref(600), H = ref(220)
+function size() {
+  const el = cw.value; if (!el) return
+  const r = el.getBoundingClientRect(); if (!r.width) return
+  W.value = Math.max(260, Math.round(r.width))
+  const big = props.fill && typeof matchMedia === 'function' && matchMedia('(min-width: 900px)').matches
+  H.value = big ? Math.round(Math.max(240, Math.min(W.value * 1.2, innerHeight - r.top - 96))) : W.value < 420 ? 190 : 220      // в панели курса — до низа окна (снизу легенда и «Посмотреть, что будет»)
+}
+let ro = null
+onMounted(() => { size(); addEventListener('resize', size); if (typeof ResizeObserver !== 'undefined') { let w0 = 0; ro = new ResizeObserver(([e]) => { if (Math.abs(e.contentRect.width - w0) > 1) { w0 = e.contentRect.width; size() } }) } if (cw.value) ro?.observe(cw.value) })
+onUnmounted(() => { removeEventListener('resize', size); ro?.disconnect() })
+watch(cw, (el) => { if (el) { size(); ro?.observe(el) } })
 const zoom = ref('due'), shift = ref(0)
 const gid = 'wcg' + Math.random().toString(36).slice(2)              // id заливки — своё у каждого графика
-const ZOOMS = [['due', 'До повтора'], ['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год']]
+const ZOOMS = [['due', 'До повтора'], ['week', '7 дн'], ['month', '30 дн'], ['year', '1 год']]
 const now = computed(() => Date.now() + shift.value)
 
 // ответы по порядку и память после каждого (история хранится от новых к старым)
@@ -49,7 +58,7 @@ const range = computed(() => {
   const span = { week: 7, month: 30, year: 365, due: 7 }[zoom.value] * DAY
   return [n - span * 0.45, n + span * 0.55]
 })
-const xOf = (t) => PADL + (t - range.value[0]) / (range.value[1] - range.value[0]) * (W - PADL - 8)
+const xOf = (t) => PADL + (t - range.value[0]) / (range.value[1] - range.value[0]) * (W.value - PADL - PADR)
 
 // вероятность в момент t: по последнему ответу до t; после срока повтора — «если ответить верно»
 const rAt = (t, future) => {
@@ -72,7 +81,7 @@ const y0 = computed(() => {
   for (const t of samples.value) { const r = rAt(t, true); if (r != null) min = Math.min(min, r) }
   return Math.max(0, Math.min(Math.floor((min - 0.05) * 10) / 10, props.cfg.retention - 0.1))
 })
-const yOf = (r) => 8 + (1 - (r - y0.value) / (1 - y0.value)) * (H.value - PADB - 8)
+const yOf = (r) => PADT + (1 - (r - y0.value) / (1 - y0.value)) * (H.value - PADB - PADT)
 const path = (from, to, future) => {
   const pts = samples.value.filter(t => t >= from && t <= to).map(t => [t, rAt(t, future)]).filter(p => p[1] != null)
   return pts.length > 1 ? 'M' + pts.map(([t, r]) => `${xOf(t).toFixed(1)} ${yOf(r).toFixed(1)}`).join(' L') : ''
@@ -88,10 +97,10 @@ const ticks = computed(() => {
   const step = span <= 2 * DAY ? 6 * HOUR : span <= 10 * DAY ? DAY : span <= 45 * DAY ? 7 * DAY : 30 * DAY
   const fmt = (t) => step < DAY ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
   let t = Math.ceil(a / step) * step
-  for (; t < b && out.length < 9; t += step) out.push({ x: xOf(t), t: fmt(t) })
+  for (; t < b && out.length < Math.max(3, Math.floor(W.value / 90)); t += step) out.push({ x: xOf(t), t: fmt(t) })
   return out
 })
-const yTicks = computed(() => [1, (1 + y0.value) / 2, y0.value].map(r => ({ y: yOf(r), t: Math.round(r * 100) + '%' })))
+const yTicks = computed(() => { const n = H.value > 320 ? 4 : 2; return Array.from({ length: n + 1 }, (_, i) => 1 - (1 - y0.value) * i / n).map(r => ({ y: yOf(r), t: Math.round(r * 100) + '%' })) })
 const rel = (t) => {
   const d = (t - now.value) / DAY
   if (d <= 0) return 'пора'
@@ -105,11 +114,11 @@ const ago = computed(() => {
 })
 const dueTxt = computed(() => `Повтор · ${new Date(due.value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`)
 const nowY = computed(() => (failNow.value ? H.value - PADB - 4 : yOf(recallNow.value)))      // только что ошибся — точка «сейчас» внизу, рядом с ошибкой
-const nowTxt = computed(() => failNow.value ? 'Сейчас · ошибка' : `${shift.value ? 'Будет' : 'Сейчас'} · ${Math.round((recallNow.value ?? 0) * 100)}%`)
+const nowTxt = computed(() => failNow.value ? 'сейчас · ошибка' : `${shift.value ? 'будет' : 'сейчас'} ${Math.round((recallNow.value ?? 0) * 100)}%`)
 // только что ошибся (до часа назад): «100 %» тут сбивает — показываем «не вспомнил»; дальше — обычная вероятность по кривой
 const failNow = computed(() => !shift.value && lastAns.value && !lastAns.value.ok && fresh.value)
-const pillW = (t) => t.length * 6.1 + 16                              // ширина «таблетки» под подпись (на глаз по шрифту 10–11 px)
-const pillX = (x, t) => Math.min(W - pillW(t) - 2, Math.max(PADL, x - pillW(t) / 2))
+const lblW = (t) => t.length * 6.2                                      // ширина подписи (шрифт 11 px)
+const lblX = (x, t) => Math.min(W.value - PADR - lblW(t) / 2, Math.max(PADL + lblW(t) / 2, x))      // по центру над линией, не вылезая за края
 // последний ответ: память до него → после (после ошибки резко падает) — «100 % сейчас» без этого вводит в заблуждение
 const dn = (d) => (d == null ? 'новое' : d < 1 ? `${Math.max(1, Math.round(d * 24))} ч` : d < 10 ? `${String(Math.round(d * 10) / 10).replace('.', ',')} дн` : `${Math.round(d)} дн`)
 const lastAns = computed(() => { const a = answers.value; if (!a.length) return null; const x = a.at(-1); return { ok: x.ok, s: x.s, before: a.length > 1 ? a.at(-2).s : null } })
@@ -123,56 +132,63 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
     <template v-else>
       <div class="top">
         <div class="kp" :class="failNow ? 'bad' : tone(recallNow)" :title="failNow ? 'Ответ был неверным — слово учится заново: память короткая, повтор скоро' : ''"><small>{{ failNow ? 'Сейчас' : 'Помнит сейчас' }}</small><b>{{ failNow ? 'не вспомнил' : Math.round(recallNow * 100) + '%' }}</b></div>
-        <div v-if="lastAns" class="kp" :class="lastAns.ok ? 'ok' : 'bad'"><small>Последний ответ: {{ lastAns.ok ? 'верно' : 'ошибка' }}</small><b>память {{ dn(lastAns.before) }} → {{ dn(lastAns.s) }}</b></div>
+        <div v-if="lastAns" class="kp" :class="lastAns.ok ? 'ok' : 'bad'"><small>Ответ: {{ lastAns.ok ? 'верно' : 'ошибка' }} · память</small><b>{{ dn(lastAns.before) }} → {{ dn(lastAns.s) }}</b></div>
         <div class="kp due" :class="{ bad: due <= now }"><small>Повторить</small><b>{{ rel(due) }}</b></div>
-        <span class="sub">последний ответ {{ ago }}<template v-if="failNow"> · ошибка — слово учится заново, кривая начинается с короткой памятью</template></span>
+        <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="[k, t] in ZOOMS" :key="k" role="tab" :aria-selected="zoom === k" :class="{ on: zoom === k }" @click="zoom = k">{{ t }}</button></div>
       </div>
-      <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="[k, t] in ZOOMS" :key="k" role="tab" :aria-selected="zoom === k" :class="{ on: zoom === k }" @click="zoom = k">{{ t }}</button></div>
-      <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" class="gr" role="img" :aria-label="`Кривая памяти «${item.text}»: помнит сейчас ${Math.round(recallNow * 100)} %, повторить ${rel(due)}`">
-        <defs><linearGradient :id="gid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1cb0f6" stop-opacity=".28" /><stop offset="1" stop-color="#1cb0f6" stop-opacity="0" /></linearGradient></defs>
-        <g class="ax"><line :x1="PADL" :y1="H - PADB" :x2="W" :y2="H - PADB" />
-          <text v-for="(t, k) in yTicks" :key="'y' + k" :x="PADL - 6" :y="t.y + 3" text-anchor="end">{{ t.t }}</text>
-          <g v-for="(t, k) in ticks" :key="'x' + k"><line :x1="t.x" :y1="H - PADB" :x2="t.x" :y2="H - PADB + 4" /><text :x="t.x" :y="H - 6" text-anchor="middle">{{ t.t }}</text></g></g>
-        <line class="ret" :x1="PADL" :y1="yOf(cfg.retention)" :x2="W" :y2="yOf(cfg.retention)" />
-        <text class="rett" :x="PADL + 4" :y="yOf(cfg.retention) - 4">ниже {{ Math.round(cfg.retention * 100) }}% — пора повторить</text>
+      <span class="sub">последний ответ {{ ago }}<template v-if="failNow"> · ошибка — слово учится заново, кривая начинается с короткой памятью</template></span>
+      <div ref="cw" class="cw">
+      <svg :viewBox="`0 0 ${W} ${H}`" :width="W" :height="H" class="gr" role="img" :aria-label="`Кривая памяти «${item.text}»: помнит сейчас ${Math.round(recallNow * 100)} %, повторить ${rel(due)}`">
+        <defs><linearGradient :id="gid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--se); stop-opacity: .16" /><stop offset="1" style="stop-color: var(--se); stop-opacity: 0" /></linearGradient></defs>
+        <g class="ax">
+          <g v-for="(t, k) in yTicks" :key="'y' + k"><line class="gl" :x1="PADL" :y1="t.y" :x2="W - PADR" :y2="t.y" /><text :x="PADL - 8" :y="t.y + 4" text-anchor="end">{{ t.t }}</text></g>
+          <text v-for="(t, k) in ticks" :key="'x' + k" :x="t.x" :y="H - 6" text-anchor="middle">{{ t.t }}</text></g>
+        <line class="ret" :x1="PADL" :y1="yOf(cfg.retention)" :x2="W - PADR" :y2="yOf(cfg.retention)" />
+        <text class="rett" :x="PADL + 6" :y="yOf(cfg.retention) - 5">порог {{ Math.round(cfg.retention * 100) }}%</text>
         <path v-if="pastFill" :d="pastFill" :fill="`url(#${gid})`" />
         <path v-if="pastD" class="past" :d="pastD" />
         <path v-if="progD" class="prog" :d="progD" />
         <path v-if="nextD" class="next" :d="nextD" />
-        <circle v-for="(d, k) in dots" :key="'d' + k" :cx="d.x" :cy="d.y" r="4.5" :class="d.ok ? 'dy' : 'dx'" />
-        <g v-if="due > range[0] && due < range[1]"><line class="dl" :x1="xOf(due)" y1="8" :x2="xOf(due)" :y2="H - PADB" /><circle class="dd" :cx="xOf(due)" :cy="yOf(cfg.retention)" r="5" />
-          <g :transform="`translate(${pillX(xOf(due), dueTxt)} 6)`"><rect class="dp" :width="pillW(dueTxt)" height="18" rx="9" /><text class="dt" :x="pillW(dueTxt) / 2" y="12.5" text-anchor="middle">{{ dueTxt }}</text></g></g>
-        <g v-if="now > range[0] && now < range[1]"><line class="nl" :x1="xOf(now)" y1="26" :x2="xOf(now)" :y2="H - PADB" /><circle class="nd" :class="{ fail: failNow }" :cx="xOf(now)" :cy="nowY" r="5.5" />
-          <g :transform="`translate(${pillX(xOf(now), nowTxt)} ${failNow ? H - PADB - 34 : Math.max(28, yOf(recallNow) - 30)})`"><rect class="np" :width="pillW(nowTxt)" height="19" rx="9.5" /><text class="ntx" :x="pillW(nowTxt) / 2" y="13" text-anchor="middle">{{ nowTxt }}</text></g></g>
+        <circle v-for="(d, k) in dots" :key="'d' + k" :cx="d.x" :cy="d.y" r="3.5" :class="d.ok ? 'dy' : 'dx'" />
+        <g v-if="due > range[0] && due < range[1]"><line class="dl" :x1="xOf(due)" :y1="PADT - 4" :x2="xOf(due)" :y2="H - PADB" /><circle class="dd" :cx="xOf(due)" :cy="yOf(cfg.retention)" r="4" />
+          <text class="dt" :x="lblX(xOf(due), dueTxt)" :y="PADT - 9" text-anchor="middle">{{ dueTxt }}</text></g>
+        <g v-if="now > range[0] && now < range[1]"><line class="nl" :x1="xOf(now)" :y1="PADT - 4" :x2="xOf(now)" :y2="H - PADB" /><circle class="nd" :class="{ fail: failNow }" :cx="xOf(now)" :cy="nowY" r="4.5" />
+          <text class="ntx" :x="lblX(xOf(now), nowTxt)" :y="PADT - 9" text-anchor="middle">{{ nowTxt }}</text></g>
       </svg>
-      <div class="leg"><span><i class="lp" />было</span><span><i class="lg" />прогноз, если не повторять</span><span><i class="ln" />после повтора — забывается медленнее</span><span><i class="lr" />ответ верно</span><span><i class="lx" />ошибка</span></div>
-      <div class="sim">Посмотреть, что будет:<button @click="shift += HOUR">+1 час</button><button @click="shift += DAY">+1 день</button><button @click="shift += 3 * DAY">+3 дня</button><button class="back" :disabled="!shift" @click="shift = 0">Вернуться в сейчас</button></div>
+      </div>
+      <div class="leg"><span><i class="lp" />Было</span><span><i class="lg" />Прогноз без повтора</span><span><i class="ln" />После повтора — забывается медленнее</span><span><i class="lr" />Верно</span><span><i class="lx" />Ошибка</span></div>
+      <div class="sim"><span>Посмотреть, что будет</span><div class="sg"><button @click="shift += HOUR">+1 ч</button><button @click="shift += DAY">+1 дн</button><button @click="shift += 3 * DAY">+3 дн</button></div><button class="back" :disabled="!shift" @click="shift = 0">Сейчас</button></div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.wc { display: grid; gap: 10px; min-width: 0 }
-.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
-.kp { display: grid; padding: 6px 12px; border-radius: 12px; background: #f4f6f8; line-height: 1.15 } .kp small { font-size: 11px; font-weight: 800; color: var(--hint) } .kp b { font-size: 19px; font-weight: 900 }
-.kp.ok b { color: #46a302 } .kp.mid b { color: #e08600 } .kp.bad b { color: #e53935 } .kp.due b { color: #1278b0 } .kp.due.bad b { color: #e53935 }
-.sub { font-size: 12px; font-weight: 700; color: var(--hint) }
-.seg { display: flex; gap: 3px; padding: 3px; border-radius: 12px; background: #f2f3f5; justify-self: start; flex-wrap: wrap }
-.seg button { font: inherit; font-size: 12.5px; font-weight: 800; border: 0; border-radius: 9px; padding: 5px 11px; background: none; color: #5f6368; cursor: pointer } .seg button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
-.gr { width: 100%; height: auto; font-family: inherit; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px #eef0f3 }
-.gr text { font-size: 10px; font-weight: 700; fill: #8a8f98 } .ax line { stroke: #dfe3e8 }
-.ret { stroke: #ff9600; stroke-width: 1.2; stroke-dasharray: 5 4 } .gr .rett { fill: #e08600; font-weight: 800 }
-.past { fill: none; stroke: #1c7ef6; stroke-width: 2.6; stroke-linejoin: round }
-.prog { fill: none; stroke: #1c7ef6; stroke-width: 2.4; stroke-dasharray: 2 5; stroke-linecap: round }
-.next { fill: none; stroke: #8cc9f7; stroke-width: 2; stroke-dasharray: 2 5; stroke-linecap: round }
-.dy { fill: #58cc02; stroke: #fff; stroke-width: 2 } .dx { fill: #ff4b4b; stroke: #fff; stroke-width: 2 }
-.dl { stroke: #ff9600; stroke-width: 1.2 } .dp { fill: #fff1e0; stroke: #ffd29a } .np { fill: #2f2f2f } .dd { fill: #ff9600; stroke: #fff; stroke-width: 2 } .gr .dt { fill: #e08600; font-weight: 900 }
-.nl { stroke: #2f2f2f; stroke-width: 1 } .nd { fill: #fff; stroke: #1c7ef6; stroke-width: 3 } .nd.fail { stroke: #ff4b4b } .gr .ntx { fill: #fff; font-weight: 900; font-size: 11px }
-.leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; font-weight: 700; color: var(--hint) } .leg span { display: inline-flex; align-items: center; gap: 5px }
-.leg i { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid #1c7ef6 } .leg .lg { border-top-style: dotted } .leg .ln { border-top: 2.5px dotted #8cc9f7 }
-.leg .lr, .leg .lx { width: 9px; height: 9px; border: 0; border-radius: 50%; background: #58cc02 } .leg .lx { background: #ff4b4b }
-.sim { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; color: #555 }
-.sim button { font: inherit; font-size: 12.5px; font-weight: 800; border: 0; border-radius: 10px; padding: 6px 11px; background: #f2f3f5; color: #2f2f2f; cursor: pointer }
-.sim .back { background: #fff; color: #1278b0; box-shadow: inset 0 0 0 1.5px #1cb0f6 } .sim .back:disabled { opacity: .45; cursor: default }
-.nt { margin: 0; font-size: 13px; color: var(--hint); font-weight: 600 }
+/* строгий вид, цвета — из переменных панели «Графики» (светлая / тёмная тема); без панели — светлые значения по умолчанию */
+.wc { --bg: var(--g-bg, #fff); --tx: var(--g-tx, #1f2328); --mu: var(--g-mu, #6b7280); --bd: var(--g-bd, #e5e7eb); --gd: var(--g-grid, #f0f1f3); --sg: var(--g-seg, #f3f4f6); --se: var(--g-sel, #2563eb); --th: #f59e0b;
+  display: grid; gap: 8px; min-width: 0; color: var(--tx); font-variant-numeric: tabular-nums }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 8px }
+.kp { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--bd); line-height: 1.2 } .kp:first-child { padding-left: 2px; border-left: 0 }
+.kp small { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mu); white-space: nowrap } .kp b { font-size: 19px; font-weight: 600; white-space: nowrap }
+.kp.ok b { color: #16a34a } .kp.mid b { color: #d97706 } .kp.bad b { color: #ef4444 } .kp.due b { color: var(--se) } .kp.due.bad b { color: #ef4444 }
+.sub { font-size: 12px; color: var(--mu) }
+.seg { display: flex; margin-left: auto; border: 1px solid var(--bd); border-radius: 6px; overflow: hidden }
+.seg button { font: inherit; font-size: 12px; font-weight: 600; border: 0; padding: 4px 10px; background: none; color: var(--mu); cursor: pointer } .seg button + button { border-left: 1px solid var(--bd) } .seg button:hover { color: var(--tx) } .seg button.on { background: var(--sg); color: var(--tx) }
+.cw { min-width: 0 }
+.gr { display: block; max-width: 100%; font-family: inherit; overflow: visible }
+.gr text { font-size: 11px; font-weight: 500; fill: var(--mu) } .gl { stroke: var(--gd) }
+.ret { stroke: var(--th); stroke-width: 1; stroke-dasharray: 4 4 } .gr .rett { fill: var(--th); font-weight: 600 }
+.past { fill: none; stroke: var(--se); stroke-width: 2; stroke-linejoin: round }
+.prog { fill: none; stroke: var(--se); stroke-width: 2; stroke-dasharray: 5 4 }
+.next { fill: none; stroke: var(--se); stroke-width: 1.5; stroke-dasharray: 2 4; opacity: .55 }
+.dy { fill: #22c55e; stroke: var(--bg); stroke-width: 2 } .dx { fill: #ef4444; stroke: var(--bg); stroke-width: 2 }
+.dl { stroke: var(--th); stroke-width: 1 } .dd { fill: var(--th); stroke: var(--bg); stroke-width: 2 } .gr .dt { fill: var(--th); font-weight: 600 }
+.nl { stroke: var(--mu); stroke-width: 1; opacity: .7 } .nd { fill: var(--bg); stroke: var(--se); stroke-width: 2.5 } .nd.fail { stroke: #ef4444 } .gr .ntx { fill: var(--tx); font-weight: 600 }
+.leg { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--mu) } .leg span { display: inline-flex; align-items: center; gap: 6px }
+.leg i { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--se) } .leg .lg { border-top-style: dashed } .leg .ln { border-top: 1.5px dashed var(--se); opacity: .55 }
+.leg .lr, .leg .lx { width: 8px; height: 8px; border: 0; border-radius: 50%; background: #22c55e } .leg .lx { background: #ef4444 }
+.sim { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--mu) }
+.sg { display: flex; border: 1px solid var(--bd); border-radius: 6px; overflow: hidden }
+.sim button { font: inherit; font-size: 12px; font-weight: 600; border: 0; padding: 4px 10px; background: none; color: var(--tx); cursor: pointer } .sg button + button { border-left: 1px solid var(--bd) } .sim button:hover:not(:disabled) { background: var(--sg) }
+.sim .back { border: 1px solid var(--bd); border-radius: 6px; color: var(--se) } .sim .back:disabled { opacity: .45; cursor: default }
+.nt { margin: 0; font-size: 13px; color: var(--mu) }
 </style>

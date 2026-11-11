@@ -10,7 +10,6 @@
 // Расчёт — utils/review.ts (ts-fsrs); прошлое восстанавливается по истории ответов слова, сервер не нужен.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { rate, recallAt, stateOf } from '../utils/review'
-import { useFitHeight } from '../composables/useFitHeight'
 
 const props = defineProps({
   items: { type: Object, required: true },             // словарь { ключ: RItem }
@@ -26,7 +25,7 @@ onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 20_000) 
 
 // «сейчас» — не раньше последнего ответа (часы тикают раз в 20 с, а ответ мог прийти только что)
 const nowT = computed(() => { let m = now.value; for (const x of Object.values(props.items)) { const t = x.hist[0]?.t; if (t > m) m = t } return m })
-const ZOOMS = [['day', 'Сутки', 0.6, 0.4], ['week', 'Неделя', 5, 2], ['month', 'Месяц', 21, 9]]   // [id, подпись, дней назад, дней вперёд]
+const ZOOMS = [['day', '24 ч', 0.6, 0.4], ['week', '7 дн', 5, 2], ['month', '30 дн', 21, 9]]   // [id, подпись, дней назад, дней вперёд]
 const ZK = props.dock ? 'tma.memZoomDock' : 'tma.memZoom'          // сверху урока по умолчанию «Сутки» — видно каждый ответ
 const zoom = ref((() => { try { return localStorage.getItem(ZK) || (props.dock ? 'day' : 'week') } catch { return props.dock ? 'day' : 'week' } })())
 watch(zoom, (v) => { try { localStorage.setItem(ZK, v) } catch { /* приватный режим */ } })
@@ -42,13 +41,25 @@ const words = computed(() => Object.values(props.items).map(x => {
 const rAt = (w, t) => { let a = null; for (const x of w.ans) { if (x.t > t) break; a = x } return a ? recallAt(a.s, (t - a.t) / DAY) : null }
 
 // ── сетка по времени ──
-const W = 640, PL = 38, PB = 40, PT = 10, BARH = 16
+// размер — в настоящих пикселях (viewBox = ширина блока): подписи всегда 11 px, как в Grafana / DevTools, а не растут с графиком
+const PL = 40, PR = 12, PB = 36, PT = 14, BARH = 8
+const pw = ref(null), W = ref(640), H = ref(props.tall ? 330 : 240)
+function size() {
+  const el = pw.value; if (!el) return
+  const r = el.getBoundingClientRect(); if (!r.width) return
+  W.value = Math.max(280, Math.round(r.width))
+  const big = props.dock && typeof matchMedia === 'function' && matchMedia('(min-width: 900px)').matches
+  H.value = big ? Math.round(Math.max(240, Math.min(W.value * 1.3, innerHeight - r.top - 64)))          // панель «Графики» курса — до низа окна
+    : props.tall ? 330 : W.value < 480 ? 210 : 240
+}
+let ro = null
+onMounted(() => { size(); addEventListener('resize', size); if (typeof ResizeObserver !== 'undefined') { let w0 = 0; ro = new ResizeObserver(([e]) => { if (Math.abs(e.contentRect.width - w0) > 1) { w0 = e.contentRect.width; size() } }); pw.value && ro.observe(pw.value) } })
+onUnmounted(() => { removeEventListener('resize', size); ro?.disconnect() })
+watch(pw, (el) => { if (el) { size(); ro?.observe(el) } })
 const N = 140
 const ts = computed(() => { const [a, b] = range.value, out = []; for (let k = 0; k <= N; k++) out.push(a + (b - a) * k / N); return out })
-const xOf = (t) => PL + (t - range.value[0]) / (range.value[1] - range.value[0]) * (W - PL - 10)
-// высота: в Review — 330; в панели «Графики» курса на широком экране — до низа окна (было много пустого места); иначе 230
+const xOf = (t) => PL + (t - range.value[0]) / (range.value[1] - range.value[0]) * (W.value - PL - PR)
 const svg = ref(null)
-const H = useFitHeight(svg, W, props.tall ? 330 : 230, () => props.dock)
 const plotB = computed(() => H.value - PB)
 const y0 = ref(0.5)
 const yOf = (r) => PT + (1 - (Math.max(y0.value, r) - y0.value) / (1 - y0.value)) * (plotB.value - PT)
@@ -101,15 +112,15 @@ const bars = computed(() => {
   for (let t = start; t < b; t += step) out.push({ t, ok: 0, bad: 0 })
   for (const w of words.value) for (const x of w.ans) { const i = Math.floor((x.t - start) / step); if (i >= 0 && i < out.length) x.ok ? out[i].ok++ : out[i].bad++ }
   const max = Math.max(1, ...out.map(o => o.ok + o.bad))
-  return out.map(o => { const x0 = Math.max(PL, xOf(o.t)), x1 = Math.min(W - 10, xOf(o.t + step) - 2); return { ...o, x: x0, w: Math.max(2, x1 - x0), max } }).filter(o => o.w > 2)
+  return out.map(o => { const x0 = Math.max(PL, xOf(o.t)), x1 = Math.min(W.value - PR, xOf(o.t + step) - 1); return { ...o, x: x0, w: Math.max(2, x1 - x0), max } }).filter(o => o.w > 2)
 })
 const ticks = computed(() => {
   const [a, b] = range.value, step = zoom.value === 'day' ? 4 * HOUR : zoom.value === 'week' ? DAY : 7 * DAY, out = []
   let t = zoom.value === 'day' ? Math.ceil(a / step) * step : (() => { const d = new Date(a); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); return d.getTime() })()
-  for (; t < b && out.length < 10; t += step) out.push({ x: xOf(t), t: zoom.value === 'day' ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) })
+  for (; t < b && out.length < Math.max(3, Math.floor(W.value / 90)); t += step) out.push({ x: xOf(t), t: zoom.value === 'day' ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) })
   return out
 })
-const yTicks = computed(() => [1, (1 + y0.value) / 2, y0.value].map(r => ({ y: yOf(r), t: Math.round(r * 100) + '%' })))
+const yTicks = computed(() => { const n = H.value > 320 ? 4 : 2; return Array.from({ length: n + 1 }, (_, i) => 1 - (1 - y0.value) * i / n).map(r => ({ y: yOf(r), t: Math.round(r * 100) + '%' })) })
 
 // цифры «сейчас»
 const nowStat = computed(() => { const rs = words.value.map(w => rAt(w, nowT.value)).filter(r => r != null); return { n: rs.length, avg: rs.length ? rs.reduce((p, q) => p + q, 0) / rs.length : null, below: rs.filter(r => r < props.cfg.retention).length } })
@@ -119,13 +130,13 @@ const today = computed(() => { const d = new Date(nowT.value); d.setHours(0, 0, 
 const hov = ref(null)
 function move(e) {
   const r = svg.value?.getBoundingClientRect(); if (!r) return
-  const x = (e.clientX - r.left) / r.width * W; if (x < PL) { hov.value = null; return }
-  const t = range.value[0] + (x - PL) / (W - PL - 10) * (range.value[1] - range.value[0])
+  const x = (e.clientX - r.left) / r.width * W.value; if (x < PL || x > W.value - PR) { hov.value = null; return }
+  const t = range.value[0] + (x - PL) / (W.value - PL - PR) * (range.value[1] - range.value[0])
   const rs = words.value.map(w => ({ w, r: rAt(w, t) })).filter(o => o.r != null)
   if (!rs.length) { hov.value = { x, t, n: 0 }; return }
   const avg = rs.reduce((p, o) => p + o.r, 0) / rs.length
   const low = rs.filter(o => o.r < props.cfg.retention).sort((a, b) => a.r - b.r)
-  hov.value = { x, t, n: rs.length, avg, low: low.slice(0, 4).map(o => `${o.w.text} ${Math.round(o.r * 100)}%`), lowN: low.length }
+  hov.value = { x, t, n: rs.length, avg, sel: selW.value ? rAt(selW.value, t) : null, low: low.slice(0, 4).map(o => `${o.w.text} ${Math.round(o.r * 100)}%`), lowN: low.length }
 }
 const hovTxt = computed(() => { const h = hov.value; if (!h) return ''; const d = new Date(h.t); return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + (zoom.value !== 'month' ? ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '') })
 
@@ -145,6 +156,14 @@ watch(() => props.items, () => {
 }, { deep: true })
 onUnmounted(() => clearTimeout(ft))
 watch(() => words.value.length, () => { if (lastAvg == null) lastAvg = nowStat.value.avg }, { immediate: true })
+// подписи у концов линий (справа): в среднем и выбранное — чтобы не бегать глазами в легенду
+const endLbl = computed(() => {
+  const t = range.value[1], out = []
+  const a = stats.value.filter(s => s.n).at(-1); if (a) out.push({ k: 'avg', y: yOf(a.avg), t: `в среднем ${pct(a.avg)}%` })
+  if (selW.value) { const r = rAt(selW.value, t); if (r != null) out.push({ k: 'sel', y: yOf(r), t: `${selW.value.text} ${pct(r)}%` }) }
+  if (out.length === 2 && Math.abs(out[0].y - out[1].y) < 14) { const up = out[0].y <= out[1].y ? 0 : 1; out[up].y -= 7; out[1 - up].y += 7 }
+  return out.map(o => ({ ...o, y: Math.min(plotB.value - 4, Math.max(PT + 10, o.y - 6)) }))
+})
 const hotPath = computed(() => { const w = words.value.find(x => x.key === hot.value); return w ? toPath(wordPts(w)) : '' })
 
 // «Из чего число»: слова и их процент сейчас
@@ -157,29 +176,28 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
 <template>
   <div class="mc" :class="{ dock }">
     <div class="hd">
-      <b class="t">График запоминания</b>
+      <b class="t">Память словаря</b><span class="sub">вероятность вспомнить · FSRS</span>
       <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="z in ZOOMS" :key="z[0]" role="tab" :aria-selected="zoom === z[0]" :class="{ on: zoom === z[0] }" @click="zoom = z[0]">{{ z[1] }}</button></div>
     </div>
     <p v-if="!words.length" class="em">Пока пусто — график появится после первого проверенного ответа в уроке.</p>
     <template v-else>
       <div class="kps">
-        <div class="kp av"><small>Помнит словарь в среднем</small><b>{{ pct(nowStat.avg) }}%</b></div>
-        <div class="kp" :class="{ bad: nowStat.below }"><small>Пора повторить (ниже {{ pct(cfg.retention) }}%)</small><b>{{ nowStat.below }} {{ word(nowStat.below) }}</b></div>
+        <div class="kp"><small>В среднем</small><b>{{ pct(nowStat.avg) }}%</b></div>
+        <div class="kp" :class="{ bad: nowStat.below }"><small>Ниже порога {{ pct(cfg.retention) }}%</small><b>{{ nowStat.below }} {{ word(nowStat.below) }}</b></div>
         <div class="kp"><small>Ответов сегодня</small><b>{{ today }}</b></div>
-        <div v-if="selW" class="kp sl"><small>Выбрано</small><b>{{ selW.text }} · {{ pct(rAt(selW, nowT)) }}%</b></div>
+        <div v-if="selW" class="kp sl"><small>Выбрано</small><b><span>{{ selW.text }}</span> {{ pct(rAt(selW, nowT)) }}%</b></div>
       </div>
-      <div class="fl" :class="{ on: flash }" aria-live="polite"><template v-if="flash"><i :class="flash.ok ? 'y' : 'x'" /><b>{{ flash.text }}</b> · {{ flash.ok ? 'верно' : 'ошибка' }} — слово «подкинуто» к 100 %<template v-if="flash.d != null && flash.d !== 0">, в среднем {{ flash.d > 0 ? '+' : '' }}{{ String(flash.d).replace('.', ',') }}%</template></template></div>
-      <div class="pw">
-        <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" class="gr" role="img" :aria-label="`Память словаря: в среднем ${pct(nowStat.avg)} %, пора повторить ${nowStat.below}`" @mousemove="move" @mouseleave="hov = null">
+      <div class="fl" :class="{ on: flash }" aria-live="polite"><template v-if="flash"><i :class="flash.ok ? 'y' : 'x'" /><b>{{ flash.text }}</b> · {{ flash.ok ? 'верно' : 'ошибка' }} — память слова обновлена<template v-if="flash.d != null && flash.d !== 0">, в среднем {{ flash.d > 0 ? '+' : '' }}{{ String(flash.d).replace('.', ',') }}%</template></template></div>
+      <div ref="pw" class="pw">
+        <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" :width="W" :height="H" class="gr" role="img" :aria-label="`Память словаря: в среднем ${pct(nowStat.avg)} %, ниже порога ${nowStat.below}`" @mousemove="move" @mouseleave="hov = null">
           <g class="ax">
-            <line :x1="PL" :y1="plotB" :x2="W" :y2="plotB" />
-            <text v-for="(t, k) in yTicks" :key="'y' + k" :x="PL - 6" :y="t.y + 3" text-anchor="end">{{ t.t }}</text>
-            <text v-for="(t, k) in ticks" :key="'x' + k" :x="t.x" :y="H - 4" text-anchor="middle">{{ t.t }}</text>
+            <g v-for="(t, k) in yTicks" :key="'y' + k"><line class="gl" :x1="PL" :y1="t.y" :x2="W - PR" :y2="t.y" /><text :x="PL - 8" :y="t.y + 4" text-anchor="end">{{ t.t }}</text></g>
+            <text v-for="(t, k) in ticks" :key="'x' + k" :x="t.x" :y="H - 8" text-anchor="middle">{{ t.t }}</text>
           </g>
-          <!-- ответы по дням: столбики под осью -->
-          <g class="bars"><g v-for="(b, k) in bars" :key="'b' + k"><rect v-if="b.ok" :x="b.x" :y="plotB + 4" :width="b.w" :height="Math.max(2, b.ok / b.max * BARH)" class="bo"><title>{{ b.ok }} верно</title></rect><rect v-if="b.bad" :x="b.x" :y="plotB + 4 + (b.ok ? Math.max(2, b.ok / b.max * BARH) : 0)" :width="b.w" :height="Math.max(2, b.bad / b.max * BARH)" class="bb"><title>{{ b.bad }} ошибок</title></rect></g></g>
-          <line class="ret" :x1="PL" :y1="yOf(cfg.retention)" :x2="W" :y2="yOf(cfg.retention)" />
-          <text class="rett" :x="W - 12" :y="yOf(cfg.retention) - 4" text-anchor="end">{{ pct(cfg.retention) }}% — пора повторить</text>
+          <!-- ответы: тонкая полоска отметок под осью (зелёный — верно, красный — ошибка) -->
+          <g class="bars"><g v-for="(b, k) in bars" :key="'b' + k"><rect v-if="b.ok" :x="b.x" :y="plotB + 3" :width="b.w" :height="Math.max(2, b.ok / b.max * BARH)" class="bo"><title>{{ b.ok }} верно</title></rect><rect v-if="b.bad" :x="b.x" :y="plotB + 3 + (b.ok ? Math.max(2, b.ok / b.max * BARH) : 0)" :width="b.w" :height="Math.max(2, b.bad / b.max * BARH)" class="bb"><title>{{ b.bad }} ошибок</title></rect></g></g>
+          <line class="ret" :x1="PL" :y1="yOf(cfg.retention)" :x2="W - PR" :y2="yOf(cfg.retention)" />
+          <text class="rett" :x="PL + 6" :y="yOf(cfg.retention) - 5">порог {{ pct(cfg.retention) }}%</text>
           <path v-if="many && band" class="band" :d="band" />
           <g v-else class="ls">
             <g v-for="l in lines" :key="l.key"><path class="wl" :d="l.d" /><path class="hit" :d="l.d" @click="pick(l.key)"><title>{{ l.text }}</title></path></g>
@@ -187,24 +205,29 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
           <path v-if="hotPath" class="hotl" :d="hotPath" />
           <path class="avg" :d="avgPast" /><path class="avgn" :d="avgNext" />
           <path v-if="selPast" class="sel" :d="selPast" /><path v-if="selNext" class="seln" :d="selNext" />
-          <circle v-for="(d, k) in selDots" :key="'d' + k" :cx="d.x" :cy="d.ok ? yOf(1) : plotB - 4" r="4" :class="d.ok ? 'dy' : 'dx'" />
+          <circle v-for="(d, k) in selDots" :key="'d' + k" :cx="d.x" :cy="d.ok ? yOf(1) : plotB - 4" r="3.5" :class="d.ok ? 'dy' : 'dx'" />
           <line class="nl" :x1="xOf(nowT)" :y1="PT" :x2="xOf(nowT)" :y2="plotB" />
-          <text class="nt" :x="xOf(nowT) + 4" :y="PT + 9">сейчас</text>
-          <g v-if="hov && hov.n"><line class="hl" :x1="hov.x" :y1="PT" :x2="hov.x" :y2="plotB" /><circle class="hd2" :cx="hov.x" :cy="yOf(hov.avg)" r="4.5" /></g>
+          <text class="nt" :x="xOf(nowT) + 5" :y="PT + 8">сейчас</text>
+          <text v-for="l in endLbl" :key="l.k" class="el" :class="l.k" :x="W - PR - 2" :y="l.y" text-anchor="end">{{ l.t }}</text>
+          <g v-if="hov && hov.n"><line class="hl" :x1="hov.x" :y1="PT" :x2="hov.x" :y2="plotB" /><circle class="hda" :cx="hov.x" :cy="yOf(hov.avg)" r="4" /><circle v-if="hov.sel != null" class="hds" :cx="hov.x" :cy="yOf(hov.sel)" r="4" /></g>
         </svg>
-        <div v-if="hov && hov.n" class="tip" :style="{ left: Math.min(78, Math.max(4, hov.x / W * 100 - 12)) + '%' }">
-          <b>{{ hovTxt }}</b><span>в среднем <b>{{ pct(hov.avg) }}%</b> · {{ hov.n }} {{ word(hov.n) }}</span>
-          <span>ниже {{ pct(cfg.retention) }}%: <b>{{ hov.lowN }}</b><template v-if="hov.low.length"> — {{ hov.low.join(', ') }}{{ hov.lowN > 4 ? '…' : '' }}</template></span>
+        <div v-if="hov && hov.n" class="tip" :style="hov.x > W - 230 ? { right: (W - hov.x + 12) + 'px' } : { left: (hov.x + 12) + 'px' }">
+          <small>{{ hovTxt }}</small>
+          <span><i class="ca" />В среднем<b>{{ pct(hov.avg) }}%</b></span>
+          <span v-if="hov.sel != null"><i class="cs" />{{ selW.text }}<b>{{ pct(hov.sel) }}%</b></span>
+          <span><i class="cb" />Ниже порога<b>{{ hov.lowN }} из {{ hov.n }}</b></span>
+          <em v-if="hov.low.length">{{ hov.low.join(' · ') }}{{ hov.lowN > 4 ? '…' : '' }}</em>
         </div>
       </div>
       <div class="leg">
-        <span><i class="la" />в среднем<template v-if="!dock"> (пунктир — если не заниматься)</template></span>
-        <span v-if="many"><i class="lb" />от слабых до сильных</span><span v-else><i class="lw" />каждое слово (нажми — выбрать)</span>
-        <span><i class="ls2" />выбранное</span><span><i class="lr" />ответы по дням</span>
+        <span><i class="la" />В среднем</span>
+        <span><i class="ls2" />Выбранное слово</span>
+        <span v-if="many"><i class="lb" />От слабых до сильных</span><span v-else><i class="lw" />Остальные слова — нажми, чтобы выбрать</span>
+        <span><i class="lp" />Прогноз без повтора</span>
+        <button class="more" :aria-expanded="showList" @click="showList = !showList">Таблица {{ showList ? '▴' : '›' }}</button>
       </div>
-      <button class="more" :aria-expanded="showList" @click="showList = !showList">Из чего «{{ pct(nowStat.avg) }}%» <span>{{ showList ? '▴' : '▾' }}</span></button>
       <div v-if="showList" class="lst">
-        <p class="nt2">Среднее вероятности вспомнить по всем {{ words.length }} {{ word(words.length) }} с ответами (новые не считаются). Слабые — сверху.</p>
+        <p class="nt2">Среднее вероятности вспомнить по {{ words.length }} {{ word(words.length) }} с ответами (новые не считаются). Слабые — сверху.</p>
         <button v-for="r in list" :key="r.key" class="li" :class="{ on: selW && selW.key === r.key }" @click="pick(r.key)">
           <span class="lt">{{ r.text }}</span><span class="lbar"><i :class="r.st.failed ? 'bad' : r.r < cfg.retention ? 'bad' : r.r < cfg.retention + 0.04 ? 'mid' : 'ok'" :style="{ width: pct(r.r) + '%' }" /></span><b>{{ r.st.failed ? 'ошибка' : pct(r.r) + '%' }}</b>
         </button>
@@ -214,37 +237,47 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
 </template>
 
 <style scoped>
-.mc { display: grid; gap: 8px; min-width: 0; padding: 12px; border-radius: 16px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px #eef0f3 }
-.hd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap } .t { flex: 1; font-size: 15px; font-weight: 900 }
-.seg { display: flex; gap: 3px; padding: 3px; border-radius: 12px; background: #f2f3f5 } .seg button { font: inherit; font-size: 12px; font-weight: 800; border: 0; border-radius: 9px; padding: 4px 10px; background: none; color: #5f6368; cursor: pointer } .seg button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
-.kps { display: flex; flex-wrap: wrap; gap: 6px }
-.kp { display: grid; padding: 6px 11px; border-radius: 12px; background: #f4f6f8; line-height: 1.15; min-width: 0 } .kp small { font-size: 11px; font-weight: 800; color: var(--hint) } .kp b { font-size: 17px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.kp.av b { color: #7a4dde } .kp.bad b { color: #e53935 } .kp.sl b { color: #1c7ef6; max-width: 220px }
-.fl { height: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; border-radius: 10px; background: #fff; transition: height .2s; padding: 0 10px }
-.fl.on { height: 30px; box-shadow: 0 0 0 1.5px #ff9600 } .fl i { flex: none; width: 9px; height: 9px; border-radius: 50% } .fl .y { background: #58cc02 } .fl .x { background: #ff4b4b }
-.pw { position: relative }
-.gr { width: 100%; height: auto; display: block; font-family: inherit; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px #eef0f3; cursor: crosshair }
-.gr text { font-size: 10px; font-weight: 700; fill: #8a8f98 } .ax line { stroke: #dfe3e8 }
-.ret { stroke: #ff9600; stroke-width: 1.2; stroke-dasharray: 5 4 } .gr .rett { fill: #e08600; font-weight: 800 }
-.wl { fill: none; stroke: #b9c2cc; stroke-width: 1; opacity: .6 } .hit { fill: none; stroke: transparent; stroke-width: 8; cursor: pointer; pointer-events: stroke }
-.ls g:hover .wl { stroke: #1c7ef6; opacity: 1; stroke-width: 2 }
-.band { fill: #9b6bff; opacity: .13 }
-.avg { fill: none; stroke: #9b6bff; stroke-width: 3.2; stroke-linejoin: round } .avgn { fill: none; stroke: #9b6bff; stroke-width: 3; stroke-dasharray: 3 6; stroke-linecap: round; opacity: .8 }
-.sel { fill: none; stroke: #1c7ef6; stroke-width: 2.4; stroke-linejoin: round } .seln { fill: none; stroke: #1c7ef6; stroke-width: 2.2; stroke-dasharray: 2 5; stroke-linecap: round }
-.hotl { fill: none; stroke: #ff9600; stroke-width: 3.2; animation: hl 1.1s ease-in-out 3 } @keyframes hl { 50% { stroke-width: 5; opacity: .6 } }
-.dy { fill: #58cc02; stroke: #fff; stroke-width: 2 } .dx { fill: #ff4b4b; stroke: #fff; stroke-width: 2 }
-.bo { fill: #58cc02; opacity: .8 } .bb { fill: #ff4b4b; opacity: .8 }
-.nl { stroke: #2f2f2f; stroke-width: 1 } .gr .nt { fill: #2f2f2f; font-weight: 900 }
-.hl { stroke: #9b6bff; stroke-width: 1; stroke-dasharray: 2 3 } .hd2 { fill: #fff; stroke: #9b6bff; stroke-width: 2.5 }
-.tip { position: absolute; top: 8px; display: grid; gap: 2px; max-width: 280px; padding: 7px 10px; border-radius: 10px; background: #2f2f2f; color: #fff; font-size: 12px; font-weight: 600; pointer-events: none; box-shadow: 0 6px 18px rgba(0, 0, 0, .18) } .tip b { font-weight: 900 }
-.leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; font-weight: 700; color: var(--hint) } .leg span { display: inline-flex; align-items: center; gap: 5px }
-.leg i { display: inline-block; width: 16px; height: 0 } .la { border-top: 3px solid #9b6bff } .lw { border-top: 1.5px solid #b9c2cc } .ls2 { border-top: 2.5px solid #1c7ef6 } .lb { height: 8px !important; background: #e9e1ff } .lr { height: 8px !important; width: 8px !important; background: #58cc02; border-radius: 2px }
-.more { all: unset; cursor: pointer; justify-self: start; font-size: 13px; font-weight: 800; color: #7a4dde } .more span { font-size: 11px }
-.lst { display: grid; gap: 3px; max-height: 280px; overflow: auto }
-.nt2 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--hint) }
-.li { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border: 0; border-radius: 9px; background: none; font: inherit; text-align: left; cursor: pointer } .li:hover { background: #f4f6f8 } .li.on { background: #eaf3ff }
-.lt { width: 34%; min-width: 0; font-size: 13px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.lbar { flex: 1; height: 8px; border-radius: 99px; background: #eef0f3; overflow: hidden } .lbar i { display: block; height: 100% } .lbar .ok { background: #58cc02 } .lbar .mid { background: #ff9600 } .lbar .bad { background: #ff4b4b }
-.li b { width: 54px; text-align: right; font-size: 13px; font-weight: 900 }
-.em { margin: 0; font-size: 13px; color: var(--hint) }
+/* строгий вид, как в профессиональных программах; цвета — из переменных панели (светлая / тёмная тема, CourseViewer .rvd) */
+.mc { --bg: var(--g-bg, #fff); --tx: var(--g-tx, #1f2328); --mu: var(--g-mu, #6b7280); --bd: var(--g-bd, #e5e7eb); --gd: var(--g-grid, #f0f1f3); --sg: var(--g-seg, #f3f4f6); --su: var(--g-sub, #f6f7f9);
+  --av: var(--g-avg, #7c3aed); --se: var(--g-sel, #2563eb); --th: #f59e0b;
+  display: grid; gap: 10px; min-width: 0; padding: 12px 14px 12px; border-radius: 8px; background: var(--bg); color: var(--tx); border: 1px solid var(--bd); font-variant-numeric: tabular-nums }
+.hd { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap } .t { font-size: 13.5px; font-weight: 700 } .sub { flex: 1; font-size: 12px; font-weight: 500; color: var(--mu) }
+.seg { display: flex; border: 1px solid var(--bd); border-radius: 6px; overflow: hidden }
+.seg button { font: inherit; font-size: 12px; font-weight: 600; border: 0; padding: 4px 10px; background: none; color: var(--mu); cursor: pointer } .seg button + button { border-left: 1px solid var(--bd) }
+.seg button:hover { color: var(--tx) } .seg button.on { background: var(--sg); color: var(--tx) }
+.kps { display: flex; flex-wrap: wrap; row-gap: 8px }
+.kp { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--bd); min-width: 0 } .kp:first-child { padding-left: 2px; border-left: 0 }
+.kp small { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mu); white-space: nowrap } .kp b { font-size: 19px; font-weight: 600; line-height: 1.2; white-space: nowrap }
+.kp.bad b { color: #ef4444 } .kp.sl b span { color: var(--se); display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom }
+.fl { height: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; border-radius: 6px; background: var(--su); transition: height .2s; padding: 0 10px }
+.fl.on { height: 26px } .fl b { font-weight: 700 } .fl i { flex: none; width: 7px; height: 7px; border-radius: 50% } .fl .y { background: #22c55e } .fl .x { background: #ef4444 }
+.pw { position: relative; min-width: 0 }
+.gr { display: block; max-width: 100%; font-family: inherit; cursor: crosshair; overflow: visible }
+.gr text { font-size: 11px; font-weight: 500; fill: var(--mu) } .gl { stroke: var(--gd); stroke-width: 1 }
+.ret { stroke: var(--th); stroke-width: 1; stroke-dasharray: 4 4 } .gr .rett { fill: var(--th); font-weight: 600 }
+.wl { fill: none; stroke: var(--mu); stroke-width: 1; opacity: .3 } .hit { fill: none; stroke: transparent; stroke-width: 9; cursor: pointer; pointer-events: stroke }
+.ls g:hover .wl { stroke: var(--se); opacity: 1; stroke-width: 1.5 }
+.band { fill: var(--av); opacity: .12 }
+.avg { fill: none; stroke: var(--av); stroke-width: 2; stroke-linejoin: round } .avgn { fill: none; stroke: var(--av); stroke-width: 2; stroke-dasharray: 5 4; opacity: .75 }
+.sel { fill: none; stroke: var(--se); stroke-width: 2; stroke-linejoin: round } .seln { fill: none; stroke: var(--se); stroke-width: 2; stroke-dasharray: 5 4; opacity: .75 }
+.hotl { fill: none; stroke: var(--th); stroke-width: 2; animation: hl 1.1s ease-in-out 3 } @keyframes hl { 50% { opacity: .35 } }
+.dy { fill: #22c55e; stroke: var(--bg); stroke-width: 2 } .dx { fill: #ef4444; stroke: var(--bg); stroke-width: 2 }
+.bo { fill: #22c55e; opacity: .7 } .bb { fill: #ef4444; opacity: .7 }
+.nl { stroke: var(--mu); stroke-width: 1; opacity: .7 } .gr .nt { font-weight: 600 }
+.gr .el { font-weight: 600; fill: var(--tx); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round }
+.hl { stroke: var(--mu); stroke-width: 1; stroke-dasharray: 2 3 } .hda { fill: var(--av); stroke: var(--bg); stroke-width: 2 } .hds { fill: var(--se); stroke: var(--bg); stroke-width: 2 }
+.tip { position: absolute; top: 10px; z-index: 2; display: grid; gap: 4px; width: 200px; padding: 8px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--bd); box-shadow: 0 6px 20px rgba(0, 0, 0, .14); font-size: 12px; pointer-events: none }
+.tip small { font-size: 11px; color: var(--mu) } .tip span { display: flex; align-items: center; gap: 6px } .tip span b { margin-left: auto; font-weight: 700 }
+.tip i { flex: none; width: 8px; height: 8px; border-radius: 50% } .tip .ca { background: var(--av) } .tip .cs { background: var(--se) } .tip .cb { background: var(--th) }
+.tip em { font-style: normal; font-size: 11px; color: var(--mu); line-height: 1.35 }
+.leg { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 12px; color: var(--mu) } .leg span { display: inline-flex; align-items: center; gap: 6px }
+.leg i { display: inline-block; width: 14px; height: 0 } .la { border-top: 2px solid var(--av) } .lw { border-top: 1px solid var(--mu); opacity: .5 } .ls2 { border-top: 2px solid var(--se) } .lp { border-top: 2px dashed var(--mu) } .lb { height: 8px !important; background: var(--av); opacity: .2 }
+.more { all: unset; cursor: pointer; margin-left: auto; font-size: 12px; font-weight: 600; color: var(--se) }
+.lst { display: grid; gap: 2px; max-height: 280px; overflow: auto; border-top: 1px solid var(--bd); padding-top: 8px }
+.nt2 { margin: 0 0 4px; font-size: 12px; color: var(--mu) }
+.li { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border: 0; border-radius: 4px; background: none; font: inherit; color: var(--tx); text-align: left; cursor: pointer } .li:hover { background: var(--su) } .li.on { background: var(--sg) }
+.lt { width: 34%; min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.lbar { flex: 1; height: 6px; border-radius: 3px; background: var(--gd); overflow: hidden } .lbar i { display: block; height: 100% } .lbar .ok { background: #22c55e } .lbar .mid { background: var(--th) } .lbar .bad { background: #ef4444 }
+.li b { width: 54px; text-align: right; font-size: 12.5px; font-weight: 600 }
+.em { margin: 0; font-size: 13px; color: var(--mu) }
 </style>

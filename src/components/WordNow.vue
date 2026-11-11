@@ -56,19 +56,19 @@ const lastH = computed(() => cur.value?.hist[0])
 </template>
 
 <style scoped>
-.wn { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; min-width: 0; padding: 12px; border-radius: 16px; background: #fff; box-shadow: inset 0 0 0 1px #eef0f3 }
+.wn { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; min-width: 0; padding: 12px 14px; border-radius: 8px; background: var(--g-bg, #fff); color: var(--g-tx, #1f2328); border: 1px solid var(--g-bd, #e5e7eb) }
 .ls { display: grid; align-content: start; gap: 6px; max-height: 470px; overflow: auto; padding-right: 2px }
 .dock .ls { max-height: 330px }
 /* в панели «Графики» курса: график на всю ширину, список слов — под ним плиткой */
 .wn.dock { grid-template-columns: minmax(0, 1fr) } .dock .rt { order: 1 } .dock .ls { order: 2; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); max-height: 220px } .dock .lt { grid-column: 1 / -1 }
-.lt { font-size: 12px; font-weight: 900; color: var(--hint); padding: 2px 4px }
-.li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 12px; background: #f6f7f9; font: inherit; text-align: left; cursor: pointer; transition: background .3s, box-shadow .3s }
-.li:hover { background: #eef4fb } .li.on { background: #eaf6fe; box-shadow: inset 0 0 0 2px #1cb0f6 } .li.hot { background: #fff3c4 }
-.t { display: grid; min-width: 0; flex: 1 } .t b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .t small { font-size: 11px; font-weight: 600; color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-em { font-style: normal; font-size: 13px; font-weight: 900 } em.ok { color: #46a302 } em.mid { color: #e08600 } em.bad { color: #e53935 } em.nw { color: #9aa0a8; font-size: 11px }
+.lt { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--g-mu, #6b7280); padding: 2px 4px }
+.li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--g-bd, #e5e7eb); border-radius: 6px; background: var(--g-bg, #fff); color: var(--g-tx, #1f2328); font: inherit; text-align: left; cursor: pointer; transition: background .3s, border-color .3s }
+.li:hover { background: var(--g-sub, #f6f7f9) } .li.on { border-color: var(--g-sel, #2563eb); box-shadow: inset 0 0 0 1px var(--g-sel, #2563eb) } .li.hot { background: rgba(245, 158, 11, .18) }
+.t { display: grid; min-width: 0; flex: 1 } .t b { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .t small { font-size: 11px; font-weight: 500; color: var(--g-mu, #6b7280); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+em { font-style: normal; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums } em.ok { color: #16a34a } em.mid { color: #d97706 } em.bad { color: #ef4444 } em.nw { color: var(--g-mu, #9aa0a8); font-size: 11px; font-weight: 500 }
 .rt { display: grid; align-content: start; gap: 8px; min-width: 0 }
-.wh { display: grid } .wh b { font-size: 22px; font-weight: 900 } .wh small { font-size: 12.5px; font-weight: 700; color: var(--hint) } .wh .y { color: #46a302 } .wh .x { color: #e53935 }
-.em { margin: 0; font-size: 13px; color: var(--hint) }
+.wh { display: grid } .wh b { font-size: 18px; font-weight: 700 } .wh small { font-size: 12px; font-weight: 500; color: var(--g-mu, #6b7280) } .wh .y { color: #16a34a } .wh .x { color: #ef4444 }
+.em { margin: 0; font-size: 13px; color: var(--g-mu, #6b7280) }
 .wnc { container-type: inline-size; min-width: 0 }
 @container (max-width: 600px) {
   .wn { grid-template-columns: minmax(0, 1fr) } .ls { display: flex; overflow-x: auto; max-height: none; padding-bottom: 4px } .lt { display: none }
