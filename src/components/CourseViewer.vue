@@ -8,7 +8,6 @@ import { API, apiRequest, fb, isDemo } from '../firebase'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import ReviewChart from './ReviewChart.vue'
-import CkFlow from './CkFlow.vue'
 import { topicById, detectTopic, wordsOnly, screenKey } from '../utils/skills'
 import WordNow from './WordNow.vue'
 import MemoryChart from './MemoryChart.vue'
@@ -225,7 +224,7 @@ const repeats = computed(() => Object.fromEntries(units.value.map(u => [u.id, re
 const relDay = (t) => { if (!t) return ''; const d = Math.round((new Date(t).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86_400_000); return d <= 0 ? 'сегодня' : d === 1 ? 'завтра' : `через ${d} дн` }
 function goRepeat(rv) { if (rv.steps.length) go({ ...rv, steps: rv.steps.slice() }) }
 
-// курс по горизонтали: Chapter → уроки → чекпоинт и что в него попадёт сейчас (CkFlow) — для преподавателя, в реальном времени
+// вкладка «Путь → чекпоинты» панели «Графики»: тот же путь курса, справа от узлов — что куда попадает (в реальном времени)
 const titleOf = (id) => course.value?.items?.find(t => t.id === id)?.title || ''
 const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type === 'checkpoint') || u.title).map(u => ({
   id: u.id, title: u.title ? u.title + (u.sub ? ': ' + u.sub : '') : '',
@@ -235,6 +234,9 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
   rv: (() => { const r = repeats.value[u.id]; return r?.started ? { n: r.steps.length, words: r.words, screens: r.screens, next: r.next ? relDay(r.next) : '', items: r.list.map(o => ({ id: o.st.id, kind: o.kind, ex: exName(o.st), w: o.w, from: o.t.title, pct: o.pct })) } : null })(),
 })))
 const dockTab = ref('mem')
+const missItems = (t) => { const m = missOf(t.id); return m.length ? okSteps(t).filter(s => m.includes(s.id)).map(s => ({ id: s.id, w: stepWord(s), ex: exName(s), hot: open.value?.id === t.id && misses.has(s.id) })) : [] }
+const ckInfo = (id) => ckMap.value.flatMap(c => c.cks).find(k => k.id === id)
+const rvInfo = (uid) => ckMap.value.find(c => c.id === uid)?.rv
 // итог урока: что уйдёт в чекпоинт этой Chapter (экраны с ошибкой) — для проверки, что автоматика сработала
 const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || ''
 const ckLog = computed(() => {
@@ -357,11 +359,48 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
           <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
           <div v-if="rvChart" class="rvd">
-            <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Экраны → чекпоинты</button></div>
+            <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
             <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
             <WordNow v-else-if="dockTab === 'curve'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <ReviewChart v-else-if="dockTab === 'words'" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
-            <CkFlow v-else :chapters="ckMap" dock />
+            <!-- путь курса, как у ученика; справа: у урока — экраны с ошибкой (→ в чекпоинт), у чекпоинта и «Повторения» — что в них сейчас -->
+            <div v-else class="ckp">
+              <p class="ckh">Ошибка в уроке → экран уходит в чекпоинт своей Chapter. Слова и упражнения, которым пора по FSRS, — в «Повторение».</p>
+              <template v-for="u in units" :key="'p' + u.id">
+                <section class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
+                  <template v-if="u.title">
+                    <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b></div>
+                    <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em :style="{ left: u.pct + '%', transform: `translate(-${u.pct}%, -50%)` }">{{ u.pct }}%</em></div>
+                  </template>
+                  <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1 }]" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }">
+                    <span class="bead" :class="[x.type, state(x), { live: open.id === x.id }]" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }">
+                      <svg viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
+                      <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
+                      <em v-if="missItems(x).length" class="mb">{{ missItems(x).length }}</em>
+                    </span>
+                    <div class="cap"><span v-if="open.id === x.id" class="start" style="--c: #1cb0f6">Открыт</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ (T[x.type] ?? T.lesson).t }}</small></div>
+                    <div class="sd">
+                      <template v-if="x.type === 'checkpoint' && ckInfo(x.id)">
+                        <div class="sbx ck"><h4>{{ ckInfo(x.id).fromErrors ? 'Из ошибок' : ckInfo(x.id).items.length ? 'Ошибок нет — авто' : 'Пусто' }} · {{ ckInfo(x.id).items.length + ckInfo(x.id).own }} {{ plural(ckInfo(x.id).items.length + ckInfo(x.id).own, 'экран', 'экрана', 'экранов') }}</h4>
+                          <div class="chs"><span v-for="i in ckInfo(x.id).items" :key="i.id" class="chp" :class="{ au: !ckInfo(x.id).fromErrors, hot: misses.has(i.id) }" :title="i.ex + (i.from ? ' · ' + i.from : '')">{{ i.w || i.ex }}<i>{{ i.ex }}</i></span><span v-if="ckInfo(x.id).own" class="chp own">+ {{ ckInfo(x.id).own }} от преподавателя</span></div>
+                          <small v-if="!ckInfo(x.id).items.length && !ckInfo(x.id).own">В уроках нет проверяемых экранов — пройдётся кнопкой «Готово — дальше».</small>
+                        </div>
+                      </template>
+                      <template v-else-if="missItems(x).length">
+                        <div class="chs"><span v-for="i in missItems(x)" :key="i.id" class="chp" :class="{ hot: i.hot }">{{ i.w || i.ex }}<i>{{ i.ex }}</i></span><b class="to">→ в чекпоинт</b></div>
+                      </template>
+                      <span v-else-if="INTERACTIVE.includes(x.type) && state(x) !== 'todo'" class="chp no">ошибок нет</span>
+                    </div>
+                  </div>
+                </section>
+                <div v-if="rvInfo(u.id)" class="vrow rvr">
+                  <span class="rpi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /><path d="M9 12.5l2 2 4-4.5" /></svg></span>
+                  <div class="cap">Повторение<small>{{ rvInfo(u.id).n ? `пора: ${rvInfo(u.id).words} сл. · ${rvInfo(u.id).screens} упр.` : 'пока нечего' + (rvInfo(u.id).next ? ' · следующее ' + rvInfo(u.id).next : '') }}</small></div>
+                  <div class="sd"><div v-if="rvInfo(u.id).items.length" class="sbx rv"><h4>По FSRS · пора повторить</h4>
+                    <div class="chs"><span v-for="i in rvInfo(u.id).items" :key="i.id" class="chp" :class="i.kind === 'screen' ? 'sc' : 'wd'" :title="i.ex + ' · ' + i.from">{{ i.w || i.ex }}<i>{{ i.pct == null ? 'ошибка' : i.pct + '%' }}</i></span></div></div></div>
+                </div>
+              </template>
+            </div>
           </div>
         </template>
         <LessonPlayer v-if="steps.length" :key="open.id" :start="startAt" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @step="curStep = $event" @done="finish(open, $event)" @close="open = null" />
@@ -460,6 +499,25 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .dtabs button { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 11px 7px; background: none; color: #5f6368; cursor: pointer; white-space: nowrap }
 .dtabs button:hover { background: #eceef1; color: #303338 } .dtabs button.on { color: #1a73e8; border-bottom-color: #1a73e8 }
 .mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: #f0f1f3; color: #555; font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
+/* «Путь → чекпоинты» в панели: тот же путь, компактнее, справа — что куда попадает */
+.ckp { display: grid; gap: 10px } .ckh { margin: 0; font-size: 12px; font-weight: 700; color: var(--hint) }
+.ckp .un { padding: 14px 16px 6px; border-radius: 16px } .ckp .uh b { font-size: 17px } .ckp .ubar { height: 8px; margin: 10px 0 6px }
+.ckp .vrow { min-height: 84px; gap: 12px; flex-wrap: nowrap } .ckp .vrow::before { left: 33px } .ckp .vrow.current::before { height: 42px } .ckp .vrow.first::before { top: 42px } .ckp .vrow.last::before { height: 42px }
+.ckp .vrow > .bead { margin: 18px 0; width: 48px; height: 48px; cursor: default } .ckp .ic { width: 22px; height: 22px } .ckp .ok { width: 18px; height: 18px; margin-left: -9px; bottom: -9px }
+.ckp .bead.current { animation: none } .ckp .bead.live { box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1cb0f6, 0 0 0 11px rgba(28, 176, 246, .2) }
+.ckp .vrow.current { margin: 0; padding-left: 6px; padding-right: 0; background: none } .ckp .vrow.current::before { left: 33px }
+.ckp .cap { flex: 0 0 132px; min-width: 0; font-size: 14px; cursor: default } .ckp .cap small { font-size: 11.5px }
+.mb { position: absolute; top: -5px; right: -7px; z-index: 3; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: #ff4b4b; color: #fff; font-size: 11px; font-weight: 900; font-style: normal; display: grid; place-items: center; box-shadow: 0 0 0 2px #fff }
+.sd { flex: 1; min-width: 0; padding: 8px 0 }
+.chs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px }
+.chp { display: inline-flex; align-items: baseline; gap: 5px; max-width: 100%; padding: 3px 8px; border-radius: 7px; font-size: 12px; font-weight: 800; background: #fff5f5; box-shadow: inset 2px 0 0 #ff4b4b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: background .3s }
+.chp i { font-style: normal; font-size: 10.5px; font-weight: 700; color: #e53935 } .chp.au { background: #f3f4f6; box-shadow: inset 2px 0 0 #b5bac1 } .chp.au i { color: #888 }
+.chp.wd { background: #f2f9ff; box-shadow: inset 2px 0 0 #1cb0f6 } .chp.sc { background: #f6f1ff; box-shadow: inset 2px 0 0 #9747ff } .chp.own { background: #efe8ff; box-shadow: none; color: #6b3fd1 }
+.chp.no { background: #f3f4f6; box-shadow: none; color: #9aa0a8 } .chp.hot { background: #fff0c2; animation: ckpop .5s ease-out } @keyframes ckpop { from { transform: scale(.9) } }
+.to { font-size: 11px; font-weight: 900; color: #e53935 }
+.sbx { display: grid; gap: 5px; padding: 8px 10px; border-radius: 10px; background: #fff8ef; box-shadow: inset 0 0 0 1.5px #ffd59a } .sbx h4 { margin: 0; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .02em; color: #b06a00 } .sbx small { font-size: 11.5px; color: var(--hint); font-weight: 600 }
+.sbx.rv { background: #f7f2ff; box-shadow: inset 0 0 0 1.5px #d8c3ff } .sbx.rv h4 { color: #6b3fd1 }
+.ckp .rvr { min-height: 70px; padding: 0 16px; border-radius: 16px; background: #f7f3ff; box-shadow: inset 0 0 0 1.5px #e6dcff } .ckp .rvr::before { display: none } .ckp .rvr .rpi { width: 44px; height: 44px; margin-left: 2px } .ckp .rvr .rpi svg { width: 24px; height: 24px }
 .rpt { display: flex; align-items: center; gap: 16px; margin: 12px 0; padding: 16px 18px; border-radius: 18px; background: #f4f7fb; box-shadow: inset 0 0 0 1.5px #e3e8ef; cursor: pointer; transition: background .15s }
 .rpt:hover, .rpt.on { background: #ecf3fc } .rpt.due { background: #f3efff; box-shadow: inset 0 0 0 1.5px #ddd0ff } .rpt.due:hover, .rpt.due.on { background: #ebe4ff }
 .rpi { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: #fff; box-shadow: 0 2px 0 #dfe3e8 } .rpi svg { width: 28px; height: 28px; fill: none; stroke: #9747ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
