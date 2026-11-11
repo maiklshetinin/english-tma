@@ -14,6 +14,7 @@ import { imageSrc } from '../utils/media'
 const props = defineProps({
   items: { type: Array, required: true },
   dock: Boolean,                                       // компактно (сверху сессии / урока)
+  tall: Boolean,                                       // высокий (Review: шапка ужата, график главный)
   fresh: { type: String, default: null },              // id слова, которое только что «ушло»
   order: { type: Array, default: () => ['mature', 'strong', 'review', 'medium', 'learn', 'weak'] },      // снизу вверх в стопке
   noun: { type: Array, default: () => ['слово', 'слова', 'слов'] },
@@ -53,7 +54,7 @@ const bins = computed(() => {
   return out
 })
 // Стопка: каждое слово — мини-карточка 3:2, лежат друг на друге чуть вразнобой; самая высокая стопка влезает в график.
-const BMAX = computed(() => wide.value ? 210 : props.dock && narrow.value ? 52 : props.dock ? 110 : 120)
+const BMAX = computed(() => wide.value ? (props.tall ? 330 : 210) : props.tall && !narrow.value ? 220 : props.dock && narrow.value ? 52 : props.dock ? 110 : 120)
 const pileMax = computed(() => Math.max(1, ...bins.value.slice(0, -1).map(b => b.items.length)))      // «позже» в масштаб не берём
 const mq = (q) => typeof matchMedia !== 'undefined' && matchMedia(q).matches
 const wide = ref(mq('(min-width: 720px)')), narrow = ref(mq('(max-width: 520px)'))
@@ -167,7 +168,7 @@ onUnmounted(() => cancelAnimationFrame(raf))
 </script>
 
 <template>
-  <div ref="root" class="pch" :class="{ docked: dock }">
+  <div ref="root" class="pch" :class="{ docked: dock, tall }">
     <div class="top">
       <div class="ttl"><slot name="top" /></div>
       <div class="seg scl" role="radiogroup" aria-label="Масштаб">
@@ -249,5 +250,6 @@ onUnmounted(() => cancelAnimationFrame(raf))
   .pch.docked .top { gap: 4px 6px } .pch.docked .scl { margin-right: auto }
   .pch.docked .plot { height: 76px; padding-top: 12px } .pch.docked .grid { inset: 12px 0 0 }
 }
-@media (min-width: 720px) { .pch, .pch.docked { --bmax: 210px } .plot, .pch.docked .plot { height: 250px } }
+@media (min-width: 720px) { .pch, .pch.docked { --bmax: 210px } .plot, .pch.docked .plot { height: 250px } .pch.tall { --bmax: 330px } .pch.tall .plot { height: 370px } }
+@media (min-width: 521px) and (max-width: 719px) { .pch.tall { --bmax: 220px } .pch.tall .plot { height: 260px } }
 </style>

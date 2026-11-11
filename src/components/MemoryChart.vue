@@ -16,6 +16,7 @@ const props = defineProps({
   cfg: { type: Object, required: true },               // { retention, maxDays }
   focus: { type: String, default: '' },                // слово экрана, открытого в уроке, — выбрано само
   dock: Boolean,
+  tall: Boolean,                                       // высокий (Review)
 })
 const emit = defineEmits(['pick'])
 const DAY = 86_400_000, HOUR = 3_600_000
@@ -40,7 +41,7 @@ const words = computed(() => Object.values(props.items).map(x => {
 const rAt = (w, t) => { let a = null; for (const x of w.ans) { if (x.t > t) break; a = x } return a ? recallAt(a.s, (t - a.t) / DAY) : null }
 
 // ── сетка по времени ──
-const W = 640, H = 230, PL = 38, PB = 40, PT = 10, BARH = 16
+const W = 640, H = props.tall ? 330 : 230, PL = 38, PB = 40, PT = 10, BARH = 16
 const N = 140
 const ts = computed(() => { const [a, b] = range.value, out = []; for (let k = 0; k <= N; k++) out.push(a + (b - a) * k / N); return out })
 const xOf = (t) => PL + (t - range.value[0]) / (range.value[1] - range.value[0]) * (W - PL - 10)

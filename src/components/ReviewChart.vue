@@ -16,6 +16,7 @@ const props = defineProps({
   cfg: { type: Object, required: true },               // { retention, maxDays }
   lesson: { type: String, default: '' },               // сразу показать только слова этого урока
   dock: Boolean,                                       // компактно — сверху урока
+  tall: Boolean,                                       // высокий, без своего заголовка (счётчики — в шапке Review)
 })
 const emit = defineEmits(['pick'])
 const DAY = 86_400_000
@@ -60,10 +61,11 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
 <template>
   <div class="rc" :class="{ dock }">
     <div class="fl" :class="{ on: flash }" aria-live="polite"><template v-if="flash"><i :class="flash.ok === true ? 'y' : flash.ok === false ? 'x' : 'n'" /><b>{{ flash.text }}</b> · {{ flash.what }}<span v-if="flash.more"> · и ещё {{ flash.more }}</span></template></div>
-    <PileChart :items="rows" :dock="dock" :fresh="hotId" :order="['strong', 'medium', 'weak']" @pick="pickW">
+    <PileChart :items="rows" :dock="dock" :tall="tall" :fresh="hotId" :order="['strong', 'medium', 'weak']" @pick="pickW">
       <template #top>
-        <b class="ttl2">Где сейчас слова</b>
-        <span class="cnt">{{ count.weak }} слабых · {{ count.medium }} средних · {{ count.strong }} сильных<template v-if="fresh"> · {{ fresh }} новых без ответа</template></span>
+        <template v-if="!tall"><b class="ttl2">Где сейчас слова</b>
+        <span class="cnt">{{ count.weak }} слабых · {{ count.medium }} средних · {{ count.strong }} сильных<template v-if="fresh"> · {{ fresh }} новых без ответа</template></span></template>
+        <span v-else-if="fresh" class="cnt">{{ fresh }} новых без ответа</span>
         <select v-model="filter" aria-label="Какие слова"><option value="all">Все</option><option value="word">Слова</option><option value="phrase">Фразы</option><option v-for="l in lessons" :key="l" :value="'lesson:' + l">Урок: {{ l }}</option></select>
       </template>
     </PileChart>

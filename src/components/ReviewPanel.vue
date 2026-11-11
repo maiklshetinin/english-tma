@@ -23,7 +23,7 @@ const props = defineProps({
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
 const chartOn = ref((() => { try { return localStorage.getItem('tma.review.chart') !== '0' } catch { return true } })())
-const view = ref((() => { try { return localStorage.getItem('tma.review.view') || 'mem' } catch { return 'mem' } })())      // «График запоминания» / «Где сейчас слова»
+const view = ref((() => { try { return localStorage.getItem('tma.review.view') || 'piles' } catch { return 'mem' } })())      // «График запоминания» / «Где сейчас слова»
 watch(view, (v) => { try { localStorage.setItem('tma.review.view', v) } catch { /* приватный режим */ } })
 const toggleChart = () => { chartOn.value = !chartOn.value; try { localStorage.setItem('tma.review.chart', chartOn.value ? '1' : '0') } catch { /* приватный режим */ } }
 const cfgNow = computed(() => ({ retention: algo.retention, maxDays: algo.maxDays }))
@@ -61,6 +61,7 @@ async function reset() {
     <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" />
     <template v-else>
     <div class="rcard">
+      <div class="hdr">
       <h2>{{ title }}<small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></h2>
       <div class="lv3">
         <div v-for="lv in ['weak', 'medium', 'strong']" :key="lv" class="lvc" :class="lv" role="button" tabindex="0" @click="filter = filter === lv ? 'all' : lv">
@@ -68,10 +69,11 @@ async function reset() {
           <span><b>{{ count(lv) }}</b>{{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</span>
         </div>
       </div>
+      <div v-if="chartOn && list.length" class="vt" role="tablist"><button v-for="[k, t] in [['piles', 'Где сейчас слова'], ['mem', 'График запоминания']]" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" @click="view = k">{{ t }}</button></div>
+      </div>
       <template v-if="chartOn && list.length">
-        <div class="vt" role="tablist"><button v-for="[k, t] in [['mem', 'График запоминания'], ['piles', 'Где сейчас слова']]" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" @click="view = k">{{ t }}</button></div>
-        <MemoryChart v-if="view === 'mem'" :items="dict" :cfg="cfgNow" @pick="pick" />
-        <ReviewChart v-else :items="dict" :cfg="cfgNow" @pick="pick" />
+        <MemoryChart v-if="view === 'mem'" :items="dict" :cfg="cfgNow" tall @pick="pick" />
+        <ReviewChart v-else :items="dict" :cfg="cfgNow" tall @pick="pick" />
       </template>
       <div class="hbs"><button class="howb" :aria-expanded="chartOn" @click="toggleChart">График <span>{{ chartOn ? '▴' : '▾' }}</span></button>
       <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button></div>
@@ -137,13 +139,16 @@ async function reset() {
 .rv { width: 100%; max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0 }          /* minmax(0) — на телефоне ничего не распирает за край */
 .rcard { min-width: 0; background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }
 h2 { margin: 0; font-size: 24px; font-weight: 900 }
-.lv3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px }
-.lvc { display: flex; align-items: flex-end; gap: 10px; cursor: pointer; border-radius: 12px; padding: 4px }
+/* шапка в одну строку: заголовок · три столбика (высота — доля слов) · вкладки справа */
+.hdr { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap } .hdr h2 { font-size: 20px; white-space: nowrap } .hdr h2 .sy { display: block; margin: 0; font-size: 11px }
+.hdr .vt { margin-left: auto } .hdr .vt button { padding: 6px 10px; font-size: 12.5px } .hdr .lvc b { font-size: 20px }
+.lv3 { display: flex; gap: 2px }
+.lvc { display: flex; align-items: flex-end; gap: 5px; cursor: pointer; border-radius: 12px; padding: 3px 4px }
 .lvc:hover { background: #f5f6f8 }
-.jar { position: relative; flex: none; width: 54px; height: 72px; border-radius: 10px; border: 2px solid #e3e6ea; overflow: hidden; background: #fff }
+.jar { position: relative; flex: none; width: 22px; height: 60px; border-radius: 7px; border: 2px solid #e3e6ea; overflow: hidden; background: #fff }
 .jar i { position: absolute; left: 0; right: 0; bottom: 0; transition: height .3s }
 .weak .jar i { background: #ff4b4b } .medium .jar i { background: #ff9600 } .strong .jar i { background: #58cc02 }
-.lvc > span:last-child { display: grid; font-size: 13px; font-weight: 700; color: var(--hint) } .lvc b { font-size: 24px; font-weight: 900; color: var(--text) }
+.lvc > span:last-child { display: grid; font-size: 12px; font-weight: 700; color: var(--hint); line-height: 1.15 } .lvc b { font-size: 22px; font-weight: 900; color: var(--text) }
 .rbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; font-weight: 700 }
 .rbar select { width: auto; font: inherit; padding: 5px 8px; border-radius: 9px; border: 1.5px solid #e3e6ea; background: #fff }
 .sp { flex: 1 }
@@ -170,7 +175,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .det li span { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 7px; color: #fff } .det .y { background: #58cc02 } .det .x { background: #ff4b4b } .det .n { background: #b5bac1 }
 @media (max-width: 520px) {
   .rcard { padding: 14px; gap: 12px } h2 { font-size: 21px }
-  .lv3 { gap: 6px } .lvc { gap: 6px; padding: 2px } .jar { width: 34px; height: 48px; border-radius: 8px } .lvc b { font-size: 19px } .lvc > span:last-child { font-size: 11.5px }
+  .lv3 { gap: 2px } .lvc { gap: 5px; padding: 2px } .jar { width: 20px; height: 48px; border-radius: 6px } .hdr .vt { margin-left: 0 } .lvc b { font-size: 19px } .lvc > span:last-child { font-size: 11.5px }
   .rbar .sp { flex-basis: 100%; height: 0 } .rbar .go, .rbar .ghost { flex: 1; padding: 9px 10px }
   .mt { display: block }
   .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
