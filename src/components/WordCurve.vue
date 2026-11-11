@@ -165,7 +165,7 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
 
 <style scoped>
 /* строгий вид, цвета — из переменных панели «Графики» (светлая / тёмная тема); без панели — светлые значения по умолчанию */
-.wc { --bg: var(--g-bg, #fff); --tx: var(--g-tx, #1f2328); --mu: var(--g-mu, #6b7280); --bd: var(--g-bd, #e5e7eb); --gd: var(--g-grid, #f0f1f3); --sg: var(--g-seg, #f3f4f6); --se: var(--g-sel, #2563eb); --th: #f59e0b;
+.wc { --bg: var(--g-bg, var(--card)); --tx: var(--g-tx, var(--text)); --mu: var(--g-mu, var(--hint)); --bd: var(--g-bd, var(--border)); --gd: var(--g-grid, var(--surface)); --sg: var(--g-seg, var(--surface)); --se: var(--g-sel, #2563eb); --th: #f59e0b;
   display: grid; gap: 8px; min-width: 0; color: var(--tx); font-variant-numeric: tabular-nums }
 .top { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 8px }
 .hd { display: grid; min-width: 0; max-width: 34%; padding-right: 14px; border-right: 1px solid var(--bd) } .hd + .kp { border-left: 0 }

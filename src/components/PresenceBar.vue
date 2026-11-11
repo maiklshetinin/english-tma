@@ -6,10 +6,12 @@
 import { ref, computed } from 'vue'
 import { live, people, WHERE, shared, setSharedCursors } from '../composables/useLive'
 import AppIcon from './AppIcon.vue'
+import ThemeToggle from './ThemeToggle.vue'
 import { notesState, unreadCount, toggleChat } from '../composables/useNotes'
 import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
-const props = defineProps({ inline: Boolean })
+const props = defineProps({ inline: Boolean, presence: { type: Boolean, default: true }, theme: Boolean })      // theme — кнопка темы первой (вверху справа)
+const has = computed(() => props.presence && live.on && people.value.length > 0)
 const open = ref(false)
 const shown = computed(() => people.value.slice(-5))                 // больше пяти — «+N»
 const more = computed(() => Math.max(0, people.value.length - 5))
@@ -20,7 +22,9 @@ const chatOn = computed(() => !!(notesState.open || notesState.draft))          
 const label = (p) => (p.where === 'courses' ? 'в редакторе курсов' : WHERE[p.where] ? `«${WHERE[p.where]}»` : 'в приложении')
 </script>
 <template>
-  <div v-if="live.on && people.length" class="pb" :class="{ inline, solo: people.length < 2 }">
+  <div v-if="has || (theme && !inline)" class="pb" :class="{ inline, solo: people.length < 2, has }">
+    <ThemeToggle v-if="theme && !inline" />
+    <template v-if="has">
     <!-- Разработчику: общие курсоры на всех экранах — вкл/выкл сразу у всех (то же, что переключатель в «Профиле») -->
     <button v-if="auth.isDev && !inline" class="cur" :class="{ on: shared.cursors }" :aria-pressed="shared.cursors"
       :title="shared.cursors ? 'Общие курсоры включены — нажмите, чтобы выключить у всех' : 'Включить общие курсоры: все увидят курсоры друг друга'" @click="setSharedCursors(!shared.cursors)">
@@ -34,6 +38,7 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
       </span>
       <span v-if="more" class="av more">+{{ more }}</span>
     </button>
+    </template>
     <div v-if="open" class="bg" @click="open = false" />
     <div v-if="open" class="menu" role="dialog" aria-label="Кто сейчас в приложении">
       <div class="mh">Сейчас в приложении</div>
@@ -76,8 +81,9 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
 @media (max-width: 719px) {
   /* в потоке страницы, тонкой строкой сверху (а не поверх содержимого) */
   .pb:not(.inline) { position: relative; top: auto; right: auto; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 10px 0 }
-  .pb:not(.inline)::before { content: 'Сейчас здесь'; font-size: 12px; font-weight: 800; color: var(--hint) }
-  .pb.solo:not(.inline) { display: none }
+  .pb.has:not(.inline)::before { content: 'Сейчас здесь'; font-size: 12px; font-weight: 800; color: var(--hint); order: -1 }
+  /* один в приложении — кружки не показываем (остаётся кнопка темы) */
+  .pb.solo:not(.inline) .cur, .pb.solo:not(.inline) .nt, .pb.solo:not(.inline) .row { display: none } .pb.solo.has:not(.inline)::before { content: none }
   .av { width: 24px; height: 24px } .av b { font-size: 11px } .cur { width: 30px; height: 30px }
 }
 </style>

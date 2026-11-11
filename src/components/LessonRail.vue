@@ -464,22 +464,22 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .grip { flex: none; width: 16px; height: 16px; fill: #a5a5a5 }
 .ib.mv { font-size: 22px; font-weight: 900; color: var(--hint) } .ib.mv:hover:not(:disabled) { background: var(--blue-l); color: var(--blue-d) } .ib.mv:disabled { opacity: .25; cursor: default }
 .flab { display: flex; align-items: center; gap: 6px; height: 34px; margin-top: 14px; padding: 0 2px; cursor: grab; user-select: none; touch-action: none }
-.flab.fix, .flab.ro { cursor: default } .flab b { font-size: 13px; font-weight: 800; color: #555; white-space: nowrap }
+.flab.fix, .flab.ro { cursor: default } .flab b { font-size: 13px; font-weight: 800; color: var(--hint); white-space: nowrap }
 .iss { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-style: normal; font-weight: 800; color: var(--orange-d) }
 /* сам экран — как у ученика на телефоне / планшете */
-.card { display: flex; flex-direction: column; min-height: 330px; box-sizing: border-box; background: #fff; border: 1px solid #e3e3e3; border-radius: 22px; box-shadow: 0 2px 12px rgba(0, 0, 0, .06); cursor: default; user-select: none; overflow: hidden }
+.card { display: flex; flex-direction: column; min-height: 330px; box-sizing: border-box; background: var(--card); border: 1px solid #e3e3e3; border-radius: 22px; box-shadow: 0 2px 12px rgba(0, 0, 0, .06); cursor: default; user-select: none; overflow: hidden }
 .card.on { outline: 3px solid #0d99ff; outline-offset: 3px }
 .pbar { flex: none; height: 8px; margin: 18px 120px 4px; border-radius: 4px; background: #e8e8e8; overflow: hidden } .pbar i { display: block; height: 100%; border-radius: 4px; background: #1fbe78 }
-.tm { flex: none; padding: 1px 6px; border-radius: 6px; background: #f1f1f1; color: #777; font-size: 11px; font-weight: 800; white-space: nowrap }
-.mn { display: flex; align-items: center; gap: 4px; margin-right: auto; font-size: 13px; font-weight: 800; color: #555 } .mn select { padding: 5px 6px; border: 1px solid #dcdcdc; border-radius: 8px; background: #fff; font: inherit }
+.tm { flex: none; padding: 1px 6px; border-radius: 6px; background: var(--surface); color: #777; font-size: 11px; font-weight: 800; white-space: nowrap }
+.mn { display: flex; align-items: center; gap: 4px; margin-right: auto; font-size: 13px; font-weight: 800; color: var(--hint) } .mn select { padding: 5px 6px; border: 1px solid #dcdcdc; border-radius: 8px; background: var(--card); font: inherit }
 .cf { flex: none; display: flex; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid #ececec }
 .ca { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 13px } .ca b { font-weight: 900 } .ca em { padding: 6px 12px; border-radius: 9px; background: #f1f6ff; font-style: normal; font-weight: 700 }
 .go { border: 0; border-radius: 20px; padding: 8px 22px; background: var(--blue); color: #fff; font: inherit; font-size: 13px; font-weight: 800; opacity: .9 }
 .go.play { cursor: pointer; opacity: 1 }
 .aud.over { position: relative; margin-top: -48px; margin-left: 10px; margin-right: 10px; padding: 4px 8px; border-radius: 20px; background: rgba(255, 255, 255, .95); box-shadow: 0 2px 6px rgba(0, 0, 0, .15); z-index: 2 }
-.plus { position: absolute; z-index: 3; width: 40px; height: 40px; margin: -20px 0 0 -20px; border: 3px dashed #c9c9c9; border-radius: 50%; background: #f5f5f5; color: var(--hint); font-size: 20px; font-weight: 700; cursor: pointer; padding: 0 }
+.plus { position: absolute; z-index: 3; width: 40px; height: 40px; margin: -20px 0 0 -20px; border: 3px dashed #c9c9c9; border-radius: 50%; background: var(--surface); color: var(--hint); font-size: 20px; font-weight: 700; cursor: pointer; padding: 0 }
 .empty-h { position: absolute; white-space: nowrap; font-size: 13px; font-weight: 700; color: var(--hint) }
-.plus:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); background: #fff }
+.plus:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); background: var(--card) }
 .ch { position: relative; flex: none; display: flex; align-items: center; gap: 7px; height: 68px; box-sizing: border-box; padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); cursor: grab; user-select: none; touch-action: none }
 .ch.fix { cursor: default }
 .ch b { flex: 1; font-size: 12px; font-weight: 800; color: var(--hint) }
@@ -488,7 +488,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--hint); cursor: pointer; padding: 0 } .ib:hover { background: var(--red-l); color: var(--red-d) }
 .ib.cp:hover { background: var(--blue-l); color: var(--blue-d) }
 .empty-f .stem { top: -26px } .ef { display: grid; justify-items: center; gap: 4px; margin-top: 14px; padding: 18px; border: 2px dashed #d6d6d6; border-radius: 18px; background: rgba(255, 255, 255, .7); text-align: center }
-.ef b { font-size: 14px; font-weight: 800; color: #555 }
+.ef b { font-size: 14px; font-weight: 800; color: var(--hint) }
 .ckalg { position: absolute; z-index: 3; width: 340px; box-sizing: border-box; padding: 12px 14px; border-radius: 4px; background: #fff3b0; box-shadow: 0 4px 14px rgba(0, 0, 0, .12); text-align: left; max-height: 620px; overflow: auto }          /* как стикер */
 .ckalg.upb { transform: translateY(-100%) } .ckalg.shut { width: 240px }
 .ckh { all: unset; cursor: pointer; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100% } .ckh b { font-size: 13.5px; font-weight: 900; color: #6b5300 } .ckh span { font-size: 11px; font-weight: 800; color: #9a7b00 }
@@ -496,12 +496,12 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 .ckb .dem { margin-top: 2px; padding: 7px 9px; border-radius: 6px; background: rgba(151, 71, 255, .1); color: #4b2a80 } .ckb .dem b { color: #6b2fd0 }
 .cknote { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 4px; background: #fff3b0; text-align: left; box-shadow: 0 2px 6px rgba(0, 0, 0, .08) }          /* как стикер */
 .cknote b { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 900; color: #6b5300 } .cknote ul { margin: 0; padding-left: 16px; display: grid; gap: 3px } .cknote li { font-size: 11.5px; font-weight: 600; line-height: 1.35; color: #4a4020 }
-.xpill { position: relative; display: grid; justify-items: center; gap: 4px; width: 92px; padding: 10px 0 8px; box-sizing: border-box; border-radius: 14px; background: #fff; color: #2c2c2c !important; opacity: .75; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }          /* как кнопка «Exercise» на нижней панели */
+.xpill { position: relative; display: grid; justify-items: center; gap: 4px; width: 92px; padding: 10px 0 8px; box-sizing: border-box; border-radius: 14px; background: var(--card); color: #2c2c2c !important; opacity: .75; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }          /* как кнопка «Exercise» на нижней панели */
 .xpill svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round } .xpill small { font-size: 13px; font-weight: 800 }
-.xn { position: absolute; top: 6px; left: 16px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #eceef1; color: #6b7280; font-size: 11px; font-style: normal; font-weight: 900 }
+.xn { position: absolute; top: 6px; left: 16px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--border); color: var(--hint); font-size: 11px; font-style: normal; font-weight: 900 }
 .ef.hot { border-color: #0d99ff; background: rgba(13, 153, 255, .06) } .ef.hot .xpill { background: #e5f4ff; color: #0d99ff !important; opacity: 1; box-shadow: 0 0 0 2.5px #0d99ff, 0 0 0 9px rgba(13, 153, 255, .2), 0 0 0 16px rgba(13, 153, 255, .08) } .ef.hot .xn { background: #0d99ff; color: #fff }
  .ef { transition: border-color .15s, background .15s } .ef { gap: 10px } .ef span { font-size: 12px; font-weight: 600; color: var(--hint) } .eb { display: flex; gap: 6px; margin-top: 6px }
-.paste { position: absolute; z-index: 3; transform: translateX(-50%); padding: 5px 10px; border: 1px solid var(--blue); border-radius: 14px; background: #fff; color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap }
+.paste { position: absolute; z-index: 3; transform: translateX(-50%); padding: 5px 10px; border: 1px solid var(--blue); border-radius: 14px; background: var(--card); color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap }
 .paste:hover:not(:disabled) { background: var(--blue-l) }
 .ib.rs:hover { background: var(--blue-l); color: var(--blue-d) }
 .ib svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
@@ -511,7 +511,7 @@ const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 input, textarea { user-select: text }
 textarea { field-sizing: content; overflow: hidden; min-height: 1.6em }
 input, textarea, select { font: inherit; color: var(--text); border: 1px solid transparent; border-radius: 7px; background: none; outline: none; padding: 3px 6px; min-width: 0; resize: none }
-input:hover, textarea:hover { background: var(--surface) } input:focus, textarea:focus { border-color: var(--blue); background: #fff }
+input:hover, textarea:hover { background: var(--surface) } input:focus, textarea:focus { border-color: var(--blue); background: var(--card) }
 input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 600 }
 .media { position: relative; flex: none; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000 }
 .media.empty { background: var(--surface); border: 1px dashed #cfcfcf; cursor: pointer } .media.empty:hover { background: var(--blue-l) }
@@ -519,32 +519,32 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .ph { display: grid; place-items: center; align-content: center; height: 100%; gap: 2px; color: var(--blue-d); font-size: 13px; font-weight: 800 } .ph small { color: var(--hint); font-size: 10px; font-weight: 600 }
 .x { position: absolute; right: 5px; top: 5px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px; cursor: pointer; padding: 0 }
 .x.in { position: static; flex: none; background: var(--surface); color: var(--hint) }
-.up { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 6px; background: #fff; color: var(--blue-d); font-size: 11px; font-weight: 900; font-style: normal }
+.up { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 6px; background: var(--card); color: var(--blue-d); font-size: 11px; font-weight: 900; font-style: normal }
 .aud { position: relative; display: flex; align-items: center; gap: 6px; min-height: 30px } .aud > :first-child:not(button) { flex: 1; min-width: 0 }
 .add { border: 1px dashed #cfcfcf; border-radius: 9px; padding: 6px 10px; background: none; font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-d); cursor: pointer; flex: 1 } .add:hover { background: var(--blue-l) }
 .add.sm { flex: none; padding: 4px 8px; font-size: 11px }
-.dk { display: flex; gap: 6px; margin-top: auto } .dk .add.deck { flex: 1; margin-top: 0 } .add.deck.un { flex: none; background: #fff; border-color: var(--border); color: var(--text) }
+.dk { display: flex; gap: 6px; margin-top: auto } .dk .add.deck { flex: 1; margin-top: 0 } .add.deck.un { flex: none; background: var(--card); border-color: var(--border); color: var(--text) }
 .add.deck { flex: none; margin-top: auto; border-style: solid; border-color: var(--blue-l); background: var(--blue-l) }
 .word { display: grid; gap: 0; padding: 6px; border-radius: 10px; background: #f1f6ff; text-align: center }
 .word input { text-align: center; font-size: 17px; font-weight: 900 } .word input.tr { font-size: 12px; font-weight: 700; color: var(--hint) }
 .ex { font-size: 13px; font-weight: 700 } .ex.tr { font-size: 12px; font-weight: 600; color: var(--hint) }
 .tg { display: flex; padding: 2px; border-radius: 8px; background: var(--surface) } .tg button { flex: 1; border: 0; border-radius: 6px; padding: 4px; background: none; font: inherit; font-size: 11px; font-weight: 800; color: var(--hint); cursor: pointer }
-.tg button.on { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .12) }
+.tg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .12) }
 .q { padding: 8px; border-radius: 10px; background: #f1f6ff; text-align: center; font-size: 15px; font-weight: 900; color: var(--hint) }
 .opts { display: grid; gap: 10px } .opts.pics { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)) }
-.op { position: relative; display: grid; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: #fff }
+.op { position: relative; display: grid; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: var(--card) }
 .opts.text .op { grid-template-columns: 1fr auto auto; align-items: center }
 .op.right { border-color: #1fbe78; background: #e3fbef }
 .oi { aspect-ratio: 3 / 2; background: var(--surface); display: grid; place-items: center; cursor: pointer; font-size: 11px; font-weight: 800; color: var(--blue-d) } .oi img { width: 100%; height: 100%; object-fit: cover }
 .op input { text-align: center; font-size: 12px; font-weight: 800; padding: 5px 4px; border-radius: 0 }
-.ok { position: absolute; left: 4px; top: 4px; width: 20px; height: 20px; border: 0; border-radius: 50%; background: #fff; color: var(--hint-2); font-size: 11px; font-weight: 900; cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--border) }
+.ok { position: absolute; left: 4px; top: 4px; width: 20px; height: 20px; border: 0; border-radius: 50%; background: var(--card); color: var(--hint-2); font-size: 11px; font-weight: 900; cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--border) }
 .op.right .ok { background: #1fbe78; color: #fff; box-shadow: none }
 .op .x { right: 4px; top: 4px; width: 20px; height: 20px; font-size: 10px; opacity: 0 } .op:hover .x { opacity: 1 }
 .opts.text .ok, .opts.text .x { position: static; margin-right: 4px }
 .op.plus { place-items: center; min-height: 36px; border-style: dashed; color: var(--blue-d); font-size: 18px; cursor: pointer; font: inherit }
 .opts.pics .op.plus { min-height: 90px } .opts.text .op.plus { display: grid; width: 100% }
 .big { text-align: center; font-size: 17px; font-weight: 800 } .cb > input.tr { text-align: center; font-size: 12px; font-weight: 700; color: var(--hint) }
-.chips { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px } .chips > span { padding: 4px 9px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-weight: 600; background: #fff }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px } .chips > span { padding: 4px 9px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-weight: 600; background: var(--card) }
 .chips small { font-size: 10px; color: var(--hint-2); font-weight: 600 }
 .chips.ed > span { display: flex; align-items: center; padding: 0 2px 0 0 } .chips.ed > span.right { border-color: #1fbe78; background: #e3fbef } .chips.ed input { text-align: center; font-size: 13px; font-weight: 700 }
 .xx { border: 0; background: none; color: var(--hint-2); font-size: 10px; cursor: pointer; padding: 2px }
@@ -552,11 +552,11 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .trw { display: grid; grid-template-columns: auto 1fr 1fr auto; align-items: center; gap: 4px; border-bottom: 1px solid #efefef } .trw input { font-size: 13px; font-weight: 600 } .trw input.tr { color: var(--hint) }
 .sn { border: 0; background: none; cursor: pointer; font-size: 13px; opacity: .35; padding: 2px } .sn.on { opacity: 1 }
 .pr { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center }
-.pr input { height: 44px; border: 1px solid #dcdcdc; border-radius: 9px; background: #fff; text-align: center; font-size: 14px; font-weight: 600 }
+.pr input { height: 44px; border: 1px solid #dcdcdc; border-radius: 9px; background: var(--card); text-align: center; font-size: 14px; font-weight: 600 }
 .pr:first-of-type input { background: #8ff0c8; border-color: #5fe0aa }
 .pr .x { right: -26px; top: 12px; background: none; color: var(--hint-2); opacity: 0 } .pr:hover .x { opacity: 1 }
 /* «+» на рельсе урока */
-.plus-card { position: absolute; z-index: 3; width: 56px; height: 56px; border: 3px dashed #c9c9c9; border-radius: 50%; background: #fff; color: var(--hint); font-size: 26px; font-weight: 700; cursor: pointer }
+.plus-card { position: absolute; z-index: 3; width: 56px; height: 56px; border: 3px dashed #c9c9c9; border-radius: 50%; background: var(--card); color: var(--hint); font-size: 26px; font-weight: 700; cursor: pointer }
 .plus-card:hover:not(:disabled) { border-color: var(--blue); color: var(--blue) }
 /* итог */
 .fin .cb { align-items: center; text-align: center; padding: 8px 90px 12px } .thumb { width: 64px; height: 64px; flex: none }

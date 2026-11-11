@@ -342,7 +342,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 </template>
 
 <style scoped>
-.lp { position: relative; display: flex; flex-direction: column; height: 100%; background: #fff; color: var(--text); font-family: var(--font); user-select: none }
+.lp { position: relative; display: flex; flex-direction: column; height: 100%; background: var(--card); color: var(--text); font-family: var(--font); user-select: none }
 .top { display: flex; align-items: center; gap: 12px; padding: 18px 22px 6px; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box }
 .x { flex: none; width: 32px; height: 32px; border: 0; background: none; border-radius: 8px; cursor: pointer; display: grid; place-items: center } .x:hover { background: var(--surface) }
 .x svg { width: 20px; height: 20px; stroke: var(--hint); stroke-width: 2.6; stroke-linecap: round }
@@ -367,7 +367,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 /* варианты */
 .pics { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px }
 .rows { display: grid; gap: 8px }
-.op { display: grid; gap: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: #fff; font: inherit; color: var(--text); cursor: pointer; overflow: hidden; transition: background .12s, border-color .12s, opacity .12s }
+.op { display: grid; gap: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; color: var(--text); cursor: pointer; overflow: hidden; transition: background .12s, border-color .12s, opacity .12s }
 .op:hover { border-color: #c9c9c9 }
 .ph { display: block; aspect-ratio: 3 / 2; background: var(--surface) } .ph img { display: block; width: 100%; height: 100%; object-fit: cover } .ph i { display: grid; place-items: center; height: 100%; font-size: 12px; color: var(--hint-2); font-style: normal }
 .ow { padding: 9px 10px; font-size: 14px; font-weight: 800; text-align: center }
@@ -376,12 +376,12 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 @keyframes shake { 25% { transform: translateX(-4px) } 75% { transform: translateX(4px) } }
 /* пары */
 .pairs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px } .col { display: grid; gap: 10px; align-content: start }
-.pr { min-height: 48px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; font: inherit; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer }
+.pr { min-height: 48px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); font: inherit; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer }
 .pr.sel { border-color: var(--blue); background: var(--blue-l) } .pr.ok { background: #8ff0c8; border-color: #8ff0c8; cursor: default } .pr.no { background: var(--red-l); border-color: var(--red); animation: shake .3s }
 /* собери фразу, пропуск */
 .built { min-height: 50px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 8px; padding: 10px; border-bottom: 2px solid var(--border) }
 .pool { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-top: 4px }
-.chip { padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font: inherit; font-size: 15px; font-weight: 600; color: var(--text); cursor: pointer }
+.chip { padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font: inherit; font-size: 15px; font-weight: 600; color: var(--text); cursor: pointer }
 .chip:hover { border-color: #1a73e8 } .chip.ok { background: #8ff0c8; border-color: #8ff0c8 } .chip.no { background: var(--red-l); border-color: var(--red); animation: shake .3s }
 .built.ok .chip { background: #e3fbef; border-color: #8ff0c8 } .built.no .chip { background: var(--red-l); border-color: var(--red-l) }
 .sent { margin: 6px 0; text-align: center; font-size: 18px; font-weight: 600; line-height: 1.6 }
@@ -399,7 +399,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .trl { margin: 0; text-align: center; color: var(--hint); font-size: 14px; font-weight: 600 }
 .acts { display: flex; justify-content: center; align-items: flex-start; gap: 22px; margin-top: 4px }
 .act { display: grid; justify-items: center; gap: 6px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 700; color: #1a73e8; cursor: pointer; padding: 0; width: 84px }
-.act i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #c9dcfb; background: #fff }
+.act i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #c9dcfb; background: var(--card) }
 .act svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .act.big i { width: 60px; height: 60px; background: #1a73e8; border-color: #1a73e8; color: #fff } .act.big svg { width: 26px; height: 26px }
 .act.on i { background: var(--red); border-color: var(--red); animation: pulse 1s infinite } .act:disabled { opacity: .4; cursor: default }
@@ -409,7 +409,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .qq { font-size: 15px !important; font-weight: 600 !important } .lnk { border: 0; background: none; padding: 0; color: #1a73e8; text-decoration: underline; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer }
 .how { margin: 4px 0 0; text-align: center; font-size: 13px; font-weight: 600 }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 380px; align-self: center }
-.out { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 12px; border: 1.5px solid #1a73e8; border-radius: 22px; background: #fff; color: #1a73e8; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer }
+.out { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 12px; border: 1.5px solid #1a73e8; border-radius: 22px; background: var(--card); color: #1a73e8; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer }
 .out svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .out:disabled { opacity: .45; cursor: default }
 .wr2 { display: grid; gap: 8px; width: 100%; max-width: 380px; align-self: center } .wr2 .out { justify-self: end }
 .wr2 textarea { resize: none; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; font: inherit; font-size: 15px; outline: none } .wr2 textarea:focus { border-color: #1a73e8 }
@@ -422,7 +422,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .wl { width: 100%; display: grid; gap: 6px; text-align: left } .wh { font-size: 12px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .wr { display: grid; grid-template-columns: 30px auto 1fr; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface) }
 .wr b { font-size: 14px } .wr small { font-size: 12px; color: var(--hint); font-weight: 600 }
-.wr.rv .rlog { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px } .rlog span { flex: none; white-space: nowrap; font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 7px; background: #eceef1; color: #555 } .rlog .ly { background: #e3f6d5; color: #3d8c00 } .rlog .lx { background: #ffe1e1; color: #c62828 }          /* не .x — так называется крестик закрытия */
+.wr.rv .rlog { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px } .rlog span { flex: none; white-space: nowrap; font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 7px; background: var(--border); color: var(--hint) } .rlog .ly { background: #e3f6d5; color: #3d8c00 } .rlog .lx { background: #ffe1e1; color: #c62828 }          /* не .x — так называется крестик закрытия */
 .ckn { margin: 0; font-size: 13px; font-weight: 700; color: var(--hint) } .wr.ck { grid-template-columns: 24px auto 1fr } .ckx { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #9747ff; color: #fff; font-size: 12px; font-weight: 900 }
 .wh .rsum { margin-left: 8px; text-transform: none; letter-spacing: 0; font-weight: 700 }
 .wr.rv { grid-template-columns: 30px minmax(0, 1fr) auto auto; gap: 10px } .rt { display: grid; min-width: 0 } .rt b { overflow-wrap: anywhere }
@@ -430,10 +430,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .rs.weak i.f { background: #ff4b4b } .rs.medium i.f { background: #ff9600 } .rs.strong i.f { background: #58cc02 }
 .rd { min-width: 82px; text-align: right; font-size: 12px; font-weight: 900; color: var(--hint); white-space: nowrap } .rd.up { color: #3d8c00 } .rd.dn { color: #d32f2f } .rd.nw { color: #1278b0 }
 @media (max-width: 480px) { .wr.rv { grid-template-columns: 30px minmax(0, 1fr) auto; row-gap: 2px } .wr.rv .rd { grid-column: 2 / -1; text-align: left; min-width: 0 } }
-.say { width: 28px; height: 28px; border: 0; border-radius: 50%; background: #fff; display: grid; place-items: center; cursor: pointer; padding: 0 } .say.no { background: none }
+.say { width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--card); display: grid; place-items: center; cursor: pointer; padding: 0 } .say.no { background: none }
 .say svg { width: 16px; height: 16px; fill: none; stroke: var(--blue); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
 /* низ */
-.foot { display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-top: 1px solid var(--border); background: #fff; transition: background .15s }
+.foot { display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-top: 1px solid var(--border); background: var(--card); transition: background .15s }
 .foot.good { background: #e3fbef } .foot.bad { background: var(--red-l) }
 .fb { flex: 1; display: grid; font-size: 14px } .foot.good .fb b { color: #128a55 } .foot.bad .fb b { color: var(--red-d) }
 .go { border: 0; border-radius: 22px; padding: 11px 26px; background: var(--blue); color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }

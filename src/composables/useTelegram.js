@@ -1,14 +1,23 @@
 // Обёртка над Telegram WebApp SDK. Вне Telegram (браузер) безопасно работает "вхолостую".
+import { ref } from 'vue'
 import { say } from './useDialog'
 const tg = window.Telegram?.WebApp
 
-// Тема: светлая/тёмная по Telegram или по системе. Цвета бренда фиксированные (Duolingo), меняются только поверхности.
+// Тема: светлая/тёмная. По умолчанию — как в Telegram или в системе; кнопка темы вверху (ThemeToggle) выбирает сама
+// и запоминает выбор в браузере. Цвета бренда фиксированные (Duolingo), меняются только поверхности.
 const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
+const TK = 'tma.theme'
+let pref = (() => { try { return localStorage.getItem(TK) || 'auto' } catch { return 'auto' } })()      // auto | light | dark
+export const theme = ref('light')
 function applyTheme() {
-  const dark = tg?.colorScheme ? tg.colorScheme === 'dark' : !!mq?.matches
+  const sys = tg?.colorScheme ? tg.colorScheme === 'dark' : !!mq?.matches
+  const dark = pref === 'dark' || (pref === 'auto' && sys)
+  theme.value = dark ? 'dark' : 'light'
   document.documentElement.dataset.theme = dark ? 'dark' : 'light'
   try { tg?.setHeaderColor?.(dark ? '#131f24' : '#ffffff'); tg?.setBackgroundColor?.(dark ? '#131f24' : '#ffffff') } catch { /* старые версии клиента */ }
 }
+/** Переключить светлую / тёмную (выбор запоминается; «как в системе» — снова, если стереть выбор) */
+export function toggleTheme() { pref = theme.value === 'dark' ? 'light' : 'dark'; try { localStorage.setItem(TK, pref) } catch { /* приватный режим */ } applyTheme() }
 export function initTelegram() {
   applyTheme(); mq?.addEventListener?.('change', applyTheme)
   if (!tg) return

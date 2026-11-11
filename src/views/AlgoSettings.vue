@@ -163,32 +163,32 @@ const ebLbl = (d) => d < 1 / 24 + 0.001 ? (d < 0.02 ? '20 мин' : '1 ч') : d 
 .algo { display: grid; gap: 12px; justify-items: stretch }
 .algo > * { width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box; min-width: 0 }
 .hd { display: flex; align-items: center; gap: 12px } .hd h1 { margin: 0 }
-.card { background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 12px }
+.card { background: var(--card); border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 12px }
 h2 { margin: 0; font-size: 21px; font-weight: 900 } h2 small { font-size: 13px; font-weight: 700; color: var(--hint) }
 .row { display: flex; align-items: center; gap: 14px; justify-content: space-between }
 .row label { display: grid; gap: 3px; min-width: 0 } .row label b { font-size: 16px; font-weight: 900 } .row label span { font-size: 13px; font-weight: 600; color: var(--hint); line-height: 1.4 }
 .val { flex: none; font-size: 30px; font-weight: 900; color: #1cb0f6 }
 input[type=range] { width: 100%; accent-color: #1cb0f6; margin: -4px 0 0 }
 .lg { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 800; color: var(--hint); margin-top: -8px }
-select { width: auto; flex: none; font: inherit; font-weight: 700; padding: 7px 10px; border-radius: 10px; border: 1.5px solid #e3e6ea; background: #fff }
-.prev { display: grid; gap: 8px; padding: 12px 14px; border-radius: 14px; background: #f6f8fa }
+select { width: auto; flex: none; font: inherit; font-weight: 700; padding: 7px 10px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--card) }
+.prev { display: grid; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--surface) }
 .prev p { margin: 0; font-size: 14px; line-height: 1.55 }
-.ch { display: inline-block; padding: 0 7px; border-radius: 8px; background: #fff; box-shadow: inset 0 0 0 1.5px #dfe3e8; font-weight: 800; color: #1278b0 }
+.ch { display: inline-block; padding: 0 7px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--border); font-weight: 800; color: #1278b0 }
 .gr { width: 100%; height: auto; max-height: 190px; font-family: inherit }
 .gr .ax line { stroke: #cfd4da; stroke-width: 1 } .gr text { font-size: 10px; font-weight: 700; fill: #8a8f98 }
 .gr .tg { stroke: #ff9600; stroke-width: 1.2; stroke-dasharray: 4 3 } .gr .tgt { fill: #ff9600; font-weight: 900 }
 .gr .mk { stroke: #b5bac1; stroke-width: 1; stroke-dasharray: 2 3 }
 .gr .saw { fill: none; stroke: #1cb0f6; stroke-width: 2.4; stroke-linejoin: round }
 .gr .ebl { fill: none; stroke: #9747ff; stroke-width: 2.2 } .gr.eb circle { fill: #9747ff } .gr .ev { fill: #9747ff; font-weight: 900 }
-.seg { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: #f2f3f5; justify-self: start }
-.seg button { font: inherit; font-size: 14px; font-weight: 800; border: 0; border-radius: 10px; padding: 7px 16px; background: none; color: #5f6368; cursor: pointer } .seg button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface); justify-self: start }
+.seg button { font: inherit; font-size: 14px; font-weight: 800; border: 0; border-radius: 10px; padding: 7px 16px; background: none; color: var(--hint); cursor: pointer } .seg button.on { background: var(--card); color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .nt { margin: 0; font-size: 12.5px; font-weight: 600; color: #777; line-height: 1.45 }
 .bar { display: flex; gap: 8px; align-items: center } .sp { flex: 1 }
 .go, .ghost { border: 0; border-radius: 12px; padding: 10px 16px; font: inherit; font-weight: 900; cursor: pointer }
-.go { background: #1cb0f6; color: #fff } .ghost { background: #f0f1f3; color: #555 } .go:disabled, .ghost:disabled { opacity: .45; cursor: default }
+.go { background: #1cb0f6; color: #fff } .ghost { background: var(--border); color: var(--hint) } .go:disabled, .ghost:disabled { opacity: .45; cursor: default }
 .txt p, .txt li { font-size: 14px; line-height: 1.55; color: #333 } .txt p { margin: 0 } .txt ul { margin: 0; padding-left: 20px; display: grid; gap: 6px }
 .tl { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px }
-.tl li { padding-left: 16px; border-left: 3px solid #e3e6ea; display: grid; gap: 6px } .tl small { font-size: 12.5px; color: #777; line-height: 1.45 }
+.tl li { padding-left: 16px; border-left: 3px solid var(--border); display: grid; gap: 6px } .tl small { font-size: 12.5px; color: #777; line-height: 1.45 }
 @media (max-width: 520px) {
   .card { padding: 14px } .row { flex-wrap: wrap } .val { font-size: 26px } select { width: 100% } .lg span:nth-child(2) { display: none }
 }

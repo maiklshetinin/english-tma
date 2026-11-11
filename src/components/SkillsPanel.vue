@@ -60,7 +60,7 @@ const how = ref(false)
           <b class="rt">Освоение</b>
           <div class="rw">
             <svg viewBox="0 0 140 140" class="donut" role="img" :aria-label="Object.keys(ST).map(k => `${ST[k].t}: ${counts[k]}`).join(', ')">
-              <circle cx="70" cy="70" :r="R" fill="none" stroke="#eef0f3" stroke-width="18" />
+              <circle cx="70" cy="70" :r="R" fill="none" style="stroke: var(--border)" stroke-width="18" />
               <circle v-for="a in arcs" :key="a.k" cx="70" cy="70" :r="R" fill="none" :stroke="ST[a.k].c" stroke-width="18" :stroke-dasharray="`${a.len} ${C - a.len}`" :stroke-dashoffset="-a.off" transform="rotate(-90 70 70)" />
             </svg>
             <ul><li v-for="(v, k) in ST" :key="k"><i :style="{ background: v.c }" /><span>{{ v.t }}</span><b>{{ counts[k] }}</b></li></ul>
@@ -98,27 +98,27 @@ const how = ref(false)
 
 <style scoped>
 .sp { display: grid; gap: 12px; min-width: 0 }
-.card { background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 8px; min-width: 0 }
+.card { background: var(--card); border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 8px; min-width: 0 }
 .hd { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap }
 h2 { margin: 0; font-size: 24px; font-weight: 900 } h3 { margin: 0 0 4px; font-size: 18px; font-weight: 900 }
 .lnk { all: unset; cursor: pointer; font-size: 13px; font-weight: 800; color: #1278b0; text-decoration: underline } .lnk span { font-size: 11px; text-decoration: none }
-.how { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: #f6f8fa } .how p { margin: 0; font-size: 13px; line-height: 1.5; color: #444 }
+.how { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface) } .how p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--hint) }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 12px }
-.box { display: grid; align-content: start; gap: 6px; padding: 16px; border-radius: 14px; box-shadow: inset 0 0 0 1px #e8eaee }
-.big { font-size: 40px; font-weight: 900; line-height: 1 } .box > span { font-size: 15px; font-weight: 700; color: #444 } .box > small { font-size: 12.5px; font-weight: 600; color: var(--hint); line-height: 1.45 }
+.box { display: grid; align-content: start; gap: 6px; padding: 16px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--border) }
+.big { font-size: 40px; font-weight: 900; line-height: 1 } .box > span { font-size: 15px; font-weight: 700; color: var(--hint) } .box > small { font-size: 12.5px; font-weight: 600; color: var(--hint); line-height: 1.45 }
 .rt { font-size: 16px; font-weight: 900 }
 .rw { display: flex; align-items: center; gap: 18px; flex-wrap: wrap }
 .donut { width: 140px; height: 140px; flex: none }
 .rw ul { flex: 1; min-width: 170px; margin: 0; padding: 0; list-style: none; display: grid; gap: 8px }
-.rw li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: #444 } .rw li i { flex: none; width: 13px; height: 13px; border-radius: 50% } .rw li span { flex: 1 } .rw li b { font-size: 14px }
-.tr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 10px; border: 0; border-radius: 12px; background: none; font: inherit; text-align: left; cursor: pointer; border-top: 1px solid #f0f1f3 }
-.tr:hover:not(:disabled), .tr.on { background: #f4f8fd } .tr:disabled { cursor: default }
+.rw li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: var(--hint) } .rw li i { flex: none; width: 13px; height: 13px; border-radius: 50% } .rw li span { flex: 1 } .rw li b { font-size: 14px }
+.tr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 10px; border: 0; border-radius: 12px; background: none; font: inherit; text-align: left; cursor: pointer; border-top: 1px solid var(--border) }
+.tr:hover:not(:disabled), .tr.on { background: var(--surface) } .tr:disabled { cursor: default }
 .nm { width: 34%; min-width: 120px; display: grid; font-size: 14.5px; font-weight: 800 } .nm small { font-size: 11px; font-weight: 700; color: var(--hint) }
-.chip { flex: none; font-size: 11px; font-weight: 900; color: #2f2f2f; padding: 2px 8px; border-radius: 8px }
-.bar { flex: 1; min-width: 60px; height: 8px; border-radius: 99px; background: #eef0f3; overflow: hidden } .bar i { display: block; height: 100% }
+.chip { flex: none; font-size: 11px; font-weight: 900; color: var(--text); padding: 2px 8px; border-radius: 8px }
+.bar { flex: 1; min-width: 60px; height: 8px; border-radius: 99px; background: var(--border); overflow: hidden } .bar i { display: block; height: 100% }
 .pc { width: 54px; text-align: right; font-size: 14px; font-weight: 900 } .dd { width: 76px; text-align: right; font-size: 12px; font-weight: 700; color: var(--hint) }
-.na { font-size: 12.5px; font-weight: 600; color: var(--hint) } .tr.off .nm { color: #9aa0a8 }
-.cv { padding: 10px; border-radius: 12px; background: #fafbfc; box-shadow: inset 0 0 0 1px #eef0f3 }
+.na { font-size: 12.5px; font-weight: 600; color: var(--hint) } .tr.off .nm { color: var(--hint) }
+.cv { padding: 10px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border) }
 .em { margin: 0; font-size: 13px; color: var(--hint); line-height: 1.5 }
 @media (max-width: 600px) { .grid { grid-template-columns: minmax(0, 1fr) } .nm { width: 100% } .dd { width: auto } h2 { font-size: 20px } }
 </style>

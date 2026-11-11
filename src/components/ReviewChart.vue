@@ -77,18 +77,17 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
 </template>
 
 <style scoped>
-.rc { display: grid; gap: 8px; min-width: 0; padding: 12px; border-radius: 16px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px var(--border, #eef0f3) }
+.rc { display: grid; gap: 8px; min-width: 0; padding: 12px; border-radius: 16px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px var(--border, var(--border)) }
+.rc:has(.pch.tall) { gap: 4px; padding: 6px 10px 6px }      /* в Review — как над колодой: отступы сняты, место графику */
 .rc.dock { padding: 12px 14px; border-radius: 8px; box-shadow: none; border: 1px solid var(--border) }      /* в панели «Графики» курса — строже, как остальные графики панели */
 .hb { display: grid; min-width: 0; padding-right: 14px; border-right: 1px solid var(--border) }
 .rc.dock .ttl2 { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap } .rc.dock .cnt { font-size: 11.5px; font-weight: 500; white-space: nowrap }
 .rc.dock :deep(.ttl) { display: flex; align-items: center; gap: 12px; min-width: 0 } .rc.dock select { border-radius: 6px; font-weight: 600; font-size: 12px; padding: 4px 8px }
-.rc.dock :deep(.scl) { padding: 0; gap: 0; border-radius: 6px; background: none; overflow: hidden } .rc.dock :deep(.scl button) { border-radius: 0; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--hint) }
-.rc.dock :deep(.scl button + button) { border-left: 1px solid var(--border) } .rc.dock :deep(.scl button.on) { background: var(--g-seg, #f3f4f6); color: var(--text) }
 .ttl2 { font-size: 15px; font-weight: 900; color: var(--text) }
 .cnt { font-size: 12px; font-weight: 700; color: var(--hint) }
-select { justify-self: start; width: auto; max-width: 220px; font: inherit; font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 9px; border: 1px solid var(--border, #e3e6ea); background: var(--card, #fff); color: var(--text) }
+select { justify-self: start; width: auto; max-width: 220px; font: inherit; font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 9px; border: 1px solid var(--border, var(--border)); background: var(--card, #fff); color: var(--text) }
 .fl { height: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; border-radius: 10px; background: var(--card, #fff); transition: height .2s; padding: 0 10px }
 .fl.on { height: 30px; box-shadow: 0 0 0 1.5px #1cb0f6 } .fl i { flex: none; width: 9px; height: 9px; border-radius: 50% } .fl .y { background: #58cc02 } .fl .x { background: #ff4b4b } .fl .n { background: #b5bac1 }
 .em { margin: 0; font-size: 13px; color: var(--hint); text-align: center }
-.cv { padding: 10px; border-radius: 12px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px var(--border, #eef0f3) }
+.cv { padding: 10px; border-radius: 12px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px var(--border, var(--border)) }
 </style>

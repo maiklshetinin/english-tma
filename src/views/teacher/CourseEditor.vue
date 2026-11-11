@@ -1862,7 +1862,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 </template>
 
 <style scoped>
-.ce { position: fixed; inset: 0; z-index: 30; background: #f5f5f5; user-select: none; -webkit-user-select: none; font-family: var(--font) }
+.ce { position: fixed; inset: 0; z-index: 30; background: var(--surface); user-select: none; -webkit-user-select: none; font-family: var(--font) }
 .ce.dragging, .ce.dragging * { cursor: grabbing !important }
 /* Холст: бесконечное поле в точку; содержимое — в координатах холста (центр рельса — x = 0) */
 .board { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab; background-image: radial-gradient(circle, #cfcfcf 1px, transparent 1.3px) }
@@ -1875,11 +1875,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .mq { position: absolute; z-index: 20; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }
 .selbox { position: absolute; z-index: 19; border: 2px solid #0d99ff; pointer-events: none }
 .selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .04) } .selmask:active { cursor: grabbing }
-.selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: #fff }
+.selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: var(--card) }
 .selbox i:nth-of-type(1) { left: -7px; top: -7px } .selbox i:nth-of-type(2) { right: -7px; top: -7px } .selbox i:nth-of-type(3) { left: -7px; bottom: -7px } .selbox i:nth-of-type(4) { right: -7px; bottom: -7px }
 /* стрелка и рука на панели */
 .mode { display: flex; gap: 4px; padding: 0 2px }
-.md { display: grid; place-items: center; width: 54px; height: 54px; border: 0; border-radius: 13px; background: none; color: #2c2c2c; cursor: pointer; padding: 0 } .md:hover { background: #f2f2f2 }
+.md { display: grid; place-items: center; width: 54px; height: 54px; border: 0; border-radius: 13px; background: none; color: #2c2c2c; cursor: pointer; padding: 0 } .md:hover { background: var(--surface) }
 .md svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
 .md.on { background: #9747ff; color: #fff }
 /* маркер, как в FigJam: торчит из панели, выбран — выше */
@@ -1898,7 +1898,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .bead { position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 6px 0 var(--d);
   cursor: grab; transition: left .22s ease, top .22s ease, transform .12s, opacity .15s; touch-action: none; z-index: 2 }
 .bead:hover { transform: translateY(-2px) }
-.bead.todo { background: #e5e5e5; box-shadow: 0 6px 0 #cdcdcd; color: #afafaf } .bead.todo .cap { color: var(--hint) }
+.bead.todo { background: var(--border); box-shadow: 0 6px 0 #cdcdcd; color: #afafaf } .bead.todo .cap { color: var(--hint) }
 .bead.tutor { border-radius: 20px }
 /* Кружок: само видео в круге, с голубым кольцом как в Telegram; при наведении играет без звука */
 .bead.video { width: 76px; height: 76px; margin: -38px 0 0 -38px; overflow: visible }
@@ -1918,32 +1918,32 @@ async function reset() { if (!(await ask('Вернуть пример курса
 @keyframes pulse { 50% { box-shadow: 0 6px 0 var(--d), 0 0 0 7px #fff, 0 0 0 16px color-mix(in srgb, var(--c) 12%, transparent) } }
 .bead.on { outline: 3px solid #0d99ff; outline-offset: 6px }
 /* Место, куда встанет взятое: пустое кольцо на рельсе */
-.bead.lift { background: #fff !important; color: transparent; box-shadow: none !important; outline: 3px dashed var(--c); outline-offset: -3px; animation: none; transform: none }
+.bead.lift { background: var(--card) !important; color: transparent; box-shadow: none !important; outline: 3px dashed var(--c); outline-offset: -3px; animation: none; transform: none }
 .bead.lift > * { visibility: hidden }
 .ic { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
 /* Подпись — сбоку от бусины, с той стороны, где больше места; линия остаётся чистой */
 .cap { position: absolute; top: 50%; left: calc(100% + 16px); transform: translateY(-50%); width: 150px; display: grid; justify-items: start; gap: 1px; font-style: normal; font-size: 14px; font-weight: 800; line-height: 1.2; color: var(--text); pointer-events: none }
 .cap small { font-size: 11px; font-weight: 700; color: var(--hint) }
 .bead.s-l .cap { left: auto; right: calc(100% + 16px); justify-items: end; text-align: right }
-.start { margin-bottom: 3px; padding: 3px 8px; border-radius: 9px; background: #fff; color: var(--c); font-size: 11px; font-weight: 900; text-transform: uppercase; box-shadow: 0 0 0 2px #e5e5e5, 0 3px 0 #e5e5e5; white-space: nowrap; pointer-events: none }
+.start { margin-bottom: 3px; padding: 3px 8px; border-radius: 9px; background: var(--card); color: var(--c); font-size: 11px; font-weight: 900; text-transform: uppercase; box-shadow: 0 0 0 2px #e5e5e5, 0 3px 0 #e5e5e5; white-space: nowrap; pointer-events: none }
 /* Станция юнита: круг с номером и табличка над рельсом */
 .bead.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px; box-shadow: 0 0 0 6px #fff, 0 0 0 9px var(--c) }
-.bead.unit.todo { background: #e5e5e5; box-shadow: 0 0 0 6px #fff, 0 0 0 9px #e0e0e0 } .bead.unit.todo .sign { background: #e5e5e5; color: #9a9a9a; box-shadow: 0 4px 0 #cdcdcd }
+.bead.unit.todo { background: var(--border); box-shadow: 0 0 0 6px #fff, 0 0 0 9px #e0e0e0 } .bead.unit.todo .sign { background: var(--border); color: #9a9a9a; box-shadow: 0 4px 0 #cdcdcd }
 .no { font-size: 21px; font-weight: 900 }
 .sign { position: absolute; top: 50%; left: calc(100% + 20px); transform: translateY(-50%); display: grid; padding: 7px 14px; border-radius: 12px; background: var(--c); box-shadow: 0 4px 0 var(--d); color: #fff; white-space: nowrap; pointer-events: none }
 .bead.s-l .sign { left: auto; right: calc(100% + 20px) }
 .sign b { font-size: 15px }
 /* Сводка сверху */
-.sum { position: absolute; left: -220px; top: -250px; width: 440px; cursor: default; box-sizing: border-box; display: grid; gap: 6px; padding: 16px 18px; border-radius: 18px; background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04); z-index: 3 }
+.sum { position: absolute; left: -220px; top: -250px; width: 440px; cursor: default; box-sizing: border-box; display: grid; gap: 6px; padding: 16px 18px; border-radius: 18px; background: var(--card); box-shadow: 0 2px 12px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04); z-index: 3 }
 .sh { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .dt { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--green); vertical-align: 1px }
 .pp { padding: 4px 9px; border-radius: 9px; background: var(--green-l); color: var(--green-d); font-size: 14px; letter-spacing: 0 }
 .st { font-size: 18px; font-weight: 900; color: var(--text) }
-.bar { height: 10px; margin: 4px 0 2px; border-radius: 6px; background: #ececec; overflow: hidden } .bar i { display: block; height: 100%; border-radius: 6px; background: var(--green); transition: width .25s }
+.bar { height: 10px; margin: 4px 0 2px; border-radius: 6px; background: var(--border); overflow: hidden } .bar i { display: block; height: 100%; border-radius: 6px; background: var(--green); transition: width .25s }
 .sf { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--hint) } .sf b { color: var(--text) }
 .sign span { font-size: 12px; font-weight: 700; opacity: .85 }
 /* Карточка выбранного */
-.pop { position: fixed; z-index: 20; display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04); cursor: default; animation: pop .14s ease-out }
+.pop { position: fixed; z-index: 20; display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: var(--card); box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04); cursor: default; animation: pop .14s ease-out }
 @keyframes pop { from { opacity: 0; transform: translateY(-4px) } }
 .lz { margin-left: 8px; padding: 1px 6px; border-radius: 5px; background: #fff4d6; color: #b07800; text-transform: none; letter-spacing: 0 }
 .btn-l { display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 9px; padding: 8px; background: var(--blue-l); color: var(--blue-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
@@ -1956,7 +1956,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .bead.loose .cap small { color: #b07800 }
 .ph { font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 .in { margin: 0; padding: 8px 10px; font-size: 15px; font-weight: 700; border-width: 1px; border-radius: 9px } .in.sub { font-size: 13px; font-weight: 600 }
-.types { display: flex; gap: 6px } .tt { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #f0f0f0; color: var(--c); cursor: pointer; padding: 0 }
+.types { display: flex; gap: 6px } .tt { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--surface); color: var(--c); cursor: pointer; padding: 0 }
 .tt svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round } .tt.on { background: var(--c); color: #fff }
 .del { border: 0; border-radius: 9px; padding: 8px; background: var(--red-l); color: var(--red-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
 /* Летящее */
@@ -1964,7 +1964,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .fly .vid { box-shadow: none }
 .fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px } .fly.tutor { border-radius: 20px } .fly.out { opacity: .45 }
 /* Панели */
-.fl { position: absolute; z-index: 5; background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }
+.fl { position: absolute; z-index: 5; background: var(--card); border-radius: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }
 .tl-panel { left: 14px; top: 14px; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px }
 .ttl { width: 220px; margin: 0; padding: 6px 8px; border: 0; background: none; font-size: 15px; font-weight: 800 } .ttl:focus { background: var(--surface) }
 .rcur { position: fixed; left: 0; top: 0; z-index: 40; pointer-events: none; transition: transform .08s linear }
@@ -1986,7 +1986,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .zoom b { min-width: 46px; text-align: center; font-size: 13px; cursor: pointer } .zoom .all { padding: 0 10px; font-size: 13px; font-weight: 800 } .zoom .vs { margin: 0 2px }
 .tools { left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; height: 74px; padding: 0 12px; border-radius: 18px; box-shadow: 0 2px 6px rgba(0, 0, 0, .06), 0 6px 22px rgba(0, 0, 0, .1) }
 .tl { display: grid; font-size: 13px; font-weight: 800; line-height: 1.2; padding: 0 4px; white-space: nowrap } .tl small { font-size: 11px; color: var(--hint); font-weight: 600 }
-.sep { width: 1px; height: 44px; margin: 0 8px; background: #e6e6e6 }
+.sep { width: 1px; height: 44px; margin: 0 8px; background: var(--border) }
 .pb { display: grid; justify-items: center; gap: 4px; width: 68px; padding: 6px 0 4px; border: 0; border-radius: 12px; background: none; font: inherit; cursor: grab; touch-action: none }
 .pb:hover { background: #f3f3f3 } .pb:hover .pc { transform: translateY(-2px) }
 .pc { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 3px 0 var(--d); transition: transform .12s }
@@ -2005,30 +2005,30 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .r0 { stroke: #dedede; stroke-width: 4 } .r1 { stroke: #1fbe78; stroke-width: 4 }
 .chapbox { position: absolute; z-index: 0; box-sizing: border-box; border-radius: 26px; pointer-events: none; transition: left .22s ease, top .22s ease, width .22s ease, height .22s ease }
 .lsel { position: absolute; z-index: 1; box-sizing: border-box; border: calc(2px * var(--k)) solid #0d99ff; cursor: grab; background: rgba(13, 153, 255, .03) } .lsel:active { cursor: grabbing }
-.lsel i { position: absolute; width: calc(12px * var(--k)); height: calc(12px * var(--k)); box-sizing: border-box; border: calc(2px * var(--k)) solid #0d99ff; border-radius: calc(3px * var(--k)); background: #fff }
+.lsel i { position: absolute; width: calc(12px * var(--k)); height: calc(12px * var(--k)); box-sizing: border-box; border: calc(2px * var(--k)) solid #0d99ff; border-radius: calc(3px * var(--k)); background: var(--card) }
 .lsel i:nth-child(1) { left: calc(-7px * var(--k)); top: calc(-7px * var(--k)) } .lsel i:nth-child(2) { right: calc(-7px * var(--k)); top: calc(-7px * var(--k)) } .lsel i:nth-child(3) { left: calc(-7px * var(--k)); bottom: calc(-7px * var(--k)) } .lsel i:nth-child(4) { right: calc(-7px * var(--k)); bottom: calc(-7px * var(--k)) }
 .chead { position: absolute; z-index: 2; display: grid; gap: 12px; cursor: default }
 .chead { transform: scale(2.5); transform-origin: 0 100% }          /* название курса и прогресс — крупно (в 2,5 раза), читаются и при «Весь курс» */
 .cht { display: flex; align-items: center; gap: 10px; white-space: nowrap } .cht b { font-size: 34px; font-weight: 900; cursor: text } .cht .rin.big { width: 380px; font-size: 30px }
-.cht small { padding: 2px 8px; border-radius: 7px; background: #ececec; color: #7a7f87; font-size: 12px; font-weight: 800 }
-.cpill { display: flex; align-items: center; gap: 8px; width: 380px; box-sizing: border-box; padding: 11px 14px; border: 1.5px solid #e2e2e2; border-radius: 14px; background: #fff; font-size: 16px }
+.cht small { padding: 2px 8px; border-radius: 7px; background: var(--border); color: #7a7f87; font-size: 12px; font-weight: 800 }
+.cpill { display: flex; align-items: center; gap: 8px; width: 380px; box-sizing: border-box; padding: 11px 14px; border: 1.5px solid #e2e2e2; border-radius: 14px; background: var(--card); font-size: 16px }
 .cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
 .rhint { position: absolute; z-index: 2; display: grid; gap: 8px; width: 420px; padding: 18px 22px; border: 2px dashed #b9c0c8; border-radius: 18px; background: rgba(255, 255, 255, .85); pointer-events: none }
-.rhint b { font-size: 24px; font-weight: 900; color: #252a31 } .rhint span { font-size: 16px; font-weight: 600; line-height: 1.35; color: #6b7280 }
+.rhint b { font-size: 24px; font-weight: 900; color: var(--text) } .rhint span { font-size: 16px; font-weight: 600; line-height: 1.35; color: var(--hint) }
 .rstart { position: absolute; z-index: 1; width: 44px; height: 44px; margin: -22px; border-radius: 50%; background: #d6d6d6; box-shadow: 0 0 0 5px #f4f4f4 }
-.jnt { position: absolute; z-index: 10025; height: 48px; padding: 0 20px 0 16px; transform: translate(-50%, -50%); box-sizing: border-box; border-radius: 22px; border: 2.5px dashed #aeb5bd; background: #f4f4f4; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 900; color: #8a9099; white-space: nowrap; pointer-events: none }
+.jnt { position: absolute; z-index: 10025; height: 48px; padding: 0 20px 0 16px; transform: translate(-50%, -50%); box-sizing: border-box; border-radius: 22px; border: 2.5px dashed #aeb5bd; background: var(--surface); display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 900; color: #8a9099; white-space: nowrap; pointer-events: none }
 .jic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round }          /* тот же значок, что у кнопки «Chapter» на панели */          /* стык рельса — надпись «Chapter»: сюда встанет Chapter */
-.jnt.rend { z-index: 3; border: 2.5px solid #d6d9dd; background: #ececec; color: #9aa0a8 }          /* в покое — серый */
-.jnt.lj { height: 40px; padding: 0 16px 0 12px; font-size: 15px; z-index: 10024 } .jnt.lj:not(.hot) { border-style: solid; border-color: #d6d9dd; background: #ececec; color: #9aa0a8 }
+.jnt.rend { z-index: 3; border: 2.5px solid #d6d9dd; background: var(--border); color: var(--hint) }          /* в покое — серый */
+.jnt.lj { height: 40px; padding: 0 16px 0 12px; font-size: 15px; z-index: 10024 } .jnt.lj:not(.hot) { border-style: solid; border-color: #d6d9dd; background: var(--border); color: var(--hint) }
 .bead.lift:not(.unit) { opacity: 0 !important }          /* место, куда встанет урок, показывает синяя плашка «Lesson» (а не пунктирный кружок) */
 .chapbox.aim { box-shadow: 0 0 0 3px #0d99ff, 0 0 18px rgba(13, 153, 255, .45) }          /* урок целится в эту главу на доске */
 .chrail { position: absolute; width: 6px; border-radius: 3px; background: color-mix(in srgb, var(--hc) 70%, #1a6b45); pointer-events: none }
 .chrail.aim { background: #0d99ff; box-shadow: 0 0 10px rgba(13, 153, 255, .6) }
 .rail.glow .r0 { stroke: #a9d8ff } .rail.glow path { filter: drop-shadow(0 0 6px rgba(13, 153, 255, .45)) }          /* тянем на рельс — рельс подсвечен */
-.jnt.tile { display: grid; justify-items: center; gap: 4px; width: 92px; height: auto; padding: 10px 0 8px; border: 0; border-radius: 14px; background: #fff; color: #2c2c2c; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }          /* как кнопка на нижней панели: значок, подпись, номер */
+.jnt.tile { display: grid; justify-items: center; gap: 4px; width: 92px; height: auto; padding: 10px 0 8px; border: 0; border-radius: 14px; background: var(--card); color: #2c2c2c; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04) }          /* как кнопка на нижней панели: значок, подпись, номер */
 .jnt.tile .jic { width: 32px; height: 32px; stroke-width: 1.7 } .jnt.tile small { font-size: 13px; font-weight: 800 }
 .jnt.tile .tn { position: absolute; top: 6px; left: 16px }
-.jnt.tile.rend, .jnt.tile.lj:not(.hot) { opacity: .75 } .jnt.tile.lj.hint:not(.hot) { z-index: 3; transform: translate(-50%, -50%); opacity: .55; background: #fff; color: #2c2c2c }          /* подсказка — полупрозрачная, не отвлекает */          /* подсказка в главе с одним уроком — того же размера, что кнопка панели */ .jnt.tile.lj:not(.hot) { transform: translate(-50%, -50%) scale(.8) }          /* в покое — чуть бледнее; стыки уроков — поменьше, чтобы не налезали на кружки */
+.jnt.tile.rend, .jnt.tile.lj:not(.hot) { opacity: .75 } .jnt.tile.lj.hint:not(.hot) { z-index: 3; transform: translate(-50%, -50%); opacity: .55; background: var(--card); color: #2c2c2c }          /* подсказка — полупрозрачная, не отвлекает */          /* подсказка в главе с одним уроком — того же размера, что кнопка панели */ .jnt.tile.lj:not(.hot) { transform: translate(-50%, -50%) scale(.8) }          /* в покое — чуть бледнее; стыки уроков — поменьше, чтобы не налезали на кружки */
 .jnt.tile.hot { background: #e5f4ff; color: #0d99ff; box-shadow: 0 0 0 2.5px #0d99ff, 0 0 0 9px rgba(13, 153, 255, .2), 0 0 0 16px rgba(13, 153, 255, .08); opacity: 1 } .jnt.tile.hot .tn { background: #0d99ff; color: #fff }
 .jnt.dot { width: 34px; height: 34px; padding: 0; border-radius: 50% }
 .jnt.hot { border: 2.5px solid #0d99ff; background: #0d99ff; color: #fff; box-shadow: 0 0 0 7px rgba(13, 153, 255, .2), 0 0 0 14px rgba(13, 153, 255, .08) }
@@ -2040,7 +2040,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .chapbox.light { background: color-mix(in srgb, #fff var(--ho, 85%), transparent); box-shadow: inset 0 0 0 1.5px #e3e3e3, 0 2px 10px rgba(0, 0, 0, .04) }
 .chbar .nb-pop:not(.sw) { top: auto; bottom: calc(100% + 8px) }          /* списки меню главы открываются вверх — внизу выделение главы */
 .upen { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: none; color: #8a9099; cursor: pointer } .upen svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.upen { background: rgba(0, 0, 0, .05) } .upen:hover { background: rgba(0, 0, 0, .06); color: #252a31 }
+.upen { background: rgba(0, 0, 0, .05) } .upen:hover { background: rgba(0, 0, 0, .06); color: var(--text) }
 .uh.ren { display: grid; gap: 2px } .rrow { display: flex; align-items: center; gap: 8px }
 .uh.ren .rin { width: 100%; border: 0; border-radius: 6px; background: rgba(13, 153, 255, .07); padding: 1px 4px; margin: 0 -4px; outline: none; caret-color: #0d99ff; box-shadow: none }
 .uh.ren .rin:focus { background: rgba(13, 153, 255, .12) } .uh.ren .rin.big { font-size: 20px; font-weight: 900 } .uh.ren .rin:not(.big) { font-size: 14px; font-weight: 600; color: #4b5563 }
@@ -2055,11 +2055,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .bead.unit.on { z-index: 10000; outline: none }          /* выбранная глава — рамка вокруг всей главы, без второй рамки у названия */ .nor { flex: none; padding: 1px 7px; border-radius: 6px; background: #fff4c2; color: #8a6d00; font-size: 11px; font-weight: 800 }          /* меню главы — поверх соседних карточек */
 .nbar.chbar { bottom: calc(100% + 50px); gap: 4px; padding: 0 8px; z-index: 40 }
 .cbw { height: 34px; padding: 0 10px !important; border-radius: 8px; font-size: 13px !important; font-weight: 700 } .cbw:hover:not(:disabled) { background: #383838 } .cbw.on { background: #383838; box-shadow: inset 0 0 0 1.5px #0d99ff } .cbw:disabled { opacity: .35; cursor: default }
-.chap { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid #e3e3e3; border-radius: 22px; background: #fff; pointer-events: none }
+.chap { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid #e3e3e3; border-radius: 22px; background: var(--card); pointer-events: none }
 .chap.full { border-color: #1fbe78; background: #f2fbf7 }
 .bead { width: 56px; height: 56px; margin: -28px 0 0 -28px; color: #fff; background: var(--c); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1fbe78 }
 .bead:hover { transform: none; filter: brightness(1.04) }
-.bead.todo { background: #f1f1f1; color: #b7b7b7; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e2e2e2 } .bead.todo .cap { color: var(--text) }
+.bead.todo { background: var(--surface); color: #b7b7b7; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e2e2e2 } .bead.todo .cap { color: var(--text) }
 .bead.current { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent); animation: softpulse 2.4s ease-in-out infinite }
 /* текущий урок — мягко «дышит», как в Busuu */
 @keyframes softpulse { 0%, 100% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 9px color-mix(in srgb, var(--c) 24%, transparent) } 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 17px color-mix(in srgb, var(--c) 7%, transparent) } }
@@ -2067,24 +2067,24 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ic { width: 26px; height: 26px; stroke-width: 2 }
 .ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
 .ok circle { fill: #1fbe78; stroke: #fff; stroke-width: 2 } .ok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
-.cap { left: calc(100% + 22px); width: 190px; gap: 2px; font-size: 15px; font-weight: 800; color: #252a31 }
-.cap small { font-size: 12.5px; font-weight: 600; color: #6b7280 }
+.cap { left: calc(100% + 22px); width: 190px; gap: 2px; font-size: 15px; font-weight: 800; color: var(--text) }
+.cap small { font-size: 12.5px; font-weight: 600; color: var(--hint) }
 .csub { font-size: 13.5px; font-weight: 500; color: #3b4048; line-height: 1.3 }      /* описание урока — как в Busuu: под жирным названием обычным шрифтом */
 .rin.sub { font-size: 13px; font-weight: 500 } .rin.tsel { font-size: 12.5px; font-weight: 700; max-width: 100%; padding: 4px 6px; border-radius: 8px; cursor: pointer } .lpv .lps { margin: -2px 0 0; font-size: 15px; font-weight: 500; opacity: 1 }
 .bead.s-l .cap { right: calc(100% + 22px) }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; box-shadow: none }
 /* юнит: заголовок главы и полоска прогресса */
-.bead.unit { width: auto; height: auto; margin: -40px 0 0 -46px; display: grid; gap: 10px; place-items: stretch; padding: 0; border-radius: 0; background: none !important; box-shadow: none !important; color: #252a31; cursor: grab; outline-offset: 10px }
+.bead.unit { width: auto; height: auto; margin: -40px 0 0 -46px; display: grid; gap: 10px; place-items: stretch; padding: 0; border-radius: 0; background: none !important; box-shadow: none !important; color: var(--text); cursor: grab; outline-offset: 10px }
 .bead.unit.todo { box-shadow: none } .bead.unit .sign, .bead.unit .no { display: none }
 .uh { display: flex; align-items: center; gap: 8px; width: 360px; white-space: nowrap }
 .uh b { font-size: 20px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
-.ubar { position: relative; width: 370px; height: 10px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
+.ubar { position: relative; width: 370px; height: 10px; border-radius: 6px; background: var(--border) } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
 .ubar em { position: absolute; top: 50%; transform: translate(-50%, -50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
 .ftree { position: absolute; left: 0; top: 0; z-index: 10000; opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
 .ftree .bead, .ftree :deep(.lr *), .ftree .chapbox, .ftree .chrail { transition: none !important }          /* призрак главы / урока — ровно за курсором, без подъезда */
-.bead.unit.lift { outline: 2px dashed #1fbe78; background: #fff !important }
+.bead.unit.lift { outline: 2px dashed #1fbe78; background: var(--card) !important }
 .fly.unit { width: 50px; height: 50px; margin: -25px 0 0 -25px; background: #1fbe78; box-shadow: 0 10px 20px rgba(0, 0, 0, .2) }
 /* сводка курса — плоско */
 .sum { box-shadow: none; border: 1px solid #e3e3e3 } .pp { background: #e3fbef; color: #128a55 } .bar i { background: #1fbe78 } .dt { background: #1fbe78 }
@@ -2095,16 +2095,16 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .lpv::before { content: ''; position: absolute; left: 24px; top: -9px; border: 10px solid transparent; border-top: 0; border-bottom-color: var(--c) }
 .lpv small { font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; opacity: .85 }
 .lpv b { font-size: 18px; font-weight: 900; line-height: 1.2 } .lpv p { margin: 0 0 6px; font-size: 13px; font-weight: 600; opacity: .9 }
-.pgo { padding: 11px; border: 0; border-radius: 12px; background: #fff; color: var(--d); font: inherit; font-size: 15px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
+.pgo { padding: 11px; border: 0; border-radius: 12px; background: var(--card); color: var(--d); font: inherit; font-size: 15px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
 .pgo:active { transform: translateY(2px); box-shadow: none }
 .sdmark { position: absolute; z-index: 10020; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
 .sdbead { position: absolute; z-index: 10020; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
 .sdg { position: absolute; z-index: 10030; width: 460px; pointer-events: none; opacity: .95 }
-.sdl { display: flex; align-items: center; gap: 6px; height: 34px; font-size: 13px; color: #555 } .sdl b { font-weight: 800 }
+.sdl { display: flex; align-items: center; gap: 6px; height: 34px; font-size: 13px; color: var(--hint) } .sdl b { font-weight: 800 }
 .sdl .kc { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #fff } .sdl .kc svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.sdc { overflow: hidden; border-radius: 22px; background: #fff; box-shadow: 0 0 0 2px var(--c), 0 18px 40px rgba(0, 0, 0, .2) }
+.sdc { overflow: hidden; border-radius: 22px; background: var(--card); box-shadow: 0 0 0 2px var(--c), 0 18px 40px rgba(0, 0, 0, .2) }
 .runov { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45) }
-.runbox { width: min(560px, 100%); height: min(820px, 96vh); border-radius: 22px; overflow: hidden; background: #fff }
+.runbox { width: min(560px, 100%); height: min(820px, 96vh); border-radius: 22px; overflow: hidden; background: var(--card) }
 /* Стикеры */
 .note { position: absolute; z-index: 9000; width: 240px; min-height: 240px; display: flex; box-sizing: border-box; padding: 16px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .06); cursor: grab; touch-action: none }
 .note.ghost { opacity: .6; pointer-events: none; z-index: 9001; box-shadow: none }
@@ -2139,13 +2139,13 @@ async function reset() { if (!(await ask('Вернуть пример курса
 /* Нижняя панель как в FigJam — крупно */
 .tools { height: 84px; padding: 0 10px; gap: 4px; border-radius: 20px }
 .tb { display: grid; justify-items: center; gap: 4px; width: 92px; padding: 10px 0 8px; border: 0; border-radius: 14px; background: none; font: inherit; color: #2c2c2c; cursor: pointer; touch-action: none }
-.tb:hover { background: #f2f2f2 } .tb.on { background: #e5f4ff; color: #0d99ff }
+.tb:hover { background: var(--surface) } .tb.on { background: #e5f4ff; color: #0d99ff }
 .tb svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
 .tb small { font-size: 13px; font-weight: 800 }
-.tb { position: relative } .tn { position: absolute; top: 6px; left: 16px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #eceef1; color: #6b7280; font-size: 11px; font-style: normal; font-weight: 900 }
+.tb { position: relative } .tn { position: absolute; top: 6px; left: 16px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--border); color: var(--hint); font-size: 11px; font-style: normal; font-weight: 900 }
 .tb.on .tn { background: #0d99ff; color: #fff }
 .tarr { flex: none; align-self: center; width: 18px; height: 18px; margin: 0 -8px; fill: none; stroke: #c2c7cd; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round }          /* стрелка порядка: Chapter › Lesson › Exercise */
-.tsep { width: 1px; height: 50px; margin: 0 6px; background: #e6e6e6 }
+.tsep { width: 1px; height: 50px; margin: 0 6px; background: var(--border) }
 /* стикер на панели: торчит снизу, при наведении выезжает */
 .sticky { position: relative; align-self: stretch; width: 96px; border: 0; background: none; padding: 0; cursor: pointer; clip-path: inset(-80px -20px 0 -20px) }
 .sticky::before { content: ''; position: absolute; left: 6px; right: 6px; top: 8px; bottom: 8px; border-radius: 12px; background: transparent; transition: background .15s }
@@ -2156,7 +2156,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .board.placing, .board.placing * { cursor: none !important }
 .tray { left: 50%; bottom: 116px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 18px; animation: tray .14s ease-out; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none }
 @keyframes tray { from { opacity: 0; transform: translate(-50%, 6px) } }
-.ts { display: grid; justify-items: center; gap: 4px; width: 190px; padding: 10px 8px 8px; border: 0; border-radius: 14px; background: none; font: inherit; cursor: grab; touch-action: none; flex: none } .ts:hover { background: #f2f2f2 }
+.ts { display: grid; justify-items: center; gap: 4px; width: 190px; padding: 10px 8px 8px; border: 0; border-radius: 14px; background: none; font: inherit; cursor: grab; touch-action: none; flex: none } .ts:hover { background: var(--surface) }
 .sch { width: 170px; height: 74px; border-radius: 10px; background: #fafafa; box-shadow: inset 0 0 0 1px #ececec }
 .sch .sl { stroke: #dcdcdc; stroke-width: 4; stroke-linecap: round } .sch .st { stroke: #dcdcdc; stroke-width: 1.5 }
 .sch .sdots { fill: #c8c8c8 } .sch .sc { fill: #fff; stroke: #d6d6d6; stroke-width: 1.2 } .sch .sb { fill: #e3e3e3 } .sch .sbb { fill: #9fd3ff }
@@ -2172,7 +2172,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .rin.lin.sub { font-size: 14px; font-weight: 500 } 
 .lpt { display: flex; align-items: center; gap: 6px } .lpen { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: rgba(255, 255, 255, .2); color: #fff; cursor: pointer } .lpen:hover { background: rgba(255, 255, 255, .32) } .lpt svg { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .7 } .lpt:hover svg { opacity: 1 }
 .ti { display: grid; justify-items: center; gap: 5px; width: 92px; padding: 8px 0 6px; border: 0; border-radius: 12px; background: none; font: inherit; cursor: pointer; touch-action: none; flex: none }
-.ti.wide { width: 116px } .ti:hover { background: #f2f2f2 }
+.ti.wide { width: 116px } .ti:hover { background: var(--surface) }
 .tc { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #fff; background: var(--c) }
 .tc svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round }
 .ti small { font-size: 13px; font-weight: 800; color: #2c2c2c; white-space: nowrap }
@@ -2182,9 +2182,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .cmenu button:hover:not(:disabled) { background: #0d99ff } .cmenu button:disabled { color: #6f6f6f; cursor: default }
 .cmenu kbd { font: inherit; font-size: 13px; font-weight: 600; color: #bdbdbd } .cmenu button:hover:not(:disabled) kbd { color: #fff } .cmenu button:disabled kbd { color: #5a5a5a }
 .cmenu i { height: 1px; margin: 6px 4px; background: #383838 }
-.allr { display: flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9px; background: #fff; font: inherit; font-size: 13px; font-weight: 800; color: var(--hint); cursor: pointer; white-space: nowrap }
+.allr { display: flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); font: inherit; font-size: 13px; font-weight: 800; color: var(--hint); cursor: pointer; white-space: nowrap }
 .allr svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .allr:hover { background: var(--surface) }
-.och { position: absolute; z-index: 3; display: grid; gap: 2px; padding: 10px 14px; border: 1px dashed #c9c9c9; border-radius: 12px; background: #fff; white-space: nowrap; cursor: default }
+.och { position: absolute; z-index: 3; display: grid; gap: 2px; padding: 10px 14px; border: 1px dashed #c9c9c9; border-radius: 12px; background: var(--card); white-space: nowrap; cursor: default }
 .och b { font-size: 22px; font-weight: 900 } .och small { font-size: 12px; font-weight: 700; color: var(--hint) }
 .bead.ro { cursor: default } .bead.ro:hover { transform: none }
 .allr.on { background: var(--blue-l); border-color: var(--blue); color: var(--blue-d) }
@@ -2198,35 +2198,35 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tray.inter .mini .mb { right: 6px; bottom: 5px; width: 26px; height: 7px } .tray.inter .mini.lesson { overflow: visible } .tray.inter .mini .ms { transform: scale(.82); transform-origin: top center }
 .tray.inter .mi small { font-size: 10.5px; line-height: 1.2 } .tray.inter .mi small b { font-size: 12.5px }
 .mini .mm { position: relative; display: block } .mini .mm .ma { position: absolute; left: 8%; right: 8%; bottom: 3px; width: auto; height: 5px; background: #1a73e8 } .mini .mm.sm { height: 24px }
-.mini .mr { display: grid; gap: 3px; width: 100% } .mini .mr i { height: 7px; border: 1px solid #e3e3e3; background: #fff } .mini .mr i.g { background: #8ff0c8; border-color: #5fe0aa }
-.mini .mc { display: flex; gap: 3px; justify-content: center; width: 100% } .mini .mc i.l { width: 9px }          /* «Собери слово» — плашки-буквы */ .mini .mc i { width: 18px; height: 8px; border: 1px solid #d5d5d5; background: #fff } .mini .mc i.o { border-color: #1a73e8 }
+.mini .mr { display: grid; gap: 3px; width: 100% } .mini .mr i { height: 7px; border: 1px solid #e3e3e3; background: var(--card) } .mini .mr i.g { background: #8ff0c8; border-color: #5fe0aa }
+.mini .mc { display: flex; gap: 3px; justify-content: center; width: 100% } .mini .mc i.l { width: 9px }          /* «Собери слово» — плашки-буквы */ .mini .mc i { width: 18px; height: 8px; border: 1px solid #d5d5d5; background: var(--card) } .mini .mc i.o { border-color: #1a73e8 }
 .mini .mc.ln { justify-content: flex-start; padding-bottom: 3px; border-bottom: 1.5px solid #e3e3e3 }
 .mini .ml.s { width: 60% } .mini .mq.t { gap: 0 } .mini .mq.t i { height: 7px; border-radius: 0 }
 .mini .cp { position: absolute; left: 50%; bottom: 3px; width: 26px; height: 5px; margin-left: -13px; border-radius: 2px; background: rgba(0, 0, 0, .55) }
-.mini .mk { display: flex; gap: 6px; align-items: center } .mini .mk i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #c9dcfb; background: #fff } .mini .mk i.b { width: 13px; height: 13px; background: #1a73e8; border-color: #1a73e8 }
+.mini .mk { display: flex; gap: 6px; align-items: center } .mini .mk i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #c9dcfb; background: var(--card) } .mini .mk i.b { width: 13px; height: 13px; background: #1a73e8; border-color: #1a73e8 }
 .mini .mg { display: flex; gap: 4px; align-items: flex-end; justify-content: center; width: 100%; margin-top: 3px } .mini .mg i { width: 28px; height: 5px; background: #cfcfcf } .mini .mg i.d { width: 26px; height: 2px; background: none; border-bottom: 2px dotted #1a73e8; border-radius: 0 }
-.mini .mn { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; width: 100% } .mini .mn i { height: 8px; border: 1px solid #1a73e8; border-radius: 5px; background: #fff }
+.mini .mn { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; width: 100% } .mini .mn i { height: 8px; border: 1px solid #1a73e8; border-radius: 5px; background: var(--card) }
 .mi { flex: none; display: grid; justify-items: center; gap: 7px; width: 168px; padding: 8px 6px 6px; border: 0; border-radius: 14px; background: none; font: inherit; cursor: pointer }
-.mi:hover { background: #f2f2f2 } .mi:hover .mini { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0, 0, 0, .12) }
+.mi:hover { background: var(--surface) } .mi:hover .mini { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0, 0, 0, .12) }
 .mi small { display: grid; gap: 1px; font-size: 12px; font-weight: 600; color: var(--hint); text-align: center } .mi small b { font-size: 14px; font-weight: 800; color: #2c2c2c }
 /* мини-окошко экрана */
-.mini { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 150px; height: 104px; box-sizing: border-box; padding: 8px 12px; border: 1px solid #e3e3e3; border-radius: 10px; background: #fff; transition: transform .15s, box-shadow .15s }
+.mini { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 150px; height: 104px; box-sizing: border-box; padding: 8px 12px; border: 1px solid #e3e3e3; border-radius: 10px; background: var(--card); transition: transform .15s, box-shadow .15s }
 .mini i { display: block; border-radius: 3px; background: #e9e9e9 }
 .mini .mp { width: 60px; height: 4px; background: linear-gradient(90deg, #1fbe78 45%, #e6e6e6 45%) }
 .mini .mh { width: 70px; height: 5px; background: #cfcfcf }
 .mini .mm { width: 100%; height: 30px; border-radius: 5px; background: #8fb8e8 } .mini .mw { width: 90%; height: 10px; background: #e6f0ff } .mini .ml { width: 80%; height: 4px }
 .mini .ma { width: 100%; height: 8px; border-radius: 5px; background: #1cb0f6 }
-.mini .mo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; width: 100% } .mini .mo i { height: 30px; border: 1px solid #e3e3e3; background: #f4f4f4 } .mini .mo i.g { background: #8ff0c8; border-color: #5fe0aa }
-.mini .mq { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100% } .mini .mq i { height: 11px; border: 1px solid #e3e3e3; background: #fff } .mini .mq i.g { background: #8ff0c8; border-color: #5fe0aa }
+.mini .mo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; width: 100% } .mini .mo i { height: 30px; border: 1px solid #e3e3e3; background: var(--surface) } .mini .mo i.g { background: #8ff0c8; border-color: #5fe0aa }
+.mini .mq { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100% } .mini .mq i { height: 11px; border: 1px solid #e3e3e3; background: var(--card) } .mini .mq i.g { background: #8ff0c8; border-color: #5fe0aa }
 .mini .mb { position: absolute; right: 8px; bottom: 7px; width: 34px; height: 9px; border-radius: 5px; background: #1cb0f6 }
 .mini.lesson { background: none; border: 0; padding: 4px } .mini.lesson .mp, .mini.lesson .mb { display: none }
-.mini .ms { position: relative; width: 120px; height: 90px } .mini .ms i { position: absolute; width: 84px; height: 62px; border: 1px solid #e3e3e3; border-radius: 8px; background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .08) }
+.mini .ms { position: relative; width: 120px; height: 90px } .mini .ms i { position: absolute; width: 84px; height: 62px; border: 1px solid #e3e3e3; border-radius: 8px; background: var(--card); box-shadow: 0 2px 5px rgba(0, 0, 0, .08) }
 .mini .ms i:nth-child(1) { left: 0; top: 0; background: linear-gradient(#fff 20%, #8fb8e8 20% 60%, #fff 60%) } .mini .ms i:nth-child(2) { left: 18px; top: 13px; background: linear-gradient(#fff 35%, #8ff0c8 35% 70%, #fff 70%) } .mini .ms i:nth-child(3) { left: 36px; top: 26px; background: radial-gradient(circle at 50% 40%, #ffc800 12px, #fff 13px) }
 .sw { flex: none; width: 30px; height: 30px; margin: 4px; border: 1px solid rgba(0, 0, 0, .12); border-radius: 50%; cursor: pointer; padding: 0 } .sw:hover { transform: scale(1.1) }
 .sw.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #7b61ff }
 @media (max-width: 719px) {
   .tools { left: 8px; right: 8px; transform: none; height: 72px; justify-content: center } .tb { width: 64px } .tb svg { width: 26px; height: 26px } .tb small { font-size: 11px } .sticky { width: 72px } .sk { left: 12px; width: 48px; height: 48px } .sk.back { left: 17px } .tray { bottom: 92px } .tsep { display: none }
 }
-.rin { pointer-events: auto; width: 100%; margin: 0; padding: 2px 6px; border: 2px solid #0d99ff; border-radius: 6px; background: #fff; font: inherit; font-size: 15px; font-weight: 800; color: #252a31; outline: none; user-select: text }
+.rin { pointer-events: auto; width: 100%; margin: 0; padding: 2px 6px; border: 2px solid #0d99ff; border-radius: 6px; background: var(--card); font: inherit; font-size: 15px; font-weight: 800; color: var(--text); outline: none; user-select: text }
 .uh.ren { display: grid; gap: 4px } .rin.big { font-size: 20px; font-weight: 900 }
 </style>

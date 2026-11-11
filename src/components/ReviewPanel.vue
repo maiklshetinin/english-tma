@@ -128,50 +128,48 @@ async function reset() {
 <style scoped>
 .sy { margin-left: 10px; font-size: 12px; font-weight: 800; color: var(--hint); vertical-align: middle } .sy.synced { color: #1fbe78 } .sy.error { color: #ff9600 }
 .al { color: #1cb0f6; font-weight: 800; text-decoration: none }
-.secs { display: flex; gap: 22px; border-bottom: 1px solid #e8eaee; width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box }
-.secs button { all: unset; cursor: pointer; padding: 6px 0 9px; font-size: 16px; font-weight: 800; color: #5f6368; border-bottom: 2.5px solid transparent; margin-bottom: -1px } .secs button.on { color: #1278b0; border-color: #1cb0f6 } .se { margin-left: auto; align-self: center }
-.vt { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100% }
-.vt button { font: inherit; font-size: 13px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 14px; background: none; color: #5f6368; cursor: pointer } .vt button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
-.vt { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #f2f3f5; width: max-content; max-width: 100%; overflow-x: auto }
-.vt button { font: inherit; font-size: 13px; font-weight: 800; border: 0; border-radius: 9px; padding: 6px 14px; background: none; color: #5f6368; cursor: pointer; white-space: nowrap } .vt button.on { background: #fff; color: #1278b0; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
+.secs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box }
+.secs button { all: unset; cursor: pointer; padding: 6px 0 9px; font-size: 16px; font-weight: 800; color: var(--hint); border-bottom: 2.5px solid transparent; margin-bottom: -1px } .secs button.on { color: #1278b0; border-color: #1cb0f6 } .se { margin-left: auto; align-self: center }
+.vt { display: flex; border: 1px solid var(--border); border-radius: 6px; background: var(--card); overflow: hidden; width: max-content; max-width: 100%; overflow-x: auto }      /* строго, как переключатели графиков */
+.vt button { font: inherit; font-size: 12.5px; font-weight: 600; border: 0; border-radius: 0; padding: 5px 12px; background: none; color: var(--hint); cursor: pointer; white-space: nowrap } .vt button + button { border-left: 1px solid var(--border) } .vt button:hover { color: var(--text) } .vt button.on { background: var(--surface); color: var(--text) }
 .hbs { display: flex; gap: 18px; flex-wrap: wrap }
 .howb { all: unset; cursor: pointer; margin-top: 4px; font-size: 13px; font-weight: 800; color: #1cb0f6 } .howb span { font-size: 11px }
-.how { margin-top: 10px; display: grid; gap: 7px; padding: 12px 14px; border-radius: 12px; background: #f6f8fa } .how p { margin: 0; font-size: 13px; line-height: 1.45; color: #444 } .how b { color: #222 } .how .nt { color: #777; font-size: 12px }
+.how { margin-top: 10px; display: grid; gap: 7px; padding: 12px 14px; border-radius: 12px; background: var(--surface) } .how p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--hint) } .how b { color: #222 } .how .nt { color: #777; font-size: 12px }
 .rv { width: 100%; max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0 }          /* minmax(0) — на телефоне ничего не распирает за край */
-.rcard { min-width: 0; background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }
+.rcard { min-width: 0; background: var(--card); border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }
 h2 { margin: 0; font-size: 24px; font-weight: 900 }
 /* шапка в одну строку: заголовок · три столбика (высота — доля слов) · вкладки справа */
 .rcard.flat { background: none; box-shadow: none; padding: 12px 0 0; gap: 10px }
 .hdr { display: flex; align-items: flex-end; gap: 8px 12px; flex-wrap: wrap } .hdr .sy { margin: 0 0 4px; font-size: 11px; color: var(--hint) }
-.hdr .vt { margin-left: auto } .hdr .vt button { padding: 6px 10px; font-size: 12.5px } .hdr .lvc b { font-size: 18px; line-height: 1 } .hdr .lvc { padding-bottom: 0 }
+.hdr .vt { margin-left: auto } .hdr .vt button { padding: 5px 12px } .hdr .lvc b { font-size: 18px; line-height: 1 } .hdr .lvc { padding-bottom: 0 }
 .lv3 { display: flex; gap: 2px }
 .lvc { display: flex; align-items: flex-end; gap: 5px; cursor: pointer; border-radius: 12px; padding: 3px 4px }
-.lvc:hover { background: #f5f6f8 }
-.jar { position: relative; flex: none; width: 14px; height: 34px; border-radius: 5px; border: 2px solid #e3e6ea; overflow: hidden; background: #fff }
+.lvc:hover { background: var(--surface) }
+.jar { position: relative; flex: none; width: 14px; height: 34px; border-radius: 5px; border: 2px solid var(--border); overflow: hidden; background: var(--card) }
 .jar i { position: absolute; left: 0; right: 0; bottom: 0; transition: height .3s }
 .weak .jar i { background: #ff4b4b } .medium .jar i { background: #ff9600 } .strong .jar i { background: #58cc02 }
 .lvc > span:last-child { display: grid; font-size: 12px; font-weight: 700; color: var(--hint); line-height: 1.15 } .lvc b { font-size: 22px; font-weight: 900; color: var(--text) }
 .rbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; font-weight: 700 }
-.rbar select { width: auto; font: inherit; padding: 5px 8px; border-radius: 9px; border: 1.5px solid #e3e6ea; background: #fff }
+.rbar select { width: auto; font: inherit; padding: 5px 8px; border-radius: 9px; border: 1.5px solid var(--border); background: var(--card) }
 .sp { flex: 1 }
 .go, .ghost { border: 0; border-radius: 12px; padding: 8px 14px; font: inherit; font-weight: 900; cursor: pointer }
-.go { background: #1cb0f6; color: #fff } .go:disabled { opacity: .45; cursor: default } .ghost { background: #f0f1f3; color: #555 }
+.go { background: #1cb0f6; color: #fff } .go:disabled { opacity: .45; cursor: default } .ghost { background: var(--border); color: var(--hint) }
 .empty { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px; line-height: 1.45 }
 .tbl { display: grid; font-size: 14px }
-.th, .tr { display: grid; grid-template-columns: 52px minmax(0, 1.3fr) minmax(0, 1fr) 118px; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid #eef0f2 }
+.th, .tr { display: grid; grid-template-columns: 52px minmax(0, 1.3fr) minmax(0, 1fr) 118px; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border) }
 .th { font-size: 12px; font-weight: 700; color: var(--hint) }
-.tr { cursor: pointer; border-radius: 10px } .tr:hover, .tr.on { background: #f3f8fd }
-.pic { width: 52px; height: 36px; border-radius: 7px; overflow: hidden; background: #eef0f2; display: grid; place-items: center }
-.pic img { width: 100%; height: 100%; object-fit: cover } .pic i { font-style: normal; font-size: 11px; font-weight: 900; color: #9aa0a8 }
+.tr { cursor: pointer; border-radius: 10px } .tr:hover, .tr.on { background: var(--surface) }
+.pic { width: 52px; height: 36px; border-radius: 7px; overflow: hidden; background: var(--border); display: grid; place-items: center }
+.pic img { width: 100%; height: 100%; object-fit: cover } .pic i { font-style: normal; font-size: 11px; font-weight: 900; color: var(--hint) }
 .w { display: flex; align-items: center; gap: 8px; font-weight: 800; min-width: 0; overflow-wrap: anywhere }
 .pl { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 0; background: #1cb0f6; display: grid; place-items: center; cursor: pointer; padding: 0 }
 .pl svg { width: 13px; height: 13px; fill: #fff }
 .wt { display: grid; min-width: 0 } .mt { display: none; font-size: 12px; font-weight: 600; color: var(--hint) }          /* перевод под словом — на телефоне, где колонки «Перевод» нет */
 .t { color: var(--hint); font-weight: 600; min-width: 0; overflow-wrap: anywhere }
 .str { display: flex; align-items: flex-end; gap: 2px; font-size: 13px; font-weight: 700 }
-.str i { width: 4px; border-radius: 1px; background: #dfe2e6 } .str i:nth-child(1) { height: 6px } .str i:nth-child(2) { height: 9px } .str i:nth-child(3) { height: 12px; margin-right: 6px }
+.str i { width: 4px; border-radius: 1px; background: var(--border) } .str i:nth-child(1) { height: 6px } .str i:nth-child(2) { height: 9px } .str i:nth-child(3) { height: 12px; margin-right: 6px }
 .str.weak i.f { background: #ff4b4b } .str.medium i.f { background: #ff9600 } .str.strong i.f { background: #58cc02 }
-.det { padding: 8px 12px 12px 66px; display: grid; gap: 6px; font-size: 13px; border-bottom: 1px solid #eef0f2 }
+.det { padding: 8px 12px 12px 66px; display: grid; gap: 6px; font-size: 13px; border-bottom: 1px solid var(--border) }
 .det p { margin: 0 } .det ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px }
 .det li { display: flex; gap: 8px; align-items: center; font-weight: 600 } .det li small { margin-left: auto; color: var(--hint) }
 .det li span { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 7px; color: #fff } .det .y { background: #58cc02 } .det .x { background: #ff4b4b } .det .n { background: #b5bac1 }

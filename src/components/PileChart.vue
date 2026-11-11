@@ -5,6 +5,9 @@
 //  • Наведение на столбик (на телефоне — нажатие) — подсказка поверх графика со словами; нажатый столбик держит её открытой.
 //    Содержимое подсказки — слот tip (колода показывает очередь и историю), по умолчанию — список: слово, перевод, «когда».
 //  • fresh — слово, которое только что получило ответ: падает в свою стопку и подсвечивается.
+//  • Вид — переключатель «карточки / плашки»: стопки карточек или строгие плоские плашки со словом одна над другой
+//    (цвет состояния — полоской слева). Цветов три, как в счётчиках: красный — слабые / изучаю, оранжевый — средние,
+//    зелёный — сильные / повторение. Выбор запоминается.
 //  • Курсор — веник: провёл по стопкам — карточки подпрыгивают (физика), подсказка не мешает.
 // Слово (items[]): { id, front, back?, image?, k — вид (цвет и порядок в стопке), at — когда придёт (мс), zero? — всегда в «сейчас»,
 //   when? — подпись справа в подсказке }.
@@ -55,6 +58,16 @@ const bins = computed(() => {
 })
 // Стопка: каждое слово — мини-карточка 3:2, лежат друг на друге чуть вразнобой; самая высокая стопка влезает в график.
 const BMAX = computed(() => wide.value ? (props.tall ? 330 : props.dock ? 244 : 210) : props.tall && !narrow.value ? 220 : props.dock && narrow.value ? 52 : props.dock ? 110 : 120)
+// ── Вид: карточки или столбцы ──
+const mode = ref(store('tma.pileMode') === 'tiles' ? 'tiles' : 'cards')
+watch(mode, (v) => store('tma.pileMode', v))
+const KC = { learn: '#ef4444', weak: '#ef4444', medium: '#f59e0b', review: '#22c55e', mature: '#22c55e', strong: '#22c55e' }      // три цвета, как в счётчиках
+const KL = { learn: 'Изучаю', weak: 'Слабые', medium: 'Средние', review: 'Повторение', mature: 'Повторение', strong: 'Сильные' }
+// плашки: высота одной — 18–20 px, сколько влезает в столбик; не влезли — «+N» сверху
+const TH = computed(() => props.dock && narrow.value ? 12 : 20)
+const tileFit = computed(() => Math.max(1, Math.floor((BMAX.value - 14) / (TH.value + 2))))
+const tilesOf = (b) => [...b.items].sort((a, z) => ord(a.k) - ord(z.k)).slice(0, tileFit.value)
+const legend = computed(() => { const seen = new Set(), out = []; for (const k of [...props.order].reverse()) { const c = KC[k]; if (c && !seen.has(c) && props.items.some(r => KC[r.k] === c)) { seen.add(c); out.push({ c, t: KL[k] }) } } return out })
 const pileMax = computed(() => Math.max(1, ...bins.value.slice(0, -1).map(b => b.items.length)))      // «позже» в масштаб не берём
 const mq = (q) => typeof matchMedia !== 'undefined' && matchMedia(q).matches
 const wide = ref(mq('(min-width: 720px)')), narrow = ref(mq('(max-width: 520px)'))
@@ -171,6 +184,10 @@ onUnmounted(() => cancelAnimationFrame(raf))
   <div ref="root" class="pch" :class="{ docked: dock, tall }">
     <div class="top">
       <div class="ttl"><slot name="top" /></div>
+      <div class="seg vw" role="radiogroup" aria-label="Вид графика">
+        <button role="radio" :aria-checked="mode === 'cards'" :class="{ on: mode === 'cards' }" title="Карточки — стопки слов" aria-label="Карточки" @click="mode = 'cards'"><svg viewBox="0 0 24 24"><rect x="4" y="13" width="9" height="6" rx="1.5" /><rect x="6" y="7" width="9" height="6" rx="1.5" transform="rotate(-6 10 10)" /></svg></button>
+        <button role="radio" :aria-checked="mode === 'tiles'" :class="{ on: mode === 'tiles' }" title="Плашки — строго, со словами" aria-label="Плашки" @click="mode = 'tiles'"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14" /><path d="M5 4v4M5 10v4M5 16v4" stroke-width="3" /></svg></button>
+      </div>
       <div class="seg scl" role="radiogroup" aria-label="Масштаб">
         <button v-for="s in SCALES" :key="s.id" role="radio" :aria-checked="scale === s.id" :class="{ on: scale === s.id }" @click="scale = s.id">{{ s.t }}</button>
       </div>
@@ -182,7 +199,8 @@ onUnmounted(() => cancelAnimationFrame(raf))
         <button v-for="b in bins" :key="b.i" class="bc" :class="{ on: activeI === b.i, pin: pinned === b.i, later: b.i === sc.n, hot: b.items.some(r => r.id === fresh) }"
           :aria-label="`${title(b.i)}: ${b.items.length} ${word(b.items.length)}`" @mouseenter="enter(b.i)" @mousemove="enter(b.i)" @click="pin(b.i)">
           <span v-if="b.items.length" class="bn">{{ b.items.length }}</span>
-          <span class="pile" :class="{ empty: !b.items.length }"><i v-for="(r, i) in pileOf(b)" :key="r.id" class="pc" :data-id="r.id" :class="['k-' + r.k, { fresh: r.id === fresh, ph: r.image }]" :style="cardStyle(r, i)"><small v-if="!r.image">{{ r.front }}</small></i></span>
+          <span v-if="mode === 'tiles'" class="tls" :class="{ empty: !b.items.length }"><i v-for="r in tilesOf(b)" :key="r.id" class="tl1" :class="{ fresh: r.id === fresh }" :style="{ '--c': KC[r.k] ?? '#9aa0a6', height: TH + 'px' }">{{ TH > 14 ? r.front : '' }}</i><em v-if="b.items.length > tileFit" class="tmo">+{{ b.items.length - tileFit }}</em></span>
+          <span v-else class="pile" :class="{ empty: !b.items.length }"><i v-for="(r, i) in pileOf(b)" :key="r.id" class="pc" :data-id="r.id" :class="['k-' + r.k, { fresh: r.id === fresh, ph: r.image }]" :style="cardStyle(r, i)"><small v-if="!r.image">{{ r.front }}</small></i></span>
         </button>
       </div>
       <div class="ax" :style="{ '--n': bins.length }"><span v-for="b in bins" :key="b.i" :class="{ now: b.i === 0 }">{{ axis(b.i) }}</span></div>
@@ -200,6 +218,7 @@ onUnmounted(() => cancelAnimationFrame(raf))
         </div>
       </Transition>
     </div>
+    <div v-if="mode === 'tiles' && legend.length" class="lgd"><span v-for="l in legend" :key="l.c"><i :style="{ background: l.c }" />{{ l.t }}</span></div>
     <slot name="bottom" />
   </div>
 </template>
@@ -218,6 +237,13 @@ onUnmounted(() => cancelAnimationFrame(raf))
 .bc.later { border-left: 1px dashed var(--border); border-radius: 0 8px 0 0 }
 .pile { display: flex; flex-direction: column-reverse; align-items: center; width: 84%; max-width: 64px }
 .pile.empty { height: 3px; border-radius: 2px; background: var(--border) }
+/* вид «плашки»: строго — плоские плашки со словом одна над другой, состояние — полоска слева; без теней и наклона */
+.tls { display: flex; flex-direction: column-reverse; gap: 2px; width: 92%; max-width: 110px; min-width: 0 }
+.tl1 { display: block; box-sizing: border-box; padding: 0 5px; border-radius: 3px; border-left: 3px solid var(--c); background: var(--surface, var(--surface)); color: var(--text); font-size: 10.5px; font-style: normal; font-weight: 600; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; animation: drop .35s ease-out backwards }
+.tl1.fresh { animation: drop .5s ease-out backwards, glow 1.2s ease 2 } .tmo { order: 99; font-size: 10.5px; font-style: normal; font-weight: 700; color: var(--hint); text-align: center }
+.tls.empty { height: 3px; border-radius: 2px; background: var(--border) }
+.vw { flex: none; padding: 2px } .vw button { display: grid; place-items: center; padding: 4px 7px } .vw svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.lgd { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--hint) } .lgd span { display: inline-flex; align-items: center; gap: 6px } .lgd i { width: 10px; height: 10px; border-radius: 2px }
 .pc { position: relative; display: block; flex: none; width: 100%; overflow: hidden; border-radius: 4px; background: var(--c) center / cover no-repeat; box-shadow: 0 1px 3px rgba(0, 0, 0, .22); animation: drop .45s cubic-bezier(.3, 1.5, .5, 1) backwards }
 .pc { --c: #e3e7ec } .pc.ph { background-color: var(--surface) }
 /* карточка без фото — цветом вида: колоды (изучаю / повтор. / выучено) и Review (слабое / среднее / сильное) */
@@ -251,8 +277,13 @@ onUnmounted(() => cancelAnimationFrame(raf))
   .pch.docked .plot { height: 76px; padding-top: 12px } .pch.docked .grid { inset: 12px 0 0 }
 }
 /* компактная шапка сверху сессии колоды: отступы сняты — на их высоту выше сам график */
-.pch.docked { gap: 4px } .pch.docked .scl { padding: 2px } .pch.docked .scl button { padding: 3px 9px }
-.pch.docked .plot { padding-top: 6px } .pch.docked .grid { inset: 6px 0 0 }
+.pch.docked, .pch.tall { gap: 4px }
+/* переключатели — строго, как в «Памяти словаря»: сегменты в рамке, скругление 6 px, активный — серая подложка */
+.pch .seg { flex: none; display: flex; gap: 0; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--card); overflow: hidden }
+.pch .seg button { display: grid; place-items: center; border: 0; border-radius: 0; padding: 4px 10px; background: none; font: inherit; font-size: 12px; font-weight: 600; color: var(--hint); cursor: pointer }
+.pch .seg button + button { border-left: 1px solid var(--border) } .pch .seg button:hover { color: var(--text) } .pch .seg button.on { background: var(--g-seg, var(--surface)); color: var(--text) }
+.pch .vw button { padding: 4px 8px }
+.pch.docked .plot, .pch.tall .plot { padding-top: 6px } .pch.docked .grid, .pch.tall .grid { inset: 6px 0 0 }
 @media (min-width: 720px) { .pch { --bmax: 210px } .plot { height: 250px } .pch.docked { --bmax: 244px } .pch.docked .plot { height: 280px } .pch.tall { --bmax: 330px } .pch.tall .plot { height: 370px } }
 @media (min-width: 521px) and (max-width: 719px) { .pch.tall { --bmax: 220px } .pch.tall .plot { height: 260px } }
 </style>

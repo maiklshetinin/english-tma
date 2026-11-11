@@ -5,6 +5,7 @@
 import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
+import { theme } from '../composables/useTelegram'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import ReviewChart from './ReviewChart.vue'
@@ -234,9 +235,7 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
   rv: (() => { const r = repeats.value[u.id]; return r?.started ? { n: r.steps.length, words: r.words, screens: r.screens, next: r.next ? relDay(r.next) : '', items: r.list.map(o => ({ id: o.st.id, kind: o.kind, ex: exName(o.st), w: o.w, from: o.t.title, pct: o.pct })) } : null })(),
 })))
 const dockTab = ref('mem')
-// тема панели «Графики»: светлая / тёмная (как в DevTools), запоминается в браузере
-const gTheme = ref((() => { try { return localStorage.getItem('tma.graphsTheme') || 'light' } catch { return 'light' } })())
-watch(gTheme, (v) => { try { localStorage.setItem('tma.graphsTheme', v) } catch { /* приватный режим */ } })
+// тема панели «Графики» — как у всего приложения (кнопка темы вверху справа); тёмная — палитра как в DevTools dark
 // «Где сейчас слова»: список слов под графиком (как в Review); нажал — его кривая в «Слово сейчас»
 const pickedKey = ref(null)
 watch(focusKey, () => { pickedKey.value = null })
@@ -369,8 +368,8 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
         <template v-if="steps.length && !of && auth.role === 'teacher'">
           <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
           <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
-          <div v-if="rvChart" class="rvd" :class="{ dark: gTheme === 'dark' }">
-            <div class="dtabs" role="tablist"><button class="thm" :title="gTheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'" :aria-label="gTheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'" @click="gTheme = gTheme === 'dark' ? 'light' : 'dark'"><svg v-if="gTheme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg><svg v-else viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg></button><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
+          <div v-if="rvChart" class="rvd" :class="{ dark: theme === 'dark' }">
+            <div class="dtabs" role="tablist"><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
             <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
             <WordNow v-else-if="dockTab === 'curve'" :focus="pickedKey || focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <div v-else-if="dockTab === 'words'" class="gw">
@@ -453,21 +452,21 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .ctl { margin: 0; font-size: 30px; font-weight: 900 }
 .cpill { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 14px; font-size: 16px }
 .cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
-.un { display: grid; padding: 22px 24px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: #fff }
+.un { display: grid; padding: 22px 24px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: var(--card) }
 .un.all { border-color: #1fbe78; background: #f2fbf7 }
 .uh { display: flex; align-items: center; gap: 8px; white-space: nowrap }
 .uh b { font-size: 24px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
-.ubar { position: relative; width: 100%; height: 10px; margin: 16px 0 12px; border-radius: 6px; background: #e6e6e6 } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78 }
+.ubar { position: relative; width: 100%; height: 10px; margin: 16px 0 12px; border-radius: 6px; background: var(--border) } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78 }
 .ubar em { position: absolute; top: 50%; padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 /* строка рельса: линия, кружок, подпись */
 .vrow { position: relative; display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 22px; min-height: 130px; padding-left: 6px }
-.vrow::before { content: ''; position: absolute; left: 45px; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: #e6e6e6; z-index: 0 }
+.vrow::before { content: ''; position: absolute; left: 45px; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--border); z-index: 0 }
 .vrow.done::before, .vrow.current::before { background: #1fbe78 } .vrow.current::before { bottom: auto; height: 65px }
 .vrow.first::before { top: 65px } .vrow.last::before { bottom: auto; height: 65px } .vrow.first.current::before { display: none } .vrow.first.last::before { display: none }
 .bead { position: relative; z-index: 1; flex: none; display: grid; place-items: center; width: 68px; height: 68px; padding: 0; border: 0; border-radius: 50%; color: #fff; background: var(--c); box-shadow: 0 0 0 3px #fff, 0 0 0 6px #1fbe78; cursor: pointer }
 .bead:hover { filter: brightness(1.05) }
-.bead.todo { background: #f1f1f1; color: #b7b7b7; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e2e2e2 }
+.bead.todo { background: var(--surface); color: #b7b7b7; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e2e2e2 }
 .bead.current { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent); animation: softpulse 2.4s ease-in-out infinite }
 /* текущий урок — мягко «дышит», строка подсвечена, как в Busuu */
 @keyframes softpulse { 0%, 100% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 9px color-mix(in srgb, var(--c) 24%, transparent) } 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 17px color-mix(in srgb, var(--c) 7%, transparent) } }
@@ -485,7 +484,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .kbig { display: block; width: 260px; height: 260px; border-radius: 50%; object-fit: cover; background: #000; cursor: pointer; box-shadow: 0 0 0 4px #fff, 0 0 0 7px #2aabee }
 .pbig { display: block; max-width: 100%; max-height: 420px; border-radius: 16px }
 .bead.open { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }
-.cap { flex: 0 1 auto; display: grid; justify-items: start; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 17px; font-weight: 800; color: #252a31; cursor: pointer }
+.cap { flex: 0 1 auto; display: grid; justify-items: start; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 17px; font-weight: 800; color: var(--text); cursor: pointer }
 .csub { font-size: 15px; font-weight: 500; color: #3b4048 } .pv .psub { margin: -2px 0 0; font-size: 16px; font-weight: 500; opacity: 1 }
 .cap small { font-size: 14px; font-weight: 500; color: #4b5563 }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; font-weight: 900; text-transform: uppercase }
@@ -499,14 +498,14 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .pgo.ghost { background: transparent; color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85) }
 .pv small { font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; opacity: .85 }
 .pv b { font-size: 22px; font-weight: 900; line-height: 1.2 } .pv p { margin: 0 0 8px; font-size: 14px; font-weight: 600; opacity: .9 }
-.pgo { width: 100%; padding: 14px; border: 0; border-radius: 14px; background: #fff; color: var(--d); font: inherit; font-size: 16px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
+.pgo { width: 100%; padding: 14px; border: 0; border-radius: 14px; background: var(--card); color: var(--d); font: inherit; font-size: 16px; font-weight: 900; cursor: pointer; box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
 .pgo:active { transform: translateY(2px); box-shadow: none }
 /* во весь экран */
-.full { position: fixed; inset: 0; z-index: 1000; background: #fff; display: flex; flex-direction: column }
+.full { position: fixed; inset: 0; z-index: 1000; background: var(--card); display: flex; flex-direction: column }
 .full :deep(.lp) { flex: 1; min-height: 0; height: auto }
 .rvt { position: absolute; top: 12px; right: 14px; z-index: 3; border: 0; border-radius: 12px; padding: 8px 12px; background: #eaf6fe; color: #1278b0; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer } .rvt.on { background: #1cb0f6; color: #fff }
-.rvd { flex: none; max-height: 55vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid #eef0f3; color: var(--g-tx); background: var(--g-page);
-  --g-page: #fff; --g-bg: #fff; --g-tx: #1f2328; --g-mu: #6b7280; --g-bd: #e5e7eb; --g-grid: #f0f1f3; --g-seg: #f3f4f6; --g-sub: #f6f7f9; --g-avg: #7c3aed; --g-sel: #2563eb; --g-bar: #f7f8fa; --g-hov: #eceef1; --g-acc: #1a73e8 }
+.rvd { flex: none; max-height: 55vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid var(--border); color: var(--g-tx); background: var(--g-page);
+  --g-page: var(--bg); --g-bg: var(--card); --g-tx: var(--text); --g-mu: var(--hint); --g-bd: var(--border); --g-grid: var(--surface); --g-seg: var(--surface); --g-sub: var(--surface); --g-avg: #7c3aed; --g-sel: #2563eb; --g-bar: var(--surface); --g-hov: var(--border); --g-acc: #1a73e8 }      /* светлая — как тема приложения */
 /* тёмная тема панели — свои оттенки (не простое «инвертирование») */
 .rvd.dark { --g-page: #17191c; --g-bg: #1e2023; --g-tx: #e8eaed; --g-mu: #9aa0a6; --g-bd: #33373d; --g-grid: #2a2d32; --g-seg: #2f3338; --g-sub: #26292d; --g-avg: #a78bfa; --g-sel: #60a5fa; --g-bar: #202225; --g-hov: #2a2d31; --g-acc: #8ab4f8; border-color: #33373d; color-scheme: dark;
   --card: #1e2023; --surface: #26292d; --border: #33373d; --text: #e8eaed; --hint: #9aa0a6; --hint-2: #6b7078; --blue-l: #263447; --blue: #8ab4f8 }      /* темы приложения внутри панели — для «Где сейчас слова» и пути */
@@ -519,18 +518,17 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 @media (min-width: 900px) {                    /* компьютер: урок слева, графики справа, между ними — перегородка (тянется) */
   .full.split { flex-direction: row }
   .full.split > :deep(.lp), .full.split > .sh { order: 1; flex: 1 1 0; min-width: 0; width: auto }
-  .full.split .spl { order: 2; display: block; flex: none; width: 10px; z-index: 2; cursor: col-resize; background: #eef0f3; touch-action: none; position: relative }
+  .full.split .spl { order: 2; display: block; flex: none; width: 10px; z-index: 2; cursor: col-resize; background: var(--border); touch-action: none; position: relative }
   .full.split .spl::after { content: ''; position: absolute; left: 3.5px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: #b5bac1 }
   .full.split .spl:hover, .full.split .spl:active { background: #d6ecfb }
   .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); min-width: 0; max-width: 72vw; max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 0 }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
-  .full.split .rvd > * { max-width: none } .full.split .dtabs { padding-right: 150px }      /* справа сверху — кнопки «Сейчас здесь» */
+  .full.split .rvd > * { max-width: none } .full.split .dtabs { padding-right: 190px }      /* справа сверху — кнопки «Сейчас здесь» */
 }
 /* вкладки панели — как в DevTools: плоская полоса сверху, активная подчёркнута */
 .dtabs { position: sticky; top: 0; z-index: 3; display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 10px; padding: 0 8px; background: var(--g-bar); border-bottom: 1px solid var(--g-bd) }
 .dtabs button { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 11px 7px; background: none; color: var(--g-mu); cursor: pointer; white-space: nowrap }
 .dtabs button:hover { background: var(--g-hov); color: var(--g-tx) } .dtabs button.on { color: var(--g-acc); border-bottom-color: var(--g-acc) }
-.dtabs .thm { display: grid; place-items: center; padding: 6px 9px; border-right: 1px solid var(--g-bd) }      /* тема — первой кнопкой слева, как иконки в DevTools (справа сверху — «Сейчас здесь») */ .thm svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: #f0f1f3; color: #555; font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
+.mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: var(--border); color: var(--hint); font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
 /* «Где сейчас слова» в панели: график + таблица слов (как в Review) */
 .gw { display: grid; gap: 12px; container-type: inline-size }
 .wt { display: grid; border: 1px solid var(--g-bd); border-radius: 8px; overflow: hidden; background: var(--g-bg); font-variant-numeric: tabular-nums }
@@ -555,22 +553,22 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .sd { flex: 1; min-width: 0; padding: 8px 0 }
 .chs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px }
 .chp { display: inline-flex; align-items: baseline; gap: 5px; max-width: 100%; padding: 3px 8px; border-radius: 7px; font-size: 12px; font-weight: 800; background: #fff5f5; box-shadow: inset 2px 0 0 #ff4b4b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: background .3s }
-.chp i { font-style: normal; font-size: 10.5px; font-weight: 700; color: #e53935 } .chp.au { background: #f3f4f6; box-shadow: inset 2px 0 0 #b5bac1 } .chp.au i { color: #888 }
+.chp i { font-style: normal; font-size: 10.5px; font-weight: 700; color: #e53935 } .chp.au { background: var(--surface); box-shadow: inset 2px 0 0 #b5bac1 } .chp.au i { color: #888 }
 .chp.wd { background: #f2f9ff; box-shadow: inset 2px 0 0 #1cb0f6 } .chp.sc { background: #f6f1ff; box-shadow: inset 2px 0 0 #9747ff } .chp.own { background: #efe8ff; box-shadow: none; color: #6b3fd1 }
-.chp.no { background: #f3f4f6; box-shadow: none; color: #9aa0a8 } .chp.hot { background: #fff0c2; animation: ckpop .5s ease-out } @keyframes ckpop { from { transform: scale(.9) } }
+.chp.no { background: var(--surface); box-shadow: none; color: var(--hint) } .chp.hot { background: #fff0c2; animation: ckpop .5s ease-out } @keyframes ckpop { from { transform: scale(.9) } }
 .to { font-size: 11px; font-weight: 900; color: #e53935 }
 .sbx { display: grid; gap: 5px; padding: 8px 10px; border-radius: 10px; background: #fff8ef; box-shadow: inset 0 0 0 1.5px #ffd59a } .sbx h4 { margin: 0; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .02em; color: #b06a00 } .sbx small { font-size: 11.5px; color: var(--hint); font-weight: 600 }
 .sbx.rv { background: #f7f2ff; box-shadow: inset 0 0 0 1.5px #d8c3ff } .sbx.rv h4 { color: #6b3fd1 }
 .ckp .rvr { min-height: 70px; padding: 0 16px; border-radius: 16px; background: #f7f3ff; box-shadow: inset 0 0 0 1.5px #e6dcff } .ckp .rvr::before { display: none } .ckp .rvr .rpi { width: 44px; height: 44px; margin-left: 2px } .ckp .rvr .rpi svg { width: 24px; height: 24px }
-.rpt { display: flex; align-items: center; gap: 16px; margin: 12px 0; padding: 16px 18px; border-radius: 18px; background: #f4f7fb; box-shadow: inset 0 0 0 1.5px #e3e8ef; cursor: pointer; transition: background .15s }
+.rpt { display: flex; align-items: center; gap: 16px; margin: 12px 0; padding: 16px 18px; border-radius: 18px; background: #f4f7fb; box-shadow: inset 0 0 0 1.5px var(--border); cursor: pointer; transition: background .15s }
 .rpt:hover, .rpt.on { background: #ecf3fc } .rpt.due { background: #f3efff; box-shadow: inset 0 0 0 1.5px #ddd0ff } .rpt.due:hover, .rpt.due.on { background: #ebe4ff }
-.rpi { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: #fff; box-shadow: 0 2px 0 #dfe3e8 } .rpi svg { width: 28px; height: 28px; fill: none; stroke: #9747ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.rpi { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--card); box-shadow: 0 2px 0 var(--border) } .rpi svg { width: 28px; height: 28px; fill: none; stroke: #9747ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
 .rpt:not(.due) .rpi svg { stroke: #9aa0a8 }
-.rpt-t { display: grid; gap: 3px; min-width: 0 } .rpt-t b { font-size: 16px; font-weight: 900 } .rpt-t p { margin: 0; font-size: 13.5px; font-weight: 600; color: #5f6368; line-height: 1.45 }
+.rpt-t { display: grid; gap: 3px; min-width: 0 } .rpt-t b { font-size: 16px; font-weight: 900 } .rpt-t p { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--hint); line-height: 1.45 }
 .rec { justify-self: start; font-size: 11px; font-weight: 900; color: #fff; background: #6b3fd1; padding: 2px 9px; border-radius: 8px }
 .rpv { margin: -4px 0 12px } .rpv::before { left: 40px }
 .rpl { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px }
-.rpl li { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 255, 255, .16); font-size: 13px } .rpl i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #8fdcff } .rpl i.screen { background: #fff }
+.rpl li { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 255, 255, .16); font-size: 13px } .rpl i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #8fdcff } .rpl i.screen { background: var(--card) }
 .pv .rpl b { flex: none; max-width: 40%; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .rpl span { flex: 1; min-width: 0; opacity: .85; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .rpl em { font-style: normal; font-weight: 900; font-size: 12px; background: rgba(255, 255, 255, .2); padding: 1px 6px; border-radius: 6px }
 .sh { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 30px 24px; text-align: center }
 .sh p { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px } .sh b { font-size: 18px }

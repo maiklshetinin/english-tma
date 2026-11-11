@@ -92,8 +92,8 @@ const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} мин` : `${s} с`)
 .more { border: 0; background: none; padding: 6px 0 0; font: inherit; font-size: 13px; font-weight: 800; color: var(--blue); cursor: pointer }
 .tl { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px }
 .tl li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--surface) }
-.dot { flex: 0 0 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 900; background: #e5e5e5; color: #8a8a8a }
-.d .dot { background: #1fbe78; color: #fff } .n .dot { background: #fff; color: #1fbe78; box-shadow: 0 0 0 2px #1fbe78 } .t { opacity: .6 }
+.dot { flex: 0 0 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 900; background: var(--border); color: #8a8a8a }
+.d .dot { background: #1fbe78; color: #fff } .n .dot { background: var(--card); color: #1fbe78; box-shadow: 0 0 0 2px #1fbe78 } .t { opacity: .6 }
 .tt { flex: 1; min-width: 0; font-weight: 800; font-size: 14px; display: grid } .tt small { font-size: 11px; font-weight: 700; color: var(--hint) }
 .res { display: grid; justify-items: end; text-align: right } .res b { font-size: 14px; color: #1fbe78 } .res small { font-size: 11px; color: var(--hint); font-weight: 700 }
 .now { font-size: 11px; font-weight: 900; color: #fff; background: #1fbe78; padding: 3px 8px; border-radius: 8px }

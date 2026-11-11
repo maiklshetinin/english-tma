@@ -88,7 +88,7 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 
     <section class="card ch">
       <PileChart :items="started" :dock="dock" :fresh="jump" :order="['mature', 'review', 'learn']" @unpin="open = null">
-        <template #top><span class="cnt">{{ counts.new }} новых · {{ counts.learn }} изучаю · {{ counts.review }} повтор. · {{ counts.mature }} выучено</span></template>
+        <template #top><span class="cnt">{{ counts.new }} новых · {{ counts.learn }} изучаю · {{ counts.review + counts.mature }} повтор.</span></template>
         <template #actions>
           <!-- В колоде «Сбросить» — значком в той же строке; первое нажатие — «Точно?» -->
           <button v-if="dock" class="rst ri" :class="{ sure }" :disabled="!started.length" :aria-label="sure ? 'Точно сбросить' : 'Сбросить прогресс колоды'" :title="sure ? '' : 'Сбросить прогресс колоды'" @click="reset" @blur="sure = false">
@@ -158,6 +158,9 @@ const fmtDate = (ms) => { const d = new Date(ms); return `${d.getDate()}.${Strin
 .rst { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; border-radius: 99px; background: none; color: var(--hint); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer }
 .rst:hover:not(:disabled) { background: var(--red-l); color: var(--red-d) } .rst.sure { background: var(--red); color: #fff } .rst:disabled { opacity: .4; cursor: default }
 .ri { padding: 5px 7px } .ri.sure { padding: 5px 10px }
+/* сверху сессии — квадратные кнопки в рамке, как переключатели графика */
+.dc.docked .ri, .dc.docked .x { box-sizing: border-box; height: 26px; min-width: 28px; justify-content: center; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--hint) } .dc.docked .ri.sure { padding: 0 10px; background: var(--red); border-color: var(--red); color: #fff }
+.dc.docked .x { width: auto }
 @media (max-width: 520px) {
   .dt { margin-right: 0 }
   .dc.docked .ch { gap: 4px; padding: 8px 8px 10px }

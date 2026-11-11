@@ -64,7 +64,8 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
   </div>
   <template v-else>
     <div class="shell">
-      <PresenceBar v-if="auth.isTeacher && route.name !== 'courses'" />
+      <!-- вверху справа: кнопка темы (у всех; в редакторе курсов — своя панель) и кто сейчас здесь (преподаватель) -->
+      <PresenceBar v-if="route.name !== 'courses'" :presence="auth.isTeacher" theme />
       <main><RouterView v-slot="{ Component, route: r }"><component :is="Component" :key="auth.role + r.meta.tab" /></RouterView></main>
     </div>
     <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" /><ScreenNotes v-if="auth.isTeacher && route.name !== 'courses'" />

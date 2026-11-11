@@ -239,7 +239,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
 
 <style scoped>
 /* строгий вид, как в профессиональных программах; цвета — из переменных панели (светлая / тёмная тема, CourseViewer .rvd) */
-.mc { --bg: var(--g-bg, #fff); --tx: var(--g-tx, #1f2328); --mu: var(--g-mu, #6b7280); --bd: var(--g-bd, #e5e7eb); --gd: var(--g-grid, #f0f1f3); --sg: var(--g-seg, #f3f4f6); --su: var(--g-sub, #f6f7f9);
+.mc { --bg: var(--g-bg, var(--card)); --tx: var(--g-tx, var(--text)); --mu: var(--g-mu, var(--hint)); --bd: var(--g-bd, var(--border)); --gd: var(--g-grid, var(--surface)); --sg: var(--g-seg, var(--surface)); --su: var(--g-sub, var(--surface));
   --av: var(--g-avg, #7c3aed); --se: var(--g-sel, #2563eb); --th: #f59e0b;
   display: grid; gap: 10px; min-width: 0; padding: 12px 14px 12px; border-radius: 8px; background: var(--bg); color: var(--tx); border: 1px solid var(--bd); font-variant-numeric: tabular-nums }
 /* шапка — одна строка, одинаковая с «Слово сейчас» (WordCurve): название 16 px + подпись, показатели, масштаб справа */
