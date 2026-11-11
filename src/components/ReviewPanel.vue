@@ -43,8 +43,6 @@ const FILTERS = computed(() => [['all', 'Все'], ['word', 'Слова'], ['phr
   .map(([k, t]) => ({ k, t: `${t} (${k === 'all' ? list.value.length : list.value.filter(x => x.kind === k || x.lv === k).length})` })))
 let au = null
 const play = (x) => { if (!x.audio) return; au?.pause(); au = new Audio(props.resolve(x.audio, 'audio')); au.play().catch(() => {}) }
-const dd = (d) => d < 1 ? 'меньше дня' : d < 31 ? `${Math.round(d)} дн.` : d < 365 ? `${Math.round(d / 30.4)} мес.` : `${(d / 365).toFixed(1).replace('.0', '')} г.`
-const days = (t) => { const d = Math.round((t - Date.now()) / 86_400_000); return d <= 0 ? 'сегодня' : d === 1 ? 'завтра' : `через ${d} дн.` }
 const when = (t) => new Date(t).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 // «Очистить» — с подтверждением; удаляется весь словарь (и на сервере), прохождение курса не меняется
 async function reset() {
@@ -112,7 +110,8 @@ async function reset() {
           <div v-if="openKey === x.key" class="det">
             <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
             <WordCurve v-if="!x.st.isNew" :item="x" :cfg="cfgNow" />
-            <p v-if="!x.st.isNew" class="sm"><b>{{ x.st.failed ? 'Только что: ошибка' : `Вспомнит сейчас: ${x.st.recall} %` }}</b> · память ~{{ dd(x.st.stab) }} · повторить {{ days(x.st.due) }} · верно {{ x.ok }}, ошибок {{ x.bad }} · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
+            <!-- заголовок истории: счёт ответов (остальное — в показателях над графиком) -->
+            <p v-if="!x.st.isNew" class="sm">верно {{ x.ok }} · ошибок {{ x.bad }}</p>
             <ul><li v-for="(h, k) in x.hist" :key="k"><span :class="h.ok === null ? 'n' : h.ok ? 'y' : 'x'">{{ h.ok === null ? 'встретилось' : h.ok ? 'верно' : 'ошибка' }}</span>{{ h.ex }}<template v-if="h.lesson"> · {{ h.lesson }}</template><small>{{ when(h.t) }}</small></li></ul>
           </div>
         </template>
@@ -165,7 +164,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .str i { width: 4px; border-radius: 1px; background: var(--border) } .str i:nth-child(1) { height: 6px } .str i:nth-child(2) { height: 9px } .str i:nth-child(3) { height: 12px; margin-right: 6px }
 .str.weak i.f { background: #ff4b4b } .str.medium i.f { background: #ff9600 } .str.strong i.f { background: #58cc02 }
 .det { padding: 8px 12px 12px 66px; display: grid; gap: 6px; font-size: 13px; border-bottom: 1px solid var(--border) }
-.det p { margin: 0 } .det p.sm { font-size: 12px; color: var(--hint) } .det p.sm b { font-weight: 700 } .det ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px }
+.det p { margin: 0 } .det p.sm { font-size: 12px; font-weight: 700; color: var(--hint) } .det ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px }
 .det li { display: flex; gap: 8px; align-items: center; font-weight: 600 } .det li small { margin-left: auto; color: var(--hint) }
 .det li span { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 7px; color: #fff } .det .y { background: #58cc02 } .det .x { background: #ff4b4b } .det .n { background: #b5bac1 }
 @media (max-width: 520px) {
