@@ -234,7 +234,10 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
     items: p.autoFrom.map(a => ({ id: a.s.id, ex: exName(a.s), w: stepWord(a.s), from: titleOf(a.from) })) } }),
   rv: (() => { const r = repeats.value[u.id]; return r?.started ? { n: r.steps.length, words: r.words, screens: r.screens, next: r.next ? relDay(r.next) : '', items: r.list.map(o => ({ id: o.st.id, kind: o.kind, ex: exName(o.st), w: o.w, from: o.t.title, pct: o.pct })) } : null })(),
 })))
-const dockTab = ref('mem')
+// вкладка панели запоминается на устройстве: после обновления страницы открыта та же, а не первая
+const DOCK_TABS = ['mem', 'curve', 'words', 'ck']
+const dockTab = ref((() => { try { const t = localStorage.getItem('tma.lessonGraphs.tab'); return DOCK_TABS.includes(t) ? t : 'mem' } catch { return 'mem' } })())
+watch(dockTab, (t) => { try { localStorage.setItem('tma.lessonGraphs.tab', t) } catch { /* приватный режим */ } })
 // тема панели «Графики» — своя, как в DevTools: выключатель «Тёмная» (как в iPhone) в полосе вкладок; не трогали — как у приложения
 const gStored = ref((() => { try { const v = localStorage.getItem('tma.graphsTheme'); return v === 'dark' || v === 'light' ? v : null } catch { return null } })())
 const gDark = computed({

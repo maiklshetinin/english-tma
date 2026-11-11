@@ -25,6 +25,7 @@ const filter = ref('all'), openKey = ref(null), how = ref(false)
 const chartOn = ref((() => { try { return localStorage.getItem('tma.review.chart') !== '0' } catch { return true } })())
 const view = ref((() => { try { return localStorage.getItem('tma.review.view') || 'piles' } catch { return 'mem' } })())      // «График запоминания» / «Где сейчас слова»
 watch(view, (v) => { try { localStorage.setItem('tma.review.view', v) } catch { /* приватный режим */ } })
+const VIEWS = [['piles', 'Слова', 'Где сейчас слова'], ['mem', 'Память', 'График запоминания']]      // короткая подпись — чтобы шапка графика была в одну строку; полная — в подсказке
 const toggleChart = () => { chartOn.value = !chartOn.value; try { localStorage.setItem('tma.review.chart', chartOn.value ? '1' : '0') } catch { /* приватный режим */ } }
 const cfgNow = computed(() => ({ retention: algo.retention, maxDays: algo.maxDays }))
 // нажали слово на графике — открыть его строку с кривой памяти
@@ -37,7 +38,6 @@ watch(sec, (v) => { try { localStorage.setItem('tma.review.sec', v) } catch { /*
 const list = computed(() => { const now = Date.now(), cfg = { ...algo }; return Object.values(dict.value).map(x => { const st = stateOf(x, now, cfg); return { ...x, st, lv: st.level } })
   .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })) })
 const count = (lv) => list.value.filter(x => x.lv === lv).length
-const max = computed(() => Math.max(1, ...['weak', 'medium', 'strong'].map(count)))
 const shown = computed(() => list.value.filter(x => filter.value === 'all' || x.kind === filter.value || x.lv === filter.value))
 const FILTERS = computed(() => [['all', 'Все'], ['word', 'Слова'], ['phrase', 'Фразы'], ['weak', 'Слабые'], ['medium', 'Средние'], ['strong', 'Сильные']]
   .map(([k, t]) => ({ k, t: `${t} (${k === 'all' ? list.value.length : list.value.filter(x => x.kind === k || x.lv === k).length})` })))
@@ -61,21 +61,18 @@ async function reset() {
     <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" />
     <template v-else>
     <div class="rcard flat">
-      <!-- одна строка управления: столбики «слабых / средних / сильных» (низ — на одной линии с кнопками) · справа вкладки графиков -->
-      <div class="hdr">
-      <div class="lv3">
-        <div v-for="lv in ['weak', 'medium', 'strong']" :key="lv" class="lvc" :class="lv" role="button" tabindex="0" @click="filter = filter === lv ? 'all' : lv">
-          <span class="jar"><i :style="{ height: (count(lv) ? Math.max(8, count(lv) / max * 100) : 0) + '%' }" /></span>
-          <span><b>{{ count(lv) }}</b>{{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</span>
-        </div>
-      </div>
-      <small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small>
-      <div v-if="chartOn && list.length" class="vt" role="tablist"><button v-for="[k, t] in [['piles', 'Где сейчас слова'], ['mem', 'График запоминания']]" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" @click="view = k">{{ t }}</button></div>
-      </div>
+      <!-- шапка как над колодой в «Словах»: одна тонкая строка внутри рамки графика — счётчики (нажал — фильтр списка) · фильтр · вкладки графиков · вид · масштаб.
+           Счётчики и вкладки — слоты графиков (lead / tabs); графика нет (выключен или словарь пуст) — счётчики отдельной строкой -->
       <template v-if="chartOn && list.length">
-        <MemoryChart v-if="view === 'mem'" :items="dict" :cfg="cfgNow" tall @pick="pick" />
-        <ReviewChart v-else :items="dict" :cfg="cfgNow" tall @pick="pick" />
+        <MemoryChart v-if="view === 'mem'" :items="dict" :cfg="cfgNow" tall @pick="pick">
+          <template #tabs><div class="vt sm" role="tablist"><button v-for="[k, t, f] in VIEWS" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" :title="f" @click="view = k">{{ t }}</button></div></template>
+        </MemoryChart>
+        <ReviewChart v-else :items="dict" :cfg="cfgNow" tall @pick="pick">
+          <template #lead><span class="cn"><button v-for="(lv, n) in ['weak', 'medium', 'strong']" :key="lv" :class="[lv, { on: filter === lv, z: !count(lv) }]" :title="filter === lv ? 'Показать все' : 'Показать только эти в списке ниже'" @click="filter = filter === lv ? 'all' : lv"><template v-if="n"> · </template><b>{{ count(lv) }}</b> {{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</button><small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></span></template>
+          <template #tabs><div class="vt sm" role="tablist"><button v-for="[k, t, f] in VIEWS" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" :title="f" @click="view = k">{{ t }}</button></div></template>
+        </ReviewChart>
       </template>
+      <div v-else class="hdr"><span class="cn"><button v-for="(lv, n) in ['weak', 'medium', 'strong']" :key="lv" :class="[lv, { on: filter === lv, z: !count(lv) }]" @click="filter = filter === lv ? 'all' : lv"><template v-if="n"> · </template><b>{{ count(lv) }}</b> {{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</button><small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></span></div>
       <div class="hbs"><button class="howb" :aria-expanded="chartOn" @click="toggleChart">График <span>{{ chartOn ? '▴' : '▾' }}</span></button>
       <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button></div>
       <div v-if="how" class="how">
@@ -114,8 +111,8 @@ async function reset() {
           </div>
           <div v-if="openKey === x.key" class="det">
             <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
-            <p v-else><b>{{ x.st.failed ? 'Только что: ошибка' : `Вспомнит сейчас: ${x.st.recall} %` }}</b> · память ~{{ dd(x.st.stab) }} · повторить {{ days(x.st.due) }} · верно {{ x.ok }}, ошибок {{ x.bad }} · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
             <WordCurve v-if="!x.st.isNew" :item="x" :cfg="cfgNow" />
+            <p v-if="!x.st.isNew" class="sm"><b>{{ x.st.failed ? 'Только что: ошибка' : `Вспомнит сейчас: ${x.st.recall} %` }}</b> · память ~{{ dd(x.st.stab) }} · повторить {{ days(x.st.due) }} · верно {{ x.ok }}, ошибок {{ x.bad }} · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
             <ul><li v-for="(h, k) in x.hist" :key="k"><span :class="h.ok === null ? 'n' : h.ok ? 'y' : 'x'">{{ h.ok === null ? 'встретилось' : h.ok ? 'верно' : 'ошибка' }}</span>{{ h.ex }}<template v-if="h.lesson"> · {{ h.lesson }}</template><small>{{ when(h.t) }}</small></li></ul>
           </div>
         </template>
@@ -139,16 +136,14 @@ async function reset() {
 .rcard { min-width: 0; background: var(--card); border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }
 h2 { margin: 0; font-size: 24px; font-weight: 900 }
 /* шапка в одну строку: заголовок · три столбика (высота — доля слов) · вкладки справа */
-.rcard.flat { background: none; box-shadow: none; padding: 12px 0 0; gap: 10px }
-.hdr { display: flex; align-items: flex-end; gap: 8px 12px; flex-wrap: wrap } .hdr .sy { margin: 0 0 4px; font-size: 11px; color: var(--hint) }
-.hdr .vt { margin-left: auto } .hdr .vt button { padding: 5px 12px } .hdr .lvc b { font-size: 18px; line-height: 1 } .hdr .lvc { padding-bottom: 0 }
-.lv3 { display: flex; gap: 2px }
-.lvc { display: flex; align-items: flex-end; gap: 5px; cursor: pointer; border-radius: 12px; padding: 3px 4px }
-.lvc:hover { background: var(--surface) }
-.jar { position: relative; flex: none; width: 14px; height: 34px; border-radius: 5px; border: 2px solid var(--border); overflow: hidden; background: var(--card) }
-.jar i { position: absolute; left: 0; right: 0; bottom: 0; transition: height .3s }
-.weak .jar i { background: #ff4b4b } .medium .jar i { background: #ff9600 } .strong .jar i { background: #58cc02 }
-.lvc > span:last-child { display: grid; font-size: 12px; font-weight: 700; color: var(--hint); line-height: 1.15 } .lvc b { font-size: 22px; font-weight: 900; color: var(--text) }
+.rcard.flat { background: none; box-shadow: none; padding: 8px 0 0; gap: 8px }
+.hdr { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap }
+/* счётчики одной строкой: цифра цветом уровня, нажал — список ниже фильтруется */
+.cn { display: inline-flex; align-items: baseline; font-size: 12px; font-weight: 700; color: var(--hint); white-space: nowrap }
+.cn button { font: inherit; border: 0; padding: 0; background: none; color: inherit; cursor: pointer; white-space: pre } .cn button:hover, .cn button.on { color: var(--text) } .cn button.on { text-decoration: underline; text-underline-offset: 3px }
+.cn b { font-weight: 900 } .cn .weak b { color: #d92d20 } .cn .medium b { color: #c2590a } .cn .strong b { color: #2e8b00 } .cn .z b { color: inherit }
+.cn .sy { margin-left: 10px; font-size: 11px }
+.vt.sm { flex: none } .vt.sm button { font-size: 11.5px; padding: 3px 7px }
 .rbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; font-weight: 700 }
 .rbar select { width: auto; font: inherit; padding: 5px 8px; border-radius: 9px; border: 1.5px solid var(--border); background: var(--card) }
 .sp { flex: 1 }
@@ -170,7 +165,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .str i { width: 4px; border-radius: 1px; background: var(--border) } .str i:nth-child(1) { height: 6px } .str i:nth-child(2) { height: 9px } .str i:nth-child(3) { height: 12px; margin-right: 6px }
 .str.weak i.f { background: #ff4b4b } .str.medium i.f { background: #ff9600 } .str.strong i.f { background: #58cc02 }
 .det { padding: 8px 12px 12px 66px; display: grid; gap: 6px; font-size: 13px; border-bottom: 1px solid var(--border) }
-.det p { margin: 0 } .det ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px }
+.det p { margin: 0 } .det p.sm { font-size: 12px; color: var(--hint) } .det p.sm b { font-weight: 700 } .det ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px }
 .det li { display: flex; gap: 8px; align-items: center; font-weight: 600 } .det li small { margin-left: auto; color: var(--hint) }
 .det li span { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 7px; color: #fff } .det .y { background: #58cc02 } .det .x { background: #ff4b4b } .det .n { background: #b5bac1 }
 @media (max-width: 520px) {

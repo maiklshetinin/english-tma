@@ -67,9 +67,10 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
         <div v-if="dock" class="hb"><b class="ttl2">Где сейчас слова</b><span class="cnt">{{ count.weak }} слаб. · {{ count.medium }} сред. · {{ count.strong }} сильн.<template v-if="fresh"> · {{ fresh }} нов.</template></span></div>
         <template v-else-if="!tall"><b class="ttl2">Где сейчас слова</b>
         <span class="cnt">{{ count.weak }} слабых · {{ count.medium }} средних · {{ count.strong }} сильных<template v-if="fresh"> · {{ fresh }} новых без ответа</template></span></template>
-        <span v-else-if="fresh" class="cnt">{{ fresh }} {{ fresh % 10 === 1 && fresh % 100 !== 11 ? 'новое' : 'новых' }} без ответа</span>
+        <template v-else><slot name="lead" /><span v-if="fresh" class="cnt" :title="`Новых без ответа: ${fresh} — слово только встречалось`">· {{ fresh }} {{ fresh % 10 === 1 && fresh % 100 !== 11 ? 'новое' : 'новых' }}</span></template>
         <select v-model="filter" aria-label="Какие слова"><option value="all">Все</option><option value="word">Слова</option><option value="phrase">Фразы</option><option v-for="l in lessons" :key="l" :value="'lesson:' + l">Урок: {{ l }}</option></select>
       </template>
+      <template v-if="$slots.tabs" #mid><slot name="tabs" /></template>
     </PileChart>
     <p v-if="!rows.length" class="em">Пока пусто — слова появятся здесь после первого ответа в уроке.</p>
     <div v-if="dock && sel && items[sel]" class="cv"><WordCurve :item="items[sel]" :cfg="cfg" /></div>
@@ -80,7 +81,11 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
 .rc { display: grid; gap: 8px; min-width: 0; padding: 12px; border-radius: 16px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px var(--border, var(--border)) }
 .rc:has(.pch.tall) { gap: 4px; padding: 6px 10px 6px }
 .rc:has(.pch.tall) :deep(.ttl) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0 }      /* фильтр и «N новых без ответа» — одной строкой, как шапка над колодой */
-.rc:has(.pch.tall) .cnt { order: 2 }      /* в Review — как над колодой: отступы сняты, место графику */
+.rc:has(.pch.tall) .cnt { font-size: 12px; white-space: nowrap; margin-left: -6px }
+/* Review: вся шапка — одна тонкая строка, как над колодой в «Словах»; кнопки мельче, чтобы поместились и вкладки графиков */
+.rc:has(.pch.tall) select { font-size: 11.5px; padding: 2px 4px; border-radius: 6px; max-width: 110px }
+.rc:has(.pch.tall) :deep(.top) { gap: 6px 8px } .rc:has(.pch.tall) :deep(.seg button) { font-size: 11.5px; padding: 3px 7px } .rc:has(.pch.tall) :deep(.vw button) { padding: 3px 6px }
+@media (min-width: 760px) { .rc:has(.pch.tall) :deep(.top), .rc:has(.pch.tall) :deep(.ttl) { flex-wrap: nowrap } .rc:has(.pch.tall) :deep(.ttl) { min-width: 0 } }      /* в Review — как над колодой: отступы сняты, место графику */
 .rc.dock { padding: 12px 14px; border-radius: 8px; box-shadow: none; border: 1px solid var(--border) }      /* в панели «Графики» курса — строже, как остальные графики панели */
 .hb { display: grid; min-width: 0; padding-right: 14px; border-right: 1px solid var(--border) }
 .rc.dock .ttl2 { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap } .rc.dock .cnt { font-size: 11.5px; font-weight: 500; white-space: nowrap }

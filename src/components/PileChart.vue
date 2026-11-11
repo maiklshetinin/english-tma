@@ -185,6 +185,7 @@ onUnmounted(() => cancelAnimationFrame(raf))
   <div ref="root" class="pch" :class="{ docked: dock, tall }">
     <div class="top">
       <div class="ttl"><slot name="top" /></div>
+      <slot name="mid" />
       <div class="seg vw" role="radiogroup" aria-label="Вид графика">
         <button role="radio" :aria-checked="mode === 'cards'" :class="{ on: mode === 'cards' }" title="Карточки — стопки слов" aria-label="Карточки" @click="mode = 'cards'"><svg viewBox="0 0 24 24"><rect x="4" y="13" width="9" height="6" rx="1.5" /><rect x="6" y="7" width="9" height="6" rx="1.5" transform="rotate(-6 10 10)" /></svg></button>
         <button role="radio" :aria-checked="mode === 'tiles'" :class="{ on: mode === 'tiles' }" title="Плашки — строго, со словами" aria-label="Плашки" @click="mode = 'tiles'"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14" /><path d="M5 4v4M5 10v4M5 16v4" stroke-width="3" /></svg></button>

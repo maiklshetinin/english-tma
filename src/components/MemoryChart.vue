@@ -177,14 +177,15 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
   <div class="mc" :class="{ dock }">
     <!-- одна строка, как у «Слово сейчас»: название · показатели · масштаб справа -->
     <div class="kps">
-      <div class="hd"><b class="t">Память словаря</b><span class="sub">вероятность вспомнить · FSRS</span></div>
+      <div v-if="!$slots.tabs" class="hd"><b class="t">Память словаря</b><span class="sub">вероятность вспомнить · FSRS</span></div>
       <template v-if="words.length">
         <div class="kp"><small>В среднем</small><b>{{ pct(nowStat.avg) }}%</b></div>
         <div class="kp" :class="{ bad: nowStat.below }"><small>Ниже порога {{ pct(cfg.retention) }}%</small><b>{{ nowStat.below }} {{ word(nowStat.below) }}</b></div>
         <div class="kp"><small>Ответов сегодня</small><b>{{ today }}</b></div>
         <div v-if="selW" class="kp sl"><small>Выбрано</small><b><span>{{ selW.text }}</span> {{ pct(rAt(selW, nowT)) }}%</b></div>
       </template>
-      <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="z in ZOOMS" :key="z[0]" role="tab" :aria-selected="zoom === z[0]" :class="{ on: zoom === z[0] }" @click="zoom = z[0]">{{ z[1] }}</button></div>
+      <div class="kr"><slot name="tabs" />
+        <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="z in ZOOMS" :key="z[0]" role="tab" :aria-selected="zoom === z[0]" :class="{ on: zoom === z[0] }" @click="zoom = z[0]">{{ z[1] }}</button></div></div>
     </div>
     <p v-if="!words.length" class="em">Пока пусто — график появится после первого проверенного ответа в уроке.</p>
     <template v-else>
@@ -248,6 +249,9 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
 .seg button { font: inherit; font-size: 12px; font-weight: 600; border: 0; padding: 4px 10px; background: none; color: var(--mu); cursor: pointer } .seg button + button { border-left: 1px solid var(--bd) }
 .seg button:hover { color: var(--tx) } .seg button.on { background: var(--sg); color: var(--tx) }
 .kps { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 8px }
+.kr { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; align-self: center; margin-left: auto } .kr .seg { margin-left: 0 }
+/* Review (в шапке — вкладки графиков): всё в одну строку; тесно — сжимается «Выбрано» */
+@media (min-width: 760px) { .kps:has(.kr > :nth-child(2)) { flex-wrap: nowrap } .kps:has(.kr > :nth-child(2)) .kp { flex: none } .kps:has(.kr > :nth-child(2)) .kp.sl { flex: 0 1 auto; min-width: 0; overflow: hidden } .kps:has(.kr > :nth-child(2)) .kp.sl b { overflow: hidden; text-overflow: ellipsis } }
 .kp { display: grid; gap: 2px; padding: 0 12px; border-left: 1px solid var(--bd); min-width: 0 } .kp:first-child { padding-left: 2px; border-left: 0 }
 .kp small { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mu); white-space: nowrap } .kp b { font-size: 19px; font-weight: 600; line-height: 1.2; white-space: nowrap }
 .kp.bad b { color: #ef4444 } .kp.sl b span { color: var(--se); display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom }

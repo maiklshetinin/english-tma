@@ -157,7 +157,7 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
           <text class="ntx" :x="lblX(xOf(now), nowTxt)" :y="PADT - 9" text-anchor="middle">{{ nowTxt }}</text></g>
       </svg>
       </div>
-      <div class="leg"><span><i class="lpa" />Было</span><span><i class="lg" />Прогноз без повтора</span><span><i class="ln" />После повтора — забывается медленнее</span><span><i class="lr" />Верно</span><span><i class="lx" />Ошибка</span></div>
+      <div class="leg"><span><i class="lpa" />Было</span><span><i class="lg" />Прогноз без повтора</span><span title="После повтора слово забывается медленнее"><i class="ln" />После повтора</span><span><i class="lr" />Верно</span><span><i class="lx" />Ошибка</span></div>
       <div class="sim"><span>Посмотреть, что будет</span><div class="sg"><button @click="shift += HOUR">+1 ч</button><button @click="shift += DAY">+1 дн</button><button @click="shift += 3 * DAY">+3 дн</button></div><button class="back" :disabled="!shift" @click="shift = 0">Сейчас</button></div>
     </template>
   </div>
@@ -169,12 +169,12 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
   display: grid; gap: 8px; min-width: 0; color: var(--tx); font-variant-numeric: tabular-nums }
 .top { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 8px }
 .hd { display: grid; min-width: 0; max-width: 34%; padding-right: 14px; border-right: 1px solid var(--bd) } .hd + .kp { border-left: 0 }
-.kp { display: grid; gap: 2px; padding: 0 12px; border-left: 1px solid var(--bd); line-height: 1.2 } .kp:first-child { padding-left: 2px; border-left: 0 }
+.kp { display: grid; gap: 2px; padding: 0 8px; border-left: 1px solid var(--bd); line-height: 1.2 } .kp:first-child { padding-left: 2px; border-left: 0 }
 .kp small { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mu); white-space: nowrap } .kp b { font-size: 19px; font-weight: 600; white-space: nowrap }
 .kp.ok b { color: #16a34a } .kp.mid b { color: #d97706 } .kp.bad b { color: #ef4444 } .kp.due b { color: var(--se) } .kp.due.bad b { color: #ef4444 }
 .sub { font-size: 12px; color: var(--mu) }
 .seg { display: flex; align-self: center; margin-left: auto; border: 1px solid var(--bd); border-radius: 6px; overflow: hidden }
-.seg button { font: inherit; font-size: 12px; font-weight: 600; border: 0; padding: 4px 10px; background: none; color: var(--mu); cursor: pointer } .seg button + button { border-left: 1px solid var(--bd) } .seg button:hover { color: var(--tx) } .seg button.on { background: var(--sg); color: var(--tx) }
+.seg button { font: inherit; font-size: 11.5px; font-weight: 600; border: 0; padding: 4px 6px; white-space: nowrap; background: none; color: var(--mu); cursor: pointer } .seg button + button { border-left: 1px solid var(--bd) } .seg button:hover { color: var(--tx) } .seg button.on { background: var(--sg); color: var(--tx) }
 .cw { min-width: 0 }
 .gr { display: block; max-width: 100%; font-family: inherit; overflow: visible }
 .gr text { font-size: 11px; font-weight: 500; fill: var(--mu) } .gl { stroke: var(--gd) }
@@ -185,7 +185,7 @@ const tone = (r) => (r == null ? '' : r >= props.cfg.retention + 0.03 ? 'ok' : r
 .dy { fill: #22c55e; stroke: var(--bg); stroke-width: 2 } .dx { fill: #ef4444; stroke: var(--bg); stroke-width: 2 }
 .dl { stroke: var(--th); stroke-width: 1 } .dd { fill: var(--th); stroke: var(--bg); stroke-width: 2 } .gr .dt { fill: var(--th); font-weight: 600 }
 .nl { stroke: var(--mu); stroke-width: 1; opacity: .7 } .nd { fill: var(--bg); stroke: var(--se); stroke-width: 2.5 } .nd.fail { stroke: #ef4444 } .gr .ntx { fill: var(--tx); font-weight: 600 }
-.leg { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--mu) } .leg span { display: inline-flex; align-items: center; gap: 6px }
+.leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--mu) } .leg span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap }
 .leg i { display: inline-block; width: 18px; height: 4px; border-radius: 2px; background: var(--se) } .leg .lg { background: repeating-linear-gradient(90deg, var(--se) 0 5px, transparent 5px 8px) } .leg .ln { background: repeating-linear-gradient(90deg, var(--se) 0 5px, transparent 5px 8px); opacity: .5 }
 .leg .lr, .leg .lx { width: 9px; height: 9px; border-radius: 50%; background: #22c55e } .leg .lx { background: #ef4444 }
 .sim { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--mu) }
