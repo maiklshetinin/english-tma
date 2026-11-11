@@ -21,5 +21,5 @@ onMounted(() => syncReview(auth.user?.id))                 // свой слов�
 </template>
 
 <style scoped>
-.alg { font-size: 13px; font-weight: 800; color: #1cb0f6; text-decoration: none; white-space: nowrap }
+.review { padding-top: 6px } .alg { font-size: 13px; font-weight: 800; color: #1cb0f6; text-decoration: none; white-space: nowrap }
 </style>

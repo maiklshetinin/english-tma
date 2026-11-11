@@ -234,7 +234,7 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
     items: p.autoFrom.map(a => ({ id: a.s.id, ex: exName(a.s), w: stepWord(a.s), from: titleOf(a.from) })) } }),
   rv: (() => { const r = repeats.value[u.id]; return r?.started ? { n: r.steps.length, words: r.words, screens: r.screens, next: r.next ? relDay(r.next) : '', items: r.list.map(o => ({ id: o.st.id, kind: o.kind, ex: exName(o.st), w: o.w, from: o.t.title, pct: o.pct })) } : null })(),
 })))
-const showCk = ref(true), dockTab = ref('mem')
+const dockTab = ref('mem')
 // итог урока: что уйдёт в чекпоинт этой Chapter (экраны с ошибкой) — для проверки, что автоматика сработала
 const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || ''
 const ckLog = computed(() => {
@@ -282,11 +282,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
       <h2 class="ctl">{{ course.title }}</h2>
       <div v-if="!student && !of && done" class="mrs"><span>Ваше прохождение — по тем же правилам, что у ученика</span><button @click="resetMine">Сбросить моё прохождение</button></div>
       <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ done }} из {{ total }}</b><span>·</span><b>{{ total ? Math.round(done / total * 100) : 0 }}%</b></div>
-      <!-- преподаватель: курс по горизонтали — что попадёт в каждый чекпоинт (у ученика — по его ошибкам) -->
-      <template v-if="!student && ckMap.some(c => c.cks.length)">
-        <button class="cktg" :aria-expanded="showCk" @click="showCk = !showCk">Чекпоинты: что в них попадёт <span>{{ showCk ? '▴' : '▾' }}</span></button>
-        <CkFlow v-if="showCk" :chapters="ckMap" />
-      </template>
+      <!-- «что попадёт в чекпоинты» — только в панели «Графики» урока (вкладка «Экраны → чекпоинты»), над путём курса не показываем -->
       <template v-for="u in units" :key="u.id">
       <section class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
         <template v-if="u.title">
@@ -474,7 +470,6 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .rpl { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px }
 .rpl li { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 255, 255, .16); font-size: 13px } .rpl i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #8fdcff } .rpl i.screen { background: #fff }
 .pv .rpl b { flex: none; max-width: 40%; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .rpl span { flex: 1; min-width: 0; opacity: .85; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .rpl em { font-style: normal; font-weight: 900; font-size: 12px; background: rgba(255, 255, 255, .2); padding: 1px 6px; border-radius: 6px }
-.cktg { all: unset; cursor: pointer; font-size: 13px; font-weight: 800; color: #6b3fd1; margin: 4px 0 -2px } .cktg span { font-size: 11px }
 .sh { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 30px 24px; text-align: center }
 .sh p { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px } .sh b { font-size: 18px }
 .x { position: absolute; left: 18px; top: 18px }

@@ -60,15 +60,16 @@ async function reset() {
     <div class="secs" role="tablist"><button v-for="[k, t] in [['words', 'Словарь'], ['skills', 'Грамматика и навыки']]" :key="k" role="tab" :aria-selected="sec === k" :class="{ on: sec === k }" @click="sec = k">{{ t }}</button><span class="se"><slot name="end" /></span></div>
     <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" />
     <template v-else>
-    <div class="rcard">
+    <div class="rcard flat">
+      <!-- одна строка управления: столбики «слабых / средних / сильных» (низ — на одной линии с кнопками) · справа вкладки графиков -->
       <div class="hdr">
-      <h2>{{ title }}<small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></h2>
       <div class="lv3">
         <div v-for="lv in ['weak', 'medium', 'strong']" :key="lv" class="lvc" :class="lv" role="button" tabindex="0" @click="filter = filter === lv ? 'all' : lv">
           <span class="jar"><i :style="{ height: (count(lv) ? Math.max(8, count(lv) / max * 100) : 0) + '%' }" /></span>
           <span><b>{{ count(lv) }}</b>{{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</span>
         </div>
       </div>
+      <small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small>
       <div v-if="chartOn && list.length" class="vt" role="tablist"><button v-for="[k, t] in [['piles', 'Где сейчас слова'], ['mem', 'График запоминания']]" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" @click="view = k">{{ t }}</button></div>
       </div>
       <template v-if="chartOn && list.length">
@@ -140,12 +141,13 @@ async function reset() {
 .rcard { min-width: 0; background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); display: grid; gap: 14px }
 h2 { margin: 0; font-size: 24px; font-weight: 900 }
 /* шапка в одну строку: заголовок · три столбика (высота — доля слов) · вкладки справа */
-.hdr { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap } .hdr h2 { font-size: 20px; white-space: nowrap } .hdr h2 .sy { display: block; margin: 0; font-size: 11px }
-.hdr .vt { margin-left: auto } .hdr .vt button { padding: 6px 10px; font-size: 12.5px } .hdr .lvc b { font-size: 20px }
+.rcard.flat { background: none; box-shadow: none; padding: 12px 0 0; gap: 10px }
+.hdr { display: flex; align-items: flex-end; gap: 8px 12px; flex-wrap: wrap } .hdr .sy { margin: 0 0 4px; font-size: 11px; color: var(--hint) }
+.hdr .vt { margin-left: auto } .hdr .vt button { padding: 6px 10px; font-size: 12.5px } .hdr .lvc b { font-size: 18px; line-height: 1 } .hdr .lvc { padding-bottom: 0 }
 .lv3 { display: flex; gap: 2px }
 .lvc { display: flex; align-items: flex-end; gap: 5px; cursor: pointer; border-radius: 12px; padding: 3px 4px }
 .lvc:hover { background: #f5f6f8 }
-.jar { position: relative; flex: none; width: 22px; height: 60px; border-radius: 7px; border: 2px solid #e3e6ea; overflow: hidden; background: #fff }
+.jar { position: relative; flex: none; width: 14px; height: 34px; border-radius: 5px; border: 2px solid #e3e6ea; overflow: hidden; background: #fff }
 .jar i { position: absolute; left: 0; right: 0; bottom: 0; transition: height .3s }
 .weak .jar i { background: #ff4b4b } .medium .jar i { background: #ff9600 } .strong .jar i { background: #58cc02 }
 .lvc > span:last-child { display: grid; font-size: 12px; font-weight: 700; color: var(--hint); line-height: 1.15 } .lvc b { font-size: 22px; font-weight: 900; color: var(--text) }
@@ -175,7 +177,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .det li span { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 7px; color: #fff } .det .y { background: #58cc02 } .det .x { background: #ff4b4b } .det .n { background: #b5bac1 }
 @media (max-width: 520px) {
   .rcard { padding: 14px; gap: 12px } h2 { font-size: 21px }
-  .lv3 { gap: 2px } .lvc { gap: 5px; padding: 2px } .jar { width: 20px; height: 48px; border-radius: 6px } .hdr .vt { margin-left: 0 } .lvc b { font-size: 19px } .lvc > span:last-child { font-size: 11.5px }
+  .lv3 { gap: 2px } .lvc { gap: 5px; padding: 2px } .jar { width: 14px; height: 34px; border-radius: 5px } .hdr .vt { margin-left: 0 } .lvc b { font-size: 19px } .lvc > span:last-child { font-size: 11.5px }
   .rbar .sp { flex-basis: 100%; height: 0 } .rbar .go, .rbar .ghost { flex: 1; padding: 9px 10px }
   .mt { display: block }
   .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
