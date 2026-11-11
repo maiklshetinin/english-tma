@@ -30,8 +30,7 @@ const cellNow = (d, h) => d === now.value.date && h === now.value.hour
 const stu = (id) => studentStore.findAny(id)                               // и архивные: в проведённых уроках они остаются (серые, «в архиве»)
 const at = (d, h) => scheduleStore.lessonMap.get(slotKey(d, h)) ?? []
 // Деньги дня: факт — проведённые уроки (зафиксированные цены), план — все уроки дня (utils/price.ts)
-// «Призраки» с суммой (g.plan — включён «План на месяц») входят в план дня
-const moneyByDay = computed(() => Object.fromEntries(props.dates.map(d => { const m = sumMoney(scheduleStore.lessons.filter(l => l.date === d), studentStore.byId); return [d, { ...m, plan: m.plan + props.ghosts.reduce((sum, g) => sum + (g.date === d && !at(g.date, g.hour).length ? g.plan || 0 : 0), 0) }] })))
+const moneyByDay = computed(() => Object.fromEntries(props.dates.map(d => [d, sumMoney(scheduleStore.lessons.filter(l => l.date === d), studentStore.byId)])))
 const money = (d) => moneyByDay.value[d]
 
 function dropState(d, h) {                       // подсветка ячейки под призраком: ok / swap / bad (в обеих таблицах одинаково)

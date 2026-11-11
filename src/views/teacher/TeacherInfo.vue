@@ -180,7 +180,6 @@ function demoLessons(from, to) {
       <div class="sum">
         <span class="cap">Заработано {{ months ? `за ${months} месяцев` : 'за всё время' }}</span>
         <b class="big">{{ lessons ? fmtMoney(total.real) : '…' }}</b>
-        <span v-if="lessons" class="hint">{{ total.done }} уроков проведено<template v-if="total.lost"> · −{{ fmtMoney(total.lost) }} на отменах</template></span>
       </div>
       <div class="seg per"><button :class="{ on: months === 6 }" @click="months = 6">6 месяцев</button><button :class="{ on: months === 12 }" @click="months = 12">12 месяцев</button><button :class="{ on: months === 0 }" @click="months = 0">За всё время</button></div>
     </div>

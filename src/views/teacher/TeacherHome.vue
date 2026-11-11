@@ -14,7 +14,8 @@ import StudentsPanel from '../../components/StudentsPanel.vue'
 import LessonSheet from '../../components/LessonSheet.vue'
 import WeekMoney from '../../components/WeekMoney.vue'
 import WeekLoad from '../../components/WeekLoad.vue'
-import { sumMoney, priceAt, fmtMoney } from '../../utils/price'
+import { sumMoney, fmtMoney } from '../../utils/price'
+import { ask } from '../../composables/useDialog'
 import { apiRequest, isDemo } from '../../firebase'
 import AppIcon from '../../components/AppIcon.vue'
 import BackButton from '../../components/BackButton.vue'
@@ -36,28 +37,24 @@ const weekMoney = (dates) => {
   for (const l of ls) for (const id of l.studentIds) { all++; if (l.canceled?.[id]) off++ }
   return { ...sumMoney(ls, studentStore.byId), offPct: all ? Math.round(off / all * 100) : 0, off, all }
 }
-// Одна таблица и одна плашка недели между «‹» и «›»: стрелки листают по неделе. Назад — сколько угодно, вперёд — до недели,
-// в которую попадает последний день текущего месяца (на ней «›» гаснет, но остаётся на месте — шапка не прыгает).
+// Одна таблица и одна плашка недели между «‹» и «›»: стрелки листают по неделе. Назад — сколько угодно, вперёд — на 4 недели
+// (или до недели с последним днём текущего месяца, если она дальше); на последней «›» гаснет, но остаётся на месте — шапка не прыгает.
 // Плашка голубая только на этой неделе; нажатие на серую возвращает к текущей. Уроки остальных недель подгружаются (scheduleStore.loadWeek).
 const week = ref(0)
 const shift = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10) }
 const today = computed(() => nowIn(tz.value, nowTick.value).date)
 const monthStart = computed(() => today.value.slice(0, 8) + '01')
 const monthEnd = computed(() => today.value.slice(0, 8) + new Date(Date.UTC(+today.value.slice(0, 4), +today.value.slice(5, 7), 0)).getUTCDate())
-const maxWeek = computed(() => Math.floor((Date.parse(monthEnd.value) - Date.parse(w1.value[0])) / (7 * 864e5)))      // w1[0] — понедельник этой недели
+const AHEAD = 4                                              // на сколько недель вперёд раскидываем уроки и листаем
+const maxWeek = computed(() => Math.max(AHEAD, Math.floor((Date.parse(monthEnd.value) - Date.parse(w1.value[0])) / (7 * 864e5))))      // w1[0] — понедельник этой недели
 const dates = computed(() => week.value === 0 ? w1.value : week.value === 1 ? w2.value : (nowTick.value, weekDates(week.value)))
 const weekName = computed(() => { const w = week.value; return w === 0 ? 'Эта неделя' : w === 1 ? 'Следующая' : w === -1 ? 'Прошлая' : w > 1 ? `Через ${w} нед.` : `${-w} нед. назад` })
 watch(() => dates.value[0], () => { if (week.value < 0 || week.value > 1) scheduleStore.loadWeek(dates.value[0]).catch(() => {}) })
-// Недели после следующей до конца месяца подгружаем заранее: по ним считается «ожидается за месяц», и копии не встают поверх настоящих уроков
+// Недели после следующей подгружаем заранее: по ним считается «план на месяц» и видно, какие ячейки свободны для «На 4 недели вперёд»
 const loadAhead = () => { for (let k = 2; k <= maxWeek.value; k++) scheduleStore.loadWeek(shift(w1.value[0], 7 * k)).catch(() => {}) }
 
-// «Призраки»: уроки этой недели в те же дни и часы на будущих неделях, пока там пусто. В базе их нет, ученики их не видят —
+// «Призраки» следующей недели: уроки этой недели в те же дни и часы, пока на следующей там пусто. В базе их нет —
 // нажал на призрака → урок создан; «Подтвердить все» → вся неделя; × → эту подсказку больше не показываем (запоминается на устройстве).
-// На следующей неделе они есть всегда. «План на месяц» (переключатель в шапке, ТЕСТ, запоминается на устройстве) — ещё и на всех неделях
-// до последнего дня месяца, и тогда призраки считаются в плане недели и в «ожидается за месяц» (дни следующего месяца не считаем).
-const PLAN_KEY = 'tma.monthPlan'
-const planMonth = ref((() => { try { return localStorage.getItem(PLAN_KEY) === '1' } catch { return false } })())
-function togglePlan() { planMonth.value = !planMonth.value; haptic('light'); try { localStorage.setItem(PLAN_KEY, planMonth.value ? '1' : '0') } catch { /* приватный режим — просто не запомним */ } }
 const skipMem = new Map(), skipTick = ref(0)                 // убранные подсказки по неделям: «понедельник» → Set ключей
 const skippedOf = (ws) => {
   skipTick.value
@@ -68,24 +65,31 @@ const setSkip = (g, on) => {
   const s = new Set(skippedOf(g.ws)); on ? s.add(g.key) : s.delete(g.key); skipMem.set(g.ws, s); skipTick.value++
   try { localStorage.setItem(`tma.ghostSkip.${g.ws}`, JSON.stringify([...s])) } catch { /* приватный режим */ }
 }
-function ghostsOf(k) {                                       // k — на сколько недель вперёд от этой
-  if (k < 1 || (k > 1 && (!planMonth.value || k > maxWeek.value))) return []
+// Копии уроков этой недели на неделю k вперёд — только в свободные ячейки. real — для «На 4 недели вперёд»: без уроков, которые отменили все ученики.
+function copiesOf(k, real = false) {
   const ws = shift(w1.value[0], 7 * k), skipped = skippedOf(ws), out = []
   for (const l of scheduleStore.lessons) {
     if (!w1.value.includes(l.date)) continue
     const ids = known(l); if (!ids.length) continue
+    if (real && ids.every(id => l.canceled?.[id])) continue
     const date = shift(l.date, 7 * k), key = `${date}_${l.hour}`
-    if (k > 1 && date > monthEnd.value) continue             // дальше следующей недели — только до конца месяца
     if (skipped.has(key) || occupant(date, l.hour)) continue
-    const plan = planMonth.value && date <= monthEnd.value ? ids.reduce((sum, id) => sum + priceAt(studentStore.byId(id), date, l.hour), 0) : 0
-    out.push({ key, ws, date, hour: l.hour, minute: l.minute || 0, studentIds: ids, plan })
+    out.push({ key, ws, date, hour: l.hour, minute: l.minute || 0, studentIds: ids })
   }
   return out
 }
-const ghosts = computed(() => ghostsOf(week.value))
-const ghostPlan = (list) => list.reduce((sum, g) => sum + g.plan, 0)
-const money = computed(() => { const m = weekMoney(dates.value), g = ghostPlan(ghosts.value); return g ? { ...m, plan: m.plan + g } : m })
-// «Ожидается за месяц»: проведённые (факт) + запланированные уроки месяца + призраки «Плана на месяц».
+const ghosts = computed(() => week.value === 1 ? copiesOf(1) : [])
+// «На 4 недели вперёд» (кнопка на этой неделе): настоящие уроки — как на этой неделе, на четыре следующие, только в свободные ячейки.
+// Ученики видят их в своём расписании. Разовое действие: дальнейшие правки этой недели на уже поставленные уроки не переносятся.
+const spread = computed(() => { const out = []; for (let k = 1; k <= AHEAD; k++) out.push(...copiesOf(k, true)); return out })
+async function spreadAhead() {
+  const list = spread.value; if (!list.length) return
+  if (!(await ask(`Поставить уроки на ${AHEAD} недели вперёд?`, { text: `Как на этой неделе, только в свободное время: будет поставлено уроков — ${list.length}. Ученики увидят их в своём расписании.`, ok: 'Поставить' }))) return
+  const made = list.map(g => confirmGhost(g, true)); haptic('light')
+  showToast(`Поставлено уроков: ${made.length}`, () => made.forEach(l => scheduleStore.remove(l)))
+}
+const money = computed(() => weekMoney(dates.value))
+// «План на месяц»: проведённые (факт) + запланированные уроки текущего месяца.
 // Уроки месяца до этой недели — отдельным запросом (GET /lessons/range), остальное — из стора (там свежие правки).
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
 const monthName = computed(() => MONTHS[+today.value.slice(5, 7) - 1])
@@ -100,10 +104,7 @@ const monthMoney = computed(() => {
   const m = new Map()
   for (const l of monthPast.value) m.set(l.id, l)
   for (const l of scheduleStore.lessons) if (l.date >= monthStart.value && l.date <= monthEnd.value) m.set(l.id, l)
-  let ghost = 0
-  for (let k = 1; k <= Math.max(1, maxWeek.value); k++) ghost += ghostPlan(ghostsOf(k))
-  const base = sumMoney([...m.values()], studentStore.byId)
-  return { real: base.real, plan: base.plan + ghost, ghost }
+  return sumMoney([...m.values()], studentStore.byId)
 })
 function confirmGhost(g, quiet = false) {
   const lesson = scheduleStore.create(g.studentIds, g.date, g.hour)
@@ -239,12 +240,11 @@ watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead
             <i class="brk" aria-hidden="true" />
             <GridStyleButton />
             <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Стикер: перетащите в свободную ячейку" aria-label="Стикер: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i v-for="(s, k) in pack" :key="s.id" :style="{ '--c': s.c, '--bg': s.bg, left: 8 + k * 6 + 'px', transform: `rotate(${k * 5 - 6}deg)` }" /></button>
+            <button v-if="week === 0 && spread.length" class="btn sm ghost spread" :title="`Как на этой неделе — на ${AHEAD} следующие, в свободное время. Будет поставлено уроков: ${spread.length}`" @click="spreadAhead"><AppIcon name="copy" :size="16" /><span><span class="ask-w">на </span>{{ AHEAD }} нед.</span></button>
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i><span><span class="ask-w">Укажите </span><span class="ask-t">статус</span> · {{ noStatus.length }}</span></button>
             <WeekMoney class="money" :m="money" />
-            <button class="mp-sw" role="switch" :aria-checked="planMonth" :aria-label="`План на месяц: ${planMonth ? 'включён' : 'выключен'}. Ожидается за ${monthName}: ${fmtMoney(monthMoney.plan)}`"
-              :title="`Ожидается за ${monthName}: проведено ${fmtMoney(monthMoney.real)}, всего с запланированными ${fmtMoney(monthMoney.plan)}${monthMoney.ghost ? ` (из них план на месяц — ${fmtMoney(monthMoney.ghost)})` : ''}.\nПлан на месяц (тест): повторить уроки этой недели на всех неделях до конца месяца — бледными копиями. Копии считаются в плане, в базу не пишутся, ученики их не видят`"
-              @click="togglePlan"><i :class="{ on: planMonth }" aria-hidden="true" /><span><b>{{ fmtMoney(monthMoney.plan) }}</b><small>план на {{ monthName }}</small></span></button>
+            <div class="mplan" :title="`План на ${monthName}: проведено ${fmtMoney(monthMoney.real)}, всего с запланированными ${fmtMoney(monthMoney.plan)}`"><b>{{ fmtMoney(monthMoney.plan) }}</b><small>план на {{ monthName }}</small></div>
           </div>
           <WeekGrid class="wgrid" :dates="dates" :ghosts="ghosts" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost"
             :fresh-trial="freshTrial" @trial-edited="freshTrial = null" @trial-save="saveTrial" @trial-remove="removeTrial" />
@@ -265,15 +265,13 @@ watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead
    Голубая — только текущая неделя; серая — вы на другой неделе, нажатие вернёт. «›» — та же стрелка «назад», повёрнутая. */
 .wk-back { border-color: var(--border) }
 .wk-next { border-color: var(--border) } .wk-next :deep(svg) { transform: rotate(180deg) }
-.wk-now { flex: none; width: 138px; height: 40px; display: grid; align-content: center; justify-items: center; padding: 0 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.2; white-space: nowrap; cursor: pointer }
+.wk-now { flex: none; width: 128px; height: 40px; display: grid; align-content: center; justify-items: center; padding: 0 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.2; white-space: nowrap; cursor: pointer }
 .wk-now b { font-size: 13px; font-weight: 800 } .wk-now small { font-size: 11px; font-weight: 700; color: var(--hint) }
 .wk-now.on { background: var(--blue-l); border-color: var(--blue-l); cursor: default } .wk-now.on b, .wk-now.on small { color: var(--blue) }
-/* «План на месяц» — выключатель как в iPhone и сумма «ожидается за месяц» в одной кнопке: включил — сумма выросла на копии */
-.mp-sw { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; line-height: 1.15; white-space: nowrap; cursor: pointer }
-.mp-sw i { position: relative; flex: none; width: 34px; height: 20px; border-radius: 99px; background: var(--hint-2); transition: background .15s }
-.mp-sw i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s }
-.mp-sw i.on { background: var(--blue) } .mp-sw i.on::after { transform: translateX(14px) }
-.wh .mp-sw span { display: grid; justify-items: end } .wh .mp-sw b { font-size: 18px; font-weight: 900 } .mp-sw small { font-size: 11px; font-weight: 800; color: var(--hint) }
+/* «План на месяц» — в пару к деньгам недели; «на 4 нед.» — раскидать уроки этой недели вперёд */
+.mplan { flex: none; display: grid; justify-items: end; padding: 4px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap }
+.wh .mplan b { font-size: 18px; font-weight: 900; color: var(--text) } .mplan small { font-size: 11px; font-weight: 800; color: var(--hint) }
+.spread { white-space: nowrap; color: var(--blue) }
 .wcol { display: grid; gap: 6px; min-width: 0 }
 .wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh .money { margin-left: auto }
@@ -281,7 +279,7 @@ watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead
 .trial-pad { position: relative; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none }
 .trial-pad i { position: absolute; top: 7px; width: 12px; height: 25px; border-radius: 2px 2px 3px 3px; background: var(--bg); box-shadow: inset 0 6px 0 var(--c), 0 1px 3px rgba(0, 0, 0, .2); transform-origin: 50% 100% }
 .trial-pad:hover { border-color: var(--hint-2) } .trial-pad.held { opacity: .55 }
-@media (min-width: 1024px) { .wh > * { flex: none } .ask .ask-w { display: none } .ask .ask-t { display: inline-block; text-transform: capitalize } }      /* в одну строку, пока помещается; с «Укажите статус» деньги уходят на вторую — ничего не обрезается */
+@media (min-width: 1024px) { .wh > * { flex: none } .ask .ask-w, .spread .ask-w { display: none } .ask .ask-t { display: inline-block; text-transform: capitalize } }      /* в одну строку, пока помещается; с «Укажите статус» деньги уходят на вторую — ничего не обрезается */
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
 .gall { position: relative; border-color: var(--border); color: var(--blue) } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .ask { display: inline-flex; align-items: center; gap: 6px; background: var(--orange-l); color: var(--orange-d) } .ask i { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: #fff; font-style: normal; font-size: 11px; font-weight: 900 }
@@ -302,8 +300,8 @@ watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead
   .wh .money { order: 6; margin-left: 0; display: flex; gap: 6px; padding: 0; border: 0; background: none }
   .wh .money :deep(.top), .wh .money :deep(.lost) { height: 54px; box-sizing: border-box; display: grid; align-content: center; justify-items: start; padding: 0 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); line-height: 1.15; white-space: nowrap }
   .wh .money :deep(b), .wh .money :deep(.lost em) { font-size: 15px; font-weight: 900 } .wh .money :deep(small), .wh .money :deep(.lost) { font-size: 11px }
-  .wh .mp-sw { order: 6; height: 54px; border-radius: 14px } .wh .mp-sw span { justify-items: start } .wh .mp-sw b { font-size: 15px }
-  .wh :deep(.gsb) { order: 7; margin-left: auto } .trial-pad { order: 8 } .gall { order: 9 } .ask { order: 10 }          /* GridStyleButton — без одного корня, поэтому :deep */
+  .mplan { order: 6; height: 54px; box-sizing: border-box; align-content: center; justify-items: start; padding: 0 10px; border-radius: 14px } .wh .mplan b { font-size: 15px }
+  .wh :deep(.gsb) { order: 7; margin-left: auto } .trial-pad { order: 8 } .spread { order: 9 } .gall { order: 9 } .ask { order: 10 }          /* GridStyleButton — без одного корня, поэтому :deep */
 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */
