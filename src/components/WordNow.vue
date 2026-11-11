@@ -49,8 +49,9 @@ const lastH = computed(() => cur.value?.hist[0])
       <p v-if="!list.length" class="em">Пока пусто — слова появятся после уроков.</p>
     </aside>
     <section v-if="cur" class="rt">
-      <div class="wh"><b>{{ cur.text }}</b><small>{{ cur.tr }}<template v-if="lastH"> · последний ответ: <span :class="lastH.ok === true ? 'y' : lastH.ok === false ? 'x' : ''">{{ lastH.ok === true ? 'верно' : lastH.ok === false ? 'ошибка' : 'встретилось' }}</span> ({{ lastH.ex }})</template></small></div>
-      <WordCurve :key="cur.key" :item="cur" :cfg="cfg" :fill="dock" />
+      <WordCurve :key="cur.key" :item="cur" :cfg="cfg" :fill="dock">
+        <template #head><div class="wh"><b :title="cur.text">{{ cur.text }}</b><small>{{ cur.tr }}<template v-if="lastH"> · <span :class="lastH.ok === true ? 'y' : lastH.ok === false ? 'x' : ''">{{ lastH.ok === true ? 'верно' : lastH.ok === false ? 'ошибка' : 'встретилось' }}</span> ({{ lastH.ex }})</template></small></div></template>
+      </WordCurve>
     </section>
   </div></div>
 </template>
@@ -67,7 +68,7 @@ const lastH = computed(() => cur.value?.hist[0])
 .t { display: grid; min-width: 0; flex: 1 } .t b { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .t small { font-size: 11px; font-weight: 500; color: var(--g-mu, #6b7280); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 em { font-style: normal; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums } em.ok { color: #16a34a } em.mid { color: #d97706 } em.bad { color: #ef4444 } em.nw { color: var(--g-mu, #9aa0a8); font-size: 11px; font-weight: 500 }
 .rt { display: grid; align-content: start; gap: 8px; min-width: 0 }
-.wh { display: grid } .wh b { font-size: 18px; font-weight: 700 } .wh small { font-size: 12px; font-weight: 500; color: var(--g-mu, #6b7280) } .wh .y { color: #16a34a } .wh .x { color: #ef4444 }
+.wh { display: grid; min-width: 0 } .wh b { font-size: 16px; font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .wh small { font-size: 11.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--g-mu, #6b7280) } .wh .y { color: #16a34a } .wh .x { color: #ef4444 }
 .em { margin: 0; font-size: 13px; color: var(--g-mu, #6b7280) }
 .wnc { container-type: inline-size; min-width: 0 }
 @container (max-width: 600px) {

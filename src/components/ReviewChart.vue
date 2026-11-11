@@ -63,7 +63,9 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
     <div class="fl" :class="{ on: flash }" aria-live="polite"><template v-if="flash"><i :class="flash.ok === true ? 'y' : flash.ok === false ? 'x' : 'n'" /><b>{{ flash.text }}</b> · {{ flash.what }}<span v-if="flash.more"> · и ещё {{ flash.more }}</span></template></div>
     <PileChart :items="rows" :dock="dock" :tall="tall" :fresh="hotId" :order="['strong', 'medium', 'weak']" @pick="pickW">
       <template #top>
-        <template v-if="!tall || dock"><b class="ttl2">Где сейчас слова</b>
+        <!-- в панели урока — одна строка, как у «Памяти словаря» и «Слово сейчас»: название + счётчики · фильтр · масштаб справа -->
+        <div v-if="dock" class="hb"><b class="ttl2">Где сейчас слова</b><span class="cnt">{{ count.weak }} слаб. · {{ count.medium }} сред. · {{ count.strong }} сильн.<template v-if="fresh"> · {{ fresh }} нов.</template></span></div>
+        <template v-else-if="!tall"><b class="ttl2">Где сейчас слова</b>
         <span class="cnt">{{ count.weak }} слабых · {{ count.medium }} средних · {{ count.strong }} сильных<template v-if="fresh"> · {{ fresh }} новых без ответа</template></span></template>
         <span v-else-if="fresh" class="cnt">{{ fresh }} новых без ответа</span>
         <select v-model="filter" aria-label="Какие слова"><option value="all">Все</option><option value="word">Слова</option><option value="phrase">Фразы</option><option v-for="l in lessons" :key="l" :value="'lesson:' + l">Урок: {{ l }}</option></select>
@@ -77,7 +79,11 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
 <style scoped>
 .rc { display: grid; gap: 8px; min-width: 0; padding: 12px; border-radius: 16px; background: var(--card, #fff); box-shadow: inset 0 0 0 1px var(--border, #eef0f3) }
 .rc.dock { padding: 12px 14px; border-radius: 8px; box-shadow: none; border: 1px solid var(--border) }      /* в панели «Графики» курса — строже, как остальные графики панели */
-.rc.dock .ttl2 { font-size: 13.5px; font-weight: 700 } .rc.dock .cnt { font-weight: 500 }
+.hb { display: grid; min-width: 0; padding-right: 14px; border-right: 1px solid var(--border) }
+.rc.dock .ttl2 { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap } .rc.dock .cnt { font-size: 11.5px; font-weight: 500; white-space: nowrap }
+.rc.dock :deep(.ttl) { display: flex; align-items: center; gap: 12px; min-width: 0 } .rc.dock select { border-radius: 6px; font-weight: 600; font-size: 12px; padding: 4px 8px }
+.rc.dock :deep(.scl) { padding: 0; gap: 0; border-radius: 6px; background: none; overflow: hidden } .rc.dock :deep(.scl button) { border-radius: 0; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--hint) }
+.rc.dock :deep(.scl button + button) { border-left: 1px solid var(--border) } .rc.dock :deep(.scl button.on) { background: var(--g-seg, #f3f4f6); color: var(--text) }
 .ttl2 { font-size: 15px; font-weight: 900; color: var(--text) }
 .cnt { font-size: 12px; font-weight: 700; color: var(--hint) }
 select { justify-self: start; width: auto; max-width: 220px; font: inherit; font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 9px; border: 1px solid var(--border, #e3e6ea); background: var(--card, #fff); color: var(--text) }

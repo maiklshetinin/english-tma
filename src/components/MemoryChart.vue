@@ -175,18 +175,19 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
 
 <template>
   <div class="mc" :class="{ dock }">
-    <div class="hd">
-      <b class="t">Память словаря</b><span class="sub">вероятность вспомнить · FSRS</span>
-      <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="z in ZOOMS" :key="z[0]" role="tab" :aria-selected="zoom === z[0]" :class="{ on: zoom === z[0] }" @click="zoom = z[0]">{{ z[1] }}</button></div>
-    </div>
-    <p v-if="!words.length" class="em">Пока пусто — график появится после первого проверенного ответа в уроке.</p>
-    <template v-else>
-      <div class="kps">
+    <!-- одна строка, как у «Слово сейчас»: название · показатели · масштаб справа -->
+    <div class="kps">
+      <div class="hd"><b class="t">Память словаря</b><span class="sub">вероятность вспомнить · FSRS</span></div>
+      <template v-if="words.length">
         <div class="kp"><small>В среднем</small><b>{{ pct(nowStat.avg) }}%</b></div>
         <div class="kp" :class="{ bad: nowStat.below }"><small>Ниже порога {{ pct(cfg.retention) }}%</small><b>{{ nowStat.below }} {{ word(nowStat.below) }}</b></div>
         <div class="kp"><small>Ответов сегодня</small><b>{{ today }}</b></div>
         <div v-if="selW" class="kp sl"><small>Выбрано</small><b><span>{{ selW.text }}</span> {{ pct(rAt(selW, nowT)) }}%</b></div>
-      </div>
+      </template>
+      <div class="seg" role="tablist" aria-label="Масштаб"><button v-for="z in ZOOMS" :key="z[0]" role="tab" :aria-selected="zoom === z[0]" :class="{ on: zoom === z[0] }" @click="zoom = z[0]">{{ z[1] }}</button></div>
+    </div>
+    <p v-if="!words.length" class="em">Пока пусто — график появится после первого проверенного ответа в уроке.</p>
+    <template v-else>
       <div class="fl" :class="{ on: flash }" aria-live="polite"><template v-if="flash"><i :class="flash.ok ? 'y' : 'x'" /><b>{{ flash.text }}</b> · {{ flash.ok ? 'верно' : 'ошибка' }} — память слова обновлена<template v-if="flash.d != null && flash.d !== 0">, в среднем {{ flash.d > 0 ? '+' : '' }}{{ String(flash.d).replace('.', ',') }}%</template></template></div>
       <div ref="pw" class="pw">
         <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" :width="W" :height="H" class="gr" role="img" :aria-label="`Память словаря: в среднем ${pct(nowStat.avg)} %, ниже порога ${nowStat.below}`" @mousemove="move" @mouseleave="hov = null">
@@ -223,7 +224,7 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
         <span><i class="la" />В среднем</span>
         <span><i class="ls2" />Выбранное слово</span>
         <span v-if="many"><i class="lb" />От слабых до сильных</span><span v-else><i class="lw" />Остальные слова — нажми, чтобы выбрать</span>
-        <span><i class="lp" />Прогноз без повтора</span>
+        <span><i class="lfc" />Прогноз без повтора</span>
         <button class="more" :aria-expanded="showList" @click="showList = !showList">Таблица {{ showList ? '▴' : '›' }}</button>
       </div>
       <div v-if="showList" class="lst">
@@ -241,12 +242,13 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
 .mc { --bg: var(--g-bg, #fff); --tx: var(--g-tx, #1f2328); --mu: var(--g-mu, #6b7280); --bd: var(--g-bd, #e5e7eb); --gd: var(--g-grid, #f0f1f3); --sg: var(--g-seg, #f3f4f6); --su: var(--g-sub, #f6f7f9);
   --av: var(--g-avg, #7c3aed); --se: var(--g-sel, #2563eb); --th: #f59e0b;
   display: grid; gap: 10px; min-width: 0; padding: 12px 14px 12px; border-radius: 8px; background: var(--bg); color: var(--tx); border: 1px solid var(--bd); font-variant-numeric: tabular-nums }
-.hd { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap } .t { font-size: 13.5px; font-weight: 700 } .sub { flex: 1; font-size: 12px; font-weight: 500; color: var(--mu) }
-.seg { display: flex; border: 1px solid var(--bd); border-radius: 6px; overflow: hidden }
+/* шапка — одна строка, одинаковая с «Слово сейчас» (WordCurve): название 16 px + подпись, показатели, масштаб справа */
+.hd { display: grid; min-width: 0; padding-right: 14px; border-right: 1px solid var(--bd) } .hd + .kp { border-left: 0 } .t { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap } .sub { font-size: 11.5px; font-weight: 500; color: var(--mu); white-space: nowrap }
+.seg { display: flex; align-self: center; margin-left: auto; border: 1px solid var(--bd); border-radius: 6px; overflow: hidden }
 .seg button { font: inherit; font-size: 12px; font-weight: 600; border: 0; padding: 4px 10px; background: none; color: var(--mu); cursor: pointer } .seg button + button { border-left: 1px solid var(--bd) }
 .seg button:hover { color: var(--tx) } .seg button.on { background: var(--sg); color: var(--tx) }
-.kps { display: flex; flex-wrap: wrap; row-gap: 8px }
-.kp { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--bd); min-width: 0 } .kp:first-child { padding-left: 2px; border-left: 0 }
+.kps { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 8px }
+.kp { display: grid; gap: 2px; padding: 0 12px; border-left: 1px solid var(--bd); min-width: 0 } .kp:first-child { padding-left: 2px; border-left: 0 }
 .kp small { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mu); white-space: nowrap } .kp b { font-size: 19px; font-weight: 600; line-height: 1.2; white-space: nowrap }
 .kp.bad b { color: #ef4444 } .kp.sl b span { color: var(--se); display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom }
 .fl { height: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; border-radius: 6px; background: var(--su); transition: height .2s; padding: 0 10px }
@@ -271,7 +273,8 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'слово' : [2, 3, 4].i
 .tip i { flex: none; width: 8px; height: 8px; border-radius: 50% } .tip .ca { background: var(--av) } .tip .cs { background: var(--se) } .tip .cb { background: var(--th) }
 .tip em { font-style: normal; font-size: 11px; color: var(--mu); line-height: 1.35 }
 .leg { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 12px; color: var(--mu) } .leg span { display: inline-flex; align-items: center; gap: 6px }
-.leg i { display: inline-block; width: 14px; height: 0 } .la { border-top: 2px solid var(--av) } .lw { border-top: 1px solid var(--mu); opacity: .5 } .ls2 { border-top: 2px solid var(--se) } .lp { border-top: 2px dashed var(--mu) } .lb { height: 8px !important; background: var(--av); opacity: .2 }
+/* значки легенды — плотные полоски 18×4, чтобы цвет читался */
+.leg i { display: inline-block; width: 18px; height: 4px; border-radius: 2px } .la { background: var(--av) } .lw { background: var(--mu); opacity: .45; height: 2px !important } .ls2 { background: var(--se) } .lfc { background: repeating-linear-gradient(90deg, var(--mu) 0 5px, transparent 5px 8px) } .lb { height: 8px !important; background: var(--av); opacity: .2 }
 .more { all: unset; cursor: pointer; margin-left: auto; font-size: 12px; font-weight: 600; color: var(--se) }
 .lst { display: grid; gap: 2px; max-height: 280px; overflow: auto; border-top: 1px solid var(--bd); padding-top: 8px }
 .nt2 { margin: 0 0 4px; font-size: 12px; color: var(--mu) }
