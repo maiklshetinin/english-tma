@@ -14,7 +14,7 @@ import { notesState as S, CARGO, noteById, openDrop, openNote } from '../composa
 import { showToast } from '../composables/useToast'
 
 const router = useRouter()
-const FALL = { chute: 2600, crane: 3600, bird: 3800 }        // сколько длится доставка, мс (совпадает с анимациями ниже)
+const FALL = { chute: 2600, crane: 3600, bird: 8000 }        // сколько длится доставка, мс (совпадает с анимациями ниже)
 const now = ref(Date.now()), vw = ref(innerWidth), mobile = computed(() => vw.value < 720)
 const size = computed(() => (mobile.value ? { w: 64, h: 54 } : { w: 92, h: 78 }))
 const opened = ref('')                       // открытая мной посылка (письмо над ней)
@@ -24,11 +24,13 @@ onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 200); ad
 onUnmounted(() => { clearInterval(clock); removeEventListener('resize', onResize) })
 
 // Когда посылка впервые появилась у меня и сколько её доставки уже прошло (зашёл позже — анимация с середины, давно — сразу лежит).
+// Считаем от d.got (когда посылка пришла к нам), а не от времени сервера: часы компьютера и сервера расходятся на секунды —
+// из-за этого доставка начиналась с середины и казалась мгновенной. Посылки без got пришли при загрузке — уже лежат.
 // Запоминаем один раз: задержка анимации не должна меняться на ходу, иначе она дёргается и ускоряется.
 const seen = new Map()
 function timing(d) {
   let t = seen.get(d.id)
-  if (!t) { const dur = FALL[d.via] || FALL.chute; t = { t0: Date.now(), e0: Math.min(dur, Math.max(0, Date.now() - d.at)), dur }; seen.set(d.id, t) }
+  if (!t) { const dur = FALL[d.via] || FALL.chute; t = { t0: Date.now(), e0: d.got ? Math.min(dur, Math.max(0, Date.now() - d.got)) : dur, dur }; seen.set(d.id, t) }
   return t
 }
 
@@ -139,7 +141,7 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
       <!-- птица: аист еле тащит посылку на верёвке, отпускает — его подбрасывает, летят перья -->
       <template v-if="p.falling && p.via === 'bird'">
         <div v-if="TRAIL[p.cargo.id]" class="trail" :class="'c-' + p.cargo.id" aria-hidden="true" :style="{ left: mid(p), bottom: btm(p), '--btm': btm(p) }">
-          <i v-for="n in 4" :key="n" :class="'t' + n" :style="{ animationDelay: p.delay + n * 418 + 'ms' }"><svg v-if="TRAIL[p.cargo.id] === 'f'" viewBox="0 0 30 12"><path d="M1 6 Q10 -2 29 6 Q10 14 1 6 Z" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="1.5" /></svg><template v-else>{{ TRAIL[p.cargo.id] }}</template></i>
+          <i v-for="n in 4" :key="n" :class="'t' + n" :style="{ animationDelay: p.delay + n * 880 + 'ms' }"><svg v-if="TRAIL[p.cargo.id] === 'f'" viewBox="0 0 30 12"><path d="M1 6 Q10 -2 29 6 Q10 14 1 6 Z" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="1.5" /></svg><template v-else>{{ TRAIL[p.cargo.id] }}</template></i>
         </div>
         <div class="fth" :class="'c-' + p.cargo.id" aria-hidden="true" :style="{ left: mid(p), bottom: btm(p), '--btm': btm(p) }">
           <svg v-for="f in 2" :key="f" :class="'f' + f" viewBox="0 0 30 12" :style="{ animationDelay: p.delay + 'ms' }"><path d="M1 6 Q10 -2 29 6 Q10 14 1 6 Z" fill="#f6f9fb" stroke="#8fa3ad" stroke-width="1.5" /><path d="M3 6 L27 6" stroke="#8fa3ad" stroke-width="1" fill="none" /></svg>
@@ -225,7 +227,7 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
 
 /* --- птица: --lift — на какой высоте несёт; до 55% птица и посылка летят одной волной, дальше посылка падает --- */
 .pk.via-bird, .bird, .fth, .trail { --lift: max(0px, min(58vh, calc(100vh - var(--btm) - var(--h) - 150px))) }
-.pk.fall.via-bird { animation: birdBox 3.8s ease-in-out both }
+.pk.fall.via-bird { animation: birdBox 8s ease-in-out both }
 @keyframes birdBox {
   0% { transform: translate(-110vw, calc(var(--lift) * -1 - 10px)) } 11% { transform: translate(-88vw, calc(var(--lift) * -1 + 14px)) }
   22% { transform: translate(-66vw, calc(var(--lift) * -1 - 12px)) } 33% { transform: translate(-44vw, calc(var(--lift) * -1 + 16px)) }
@@ -233,7 +235,7 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
   55% { transform: translate(0, calc(var(--lift) * -1 + 4px)); animation-timing-function: ease-in }
   68% { transform: translate(0, 0); animation-timing-function: linear } 71% { transform: scale(1.2, .76) } 74% { transform: scale(.94, 1.06) } 77%, 100% { transform: none }
 }
-.bird { position: absolute; width: 0; height: 0; margin-bottom: calc(var(--h) - 4px); animation: birdFly 3.8s ease-in-out both }
+.bird { position: absolute; width: 0; height: 0; margin-bottom: calc(var(--h) - 4px); animation: birdFly 8s ease-in-out both }
 @keyframes birdFly {
   0% { transform: translate(-110vw, calc(var(--lift) * -1 - 10px)) } 11% { transform: translate(-88vw, calc(var(--lift) * -1 + 14px)) }
   22% { transform: translate(-66vw, calc(var(--lift) * -1 - 12px)) } 33% { transform: translate(-44vw, calc(var(--lift) * -1 + 16px)) }
@@ -243,7 +245,7 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
   100% { transform: translate(110vw, calc(var(--lift) * -1 - 26vh)) rotate(-6deg) }
 }
 .bird > svg { position: absolute; left: calc(-206px * var(--bs)); bottom: calc(56px - 92px * var(--bs)); width: calc(220px * var(--bs)); height: calc(140px * var(--bs)); overflow: visible }
-.rope { position: absolute; left: -1px; bottom: 0; width: 2px; height: 56px; background: #8a6a4a; transform-origin: 50% 0; animation: rope 3.8s ease-in-out both; animation-delay: var(--d) }
+.rope { position: absolute; left: -1px; bottom: 0; width: 2px; height: 56px; background: #8a6a4a; transform-origin: 50% 0; animation: rope 8s ease-in-out both; animation-delay: var(--d) }
 @keyframes rope { 0%, 55% { transform: none } 59% { transform: rotate(40deg) } 65% { transform: rotate(-20deg) } 72% { transform: rotate(30deg) } 80%, 100% { transform: rotate(22deg) } }
 .wing, .legs { transform-box: fill-box }
 .wing { transform-origin: 94% 97%; animation: flap .17s ease-in-out infinite alternate } .wing.b { animation-name: flapB }
@@ -251,13 +253,13 @@ const craning = computed(() => pile.value.some((p) => p.falling && p.via === 'cr
 @keyframes flapB { from { transform: rotate(8deg) } to { transform: rotate(-70deg) } }
 .legs { transform-origin: 97% 6%; animation: legs .26s ease-in-out infinite alternate }
 @keyframes legs { from { transform: rotate(-8deg) } to { transform: rotate(10deg) } }
-.hard { animation: hard 3.8s linear both; animation-delay: var(--d) } .easy { animation: easy 3.8s linear both; animation-delay: var(--d) }
+.hard { animation: hard 8s linear both; animation-delay: var(--d) } .easy { animation: easy 8s linear both; animation-delay: var(--d) }
 @keyframes hard { 0%, 55% { opacity: 1 } 56%, 100% { opacity: 0 } }
 @keyframes easy { 0%, 55% { opacity: 0 } 56%, 100% { opacity: 1 } }
 .sw { animation: sweat .5s linear infinite } .s2 { animation-delay: .17s } .s3 { animation-delay: .33s }
 @keyframes sweat { from { transform: none; opacity: 1 } to { transform: translate(-16px, -12px); opacity: 0 } }
 .fth { position: absolute; width: 0; height: 0; margin-bottom: calc(var(--h) + 60px); transform: translateY(calc(var(--lift) * -1)) }
-.fth svg { position: absolute; left: -70px; top: -20px; width: 26px; height: 11px; opacity: 0; animation: feather 3.8s ease-in-out both }
+.fth svg { position: absolute; left: -70px; top: -20px; width: 26px; height: 11px; opacity: 0; animation: feather 8s ease-in-out both }
 .fth .f2 { left: -30px; top: 0; width: 20px; animation-name: feather2 }
 @keyframes feather { 0%, 55% { opacity: 0; transform: none } 57% { opacity: 1; transform: none } 70% { opacity: 1; transform: translate(-26px, 90px) rotate(50deg) } 84% { opacity: 1; transform: translate(18px, 180px) rotate(-40deg) } 100% { opacity: 0; transform: translate(-10px, 260px) rotate(30deg) } }
 @keyframes feather2 { 0%, 56% { opacity: 0; transform: none } 58% { opacity: 1; transform: none } 72% { opacity: 1; transform: translate(30px, 80px) rotate(-60deg) } 86% { opacity: 1; transform: translate(-14px, 160px) rotate(40deg) } 100% { opacity: 0; transform: translate(20px, 230px) rotate(-20deg) } }

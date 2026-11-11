@@ -43,7 +43,8 @@ let wired = false
 export function wireNotes() {
   if (wired) return; wired = true
   onLive('hello', (m) => { notesState.me = m.uid || ''; notesState.list = (m.notes || []).slice(); notesState.drops = (m.drops || []).slice() })
-  onLive('drop', (m) => { notesState.drops = [...notesState.drops.filter((d) => d.id !== m.drop.id), m.drop] })
+  // got — когда посылка пришла к нам (по нашим часам): от него идёт анимация доставки; у посылок из hello его нет — они уже лежат
+  onLive('drop', (m) => { notesState.drops = [...notesState.drops.filter((d) => d.id !== m.drop.id), { ...m.drop, got: Date.now() }] })
   onLive('drop-', (m) => { notesState.drops = notesState.drops.filter((d) => d.id !== m.id) })
   onLive('note', (m) => {
     upsert(m.note)
