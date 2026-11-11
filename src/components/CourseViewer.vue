@@ -235,10 +235,12 @@ const ckMap = computed(() => units.value.filter(u => u.tasks.some(t => t.type ==
   rv: (() => { const r = repeats.value[u.id]; return r?.started ? { n: r.steps.length, words: r.words, screens: r.screens, next: r.next ? relDay(r.next) : '', items: r.list.map(o => ({ id: o.st.id, kind: o.kind, ex: exName(o.st), w: o.w, from: o.t.title, pct: o.pct })) } : null })(),
 })))
 const dockTab = ref('mem')
-// тема панели «Графики» — своя, как в DevTools: «Как в приложении» / «Светлая» / «Тёмная» (переключатель в полосе вкладок, запоминается)
-const gTheme = ref((() => { try { return localStorage.getItem('tma.graphsTheme') || 'app' } catch { return 'app' } })())
-watch(gTheme, (v) => { try { localStorage.setItem('tma.graphsTheme', v) } catch { /* приватный режим */ } })
-const gDark = computed(() => (gTheme.value === 'app' ? theme.value : gTheme.value) === 'dark')
+// тема панели «Графики» — своя, как в DevTools: выключатель «Тёмная» (как в iPhone) в полосе вкладок; не трогали — как у приложения
+const gStored = ref((() => { try { const v = localStorage.getItem('tma.graphsTheme'); return v === 'dark' || v === 'light' ? v : null } catch { return null } })())
+const gDark = computed({
+  get: () => (gStored.value ?? theme.value) === 'dark',
+  set: (v) => { gStored.value = v ? 'dark' : 'light'; try { localStorage.setItem('tma.graphsTheme', gStored.value) } catch { /* приватный режим */ } },
+})
 // «Где сейчас слова»: список слов под графиком (как в Review); нажал — его кривая в «Слово сейчас»
 const pickedKey = ref(null)
 watch(focusKey, () => { pickedKey.value = null })
@@ -378,7 +380,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
           <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
           <div v-if="rvChart" class="rvd" :class="{ dark: gDark }">
-            <div class="dtabs" role="tablist"><div class="gth" role="radiogroup" aria-label="Тема панели"><button v-for="[k, t, d] in [['app', 'Авто', 'Как в приложении'], ['light', 'Светлая', 'Светлая тема панели'], ['dark', 'Тёмная', 'Тёмная тема панели']]" :key="k" role="radio" :aria-checked="gTheme === k" :class="{ on: gTheme === k }" :title="d" @click="gTheme = k">{{ t }}</button></div><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
+            <div class="dtabs" role="tablist"><label class="gth" title="Тёмная тема панели"><span>Тёмная</span><input v-model="gDark" type="checkbox" role="switch" :aria-checked="gDark" /><i aria-hidden="true" /></label><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
             <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
             <WordNow v-else-if="dockTab === 'curve'" :focus="pickedKey || focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <div v-else-if="dockTab === 'words'" class="gw">
@@ -541,8 +543,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 /* вкладки панели — как в DevTools: плоская полоса сверху, активная подчёркнута */
 .dtabs { position: sticky; top: 0; z-index: 3; display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 10px; padding: 0 8px; background: var(--g-bar); border-bottom: 1px solid var(--g-bd) }
 .dtabs button { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 11px 7px; background: none; color: var(--g-mu); cursor: pointer; white-space: nowrap }
-.dtabs .gth { flex: none; display: flex; align-self: center; margin: 0 8px 0 0; border: 1px solid var(--g-bd); border-radius: 6px; overflow: hidden }      /* тема панели — сегменты, первыми слева (справа сверху — «Сейчас здесь») */
-.dtabs .gth button { padding: 3px 8px; border: 0; margin: 0; font-size: 11.5px; font-weight: 600 } .dtabs .gth button + button { border-left: 1px solid var(--g-bd) } .dtabs .gth button.on { background: var(--g-seg); color: var(--g-tx) }
+.dtabs .gth { flex: none; display: inline-flex; align-items: center; gap: 7px; margin-right: 10px; padding-right: 10px; border-right: 1px solid var(--g-bd); font-size: 12px; font-weight: 600; color: var(--g-mu); cursor: pointer; user-select: none }      /* выключатель темы панели, как в iPhone — первым слева */
+.gth input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none }
+.gth i { position: relative; width: 30px; height: 18px; border-radius: 9px; background: var(--g-hov); transition: background .2s } .gth i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .2s }
+.gth input:checked + i { background: #34c759 } .gth input:checked + i::after { transform: translateX(12px) } .gth input:focus-visible + i { outline: 2px solid var(--g-acc); outline-offset: 2px }
 .dtabs button:hover { background: var(--g-hov); color: var(--g-tx) } .dtabs button.on { color: var(--g-acc); border-bottom-color: var(--g-acc) }
 .mrs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--hint) } .mrs button { border: 0; border-radius: 10px; padding: 6px 12px; background: var(--border); color: var(--hint); font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer }
 /* «Где сейчас слова» в панели: график + таблица слов (как в Review) */
