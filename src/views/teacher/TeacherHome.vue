@@ -37,21 +37,21 @@ const weekMoney = (dates) => {
   for (const l of ls) for (const id of l.studentIds) { all++; if (l.canceled?.[id]) off++ }
   return { ...sumMoney(ls, studentStore.byId), offPct: all ? Math.round(off / all * 100) : 0, off, all }
 }
-// Одна таблица и одна плашка недели между «‹» и «›»: стрелки листают по неделе. Назад — сколько угодно, вперёд — на 4 недели
-// (или до недели с последним днём текущего месяца, если она дальше); на последней «›» гаснет, но остаётся на месте — шапка не прыгает.
+// Одна таблица и одна плашка недели между «‹» и «›»: стрелки листают по неделе. Назад — сколько угодно, вперёд — до недели,
+// в которую попадает последний день текущего месяца (но не меньше чем до следующей); на последней «›» гаснет, но остаётся на месте — шапка не прыгает.
 // Плашка голубая только на этой неделе; нажатие на серую возвращает к текущей. Уроки остальных недель подгружаются (scheduleStore.loadWeek).
 const week = ref(0)
 const shift = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10) }
 const today = computed(() => nowIn(tz.value, nowTick.value).date)
 const monthStart = computed(() => today.value.slice(0, 8) + '01')
 const monthEnd = computed(() => today.value.slice(0, 8) + new Date(Date.UTC(+today.value.slice(0, 4), +today.value.slice(5, 7), 0)).getUTCDate())
-const AHEAD = 4                                              // на сколько недель вперёд раскидываем уроки и листаем
-const maxWeek = computed(() => Math.max(AHEAD, Math.floor((Date.parse(monthEnd.value) - Date.parse(w1.value[0])) / (7 * 864e5))))      // w1[0] — понедельник этой недели
+const monthWeek = computed(() => Math.floor((Date.parse(monthEnd.value) - Date.parse(w1.value[0])) / (7 * 864e5)))      // неделя с последним днём месяца; w1[0] — понедельник этой недели
+const maxWeek = computed(() => Math.max(1, monthWeek.value))
 const dates = computed(() => week.value === 0 ? w1.value : week.value === 1 ? w2.value : (nowTick.value, weekDates(week.value)))
 const weekName = computed(() => { const w = week.value; return w === 0 ? 'Эта неделя' : w === 1 ? 'Следующая' : w === -1 ? 'Прошлая' : w > 1 ? `Через ${w} нед.` : `${-w} нед. назад` })
 watch(() => dates.value[0], () => { if (week.value < 0 || week.value > 1) scheduleStore.loadWeek(dates.value[0]).catch(() => {}) })
-// Недели после следующей подгружаем заранее: по ним считается «план на месяц» и видно, какие ячейки свободны для «На 4 недели вперёд»
-const loadAhead = () => { for (let k = 2; k <= maxWeek.value; k++) scheduleStore.loadWeek(shift(w1.value[0], 7 * k)).catch(() => {}) }
+// Недели после следующей подгружаем заранее: по ним считается «план на месяц» и видно, какие ячейки свободны для автоподстановки
+const loadAhead = () => Promise.all(Array.from({ length: Math.max(0, maxWeek.value - 1) }, (_, i) => scheduleStore.loadWeek(shift(w1.value[0], 7 * (i + 2)))))
 
 // «Призраки» следующей недели: уроки этой недели в те же дни и часы, пока на следующей там пусто. В базе их нет —
 // нажал на призрака → урок создан; «Подтвердить все» → вся неделя; × → эту подсказку больше не показываем (запоминается на устройстве).
@@ -65,13 +65,12 @@ const setSkip = (g, on) => {
   const s = new Set(skippedOf(g.ws)); on ? s.add(g.key) : s.delete(g.key); skipMem.set(g.ws, s); skipTick.value++
   try { localStorage.setItem(`tma.ghostSkip.${g.ws}`, JSON.stringify([...s])) } catch { /* приватный режим */ }
 }
-// Копии уроков этой недели на неделю k вперёд — только в свободные ячейки. real — для «На 4 недели вперёд»: без уроков, которые отменили все ученики.
-function copiesOf(k, real = false) {
+// Копии уроков этой недели на неделю k вперёд — только в свободные ячейки.
+function copiesOf(k) {
   const ws = shift(w1.value[0], 7 * k), skipped = skippedOf(ws), out = []
   for (const l of scheduleStore.lessons) {
     if (!w1.value.includes(l.date)) continue
     const ids = known(l); if (!ids.length) continue
-    if (real && ids.every(id => l.canceled?.[id])) continue
     const date = shift(l.date, 7 * k), key = `${date}_${l.hour}`
     if (skipped.has(key) || occupant(date, l.hour)) continue
     out.push({ key, ws, date, hour: l.hour, minute: l.minute || 0, studentIds: ids })
@@ -79,14 +78,58 @@ function copiesOf(k, real = false) {
   return out
 }
 const ghosts = computed(() => week.value === 1 ? copiesOf(1) : [])
-// «На 4 недели вперёд» (кнопка на этой неделе): настоящие уроки — как на этой неделе, на четыре следующие, только в свободные ячейки.
-// Ученики видят их в своём расписании. Разовое действие: дальнейшие правки этой недели на уже поставленные уроки не переносятся.
-const spread = computed(() => { const out = []; for (let k = 1; k <= AHEAD; k++) out.push(...copiesOf(k, true)); return out })
-async function spreadAhead() {
-  const list = spread.value; if (!list.length) return
-  if (!(await ask(`Поставить уроки на ${AHEAD} недели вперёд?`, { text: `Как на этой неделе, только в свободное время: будет поставлено уроков — ${list.length}. Ученики увидят их в своём расписании.`, ok: 'Поставить' }))) return
-  const made = list.map(g => confirmGhost(g, true)); haptic('light')
-  showToast(`Поставлено уроков: ${made.length}`, () => made.forEach(l => scheduleStore.remove(l)))
+// «Автоподстановка» (выключатель в шапке, подпись — «авто · до 6 дек»; ТЕСТ, запоминается на устройстве): уроки этой недели сами ставятся
+// настоящими уроками на все следующие недели по ту, в которую попадает последний день месяца, — целиком, вместе с её днями следующего месяца
+// (в деньги каждый урок идёт по своей дате). Только в свободные ячейки; уроки, которые отменили все ученики, и стикеры не копируются.
+// Срабатывает при включении, при открытии «Главной» и когда началась новая неделя. Каждая ячейка подставляется один раз (AUTO_DONE):
+// снятый потом урок сам не вернётся. Правки этой недели на уже поставленные уроки не переносятся. Ученики видят эти уроки.
+const MON_GEN = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+const spreadEnd = computed(() => shift(w1.value[0], 7 * monthWeek.value + 6))        // воскресенье последней недели месяца
+const spreadTo = computed(() => `до ${+spreadEnd.value.slice(8)} ${MON_GEN[+spreadEnd.value.slice(5, 7) - 1]}`)
+const AUTO_KEY = 'tma.autoFill', AUTO_DONE = 'tma.autoFill.done'
+const autoFill = ref((() => { try { return localStorage.getItem(AUTO_KEY) === '1' } catch { return false } })())
+const setAuto = (on) => { autoFill.value = on; try { localStorage.setItem(AUTO_KEY, on ? '1' : '0') } catch { /* приватный режим — просто не запомним */ } }
+let doneMem = null
+const doneTick = ref(0)
+const doneSet = () => { if (!doneMem) { try { doneMem = new Set(JSON.parse(localStorage.getItem(AUTO_DONE) || '[]')) } catch { doneMem = new Set() } } return doneMem }
+const saveDone = (set) => {                                  // прошедшие даты забываем, чтобы список не рос
+  doneMem = new Set([...set].filter(k => k.slice(0, 10) >= today.value)); doneTick.value++
+  try { localStorage.setItem(AUTO_DONE, JSON.stringify([...doneMem])) } catch { /* приватный режим */ }
+}
+// all — все ячейки, куда смотрит автоподстановка (и занятые: их тоже помечаем, чтобы потом не подставить заново); todo — что поставить сейчас
+const autoPlan = computed(() => {
+  doneTick.value
+  const done = doneSet(), all = [], todo = []
+  for (let k = 1; k <= monthWeek.value; k++) {
+    const ws = shift(w1.value[0], 7 * k), skipped = skippedOf(ws)
+    for (const l of scheduleStore.lessons) {
+      if (!w1.value.includes(l.date)) continue
+      const ids = known(l); if (!ids.length || ids.every(id => l.canceled?.[id])) continue
+      const date = shift(l.date, 7 * k), key = `${date}_${l.hour}`
+      all.push(key)
+      if (done.has(key) || skipped.has(key) || occupant(date, l.hour)) continue
+      todo.push({ key, ws, date, hour: l.hour, minute: l.minute || 0, studentIds: ids })
+    }
+  }
+  return { all, todo }
+})
+const ready = ref(false)                                     // расписание и недели впереди загружены — можно подставлять
+function runAuto() {
+  if (!autoFill.value || !ready.value) return
+  const { all, todo } = autoPlan.value
+  if (all.some(k => !doneSet().has(k))) saveDone(new Set([...doneSet(), ...all]))
+  if (!todo.length) return
+  const made = todo.map(g => confirmGhost(g, true)); haptic('light')
+  showToast(`Автоподстановка: поставлено уроков — ${made.length}`, () => {      // «Отменить» — снять поставленное и выключить автоподстановку
+    made.forEach(l => scheduleStore.remove(l)); const d = new Set(doneSet()); all.forEach(k => d.delete(k)); saveDone(d); setAuto(false)
+  })
+}
+async function toggleAuto() {
+  if (autoFill.value) { setAuto(false); haptic('light'); return showToast('Автоподстановка выключена — поставленные уроки остались') }
+  const n = autoPlan.value.todo.length, till = `${+spreadEnd.value.slice(8)} ${MONTHS_GEN[+spreadEnd.value.slice(5, 7) - 1]}`
+  if (!(await ask('Включить автоподстановку расписания?', { text: `Уроки этой недели будут сами ставиться на следующие недели до конца месяца (сейчас — до ${till}), только в свободное время. ${n ? `Сразу будет поставлено уроков — ${n}. ` : ''}Ученики увидят их в своём расписании.`, ok: 'Включить' }))) return
+  setAuto(true); runAuto()
 }
 const money = computed(() => weekMoney(dates.value))
 // «План на месяц»: проведённые (факт) + запланированные уроки текущего месяца.
@@ -219,10 +262,12 @@ function askStatus() {
 const pick = (sid) => { const { date, hour } = sheet.value.slot; sheet.value = null; if (!occupant(date, hour)) assign(sid, date, hour) }      // sid — id ученика или список (группа)
 const openStudent = (id) => { sheet.value = null; router.push({ name: 'home', params: { id } }) }
 
-onMounted(() => { setDropHandler(onDrop); scheduleStore.load().catch(() => {}); loadAhead(); loadMonthPast().catch(() => {}) })      // при открытии вкладки перечитываем расписание
+// Расписание и недели впереди; когда всё пришло — автоподстановка (если включена). Не загрузилось — не подставляем: неизвестно, что занято.
+const loadAll = () => { ready.value = false; loadMonthPast().catch(() => {}); return Promise.all([scheduleStore.load(), loadAhead()]).then(() => { ready.value = true; runAuto() }).catch(() => {}) }
+onMounted(() => { setDropHandler(onDrop); loadAll() })      // при открытии вкладки перечитываем расписание
 onUnmounted(() => setDropHandler(null))
 watch(week, (w, was) => { if (was < 0) loadMonthPast().catch(() => {}) })                 // вернулись из прошлых недель — там могли править уроки месяца
-watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead(); loadMonthPast().catch(() => {}) })                    // наступила новая неделя: «следующая» стала «текущей», подгружаем новую «следующую»
+watch(() => w1.value[0] + monthEnd.value, loadAll)                                      // новая неделя или новый месяц — перечитать и подставить                    // наступила новая неделя: «следующая» стала «текущей», подгружаем новую «следующую»
 </script>
 
 <template>
@@ -240,7 +285,7 @@ watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead
             <i class="brk" aria-hidden="true" />
             <GridStyleButton />
             <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Стикер: перетащите в свободную ячейку" aria-label="Стикер: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i v-for="(s, k) in pack" :key="s.id" :style="{ '--c': s.c, '--bg': s.bg, left: 8 + k * 6 + 'px', transform: `rotate(${k * 5 - 6}deg)` }" /></button>
-            <button v-if="week === 0 && spread.length" class="btn sm ghost spread" :title="`Как на этой неделе — на ${AHEAD} следующие, в свободное время. Будет поставлено уроков: ${spread.length}`" @click="spreadAhead"><AppIcon name="copy" :size="16" /><span><span class="ask-w">на </span>{{ AHEAD }} нед.</span></button>
+            <button class="af-sw" role="switch" :aria-checked="autoFill" :aria-label="`Автоподстановка расписания: ${autoFill ? 'включена' : 'выключена'}`" :title="`Автоподстановка (тест): уроки этой недели сами ставятся на следующие недели до конца месяца (сейчас — ${spreadTo}) — настоящими уроками, только в свободное время. Ученики их видят`" @click="toggleAuto"><i :class="{ on: autoFill }" aria-hidden="true" /><span><b>авто</b><small>{{ spreadTo }}</small></span></button>
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i><span><span class="ask-w">Укажите </span><span class="ask-t">статус</span> · {{ noStatus.length }}</span></button>
             <WeekMoney class="money" :m="money" />
@@ -268,10 +313,14 @@ watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead
 .wk-now { flex: none; width: 128px; height: 40px; display: grid; align-content: center; justify-items: center; padding: 0 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.2; white-space: nowrap; cursor: pointer }
 .wk-now b { font-size: 13px; font-weight: 800 } .wk-now small { font-size: 11px; font-weight: 700; color: var(--hint) }
 .wk-now.on { background: var(--blue-l); border-color: var(--blue-l); cursor: default } .wk-now.on b, .wk-now.on small { color: var(--blue) }
-/* «План на месяц» — в пару к деньгам недели; «на 4 нед.» — раскидать уроки этой недели вперёд */
+/* «План на месяц» — в пару к деньгам недели; «авто · до 6 дек» — выключатель автоподстановки расписания (как в iPhone) */
 .mplan { flex: none; display: grid; justify-items: end; padding: 4px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap }
 .wh .mplan b { font-size: 18px; font-weight: 900; color: var(--text) } .mplan small { font-size: 11px; font-weight: 800; color: var(--hint) }
-.spread { white-space: nowrap; color: var(--blue) }
+.af-sw { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 9px 0 7px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; line-height: 1.1; white-space: nowrap; cursor: pointer }
+.af-sw i { position: relative; flex: none; width: 30px; height: 18px; border-radius: 99px; background: var(--hint-2); transition: background .15s }
+.af-sw i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s }
+.af-sw i.on { background: var(--blue) } .af-sw i.on::after { transform: translateX(12px) }
+.wh .af-sw span { display: grid; justify-items: start } .wh .af-sw b { font-size: 12px; font-weight: 800 } .af-sw small { font-size: 10px; font-weight: 800; color: var(--hint) }
 .wcol { display: grid; gap: 6px; min-width: 0 }
 .wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh .money { margin-left: auto }
@@ -279,7 +328,7 @@ watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead
 .trial-pad { position: relative; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none }
 .trial-pad i { position: absolute; top: 7px; width: 12px; height: 25px; border-radius: 2px 2px 3px 3px; background: var(--bg); box-shadow: inset 0 6px 0 var(--c), 0 1px 3px rgba(0, 0, 0, .2); transform-origin: 50% 100% }
 .trial-pad:hover { border-color: var(--hint-2) } .trial-pad.held { opacity: .55 }
-@media (min-width: 1024px) { .wh > * { flex: none } .ask .ask-w, .spread .ask-w { display: none } .ask .ask-t { display: inline-block; text-transform: capitalize } }      /* в одну строку, пока помещается; с «Укажите статус» деньги уходят на вторую — ничего не обрезается */
+@media (min-width: 1024px) { .wh > * { flex: none } .ask .ask-w, .af-sw small { display: none } .ask .ask-t { display: inline-block; text-transform: capitalize } }      /* в одну строку, пока помещается; с «Укажите статус» деньги уходят на вторую — ничего не обрезается */
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
 .gall { position: relative; border-color: var(--border); color: var(--blue) } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .ask { display: inline-flex; align-items: center; gap: 6px; background: var(--orange-l); color: var(--orange-d) } .ask i { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: #fff; font-style: normal; font-size: 11px; font-weight: 900 }
@@ -301,7 +350,7 @@ watch(() => w1.value[0], () => { scheduleStore.load().catch(() => {}); loadAhead
   .wh .money :deep(.top), .wh .money :deep(.lost) { height: 54px; box-sizing: border-box; display: grid; align-content: center; justify-items: start; padding: 0 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); line-height: 1.15; white-space: nowrap }
   .wh .money :deep(b), .wh .money :deep(.lost em) { font-size: 15px; font-weight: 900 } .wh .money :deep(small), .wh .money :deep(.lost) { font-size: 11px }
   .mplan { order: 6; height: 54px; box-sizing: border-box; align-content: center; justify-items: start; padding: 0 10px; border-radius: 14px } .wh .mplan b { font-size: 15px }
-  .wh :deep(.gsb) { order: 7; margin-left: auto } .trial-pad { order: 8 } .spread { order: 9 } .gall { order: 9 } .ask { order: 10 }          /* GridStyleButton — без одного корня, поэтому :deep */
+  .wh :deep(.gsb) { order: 7; margin-left: auto } .trial-pad { order: 8 } .af-sw { order: 9; height: 40px } .gall { order: 9 } .ask { order: 10 }          /* GridStyleButton — без одного корня, поэтому :deep */
 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */
