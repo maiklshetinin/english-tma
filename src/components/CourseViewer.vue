@@ -178,13 +178,12 @@ const panelW = ref((() => { try { return +localStorage.getItem(PW) || 560 } catc
 const LESSON_MIN = 320, PANEL_MIN = 240, SPL = 10
 const winW = ref(window.innerWidth), winH = ref(window.innerHeight)
 const onWin = () => { winW.value = window.innerWidth; winH.value = window.innerHeight }
-const isSplit = computed(() => !!(rvChart.value && steps.value.length && !props.of && auth.role === 'teacher' && open.value && winW.value >= 900))
+const isSplit = computed(() => !!(open.value && rvChart.value && steps.value.length && !props.of && auth.role === 'teacher' && winW.value >= 900))
 const panelNow = computed(() => Math.round(Math.max(PANEL_MIN, Math.min(winW.value - SPL - LESSON_MIN, panelW.value))))      // окно сузили — панель уступает уроку
 const lessonW = computed(() => winW.value - SPL - panelNow.value)
 const simMobile = computed(() => isSplit.value && lessonW.value < 1024)
 const sizeTip = ref(false)
 let tipT = 0
-watch(simMobile, (on) => document.documentElement.classList.toggle('sim-mobile', on), { immediate: true })
 onMounted(() => addEventListener('resize', onWin)); onUnmounted(() => { removeEventListener('resize', onWin); clearTimeout(tipT); document.documentElement.classList.remove('sim-mobile') })
 function dragSplit(e) {
   e.preventDefault(); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'
@@ -284,6 +283,8 @@ const rvWords = computed(() => Object.keys(snap).map(k => review.items[k] && { .
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value ? stepsOf(open.value) : []))
+// ↓ только здесь, после steps: сразу читает simMobile → steps (выше по файлу steps ещё не объявлен — курс не открывался вовсе, если «Графики» были включены)
+watch(simMobile, (on) => document.documentElement.classList.toggle('sim-mobile', on), { immediate: true })
 watch(open, (x) => setQ({ l: x?.virtual ? null : x?.id, s: null }))
 watch(curStep, (st) => { if (!open.value || !st) return; const k = steps.value.indexOf(st); setQ({ s: k > 0 ? String(k) : null }) })
 watch(() => props.id, (id) => { if (id) setQ({ c: id }) }, { immediate: true })

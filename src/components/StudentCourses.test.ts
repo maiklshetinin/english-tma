@@ -69,6 +69,15 @@ describe('курс у ученика', () => {
     expect(w.find('.cka').text()).toContain('Собран сам из уроков Chapter: 3')
   })
 
+  it('курс открывается и при включённых «Графиках» урока (настройка в localStorage)', async () => {
+    localStorage.setItem('tma.lessonGraphs', '1')
+    apiRequest.mockImplementation((p: string) => (p === '/my/courses/k1' ? ok({ id: 'k1', title: 'A1', items: [{ id: 'u1', type: 'unit', title: 'Chapter 1' }, ...tasks], run: { done: 1, lessons: {} } }) : ok({ items: {} })))
+    const w = mount(CourseViewer, { props: { id: 'k1', student: true }, global: { stubs: { Teleport: true } } })
+    await flushPromises()
+    expect(w.findAll('.vrow').length).toBe(3)
+    localStorage.removeItem('tma.lessonGraphs'); w.unmount()
+  })
+
   it('карточка ученика → Review: «Очистить» рядом с фильтром; курс с прогрессом — «Сбросить прохождение»', async () => {
     apiRequest.mockImplementation((p: string) => (p.startsWith('/review') ? ok({ items: {} }) : ok({ courses: [{ id: 'k1', title: 'A1', total: 3, assigned: true, tasks, run: { done: 1, lessons: {} } }] })))
     const w = mount(StudentReview, { props: { studentId: 's1' } })
