@@ -172,11 +172,26 @@ const curStep = ref(null)                      // экран, открытый �
 const focusKey = computed(() => { const h = curStep.value && hitsOf(curStep.value, { ok: true })[0]; return h ? keyOf(h.text) : '' })
 const PW = 'tma.lessonPanelW'
 const panelW = ref((() => { try { return +localStorage.getItem(PW) || 560 } catch { return 560 } })())
+// Перегородку можно увести от «урок шириной с телефон» (320) до узкой панели графиков (240): урок слева — как экран этой ширины.
+// Уже 1024 (с этого разрешения в приложении — вид для телефона) — меню слева прячется, урок во всю ширину, как у ученика на телефоне.
+// Пока тянем (и ещё секунду после) — размер урока «ширина × высота», как в DevTools.
+const LESSON_MIN = 320, PANEL_MIN = 240, SPL = 10
+const winW = ref(window.innerWidth), winH = ref(window.innerHeight)
+const onWin = () => { winW.value = window.innerWidth; winH.value = window.innerHeight }
+const isSplit = computed(() => !!(rvChart.value && steps.value.length && !props.of && auth.role === 'teacher' && open.value && winW.value >= 900))
+const panelNow = computed(() => Math.round(Math.max(PANEL_MIN, Math.min(winW.value - SPL - LESSON_MIN, panelW.value))))      // окно сузили — панель уступает уроку
+const lessonW = computed(() => winW.value - SPL - panelNow.value)
+const simMobile = computed(() => isSplit.value && lessonW.value < 1024)
+const sizeTip = ref(false)
+let tipT = 0
+watch(simMobile, (on) => document.documentElement.classList.toggle('sim-mobile', on), { immediate: true })
+onMounted(() => addEventListener('resize', onWin)); onUnmounted(() => { removeEventListener('resize', onWin); clearTimeout(tipT); document.documentElement.classList.remove('sim-mobile') })
 function dragSplit(e) {
   e.preventDefault(); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'
-  const x0 = e.clientX, w0 = Math.round(e.currentTarget.nextElementSibling?.getBoundingClientRect().width || panelW.value)                    // тянем от того места, где схватили, — перегородка идёт ровно за курсором
-  const move = (ev) => { panelW.value = Math.round(Math.min(window.innerWidth * 0.72, Math.max(340, w0 + x0 - ev.clientX))) }
-  const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); document.body.style.cursor = ''; document.body.style.userSelect = ''; try { localStorage.setItem(PW, String(panelW.value)) } catch { /* приватный режим */ } }
+  const x0 = e.clientX, w0 = Math.round(e.currentTarget.nextElementSibling?.getBoundingClientRect().width || panelNow.value)                    // тянем от того места, где схватили, — перегородка идёт ровно за курсором
+  clearTimeout(tipT); sizeTip.value = true
+  const move = (ev) => { panelW.value = Math.round(Math.min(window.innerWidth - SPL - LESSON_MIN, Math.max(PANEL_MIN, w0 + x0 - ev.clientX))) }
+  const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); document.body.style.cursor = ''; document.body.style.userSelect = ''; tipT = setTimeout(() => { sizeTip.value = false }, 1200); try { localStorage.setItem(PW, String(panelW.value)) } catch { /* приватный режим */ } }
   addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up)      // слушаем всё окно — мышь может уйти с перегородки
 }
 const snap = reactive({})                      // ключ слова → стабильность памяти до урока, дни (null — новое, ещё без ответов)
@@ -376,11 +391,12 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 
     <!-- открытое задание — во весь экран, как в Busuu -->
     <Teleport to="body">
-      <div v-if="open" class="full" :class="{ split: rvChart && steps.length && !of && auth.role === 'teacher' }" :style="{ '--pw': panelW + 'px' }">
+      <div v-if="open" class="full" :class="{ split: rvChart && steps.length && !of && auth.role === 'teacher', simm: simMobile }" :style="{ '--pw': panelNow + 'px' }">
+        <div v-if="isSplit && sizeTip" class="szt" :style="{ right: panelNow + 18 + 'px' }">{{ lessonW }} × {{ winH }}</div>
         <!-- преподаватель: график Review сверху урока — сразу видно, куда ушло слово после ответа (как график колоды в сессии) -->
         <template v-if="steps.length && !of && auth.role === 'teacher'">
           <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
-          <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину" @pointerdown="dragSplit" />
+          <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину урока — до ширины телефона" @pointerdown="dragSplit" />
           <div v-if="rvChart" class="rvd" :class="{ dark: gDark }">
             <div class="dtabs" role="tablist"><label class="gth" title="Тёмная тема панели"><span>Тёмная</span><input v-model="gDark" type="checkbox" role="switch" :aria-checked="gDark" /><i aria-hidden="true" /></label><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
             <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
@@ -538,7 +554,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
   .full.split .spl { order: 2; display: block; flex: none; width: 10px; z-index: 2; cursor: col-resize; background: var(--border); touch-action: none; position: relative }
   .full.split .spl::after { content: ''; position: absolute; left: 3.5px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: #b5bac1 }
   .full.split .spl:hover, .full.split .spl:active { background: #d6ecfb }
-  .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); min-width: 0; max-width: 72vw; max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 0 }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
+  .full.split .rvd { order: 3; flex: 0 0 var(--pw); width: var(--pw); min-width: 0; max-width: calc(100vw - 330px); max-height: none; height: 100%; box-sizing: border-box; border-bottom: 0; padding-top: 0 }      /* ширина — ровно как задана (не сжимается уроком); сверху место под «Сейчас здесь» */
   .full.split .rvd > * { max-width: none } .full.split .dtabs { padding-right: 150px }      /* справа сверху — кнопки «Сейчас здесь» */
 }
 /* вкладки панели — как в DevTools: плоская полоса сверху, активная подчёркнута */
@@ -596,9 +612,18 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .x { position: absolute; left: 18px; top: 18px }
 /* на компьютере меню приложения слева остаётся видно поверх урока — в любой момент можно уйти в другой раздел */
 @media (min-width: 1024px) { .full { z-index: 9; padding-left: 116px } .x { left: 134px } }
-@media (min-width: 1024px) { .rvt { top: auto; right: auto; bottom: 24px; left: 140px } }      /* справа сверху на компьютере — панель «Сейчас здесь» (курсор, чат); кнопка — внизу слева, у «Продолжить» */
+@media (min-width: 1024px) { .rvt { top: auto; right: auto; bottom: 24px; left: 140px } }
+/* урок уже 1024 (перегородку увели влево) — как на телефоне: меню приложения нет, урок во всю свою ширину */
+.full.split.simm { padding-left: 0 } .full.split.simm .x { left: 18px } .full.split.simm .rvt { left: 16px; bottom: 16px }
+/* размер урока, пока тянем перегородку, — как в DevTools */
+.szt { position: absolute; top: 8px; z-index: 5; padding: 3px 8px; border-radius: 6px; background: rgba(32, 33, 36, .88); color: #fff; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none }      /* справа сверху на компьютере — панель «Сейчас здесь» (курсор, чат); кнопка — внизу слева, у «Продолжить» */
 .kr { width: min(360px, 80vw); height: min(360px, 80vw); border-radius: 50%; object-fit: cover; background: #000 }
 .ph { max-width: min(900px, 92vw); max-height: 75vh; border-radius: 14px }
 .bi { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; background: var(--c); color: #fff }
 .bi svg { width: 38px; height: 38px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+</style>
+
+<!-- не scoped: меню приложения (BottomNav) — вне этого компонента; в «телефонной» ширине урока его нет, как на телефоне -->
+<style>
+html.sim-mobile nav.nav { display: none }
 </style>
