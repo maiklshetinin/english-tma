@@ -22,7 +22,7 @@ describe('«Песочница курса»', () => {
     await sw(w, 'Порог чекпоинта').trigger('click')
     expect(w.find('.debt').text()).toContain('чекпоинт ещё не пройден')
     await sw(w, 'по всему курсу').trigger('click')
-    await w.find('#sbx-days').setValue('1')
+    await w.find('#sbx-days').setValue('2')
     const gl = w.find('.gl').text()
     expect(gl).toContain('гл. 1'); expect(gl).toContain('гл. 2')
     expect(w.findAll('.blk.rv').length).toBe(0)
@@ -43,11 +43,49 @@ describe('«Песочница курса»: график и «прилетел�
   it('промотали до суток — слова въезжают в «Повторение», плашка под ползунком; до этого — «ждёт завтра»', async () => {
     const w = mk()
     expect(w.findAll('.cv').length).toBeGreaterThan(0)
-    await w.find('#sbx-days').setValue('0.5')
+    await w.find('#sbx-days').setValue('1.5')
     expect(w.findAll('.wt').length).toBeGreaterThan(0)
-    await w.find('#sbx-days').setValue('1')
+    await w.find('#sbx-days').setValue('2')
     expect(w.find('.arr').text()).toContain('fine')
     expect(w.findAll('.rl li.new').length).toBeGreaterThan(0)
     w.unmount()
+  })
+})
+
+describe('«Песочница курса»: свой курс целиком + машина времени', () => {
+  const COURSE = { title: 'Мой A1', items: [
+    { id: 'u1', type: 'unit', title: 'Глава Еда' },
+    { id: 'l1', type: 'lesson', title: 'Фрукты', steps: [{ id: 'a', kind: 'choice', opts: [{ w: 'apple', t: 'яблоко' }, { w: 'pear', t: 'груша' }], ans: 0 }, { id: 'b', kind: 'pairs', pairs: [{ a: 'milk', b: 'молоко' }, { a: 'bread', b: 'хлеб' }] }] },
+    { id: 'l2', type: 'lesson', title: 'Напитки', steps: [{ id: 'c', kind: 'choice', opts: [{ w: 'tea', t: 'чай' }, { w: 'juice', t: 'сок' }], ans: 0 }] },
+    { id: 'u2', type: 'unit', title: 'Глава Дом' },
+    { id: 'l3', type: 'lesson', title: 'Комнаты', steps: [{ id: 'd', kind: 'choice', opts: [{ w: 'kitchen', t: 'кухня' }, { w: 'room', t: 'комната' }], ans: 0 }, { id: 'e', kind: 'choice', opts: [{ w: 'apple', t: 'яблоко' }, { w: 'tea', t: 'чай' }], ans: 0 }] },
+  ] }
+  it('выбрали курс — все главы и уроки; уроки проходятся по дням; одно слово в двух уроках — одна строка', async () => {
+    localStorage.setItem('tma.courseRail.v1', JSON.stringify(COURSE))
+    const w = mk(); await flushPromises()
+    await w.find('.pk select').setValue('local'); await flushPromises()
+    expect(w.findAll('.chp').length).toBe(2)
+    expect(w.findAll('.ls').length).toBe(3)
+    expect(w.find('.tl label').text()).toContain('1 из 3')               // день 0 — пройден первый урок
+    expect(w.findAll('.ls.later').length).toBe(2)
+    await w.findAll('.tm button')[1].trigger('click'); await w.findAll('.tm button')[1].trigger('click')
+    expect(w.find('.tl label').text()).toContain('3 из 3')
+    const rows = w.findAll('.tr .w').map(x => x.text())
+    expect(rows.filter(t => t.startsWith('apple')).length).toBe(1)
+    expect(rows.find(t => t.startsWith('apple'))).toContain('встреч 2')
+    expect(w.find('.chp .cht small').text()).toBe('пройдена')
+    w.unmount(); localStorage.removeItem('tma.courseRail.v1')
+  })
+  it('быстрые ответы: «все верно» / «очистить»; темп «всё в 1 день» — все уроки сразу', async () => {
+    localStorage.setItem('tma.courseRail.v1', JSON.stringify(COURSE))
+    const w = mk(); await flushPromises()
+    await w.find('.pk select').setValue('local'); await flushPromises()
+    await w.findAll('.qa .qb').find(b => b.text().includes('очистить'))!.trigger('click')
+    expect(w.findAll('.sc .seg2 button.ok').length).toBe(0)
+    await w.findAll('.qa .qb').find(b => b.text().includes('все верно'))!.trigger('click')
+    expect(w.findAll('.sc .seg2 button.ok').length).toBe(5)
+    await w.findAll('.qa .seg2 button').find(b => b.text().includes('всё в 1 день'))!.trigger('click')
+    expect(w.findAll('.ls.later').length).toBe(0)
+    w.unmount(); localStorage.removeItem('tma.courseRail.v1')
   })
 })
