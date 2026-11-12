@@ -51,7 +51,7 @@ async function ping() {
       </router-link>
       <router-link class="it" :to="{ name: 'course-sandbox' }">
         <span class="ic"><AppIcon name="sliders" :size="18" /></span>
-        <span class="tx">Песочница курса<small>Тестовые настройки: чекпоинт, повторение, напоминания</small></span>
+        <span class="tx"><span class="ttl">Песочница курса <em class="tst">ТЕСТ</em></span><small>Тестовые настройки: чекпоинт, повторение, напоминания</small></span>
         <span class="val">›</span>
       </router-link>
     </section>
@@ -87,6 +87,7 @@ async function ping() {
 .ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; color: var(--hint) }      /* значки — просто серые, без цветных квадратиков */
 .tx { flex: 1; display: grid; gap: 1px; min-width: 0; font-size: 16px; font-weight: 600 } .tx small { font-size: 12px; font-weight: 500; color: var(--hint) }
 .val { flex: none; font-size: 15px; font-weight: 500; color: var(--hint) }
+.ttl { display: inline-flex; align-items: center; gap: 6px } .tst { font-style: normal; padding: 1px 6px; border-radius: 6px; background: #ffc800; color: #4b3a00; font-size: 11px; font-weight: 900; letter-spacing: .3px }      /* жёлтый ярлык «ТЕСТ» — как на самой странице песочницы */
 .red .tx { color: var(--red-d); text-align: center }
 .sw { appearance: none; flex: none; width: 46px; height: 28px; margin: 0; border-radius: 14px; background: var(--border); position: relative; cursor: pointer; transition: background .15s }
 .sw::after { content: ''; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s }
