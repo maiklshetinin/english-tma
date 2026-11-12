@@ -129,7 +129,7 @@ const colorOf = (w) => curves.value.find(c => c.ws.includes(w))?.c ?? 'var(--bor
           <input id="how-days" v-model.number="days" type="range" min="0" :max="DAYS_MAX" step="0.25">
           <svg :viewBox="`0 0 ${GW} ${GH}`" role="img" aria-label="Память слов по дням: каждая линия — слово, вертикаль — сейчас, пунктир — порог повторения">
             <line x1="0" :x2="GW" :y1="Y(algo.retention)" :y2="Y(algo.retention)" class="thr" />
-            <text :x="GW - 4" :y="Y(algo.retention) - 4" class="thr-t" text-anchor="end">{{ pct }} % — пора повторить</text>
+            <text :x="GW - 4" :y="Y(algo.retention) - 4" class="thr-t" text-anchor="end">≈{{ pct }} % — пора повторить</text>
             <path v-for="c in curves" :key="c.key" :d="c.d" :stroke="c.c" class="cv" />
             <circle v-for="c in curves" :key="c.key + 'd'" :cx="c.dueX" :cy="Y(algo.retention)" r="3.5" :fill="c.c" />
             <text v-for="c in curves" :key="c.key + 't'" :x="GW - 4" :y="c.endY - 5" class="cl" :fill="c.c" text-anchor="end">{{ c.label }}</text>
@@ -151,7 +151,7 @@ const colorOf = (w) => curves.value.find(c => c.ws.includes(w))?.c ?? 'var(--bor
             </template>
           </div>
         </div>
-        <p class="fn">Считается тем же алгоритмом и с теми же настройками, что у ваших учеников (повторять при {{ pct }} %).</p>
+        <p class="fn">Считается тем же алгоритмом и с теми же настройками, что у ваших учеников (повторять при ≈{{ pct }} %). Срок повтора — в целых днях, как в Anki, поэтому «пора» может наступить при 91 % или 89 %.</p>
       </section>
     </div>
 
@@ -173,7 +173,7 @@ const colorOf = (w) => curves.value.find(c => c.ws.includes(w))?.c ?? 'var(--bor
           <small class="mu">Считается по стабильности, а не по проценту.</small></div>
         <div class="rc rv"><b>4 · Попадает в «Повторение»</b><ul>
           <li>Блок стоит после каждой главы и собирается сам.</li>
-          <li>Берёт слова и упражнения главы, у которых процент упал до {{ pct }} % (настройка в «Алгоритме повторений»).</li>
+          <li>Берёт слова и упражнения главы, у которых подошёл срок повтора — когда память опускается примерно до {{ pct }} % (настройка в «Алгоритме повторений»). Срок считается в целых днях, как в Anki, поэтому в этот день может быть и 91 %, и 89 %.</li>
           <li>Слово показывается экраном того урока, где оно было. За раз — до {{ RV_MAX }} экранов, остальное — в следующий раз.</li>
           <li>Пока всё свежее — «Повторять пока нечего» и когда следующее.</li></ul></div>
         <div class="rc ck"><b>5 · Попадает в чекпоинт</b><ul>
