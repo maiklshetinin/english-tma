@@ -38,3 +38,16 @@ describe('«Песочница курса»', () => {
     w.unmount()
   })
 })
+
+describe('«Песочница курса»: график и «прилетело» — как на «Как работает курс»', () => {
+  it('промотали до суток — слова въезжают в «Повторение», плашка под ползунком; до этого — «ждёт завтра»', async () => {
+    const w = mk()
+    expect(w.findAll('.cv').length).toBeGreaterThan(0)
+    await w.find('#sbx-days').setValue('0.5')
+    expect(w.findAll('.wt').length).toBeGreaterThan(0)
+    await w.find('#sbx-days').setValue('1')
+    expect(w.find('.arr').text()).toContain('fine')
+    expect(w.findAll('.rl li.new').length).toBeGreaterThan(0)
+    w.unmount()
+  })
+})

@@ -61,13 +61,44 @@ function wordsAt(d) {
     for (const s of screensOf(c)) for (const w of s.words) {
       const a = ans[s.id]; if (!a) continue
       const m = memOf(a), ivl = intervalOf(m.s, cfgA.value), t = d + AGE[c.n]
-      out.push({ w, ch: c.n, s, ivl, r: Math.round(recallAt(m.s, t) * 100), due: t >= ivl, left: ivl - t })
+      out.push({ w, ch: c.n, s, st: m.s, err: a === 'bad', ivl, r: Math.round(recallAt(m.s, t) * 100), due: t >= ivl, left: ivl - t, age: AGE[c.n] })
     }
   }
   return out
 }
 const words = computed(() => wordsAt(days.value))
 const due = computed(() => words.value.filter(x => x.due))
+
+// «Прилетело» в «Повторение» — как на «Как работает курс»: подсветка в блоке и плашка под ползунком (2,5 с)
+const arrived = ref([])
+let arrT = 0
+watch(() => due.value.map(x => x.w), (now, was) => {
+  const fresh = now.filter(w => !(was ?? []).includes(w))
+  if (!fresh.length || !was) return
+  arrived.value = fresh; clearTimeout(arrT); arrT = setTimeout(() => { arrived.value = [] }, 2500)
+})
+onUnmounted(() => clearTimeout(arrT))
+
+// График памяти (как на «Как работает курс»): x — дни 0…14 после уроков, y — 50…100 %; одинаковая память — одна кривая с подписью.
+// У главы 1 кривая начинается «вчера» — её слова на день старше.
+const DAYS_MAX = 14, GW = 400, GH = 150
+const X = (d) => d / DAYS_MAX * GW, Y = (r) => GH - 10 - (Math.max(0.5, r) - 0.5) / 0.5 * (GH - 20)
+const curves = computed(() => {
+  const by = new Map()
+  for (const x of words.value) { const k = `${x.st.toFixed(3)}|${x.age}`; if (!by.has(k)) by.set(k, { s: x.st, ivl: x.ivl, age: x.age, err: x.err, ws: [] }); by.get(k).ws.push(x.w) }
+  const out = [...by.values()].map((g, n) => {
+    const at = (d) => recallAt(g.s, d + g.age)
+    let d = `M0 ${Y(at(0)).toFixed(1)}`
+    for (let k = 1; k <= DAYS_MAX * 4; k++) { const t = k / 4; d += ` L${X(t).toFixed(1)} ${Y(at(t)).toFixed(1)}` }
+    const dueT = Math.min(Math.max(g.ivl - g.age, 0), DAYS_MAX)
+    return { key: n, ws: g.ws, d, c: g.err ? '#e5484d' : '#1899d6', dash: g.age ? '5 3' : '', dueX: X(dueT), dueY: Y(at(dueT)), endY: Y(at(DAYS_MAX)),
+      label: `${g.err ? 'ошибка' : 'верно'} · гл. ${g.age ? 1 : 2} · ${g.ws.length} ${wordsN(g.ws.length)}` }
+  })
+  // подписи справа не налезают друг на друга: снизу вверх, не ближе 12 px
+  let floor = GH - 14
+  for (const c of [...out].sort((a, b) => b.endY - a.endY)) { c.labY = Math.min(c.endY - 5, floor); floor = c.labY - 12 }
+  return out
+})
 
 const dayWord = (n) => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? 'дней' : b === 1 ? 'день' : b >= 2 && b <= 4 ? 'дня' : 'дней' }
 const num = (d) => String(+d.toFixed(1)).replace('.', ',')
@@ -93,7 +124,7 @@ const chapters = computed(() => CH.map(c => {
   return { ...c, lessons, locked, ck: ckx.items, res,
     note: c.n === 1 ? 'пройдена вчера' : locked ? 'ученик хочет сюда' : 'ученик сейчас здесь',
     debt: c.n === 1 && cfg.thr && !cfg.strict && !ckx.passed ? (ckx.done ? 'чекпоинт не сдан — пересдать' : 'чекпоинт ещё не пройден') : '',
-    repeat: cdue.length ? `Пора повторить: ${cdue.map(x => x.w).join(', ')}.${c.n === 1 ? ' Ученик уже в главе 2 — этот блок выше, его легко пропустить.' : ''}` : 'Повторять пока нечего — всё свежее. Промотайте время →' }
+    due: cdue, repeat: cdue.length ? `Пора повторить — каждое экраном своего урока:${c.n === 1 ? ' (ученик уже в главе 2 — этот блок выше, его легко пропустить)' : ''}` : 'Повторять пока нечего — всё свежее. Промотайте время →' }
 }))
 
 // ── напоминание в Telegram (нарисованное): каждый вечер в 19:00 — урок был днём, первое 19:00 через 0,25 дня — если есть что повторить ──
@@ -147,7 +178,8 @@ onUnmounted(() => clearTimeout(toastT))
         <div class="ct"><span class="tag">Курс A1</span><b>путь ученика</b></div>
         <div v-if="cfg.global" class="gl">
           <div><b>Повторить сейчас</b><span class="cnt">{{ due.length }}</span></div>
-          <span>{{ due.length ? `Со всего курса: ${due.map(x => `${x.w} (гл. ${x.ch})`).join(', ')}. Ученик видит это сразу, в какой бы главе ни был.` : 'Повторять пока нечего. Промотайте время →' }}</span>
+          <span>{{ due.length ? 'Со всего курса — ученик видит это сразу, в какой бы главе ни был:' : 'Повторять пока нечего. Промотайте время →' }}</span>
+          <TransitionGroup tag="ul" name="fly" class="rl"><li v-for="x in due" :key="x.w" :class="{ new: arrived.includes(x.w) }">{{ x.w }} <small>· гл. {{ x.ch }}</small></li></TransitionGroup>
         </div>
 
         <div v-for="c in chapters" :key="c.n" class="chp">
@@ -171,7 +203,8 @@ onUnmounted(() => clearTimeout(toastT))
                 <span v-for="g in l.summary" :key="g.when"><b :class="g.tomorrow ? 'r' : 'g'">{{ g.when }}:</b> {{ g.words }}</span>
               </div>
             </div>
-            <div v-if="!cfg.global" class="blk rv"><b>Повторение главы</b><span>{{ c.repeat }}</span></div>
+            <div v-if="!cfg.global" class="blk rv" :class="{ on: c.due.length }"><b>Повторение главы</b><span>{{ c.repeat }}</span>
+              <TransitionGroup tag="ul" name="fly" class="rl"><li v-for="x in c.due" :key="x.w" :class="{ new: arrived.includes(x.w) }"><i :class="x.err ? 'e' : ''" />{{ x.w }} <small>· {{ x.s.kind }}</small></li></TransitionGroup></div>
             <div class="blk ckb">
               <b>Чекпоинт · глава {{ c.n }}</b>
               <div v-for="i in c.ck" :key="i.id" class="ci">
@@ -191,14 +224,28 @@ onUnmounted(() => clearTimeout(toastT))
         <b class="h2">Review ученика</b>
         <div class="tl">
           <label for="sbx-days"><span>Прошло после уроков</span><b>{{ dayLabel }}</b></label>
-          <input id="sbx-days" v-model.number="days" type="range" min="0" max="14" step="0.5">
+          <input id="sbx-days" v-model.number="days" type="range" min="0" :max="DAYS_MAX" step="0.25">
+          <svg :viewBox="`0 0 ${GW} ${GH}`" role="img" aria-label="Память слов по дням: каждая линия — группа слов, вертикаль — сейчас, пунктир — порог повторения">
+            <line x1="0" :x2="GW" :y1="Y(algo.retention)" :y2="Y(algo.retention)" class="thr" />
+            <text :x="GW - 4" :y="Y(algo.retention) - 4" class="thr-t" text-anchor="end">≈{{ pctR }} % — пора повторить</text>
+            <path v-for="c in curves" :key="c.key" :d="c.d" :stroke="c.c" :stroke-dasharray="c.dash" class="cv" />
+            <circle v-for="c in curves" :key="c.key + 'd'" :cx="c.dueX" :cy="c.dueY" r="4" :fill="c.c" stroke="#fff" stroke-width="1.5"><title>Срок повтора — здесь слова придут в «Повторение»</title></circle>
+            <text v-for="c in curves" :key="c.key + 't'" :x="GW - 4" :y="c.labY" class="cl" :fill="c.c" text-anchor="end">{{ c.label }}</text>
+            <line :x1="X(days)" :x2="X(days)" y1="0" :y2="GH" class="now" />
+            <text :x="Math.min(X(days) + 4, GW - 44)" y="11" class="now-t">сейчас</text>
+            <text x="2" :y="GH - 1" class="ax">урок гл. 2</text>
+            <text :x="GW - 2" :y="GH - 1" class="ax" text-anchor="end">{{ DAYS_MAX }} дней</text>
+          </svg>
+          <Transition name="pop"><p v-if="arrived.length" class="arr" role="status">↗ В «Повторение»: <b>{{ arrived.join(', ') }}</b> — подошёл срок</p></Transition>
         </div>
         <div class="tb">
           <div class="th"><span>Слово</span><span>Помнит</span><span>Повтор</span></div>
           <div v-for="x in words" :key="x.w" class="tr">
             <span class="w">{{ x.w }} <small>· гл. {{ x.ch }}</small></span>
             <b :class="x.r >= pctR ? 'g' : x.r >= 75 ? 'o' : 'r'">{{ x.r }}%</b>
-            <span :class="{ due: x.due }">{{ x.due ? 'пора' : 'через ' + fmtLeft(x.left) }}</span>
+            <span v-if="x.due" class="due">пора</span>
+            <span v-else-if="x.r < pctR" class="wt" :title="`Память уже ${x.r} %, но повтор не назначается раньше следующего дня: в тот же день он почти не растит память`">через {{ fmtLeft(x.left) }}<em>ждёт завтра</em></span>
+            <span v-else>через {{ fmtLeft(x.left) }}</span>
           </div>
         </div>
         <div v-if="cfg.tg" class="chat">
@@ -267,7 +314,7 @@ h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; fon
 .h2 { font-size: 17px; font-weight: 900 }
 .tl { display: grid; gap: 6px; padding: 10px 12px; border-radius: 14px; background: var(--surface) }
 .tl label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 700 } .tl label b { font-size: 16px; font-weight: 900; color: var(--blue) } .tl input { width: 100%; accent-color: #1899d6 }
-.th, .tr { display: grid; grid-template-columns: minmax(0, 1fr) 54px 96px; gap: 6px; align-items: center; padding: 7px 2px }
+.th, .tr { display: grid; grid-template-columns: minmax(0, 1fr) 54px 104px; gap: 6px; align-items: center; padding: 7px 2px }
 .th { padding-top: 0; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--hint) } .tr { border-top: 1px solid var(--border); font-size: 13.5px }
 .th > :last-child, .tr > :last-child { text-align: right; white-space: nowrap } .w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .w small { color: var(--hint) }
 .g { color: #2e8b00 } .o { color: #c2590a } .r { color: #d92d20 } .due { color: #d92d20; font-weight: 800 } .mu { font-size: 12.5px; font-weight: 600; color: var(--hint) }
@@ -277,6 +324,20 @@ h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; fon
 .msg { align-self: flex-start; max-width: 92%; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 4px 14px 14px 14px; background: #fff; color: #3c3c3c; font-size: 13px; font-weight: 600; line-height: 1.4 }
 .msg small { align-self: flex-end; font-size: 10.5px; color: #8a8a8a }
 .mb { align-self: flex-start; padding: 5px 10px; border: 0; border-radius: 8px; background: #eaf5fd; color: #0b6fa3; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer }
+.tl svg { width: 100%; height: auto; border-radius: 10px; background: var(--card) }
+.thr { stroke: #ff9600; stroke-width: 1.2; stroke-dasharray: 5 4 } .thr-t { font-size: 10px; font-weight: 700; fill: #b45309 }
+.cv { fill: none; stroke-width: 2 } .now { stroke: var(--text); stroke-width: 1.2 } .now-t { font-size: 10px; font-weight: 800; fill: var(--text) } .ax { font-size: 9px; font-weight: 700; fill: var(--hint) } .cl { font-size: 9.5px; font-weight: 800; paint-order: stroke; stroke: var(--card); stroke-width: 3px; stroke-linejoin: round }      /* подложка под подписью — кривая не перечёркивает текст */
+.wt { display: grid; justify-items: end; line-height: 1.2 } .wt em { font-style: normal; font-size: 11px; font-weight: 800; color: #c2590a; cursor: help }
+.rl { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px } .rl li { display: flex; align-items: center; gap: 6px; margin: 0 -4px; padding: 1px 4px; border-radius: 6px; font-weight: 800 } .rl small { font-weight: 600; opacity: .75 }
+.rl i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #1899d6 } .rl i.e { background: #e5484d }
+.gl .rl li.new { animation: glow-d 2.4s ease-out } .blk.rv .rl li.new { animation: glow 2.4s ease-out }
+@keyframes glow { 0%, 40% { background: #e4d8ff } 100% { background: transparent } } @keyframes glow-d { 0%, 40% { background: rgba(255, 255, 255, .3) } 100% { background: transparent } }
+.blk.rv { transition: box-shadow .2s } .blk.rv.on { box-shadow: 0 0 0 2px #a78bfa }
+.arr { margin: 0; padding: 6px 10px; border-radius: 10px; background: #f1ebff; color: #6d28d9; font-size: 13px; font-weight: 700 } .arr b { font-weight: 900 }
+.fly-enter-active { transition: transform .45s cubic-bezier(.2, .9, .3, 1.3), opacity .3s } .fly-enter-from { transform: translateX(60px); opacity: 0 } .fly-leave-active { transition: opacity .2s } .fly-leave-to { opacity: 0 }
+.pop-enter-active, .pop-leave-active { transition: opacity .25s, transform .25s } .pop-enter-from, .pop-leave-to { opacity: 0; transform: translateY(-4px) }
+@media (prefers-reduced-motion: reduce) { .fly-enter-active, .pop-enter-active, .pop-leave-active { transition: none } .rl li.new { animation: none } }
+:global(html[data-theme='dark']) .sbx .arr { background: #2a2340; color: #c4b5fd }
 .fn { margin: 0; padding-top: 6px; border-top: 1px solid var(--border); font-size: 12px; font-weight: 600; line-height: 1.45; color: var(--hint) }
 .tgt { position: fixed; top: 16px; right: 16px; z-index: 400; width: 330px; max-width: calc(100vw - 32px); box-sizing: border-box; display: flex; gap: 10px; padding: 12px 14px; border-radius: 16px; background: #fff; color: #3c3c3c; border: 1px solid #e5e5e5; box-shadow: 0 10px 30px rgba(0, 0, 0, .22); font-family: inherit }
 .tgt .ava { width: 36px; height: 36px; font-size: 15px } .tgt > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; font-weight: 600; line-height: 1.4 }
