@@ -63,9 +63,12 @@ describe('«Песочница курса»: свой курс целиком + 
   it('выбрали курс — все главы и уроки; уроки проходятся по дням; одно слово в двух уроках — одна строка', async () => {
     localStorage.setItem('tma.courseRail.v1', JSON.stringify(COURSE))
     const w = mk(); await flushPromises()
-    await w.find('.pk select').setValue('local'); await flushPromises()
+    await w.findAll('.pks .cc')[1].trigger('click'); await flushPromises()
     expect(w.findAll('.chp').length).toBe(2)
     expect(w.findAll('.ls').length).toBe(3)
+    expect(w.findAll('.pks .cc')[1].classes()).toContain('on')          // карточка своего курса подсвечена, пример — нет
+    expect(w.find('.pks .cc.demo').classes()).not.toContain('on')
+    expect(w.find('.ct .tag').text()).toBe('Мой A1')
     expect(w.find('.tl label').text()).toContain('1 из 3')               // день 0 — пройден первый урок
     expect(w.findAll('.ls.later').length).toBe(2)
     await w.findAll('.tm button')[1].trigger('click'); await w.findAll('.tm button')[1].trigger('click')
@@ -79,7 +82,7 @@ describe('«Песочница курса»: свой курс целиком + 
   it('быстрые ответы: «все верно» / «очистить»; темп «всё в 1 день» — все уроки сразу', async () => {
     localStorage.setItem('tma.courseRail.v1', JSON.stringify(COURSE))
     const w = mk(); await flushPromises()
-    await w.find('.pk select').setValue('local'); await flushPromises()
+    await w.findAll('.pks .cc')[1].trigger('click'); await flushPromises()
     await w.findAll('.qa .qb').find(b => b.text().includes('очистить'))!.trigger('click')
     expect(w.findAll('.sc .seg2 button.ok').length).toBe(0)
     await w.findAll('.qa .qb').find(b => b.text().includes('все верно'))!.trigger('click')

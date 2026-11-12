@@ -7,6 +7,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import BackButton from '../../components/BackButton.vue'
+import AppIcon from '../../components/AppIcon.vue'
 import { rate, recallAt, intervalOf, hitsOf, exName } from '../../utils/review'
 import { INTERACTIVE, stepIssue } from '../../utils/lesson'
 import { algo } from '../../stores/algo'
@@ -57,7 +58,7 @@ const online = !isDemo && !!API && !!fb
 const LOCAL = 'tma.courseRail.v1'
 const list = ref([]), src = ref('demo'), real = ref(null), loading = ref(false), err = ref('')
 onMounted(async () => {
-  if (!online) { try { const d = JSON.parse(localStorage.getItem(LOCAL)); if (d?.items) list.value = [{ id: 'local', title: d.title || 'Мой курс' }] } catch { /* нет курса */ } return }
+  if (!online) { try { const d = JSON.parse(localStorage.getItem(LOCAL)); if (d?.items) list.value = [{ id: 'local', title: d.title || 'Мой курс', count: d.items.length }] } catch { /* нет курса */ } return }
   try { const r = await apiRequest('/courses'); if (r.ok) list.value = (await r.json()).courses ?? [] } catch { /* сеть — останется пример */ }
 })
 const CH = computed(() => number(src.value === 'demo' ? DEMO : real.value ?? []))
@@ -82,6 +83,15 @@ async function pick(id) {
   } catch (e) { err.value = `Не удалось загрузить курс ${e.message}` } finally { loading.value = false }
 }
 Object.assign(ans, DEMO_ANS)
+// подписи карточек — как во вкладке «Курсы»
+const ago = (t) => {
+  if (!t) return ''
+  const m = Math.round((Date.now() - t) / 60000)
+  return m < 1 ? 'только что' : m < 60 ? `${m} мин назад` : m < 1440 ? `${Math.round(m / 60)} ч назад` : new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+}
+const elN = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'элемент' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'элемента' : 'элементов')
+const want = ref('demo')                                     // нажатая карточка (пока курс грузится — уже подсвечена)
+const choose = (id) => { if (loading.value || id === src.value) return; want.value = id; pick(id).then(() => { want.value = src.value }) }
 const setAns = (id, v) => { ans[id] = ans[id] === v ? null : v }
 const setCk = (id, v) => { ck[id] = ck[id] === v ? null : v }
 
@@ -233,6 +243,22 @@ onUnmounted(() => clearTimeout(toastT))
         <small>Какие понравятся — сделаем по-настоящему, и они появятся в настройках курса.</small></div>
     </div>
 
+    <section class="pks" aria-label="Курс для песочницы">
+      <b class="h2">Курс</b>
+      <div class="grid">
+        <button class="cc demo" :class="{ on: want === 'demo' }" :aria-pressed="want === 'demo'" @click="choose('demo')">
+          <span class="ic"><AppIcon name="route" :size="24" /></span>
+          <span class="tx"><b>Пример курса</b><small>вымышленный · 2 главы</small></span>
+          <span class="ex">пример</span>
+        </button>
+        <button v-for="c in list" :key="c.id" class="cc" :class="{ on: want === c.id }" :aria-pressed="want === c.id" @click="choose(c.id)">
+          <span class="ic"><AppIcon name="route" :size="24" /></span>
+          <span class="tx"><b>{{ c.title || 'Без названия' }}</b><small><template v-if="c.count != null">{{ c.count }} {{ elN(c.count) }}</template><template v-if="c.updatedAt"> · изменён {{ ago(c.updatedAt) }}</template></small></span>
+          <span v-if="loading && want === c.id" class="ld">загружаю…</span>
+        </button>
+      </div>
+    </section>
+
     <section class="sets" aria-label="Тестовые настройки">
       <div v-for="s in SETTINGS" :key="s.k" class="set" :class="{ on: cfg[s.k] }">
         <button class="swb" role="switch" :aria-checked="cfg[s.k]" @click="cfg[s.k] = !cfg[s.k]"><i aria-hidden="true" /><b>{{ s.t }}</b></button>
@@ -248,12 +274,7 @@ onUnmounted(() => clearTimeout(toastT))
     <div class="two">
       <section class="box" aria-label="Курс ученика">
         <div class="ct">
-          <label class="pk"><span>Курс</span>
-            <select v-model="src" :disabled="loading" aria-label="Курс для песочницы" @change="pick(src)">
-              <option value="demo">Пример (2 главы)</option>
-              <option v-for="c in list" :key="c.id" :value="c.id">{{ c.title || 'Без названия' }}</option>
-            </select></label>
-          <b>путь ученика</b>
+          <span class="tag">{{ title }}</span><b>путь ученика</b>
         </div>
         <p v-if="loading" class="mu">Загружаю курс…</p>
         <p v-else-if="err" class="mu r">{{ err }}</p>
@@ -389,8 +410,15 @@ h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; fon
 .box { flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--card) }
 .box:first-child { flex-basis: 520px }
 .ct { display: flex; align-items: center; gap: 8px } .ct b { font-size: 17px; font-weight: 900 }
-.pk { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; font-weight: 800; color: var(--hint) }
-.pk select { max-width: 260px; min-width: 0; padding: 5px 8px; border: 1px solid #d8c7ff; border-radius: 9px; background: #f3e8ff; color: #6d28d9; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer }
+.tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 8px; border-radius: 8px; background: #f3e8ff; color: #7c3aed; font-size: 12px; font-weight: 900 }
+/* выбор курса — карточки как во вкладке «Курсы»; пример — пунктиром и с ярлыком «пример» */
+.pks { display: grid; gap: 8px } .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) }
+.cc { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .1s }
+.cc:hover { border-color: var(--blue) } .cc.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) }
+.cc .ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--purple); color: #fff }
+.cc.demo { border-style: dashed } .cc.demo.on { border-style: solid } .cc.demo .ic { background: var(--surface); color: var(--purple); border: 2px dashed var(--purple); box-sizing: border-box }
+.cc .tx { flex: 1; display: grid; min-width: 0 } .cc .tx b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .cc .tx small { font-size: 13px; font-weight: 600; color: var(--hint) }
+.ex { flex: none; padding: 2px 7px; border-radius: 7px; background: #ffc800; color: #4b3a00; font-size: 11px; font-weight: 900 } .ld { flex: none; font-size: 12px; font-weight: 800; color: var(--blue) }
 .ct { flex-wrap: wrap } .qa { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px } .ql { font-size: 12.5px; font-weight: 800; color: var(--hint) }
 .qb { padding: 5px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer } .qb.xs { padding: 3px 8px; font-size: 11.5px }
 .lh { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px } .lh .lt { flex: 1 1 auto; min-width: 0 } .dy { font-size: 11.5px; font-weight: 800; color: var(--hint) }
