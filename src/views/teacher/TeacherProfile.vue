@@ -43,6 +43,14 @@ async function ping() {
       </button>
     </section>
 
+    <section class="grp">
+      <router-link class="it" :to="{ name: 'course-how' }">
+        <span class="ic"><AppIcon name="book" :size="18" /></span>
+        <span class="tx">Как работает курс<small>Куда уходят слова: Review, повторение, чекпоинт</small></span>
+        <span class="val">›</span>
+      </router-link>
+    </section>
+
     <!-- Для разработчика (DEV_IDS): проверка связи с сервером. Обычный преподаватель этого не видит -->
     <template v-if="auth.isDev">
       <h4 class="gh">Для разработчика</h4>
@@ -68,7 +76,7 @@ async function ping() {
 .gh { margin: 10px 16px 2px; font-size: 13px; font-weight: 700; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 /* Группа строк как в Telegram: белая плашка, строки с тонким разделителем от текста (не от края) */
 .grp { overflow: hidden; border-radius: 14px; background: var(--card); border: 1px solid var(--border) }
-.it { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 48px; padding: 8px 16px; border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer }
+.it { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; min-height: 48px; padding: 8px 16px; border: 0; background: none; font: inherit; color: var(--text); text-align: left; text-decoration: none; cursor: pointer }
 .it + .it { background: linear-gradient(var(--border), var(--border)) right top / calc(100% - 60px) 1px no-repeat }      /* разделитель — от текста, как в Telegram */
 .it:hover:not(:disabled) { background: var(--surface) } .it:disabled { cursor: default; opacity: .6 }
 .ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; color: var(--hint) }      /* значки — просто серые, без цветных квадратиков */
