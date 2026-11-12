@@ -66,7 +66,7 @@ async function reset() {
           <template #tabs><div class="vt sm" role="tablist"><button v-for="[k, t, f] in VIEWS" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" :title="f" @click="view = k">{{ t }}</button></div></template>
         </MemoryChart>
         <ReviewChart v-else :items="dict" :cfg="cfgNow" tall @pick="pick">
-          <template #lead><span class="cn"><button v-for="(lv, n) in ['weak', 'medium', 'strong']" :key="lv" :class="[lv, { on: filter === lv, z: !count(lv) }]" :title="filter === lv ? 'Показать все' : 'Показать только эти в списке ниже'" @click="filter = filter === lv ? 'all' : lv"><template v-if="n"> · </template><b>{{ count(lv) }}</b> {{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</button><small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></span></template>
+          <template #lead><span class="cn"><button v-for="(lv, n) in ['weak', 'medium', 'strong']" :key="lv" :class="[lv, { on: filter === lv, z: !count(lv) }]" :title="filter === lv ? 'Показать все' : 'Показать только эти в списке ниже'" @click="filter = filter === lv ? 'all' : lv"><template v-if="n"> · </template><b>{{ count(lv) }}</b> {{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</button><small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync" :title="{ loading: 'Загрузка…', synced: 'Сохранено на сервере', error: 'Не сохранено — повторим' }[review.sync]">{{ { loading: '…', synced: '✓', error: 'не сохранено' }[review.sync] }}</small></span></template>
           <template #tabs><div class="vt sm" role="tablist"><button v-for="[k, t, f] in VIEWS" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" :title="f" @click="view = k">{{ t }}</button></div></template>
         </ReviewChart>
       </template>
@@ -141,8 +141,8 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .cn { display: inline-flex; align-items: baseline; font-size: 12px; font-weight: 700; color: var(--hint); white-space: nowrap }
 .cn button { font: inherit; border: 0; padding: 0; background: none; color: inherit; cursor: pointer; white-space: pre } .cn button:hover, .cn button.on { color: var(--text) } .cn button.on { text-decoration: underline; text-underline-offset: 3px }
 .cn b { font-weight: 900 } .cn .weak b { color: #d92d20 } .cn .medium b { color: #c2590a } .cn .strong b { color: #2e8b00 } .cn .z b { color: inherit }
-.cn .sy { margin-left: 10px; font-size: 11px }
-.vt.sm { flex: none } .vt.sm button { font-size: 11.5px; padding: 3px 7px }
+.cn .sy { margin-left: 6px; font-size: 11px }
+.vt.sm { flex: none } .vt.sm button { font-size: 11.5px; padding: 3px 6px }
 .rbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; font-weight: 700 }
 .rbar select { width: auto; font: inherit; padding: 5px 8px; border-radius: 9px; border: 1.5px solid var(--border); background: var(--card) }
 .sp { flex: 1 }

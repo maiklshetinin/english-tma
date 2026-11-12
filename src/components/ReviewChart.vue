@@ -83,9 +83,10 @@ const pickW = (k) => { emit('pick', k); if (props.dock) sel.value = sel.value ==
 .rc:has(.pch.tall) :deep(.ttl) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0 }      /* фильтр и «N новых без ответа» — одной строкой, как шапка над колодой */
 .rc:has(.pch.tall) .cnt { font-size: 12px; white-space: nowrap; margin-left: -6px }
 /* Review: вся шапка — одна тонкая строка, как над колодой в «Словах»; кнопки мельче, чтобы поместились и вкладки графиков */
-.rc:has(.pch.tall) select { font-size: 11.5px; padding: 2px 4px; border-radius: 6px; max-width: 110px }
-.rc:has(.pch.tall) :deep(.top) { gap: 6px 8px } .rc:has(.pch.tall) :deep(.seg button) { font-size: 11.5px; padding: 3px 7px } .rc:has(.pch.tall) :deep(.vw button) { padding: 3px 6px }
-@media (min-width: 760px) { .rc:has(.pch.tall) :deep(.top), .rc:has(.pch.tall) :deep(.ttl) { flex-wrap: nowrap } .rc:has(.pch.tall) :deep(.ttl) { min-width: 0 } }      /* в Review — как над колодой: отступы сняты, место графику */
+.rc:has(.pch.tall) select { font-size: 11.5px; padding: 2px 2px; border-radius: 6px; max-width: 78px }
+.rc:has(.pch.tall) :deep(.top) { gap: 6px } .rc:has(.pch.tall) :deep(.seg button) { font-size: 11.5px; padding: 3px 6px } .rc:has(.pch.tall) :deep(.vw button) { padding: 3px 6px }
+/* помещается — одна строка; тесно — кнопки переносятся на вторую, за рамку ничего не вылезает (раньше строка не переносилась и распирала график) */
+.rc:has(.pch.tall) :deep(.ttl) { flex: 1 1 auto; min-width: 0 } .rc:has(.pch.tall), .rc:has(.pch.tall) :deep(.pch) { grid-template-columns: minmax(0, 1fr) } .rc:has(.pch.tall) :deep(.top) { min-width: 0 }      /* в Review — как над колодой: отступы сняты, место графику */
 .rc.dock { padding: 12px 14px; border-radius: 8px; box-shadow: none; border: 1px solid var(--border) }      /* в панели «Графики» курса — строже, как остальные графики панели */
 .hb { display: grid; min-width: 0; padding-right: 14px; border-right: 1px solid var(--border) }
 .rc.dock .ttl2 { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap } .rc.dock .cnt { font-size: 11.5px; font-weight: 500; white-space: nowrap }
