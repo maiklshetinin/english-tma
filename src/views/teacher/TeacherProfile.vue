@@ -49,6 +49,11 @@ async function ping() {
         <span class="tx">Как работает курс<small>Куда уходят слова: Review, повторение, чекпоинт</small></span>
         <span class="val">›</span>
       </router-link>
+      <router-link class="it" :to="{ name: 'course-sandbox' }">
+        <span class="ic"><AppIcon name="sliders" :size="18" /></span>
+        <span class="tx">Песочница курса<small>Тестовые настройки: чекпоинт, повторение, напоминания</small></span>
+        <span class="val">›</span>
+      </router-link>
     </section>
 
     <!-- Для разработчика (DEV_IDS): проверка связи с сервером. Обычный преподаватель этого не видит -->

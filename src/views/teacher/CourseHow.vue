@@ -145,6 +145,7 @@ const colorOf = (w) => curves.value.find(c => c.ws.includes(w))?.c ?? 'var(--bor
     <header class="hd">
       <BackButton to="Профиль" @click="router.push({ name: 'profile' })" />
       <div class="hdt"><h1>Как работает курс</h1><p>Куда уходят ответы ученика: Review, «Повторение» и чекпоинт — на примере. Отметьте ответы и промотайте время.</p></div>
+      <router-link class="btn sm ghost tour-btn" :to="{ name: 'course-sandbox' }">Песочница</router-link>
       <button class="btn sm ghost tour-btn" @click="startTour">Обучалка</button>
     </header>
 
