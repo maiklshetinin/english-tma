@@ -2,7 +2,8 @@
 // Кнопка с решёткой над таблицей недели: меню (как в iOS) — рамка, прошедшее время и вид урока (серый / голубой). См. utils/gridStyle.js.
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { gridFrame, setGridFrame, LESSON_STYLES, lessonStyle, setLessonStyle, pastShade, setPastShade } from '../utils/gridStyle'
+import GhostIcon from './GhostIcon.vue'
+import { gridFrame, setGridFrame, LESSON_STYLES, lessonStyle, setLessonStyle, pastShade, setPastShade, GHOST_ICONS, ghostIcon, setGhostIcon } from '../utils/gridStyle'
 const open = ref(null)
 function toggle(e) {
   if (open.value) { open.value = null; return }
@@ -36,6 +37,10 @@ onUnmounted(() => removeEventListener('keydown', onKey))
           <span class="gs-tx"><b>{{ s.title }}</b><small>{{ s.sub }}</small></span>
           <span v-if="lessonStyle === s.id" class="gs-ok"><AppIcon name="check" :size="16" /></span>
         </button>
+        <div class="gs-h sep">Привидение</div>
+        <div class="gh-row" role="radiogroup" aria-label="Значок подсказок следующей недели">
+          <button v-for="g in GHOST_ICONS" :key="g.id" class="gh-it" :class="{ on: ghostIcon === g.id }" role="radio" :aria-checked="ghostIcon === g.id" :title="g.title" @click="setGhostIcon(g.id)"><GhostIcon :variant="g.id" :size="30" /><small>{{ g.title }}</small></button>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -69,6 +74,11 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .ls-pv b { position: absolute; left: 0; right: 0; top: 2px; bottom: 2px; border-radius: 5px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
 .ls-pv.gray b { background: var(--group); box-shadow: 0 1px 3px rgba(0, 0, 0, .14); border-radius: 99px }
 .ls-pv.blue b { background: var(--blue-l); box-shadow: 0 1px 3px rgba(28, 120, 200, .25); border-radius: 99px }
+/* «Привидение» — четыре значка в одну строку; выбранный — синяя рамка */
+.gh-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 4px 10px 10px }
+.gh-it { display: grid; justify-items: center; gap: 3px; padding: 7px 2px 5px; border: 0; border-radius: 12px; background: var(--surface); font: inherit; color: var(--hint); cursor: pointer; --gi-bg: var(--surface) }
+.gh-it small { font-size: 10px; font-weight: 700; white-space: nowrap } .gh-it:hover { background: var(--border) } .gh-it:hover { --gi-bg: var(--border) }
+.gh-it.on { box-shadow: inset 0 0 0 2px var(--blue); background: var(--blue-l); color: var(--blue); --gi-bg: var(--blue-l) }
 /* Переключатель как в Telegram */
 .sw { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 99px; background: var(--border); cursor: pointer; transition: background .15s }
 .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s }

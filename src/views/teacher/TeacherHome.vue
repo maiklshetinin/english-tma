@@ -11,6 +11,8 @@ import { celebrateDone } from '../../composables/useCelebrate'
 import { pushUndo, undo } from '../../composables/useScheduleUndo'
 import { useTelegram } from '../../composables/useTelegram'
 import GridStyleButton from '../../components/GridStyleButton.vue'
+import GhostIcon from '../../components/GhostIcon.vue'
+import { ghostIcon } from '../../utils/gridStyle'
 import WeekGrid from '../../components/WeekGrid.vue'
 import StudentsPanel from '../../components/StudentsPanel.vue'
 import LessonSheet from '../../components/LessonSheet.vue'
@@ -335,7 +337,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="allGhosts.length" class="icon-btn gall gback" :class="{ on: !hiddenGhosts.length }" :aria-pressed="!hiddenGhosts.length"
               :title="hiddenGhosts.length ? `Вернуть подсказки (${hiddenGhosts.length}) — бледные уроки «как на этой неделе»` : `Скрыть подсказки (${allGhosts.length})`" :aria-label="hiddenGhosts.length ? `Вернуть подсказки: ${hiddenGhosts.length}` : `Скрыть подсказки: ${allGhosts.length}`" @click="toggleGhosts">
-              <svg class="ghost-ic" viewBox="0 0 24 24" aria-hidden="true"><path class="gb" d="M12 2.4c-4.4 0-7.2 3.4-7.2 7.7 0 3.4-.5 6.5-1.9 9.4 1.5.4 2.6-.1 3.5-1.2.8 1.3 2.1 2 3.4 1.6.7 1.1 1.6 1.7 2.6 1.7s2-.6 2.6-1.7c1.3.4 2.6-.3 3.4-1.6.9 1.1 2 1.6 3.5 1.2-1.4-2.9-1.9-6-1.9-9.4 0-4.3-2.8-7.7-7.2-7.7z" /><ellipse class="ge" cx="9.6" cy="9.6" rx="1.4" ry="2.1" /><ellipse class="ge" cx="14.4" cy="9.6" rx="1.4" ry="2.1" /></svg><i>{{ hiddenGhosts.length || allGhosts.length }}</i></button>
+              <GhostIcon :variant="ghostIcon" :size="28" /><i>{{ hiddenGhosts.length || allGhosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i>Статус · {{ noStatus.length }}</button>
             <WeekMoney class="money" :m="money" />
             <WeekMoney class="money" :m="monthMoney" :label="monthName" />
@@ -379,9 +381,8 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
 .gall { position: relative; border-color: var(--border); color: var(--blue) }
 /* Кнопка-привидение (подсказки следующей недели): тёмная простыня со светлыми глазами; подсказки видны — голубая подложка; часть убрана — серый счётчик */
-.gback { display: grid; place-items: center } .ghost-ic { width: 28px; height: 28px } .ghost-ic .gb { fill: #5f7c99 } .ghost-ic .ge { fill: var(--card) }
-.gback i { background: var(--hint-2) } .gback.on { background: var(--blue-l); border-color: var(--blue-l) } .gback.on i { background: var(--blue) } .gback.on .ge { fill: var(--blue-l) }
-html[data-theme='dark'] .ghost-ic .gb { fill: #8fa9c3 } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
+.gback { display: grid; place-items: center; --gi-bg: var(--card) }      /* значок — components/GhostIcon.vue, вариант выбирается в меню «Вид сетки» */
+.gback i { background: var(--hint-2) } .gback.on { background: var(--blue-l); border-color: var(--blue-l) } .gback.on i { background: var(--blue) } .gback.on { --gi-bg: var(--blue-l) } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .ask { display: inline-flex; align-items: center; gap: 6px; background: var(--orange-l); color: var(--orange-d) } .ask i { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: #fff; font-style: normal; font-size: 11px; font-weight: 900 }
 .wh b { display: block; font-weight: 800; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
 /* Телефон (вариант «Д»): 1-я строка — ‹, недели (кто здесь и заметки — строкой над страницей, PresenceBar); 2-я — приборы-квадраты: часометр, деньги, отмены, вид сетки;

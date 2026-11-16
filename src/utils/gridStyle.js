@@ -19,6 +19,17 @@ const LS = 'tma.lessonStyle'
 export const lessonStyle = ref((() => { try { return localStorage.getItem(LS) === 'gray' || ['plain', 'tail', 'sticker'].includes(localStorage.getItem(LS)) ? 'gray' : 'blue' } catch { return 'blue' } })())
 export function setLessonStyle(id) { lessonStyle.value = id; try { localStorage.setItem(LS, id) } catch { /* приватный режим */ } }
 
+// Значок кнопки подсказок следующей недели (привидение) — выбор в меню «Вид сетки» → «Привидение» (16.11.2026). Рисует components/GhostIcon.vue
+export const GHOST_ICONS = [
+  { id: 'silhouette', title: 'Силуэт' },
+  { id: 'sheet', title: 'Простыня' },
+  { id: 'flow', title: 'Струящийся' },
+  { id: 'fade', title: 'Тающий' },
+]
+const GI = 'tma.ghostIcon'
+export const ghostIcon = ref((() => { try { const v = localStorage.getItem(GI); return GHOST_ICONS.some(g => g.id === v) ? v : 'silhouette' } catch { return 'silhouette' } })())
+export function setGhostIcon(id) { ghostIcon.value = id; try { localStorage.setItem(GI, id) } catch { /* приватный режим */ } }
+
 // Закрашивать прошедшее время: прошлые часы серые, текущий час заполняется по минутам (в реальном времени)
 const PAST = 'tma.pastShade'
 export const pastShade = ref((() => { try { return localStorage.getItem(PAST) === '1' } catch { return false } })())
