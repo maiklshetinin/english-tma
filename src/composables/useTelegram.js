@@ -23,6 +23,8 @@ export function initTelegram() {
   if (!tg) return
   tg.ready()
   tg.expand()
+  // Свайп вниз больше не сворачивает приложение (Bot API 7.7+): мешал листать таблицу и тянуть уроки. Закрыть — кнопкой «Закрыть» / свайпом по шапке Telegram
+  try { tg.disableVerticalSwipes?.() } catch { /* старый клиент Telegram — свайп останется */ }
   tg.onEvent?.('themeChanged', applyTheme)
 }
 export const useTelegram = () => ({
