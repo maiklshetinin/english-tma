@@ -4,6 +4,7 @@
 // Целимся призраком, а не курсором: цель — то, что под центром призрака (DragGhost). Призрак ученика / группы из панели
 // появляется на месте взятого и сжимается до размера ячейки; урок из таблицы — копия карточки поверх оригинала.
 import { reactive } from 'vue'
+import { hapticOn } from './useTelegram'
 
 const tg = window.Telegram?.WebApp
 // grab — где за карточку взялись: смещение курсора внутри неё и её размер; призрак урока рисуется ровно поверх исходной карточки
@@ -18,7 +19,7 @@ const LONG_PRESS = 220, MOVE_MOUSE = 5, MOVE_TOUCH = 8, EDGE = 48
 
 // Урок вытащили за таблицу (с запасом OUT_PAD вокруг, чтобы не снять случайно, промахнувшись мимо крайней ячейки) — «снять урок»
 const OUT_PAD = 28
-const outOfTable = (x, y) => {
+export const outOfTable = (x, y) => {      // за таблицей (с запасом OUT_PAD) — урок / выделенное «выбрасывается» и удаляется
   const r = document.querySelector('.wk')?.getBoundingClientRect(); if (!r) return false
   return x < r.left - OUT_PAD || x > r.right + OUT_PAD || y < r.top - OUT_PAD || y > r.bottom + OUT_PAD
 }
@@ -55,7 +56,8 @@ function begin() {
   s.started = true
   Object.assign(dnd, { active: true, touch: s.touch, payload: s.payload, x: s.x, y: s.y, grab: s.grab, box: boxOf(s) })
   document.documentElement.classList.add('dragging')
-  tg?.HapticFeedback?.impactOccurred?.('medium'); tg?.disableVerticalSwipes?.()   // чтобы Telegram не закрыл приложение свайпом
+  if (hapticOn.value) tg?.HapticFeedback?.impactOccurred?.('medium')      // вибрацию можно выключить в Профиле
+  tg?.disableVerticalSwipes?.()   // чтобы Telegram не закрыл приложение свайпом
   refresh(); raf = requestAnimationFrame(loop)
 }
 
@@ -64,7 +66,7 @@ function cleanup() {
   removeEventListener('pointermove', onMove); removeEventListener('pointerup', onUp)
   removeEventListener('pointercancel', onCancel); removeEventListener('keydown', onKey)
   document.documentElement.classList.remove('dragging')
-  if (dnd.active) { tg?.enableVerticalSwipes?.(); Object.assign(dnd, { active: false, payload: null, over: null, grab: null, box: null }) }
+  if (dnd.active) Object.assign(dnd, { active: false, payload: null, over: null, grab: null, box: null })      // свайп вниз обратно не включаем: он выключен во всём приложении (useTelegram → initTelegram)
   s = null
 }
 function onMove(e) {

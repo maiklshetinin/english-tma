@@ -3,7 +3,7 @@
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { undo, redo, undoN, redoN, ctrlKey } from '../composables/useScheduleUndo'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
-import { dnd, pressStart } from '../composables/useDnd'
+import { dnd, pressStart, outOfTable } from '../composables/useDnd'
 import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
 import TrialSticker from './TrialSticker.vue'
 import Avatar from './Avatar.vue'
@@ -202,7 +202,11 @@ function maskMove(e) {
   if (!gs) return
   if (!gs.on && Math.hypot(e.clientX - gs.x, e.clientY - gs.y) < 5) return
   gs.on = true
-  const c = gs.c && cellAt(e.clientX, e.clientY); if (!c) return
+  const free = { dx: e.clientX - gs.x, dy: e.clientY - gs.y }
+  if (outOfTable(e.clientX, e.clientY)) { gs.plan = null; gs.out = true; gd.value = { ...free, ok: true, out: true }; return }      // за таблицей — отпустить = удалить
+  gs.out = false
+  const c = gs.c && cellAt(e.clientX, e.clientY)
+  if (!c) { gs.plan = null; gd.value = { ...free, ok: false }; return }      // над шапкой / часами — едут за курсором, сюда нельзя
   gs.plan = planMove(c)
   const same = c.b.left === gs.c.b.left && c.b.top === gs.c.b.top      // на месте — не красим
   gd.value = { dx: c.b.left - gs.c.b.left, dy: c.b.top - gs.c.b.top, ok: same || gs.plan.ok }
@@ -211,7 +215,7 @@ function maskUp(e) {
   removeEventListener('pointermove', maskMove)
   const g = gs; gs = null; gd.value = null
   if (!g) return
-  if (g.on) { if (g.plan?.ok) emit('move-many', g.plan.moves); return }
+  if (g.on) { if (g.out) removeSel(); else if (g.plan?.ok) emit('move-many', g.plan.moves); return }      // выбросили за таблицу — удалить (Ctrl+Z вернёт)
   // просто нажали — как в Figma: выбрать урок под курсором (дважды — открыть), мимо уроков — снять выделение
   const el = [...wk.value.querySelectorAll('[data-pick]')].find(x => { const b = x.getBoundingClientRect(); return e.clientX >= b.left && e.clientX < b.right && e.clientY >= b.top && e.clientY < b.bottom })
   if (!el) { clearSel(); return }
@@ -236,7 +240,7 @@ onUnmounted(() => { removeEventListener('pointermove', maskMove); removeEventLis
 
 <template>
   <div ref="wk" class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]), boxing: !!box, many: sel.length > 1, gdrag: !!gd }]" :style="gd ? { '--gdx': gd.dx + 'px', '--gdy': gd.dy + 'px' } : null" @pointerdown="mqDown" @contextmenu="ctxBg">
-    <div v-if="selRect && !box" class="selbox" :class="{ bad: gd && !gd.ok }" :style="selRect" aria-hidden="true"><b class="selmask" title="Тяните — выделенные уроки поедут вместе. Нажмите — выбрать урок, дважды — открыть" @pointerdown="maskDown" @contextmenu.stop.prevent="maskCtx" /><i /><i /><i /><i /></div>
+    <div v-if="selRect && !box" class="selbox" :class="{ bad: gd && (!gd.ok || gd.out), out: gd?.out }" :style="selRect" aria-hidden="true"><em v-if="gd?.out" class="seldel">Отпустите — удалить</em><b class="selmask" title="Тяните — выделенные уроки поедут вместе. Нажмите — выбрать урок, дважды — открыть" @pointerdown="maskDown" @contextmenu.stop.prevent="maskCtx" /><i /><i /><i /><i /></div>
     <i v-if="box" class="mq" :style="{ left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px' }" aria-hidden="true" />
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
@@ -450,6 +454,9 @@ html[data-theme='dark'] .dsum.shine::after { background: linear-gradient(100deg,
 .selbox { position: absolute; z-index: 7; border: 2px solid #0d99ff; pointer-events: none }
 .selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .06); touch-action: none } .selmask:active { cursor: grabbing }      /* лёгкая голубая маска: за неё тянется всё выделенное */
 .wk.gdrag .selbox, .wk.gdrag .chip.sel:not(.ghost) { transform: translate(var(--gdx), var(--gdy)) } .wk.gdrag .chip.sel:not(.ghost) { z-index: 6; opacity: .85 }      /* едут по клеткам вместе с рамкой */
+.wk.gdrag { overflow: visible }      /* пока тянем — уроки не обрезаются краем таблицы */
+.seldel { position: absolute; left: 50%; top: -30px; translate: -50% 0; padding: 3px 10px; border-radius: 99px; background: var(--red); color: #fff; font-style: normal; font-size: 12px; font-weight: 800; white-space: nowrap }
+.selbox.out { border-style: dashed } .selbox.out i { display: none }
 .selbox.bad, .selbox.bad i { border-color: var(--red) } .selbox.bad .selmask { background: rgba(255, 75, 75, .08); cursor: not-allowed }      /* сюда нельзя — рамка красная */
 .selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: var(--card) }
 .selbox i:nth-of-type(1) { left: -7px; top: -7px } .selbox i:nth-of-type(2) { right: -7px; top: -7px } .selbox i:nth-of-type(3) { left: -7px; bottom: -7px } .selbox i:nth-of-type(4) { right: -7px; bottom: -7px }
