@@ -26,6 +26,9 @@ html[data-theme='dark'] {
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 700 16px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
+/* Место под полосу прокрутки — всегда: страница почти ровно влезает в окно, и когда полоса то появлялась, то пропадала (отметили урок — исчезла кнопка «Статус», закрылось окно урока),
+   ширина прыгала на ~15px — таблица недели сужалась и дёргалась (16.11.2026) */
+html { scrollbar-gutter: stable }
 h1, h2, h3 { font-weight: 800; color: var(--text); }
 :focus, :focus-visible { outline: none; }      /* без синей обводки фокуса во всём приложении */
 /* Фон в точку, как холст в Figma (настройка в меню вида сетки — utils/gridStyle.js): карточки лежат на нём белыми досками */
