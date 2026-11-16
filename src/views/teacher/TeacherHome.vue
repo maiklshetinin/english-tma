@@ -150,6 +150,8 @@ const monthMoney = computed(() => {
   for (const l of scheduleStore.lessons) if (l.date >= monthStart.value && l.date <= monthEnd.value) m.set(l.id, l)
   return sumMoney([...m.values()], studentStore.byId)
 })
+// Доля месяца, которая уже заработана (проведённые уроки от прогноза) — зелёная полоска под суммой месяца
+const monthPct = computed(() => (monthMoney.value.plan ? Math.min(100, Math.round(monthMoney.value.real / monthMoney.value.plan * 100)) : 0))
 function confirmGhost(g, quiet = false) {
   const lesson = scheduleStore.create(g.studentIds, g.date, g.hour)
   if (g.minute) scheduleStore.setDetails(lesson, { minute: g.minute })
@@ -291,7 +293,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i>Статус · {{ noStatus.length }}</button>
             <WeekMoney class="money" :m="money" />
-            <div class="mplan" :title="`План на ${monthName}: проведено ${fmtMoney(monthMoney.real)}, всего с запланированными ${fmtMoney(monthMoney.plan)}`"><b>{{ fmtMoney(monthMoney.plan) }}</b><small>за {{ monthName }}</small></div>
+            <div class="mplan" :title="`Прогноз на ${monthName}: ${fmtMoney(monthMoney.plan)} (все уроки с запланированными). Уже заработано: ${fmtMoney(monthMoney.real)} — ${monthPct}%`"><b>{{ fmtMoney(monthMoney.plan) }}</b><small><em>{{ fmtMoney(monthMoney.real) }}</em> · за {{ monthName }}</small><span class="mbar" aria-hidden="true"><i :style="{ width: monthPct + '%' }" /></span></div>
           </div>
           <WeekGrid class="wgrid" :dates="dates" :ghosts="ghosts" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost"
             :fresh-trial="freshTrial" @trial-edited="freshTrial = null" @trial-save="saveTrial" @trial-remove="removeTrial" />
@@ -318,6 +320,10 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 /* «План на месяц» — в пару к деньгам недели; «авто · до 6 дек» — выключатель автоподстановки расписания (как в iPhone) */
 .mplan { flex: none; display: grid; justify-items: end; padding: 4px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap }
 .wh .mplan b { font-size: 18px; font-weight: 900; color: var(--text) } .mplan small { font-size: 11px; font-weight: 800; color: var(--hint) }
+/* Прогноз месяца крупно; под ним зелёным — уже заработано (проведённые уроки) и полоска: какая доля прогноза уже в кармане */
+.mplan small em { font-style: normal; font-weight: 900; color: var(--green-d) } html[data-theme='dark'] .mplan small em { color: var(--green) }
+.mbar { justify-self: stretch; height: 4px; margin-top: 4px; border-radius: 2px; background: var(--border); overflow: hidden }
+.mbar i { display: block; height: 100%; border-radius: 2px; background: var(--green); transition: width .9s cubic-bezier(.22, 1, .36, 1) }      /* отметили «проведён» — полоска плавно растёт */
 .af-sw { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 9px 0 7px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; line-height: 1.1; white-space: nowrap; cursor: pointer }
 .af-sw i { position: relative; flex: none; width: 30px; height: 18px; border-radius: 99px; background: var(--hint-2); transition: background .15s }
 .af-sw i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s }

@@ -66,8 +66,9 @@ let burstT
 watch(doneBurst, (b) => {
   if (!b || !props.dates.includes(b.date) || reducedMotion()) return
   const l = scheduleStore.lessons.find(x => x.id === b.id)
-  burst.value = { ...b, amount: l ? lessonMoney(l, studentStore.byId).real : 0 }
-  clearTimeout(burstT); burstT = setTimeout(() => { burst.value = null }, 1700)
+  const m = money(b.date)      // последний урок дня закрыт — весь день оплачен: сумма дня зеленеет, подпрыгивает и по ней пробегает блеск
+  burst.value = { ...b, amount: l ? lessonMoney(l, studentStore.byId).real : 0, full: m.plan > 0 && m.real === m.plan }
+  clearTimeout(burstT); burstT = setTimeout(() => { burst.value = null }, 1900)
 })
 const popping = (l) => burst.value?.id === l.id
 // Как в Figma: одно нажатие — выделить урок (синяя рамка), двойное — открыть карточку урока. Enter — открыть выделенный, Esc / нажатие мимо — снять.
@@ -97,7 +98,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
       </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
-        <span :key="burst?.date === d ? burst.t : 0" class="dsum" :class="{ bump: burst?.date === d, ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'"><i class="full">{{ money(d).plan ? fmtMoney(money(d).plan) : 0 }}</i><i class="kk">{{ kShort(money(d).plan) }}</i></span>
+        <span :key="burst?.date === d ? burst.t : 0" class="dsum" :class="{ bump: burst?.date === d && !burst.full, shine: burst?.date === d && burst.full, ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'"><i class="full">{{ money(d).plan ? fmtMoney(money(d).plan) : 0 }}</i><i class="kk">{{ kShort(money(d).plan) }}</i></span>
         <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−<i class="full">{{ fmtMoney(money(d).lost) }}</i><i class="kk">{{ kShort(money(d).lost) }}</i></span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g" :class="{ nowrow: rowNow(h) }">
@@ -277,5 +278,11 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 /* Сумма дня в шапке — короткая зелёная вспышка */
 .dsum.bump { animation: sumBump .9s .25s ease-out both }
 @keyframes sumBump { 0% { transform: scale(1) } 30% { transform: scale(1.25); color: var(--green-d) } 100% { transform: scale(1) } }
-@media (prefers-reduced-motion: reduce) { .chip.pop, .chip.pop::after, .chip.pop .tick, .plus, .dsum.bump { animation: none } }
+/* Последний урок дня закрыт: сумма дня — в зелёной плашке, подпрыгивает, по ней пробегает блеск */
+.dsum.shine { position: relative; overflow: hidden; border-radius: 6px; animation: sumDone 1.4s .25s ease-out both }
+.dsum.shine::after { content: ''; position: absolute; top: 0; bottom: 0; left: -70%; width: 55%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .95), transparent); transform: skewX(-20deg); animation: sumShine .8s .6s ease-in-out both; pointer-events: none }
+@keyframes sumDone { 0% { transform: scale(1); background: transparent; box-shadow: 0 0 0 0 transparent } 22% { transform: scale(1.3); color: var(--green-d); background: var(--green-l); box-shadow: 0 0 0 3px var(--green-l) } 75% { transform: scale(1.1); background: var(--green-l); box-shadow: 0 0 0 3px var(--green-l) } 100% { transform: scale(1); background: transparent; box-shadow: 0 0 0 0 transparent } }
+@keyframes sumShine { from { left: -70% } to { left: 120% } }
+html[data-theme='dark'] .dsum.shine::after { background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .35), transparent) }
+@media (prefers-reduced-motion: reduce) { .chip.pop, .chip.pop::after, .chip.pop .tick, .plus, .dsum.bump, .dsum.shine, .dsum.shine::after { animation: none } }
 </style>
