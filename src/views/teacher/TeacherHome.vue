@@ -50,13 +50,9 @@ const weekMoney = (dates) => moneyOf(scheduleStore.lessons.filter(l => dates.inc
 // Плашка голубая только на этой неделе; нажатие на серую возвращает к текущей. Уроки остальных недель подгружаются (scheduleStore.loadWeek).
 const week = ref(0)
 // Календарь месяца (как в Telegram) — по нажатию на плашку недели: выбрать любую неделю, видно заработок за месяц (components/MonthPicker.vue)
-const picker = ref(null)
-function togglePicker(e) {
-  if (picker.value) { picker.value = null; return }
-  const r = e.currentTarget.getBoundingClientRect()
-  picker.value = { left: Math.max(8, Math.min(r.left, innerWidth - 308)), top: r.bottom + 6 }
-}
-function pickWeek(mon) { week.value = Math.round((Date.parse(mon) - Date.parse(w1.value[0])) / (7 * 864e5)); picker.value = null }
+const picker = ref(false)
+const togglePicker = () => { picker.value = !picker.value }      // попап по центру, с затемнением
+function pickWeek(mon) { week.value = Math.round((Date.parse(mon) - Date.parse(w1.value[0])) / (7 * 864e5)); picker.value = false }
 const shift = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10) }
 const today = computed(() => nowIn(tz.value, nowTick.value).date)
 const monthStart = computed(() => today.value.slice(0, 8) + '01')
@@ -359,7 +355,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
           <div class="wh">
             <BackButton class="wk-back" to="Предыдущая неделя" @click="week--" />
             <button class="wk-now" :class="{ on: week === 0, open: !!picker }" :aria-expanded="!!picker" title="Календарь: выбрать неделю, заработок за месяц" @click="togglePicker"><b>{{ weekName }}</b><small>{{ weekRange(dates) }}</small></button>
-            <MonthPicker v-if="picker" :at="picker" :selected="dates[0]" :this-week="w1[0]" :max-monday="shift(w1[0], 7 * maxWeek)" :today="today" @pick="pickWeek" @close="picker = null" />
+            <MonthPicker v-if="picker" :selected="dates[0]" :this-week="w1[0]" :max-monday="shift(w1[0], 7 * maxWeek)" :today="today" @pick="pickWeek" @close="picker = false" />
             <button class="icon-btn wk-next" :disabled="week >= maxWeek" :title="week >= maxWeek ? 'Дальше пока не планируем' : 'Следующая неделя'" aria-label="Следующая неделя" @click="week++"><AppIcon name="back" :size="20" /></button>
             <WeekLoad class="wload" :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <i class="brk" aria-hidden="true" /><i class="brk b2" aria-hidden="true" />
