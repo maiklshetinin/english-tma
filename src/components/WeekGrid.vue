@@ -3,7 +3,7 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
-import { gridStyle, gridFrame, lessonStyle, pastShade, statusStyle } from '../utils/gridStyle'
+import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
 import TrialSticker from './TrialSticker.vue'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney, lessonMoney } from '../utils/price'
@@ -90,7 +90,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
 </script>
 
 <template>
-  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, `st-${statusStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]) }]">
+  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]) }]">
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
         <span>{{ tzShort(tz) }}</span>
@@ -107,7 +107,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
           <TrialSticker v-if="l.trial" :lesson="l" :auto-edit="freshTrial === l.id" @save="emit('trial-save', l, $event)" @remove="emit('trial-remove', l)" @edited="emit('trial-edited')" />
-          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), need: unknown(l), pop: popping(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
+          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), pop: popping(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
             @pointerdown="down($event, l)" @click.stop="tapLesson(l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
@@ -265,20 +265,6 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (max-width: 420px) { .wk.gs-cells .tm.now { font-size: 9px; letter-spacing: -.3px; justify-items: start; padding-left: 3px } }      /* «13:24» влезает в узкий столбик и не прячется под точкой линии «сейчас» */
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 @media (max-width: 719px) { .min { top: auto; bottom: -5px; right: -4px; transform: none; font-size: 10px; padding: 0 3px } }      /* на телефоне — в правом нижнем углу, чтобы не закрывать кружок */
-/* Статус урока (utils/gridStyle.js → statusStyle, меню «Вид сетки» → «Статус урока») */
-/* Вариант «Цветная капсула»: вся карточка цветная — зелёная (проведён), красная (отмена), оранжевая (урок прошёл, статуса нет) */
-.wk.st-pill .chip.done { background: var(--green-l) }
-.wk.st-pill .chip.canceled { background: var(--red-l) }
-.wk.st-pill .chip.up.need { background: var(--orange-l); box-shadow: none }
-.wk.st-pill .chip.done .nm { color: var(--text); opacity: .85 }
-@media (min-width: 720px) {
-  .wk.st-pill .chip.done, .wk.st-pill .chip.canceled { padding-left: 3px; border-radius: 999px }      /* капсула, как у будущего урока */
-  .wk.st-pill .chip.done :deep(.av), .wk.st-pill .chip.canceled :deep(.av) { width: 34px !important; height: 34px !important; font-size: 15px !important }
-  .wk.st-pill .chip .tick, .wk.st-icon .chip .tick { position: static; margin-left: auto; margin-right: 2px; box-shadow: none; width: 18px; height: 18px }      /* значок — в конце строки */
-  .wk.st-pill .chip .tick svg, .wk.st-icon .chip .tick svg { width: 13px; height: 13px }
-}
-/* Вариант «Значок в конце строки» (вариант 1): подложки нет, значок — справа; имя проведённого — обычным цветом, отменённого — зачёркнуто */
-@media (min-width: 720px) { .wk.st-icon .chip.done .nm { color: var(--text); opacity: .85 } }
 /* «Урок проведён» — маленький праздник: карточка подпрыгивает с зелёной волной, галочка «выстреливает», над уроком всплывает «+сумма» */
 .chip.pop { z-index: 5; animation: chipPop .55s cubic-bezier(.34, 1.56, .64, 1) }
 .chip.pop::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: chipWave .8s ease-out forwards }

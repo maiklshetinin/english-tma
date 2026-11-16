@@ -2,7 +2,7 @@
 // Кнопка с решёткой над таблицей недели: меню (как в iOS) — рамка, прошедшее время и вид урока (серый / голубой). См. utils/gridStyle.js.
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { gridFrame, setGridFrame, LESSON_STYLES, lessonStyle, setLessonStyle, pastShade, setPastShade, STATUS_STYLES, statusStyle, setStatusStyle } from '../utils/gridStyle'
+import { gridFrame, setGridFrame, LESSON_STYLES, lessonStyle, setLessonStyle, pastShade, setPastShade } from '../utils/gridStyle'
 const open = ref(null)
 function toggle(e) {
   if (open.value) { open.value = null; return }
@@ -35,12 +35,6 @@ onUnmounted(() => removeEventListener('keydown', onKey))
           <span class="ls-pv" :class="s.id"><i /><b /></span>
           <span class="gs-tx"><b>{{ s.title }}</b><small>{{ s.sub }}</small></span>
           <span v-if="lessonStyle === s.id" class="gs-ok"><AppIcon name="check" :size="16" /></span>
-        </button>
-        <div class="gs-h sep">Статус урока</div>
-        <button v-for="s in STATUS_STYLES" :key="s.id" class="gs-r" role="menuitemradio" :aria-checked="statusStyle === s.id" @click="setStatusStyle(s.id)">
-          <span class="st-pv" :class="s.id"><i /><b /><em /></span>
-          <span class="gs-tx"><b>{{ s.title }}</b><small>{{ s.sub }}</small></span>
-          <span v-if="statusStyle === s.id" class="gs-ok"><AppIcon name="check" :size="16" /></span>
         </button>
       </div>
     </div>
@@ -75,13 +69,6 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .ls-pv b { position: absolute; left: 0; right: 0; top: 2px; bottom: 2px; border-radius: 5px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
 .ls-pv.gray b { background: var(--group); box-shadow: 0 1px 3px rgba(0, 0, 0, .14); border-radius: 99px }
 .ls-pv.blue b { background: var(--blue-l); box-shadow: 0 1px 3px rgba(28, 120, 200, .25); border-radius: 99px }
-/* Превью статуса: капсула — зелёная плашка с кружком и галочкой справа; значок — кружок, имя и зелёная точка в конце, без подложки */
-.st-pv { flex: none; position: relative; display: flex; align-items: center; width: 38px; height: 20px }
-.st-pv i { position: relative; z-index: 1; width: 16px; height: 16px; border-radius: 50%; background: var(--blue) }
-.st-pv.pill b { position: absolute; left: 0; right: 0; top: 2px; bottom: 2px; border-radius: 99px; background: var(--green-l) }
-.st-pv.pill em { position: absolute; right: 3px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: #1f883d }
-.st-pv.icon b { position: absolute; left: 19px; top: 8px; width: 9px; height: 4px; border-radius: 2px; background: var(--hint-2) }
-.st-pv.icon em { position: absolute; right: 1px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: #1f883d }
 /* Переключатель как в Telegram */
 .sw { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 99px; background: var(--border); cursor: pointer; transition: background .15s }
 .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s }
