@@ -17,6 +17,7 @@ import WeekGrid from '../../components/WeekGrid.vue'
 import StudentsPanel from '../../components/StudentsPanel.vue'
 import LessonSheet from '../../components/LessonSheet.vue'
 import WeekMoney from '../../components/WeekMoney.vue'
+import MonthPicker from '../../components/MonthPicker.vue'
 import WeekLoad from '../../components/WeekLoad.vue'
 import { sumMoney, fmtMoney } from '../../utils/price'
 import { ask } from '../../composables/useDialog'
@@ -48,6 +49,14 @@ const weekMoney = (dates) => moneyOf(scheduleStore.lessons.filter(l => dates.inc
 // в которую попадает последний день текущего месяца (но не меньше чем до следующей); на последней «›» гаснет, но остаётся на месте — шапка не прыгает.
 // Плашка голубая только на этой неделе; нажатие на серую возвращает к текущей. Уроки остальных недель подгружаются (scheduleStore.loadWeek).
 const week = ref(0)
+// Календарь месяца (как в Telegram) — по нажатию на плашку недели: выбрать любую неделю, видно заработок за месяц (components/MonthPicker.vue)
+const picker = ref(null)
+function togglePicker(e) {
+  if (picker.value) { picker.value = null; return }
+  const r = e.currentTarget.getBoundingClientRect()
+  picker.value = { left: Math.max(8, Math.min(r.left, innerWidth - 308)), top: r.bottom + 6 }
+}
+function pickWeek(mon) { week.value = Math.round((Date.parse(mon) - Date.parse(w1.value[0])) / (7 * 864e5)); picker.value = null }
 const shift = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10) }
 const today = computed(() => nowIn(tz.value, nowTick.value).date)
 const monthStart = computed(() => today.value.slice(0, 8) + '01')
@@ -349,7 +358,8 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
         <div class="wcol">
           <div class="wh">
             <BackButton class="wk-back" to="Предыдущая неделя" @click="week--" />
-            <button class="wk-now" :class="{ on: week === 0 }" :title="week === 0 ? 'Эта неделя' : 'Вернуться к этой неделе'" @click="week = 0"><b>{{ weekName }}</b><small>{{ weekRange(dates) }}</small></button>
+            <button class="wk-now" :class="{ on: week === 0, open: !!picker }" :aria-expanded="!!picker" title="Календарь: выбрать неделю, заработок за месяц" @click="togglePicker"><b>{{ weekName }}</b><small>{{ weekRange(dates) }}</small></button>
+            <MonthPicker v-if="picker" :at="picker" :selected="dates[0]" :this-week="w1[0]" :max-monday="shift(w1[0], 7 * maxWeek)" :today="today" @pick="pickWeek" @close="picker = null" />
             <button class="icon-btn wk-next" :disabled="week >= maxWeek" :title="week >= maxWeek ? 'Дальше пока не планируем' : 'Следующая неделя'" aria-label="Следующая неделя" @click="week++"><AppIcon name="back" :size="20" /></button>
             <WeekLoad class="wload" :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <i class="brk" aria-hidden="true" /><i class="brk b2" aria-hidden="true" />
@@ -385,7 +395,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 .wk-next { border-color: var(--border) } .wk-next :deep(svg) { transform: rotate(180deg) }
 .wk-now { flex: none; width: 116px; height: 40px; display: grid; align-content: center; justify-items: center; padding: 0 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.2; white-space: nowrap; cursor: pointer }
 .wk-now b { font-size: 13px; font-weight: 800 } .wk-now small { font-size: 11px; font-weight: 700; color: var(--hint) }
-.wk-now.on { background: var(--blue-l); border-color: var(--blue-l); cursor: default } .wk-now.on b, .wk-now.on small { color: var(--blue) }
+.wk-now.on { background: var(--blue-l); border-color: var(--blue-l) } .wk-now:hover, .wk-now.open { border-color: var(--blue) }      /* нажатие — календарь месяца */ .wk-now.on b, .wk-now.on small { color: var(--blue) }
 /* «авто · до 6 дек» — выключатель автоподстановки расписания (как в iPhone). Деньги недели и месяца — WeekMoney, одинаковые плашки */
 .af-sw { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 9px 0 7px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; line-height: 1.1; white-space: nowrap; cursor: pointer }
 .af-sw i { position: relative; flex: none; width: 30px; height: 18px; border-radius: 99px; background: var(--hint-2); transition: background .15s }
