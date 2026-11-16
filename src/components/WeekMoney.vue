@@ -36,15 +36,16 @@ onUnmounted(() => cancelAnimationFrame(raf))
   </div>
 </template>
 <style scoped>
-.wm { flex: none; display: grid; min-width: 118px; padding: 4px 12px 5px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap }
+/* Зелёный плашек денег — #009300, как на макете (спокойнее, чем салатовый --green); в тёмной теме — светлее, чтобы читался */
+.wm { --mg: #009300; flex: none; display: grid; min-width: 118px; padding: 4px 12px 5px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap }
 .top { justify-self: end; display: flex; align-items: baseline; gap: 5px }
-b { font-size: 18px; font-weight: 900; color: var(--green-d); font-variant-numeric: tabular-nums } small { font-size: 12px; font-weight: 800; color: var(--hint) }
+b { font-size: 18px; font-weight: 900; color: var(--mg); font-variant-numeric: tabular-nums } small { font-size: 12px; font-weight: 800; color: var(--hint) }
 b.up { display: inline-block; transform-origin: right center; animation: wmUp 1s ease-out }
-@keyframes wmUp { 0% { transform: scale(1) } 25% { transform: scale(1.18); text-shadow: 0 0 12px rgba(88, 204, 2, .55) } 100% { transform: scale(1); text-shadow: none } }
+@keyframes wmUp { 0% { transform: scale(1) } 25% { transform: scale(1.18); text-shadow: 0 0 12px rgba(0, 147, 0, .45) } 100% { transform: scale(1); text-shadow: none } }
 .bar { height: 4px; margin: 4px 0 3px; border-radius: 2px; background: var(--border); overflow: hidden }
-.bar i { display: block; height: 100%; border-radius: 2px; background: var(--green); transition: width .9s cubic-bezier(.22, 1, .36, 1) }      /* отметили «проведён» — полоска плавно дорастает */
+.bar i { display: block; height: 100%; border-radius: 2px; background: var(--mg); transition: width .9s cubic-bezier(.22, 1, .36, 1) }      /* отметили «проведён» — полоска плавно дорастает */
 .bot { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 800 }
 .per { color: var(--hint) } .lost { font-style: normal; color: var(--red-d) }
 @media (prefers-reduced-motion: reduce) { b.up { animation: none } .bar i { transition: none } }
-html[data-theme='dark'] b { color: var(--green) } html[data-theme='dark'] .lost { color: var(--red) }
+html[data-theme='dark'] .wm { --mg: #3fb950 } html[data-theme='dark'] .lost { color: var(--red) }
 </style>
