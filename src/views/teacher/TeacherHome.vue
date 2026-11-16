@@ -32,10 +32,13 @@ const { haptic } = useTelegram()
 const w1 = computed(() => (nowTick.value, weekDates(0))), w2 = computed(() => (nowTick.value, weekDates(1)))
 // Деньги недели: факт (проведённые) и план (все уроки) — utils/price.ts; меняются сразу при отметке «проведён»
 // Деньги недели + доля отмен: сколько мест учеников на уроках недели отменено (в группе — по каждому ученику), в процентах
-const moneyOf = (ls) => {      // деньги уроков + доля отмен — одинаково для недели и месяца
+// Деньги уроков + отмены — одинаково для недели и месяца. Процент отмен — от суммы, как в «Информации» (TeacherInfo → lostPct):
+// потеряно / (все уроки + потерянное). off / all — сколько мест учеников отменено (для подсказки).
+const moneyOf = (ls) => {
   let all = 0, off = 0
   for (const l of ls) for (const id of l.studentIds) { all++; if (l.canceled?.[id]) off++ }
-  return { ...sumMoney(ls, studentStore.byId), offPct: all ? Math.round(off / all * 100) : 0, off, all }
+  const m = sumMoney(ls, studentStore.byId), sum = m.plan + m.lost
+  return { ...m, offPct: sum ? Math.round(m.lost / sum * 100) : 0, off, all }
 }
 const weekMoney = (dates) => moneyOf(scheduleStore.lessons.filter(l => dates.includes(l.date)))
 // Одна таблица и одна плашка недели между «‹» и «›»: стрелки листают по неделе. Назад — сколько угодно, вперёд — до недели,

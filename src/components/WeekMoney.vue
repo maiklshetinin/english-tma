@@ -1,7 +1,7 @@
 <script setup>
 // Деньги за период — неделя и месяц выглядят одинаково (16.11.2026, вариант «компактно»): крупно зелёным — заработано (проведённые уроки),
 // рядом «из …» — прогноз (все уроки с запланированными); полоска — какая доля прогноза уже заработана;
-// внизу в одну строку — период слева и отмены справа красным: сколько потеряно и какая это доля мест учеников.
+// внизу в одну строку — период слева и отмены справа красным: сколько потеряно и какая это доля суммы (как в «Информации»).
 // Учитель отметил «Урок проведён» — заработанное плавно досчитывается, мигает зелёным, полоска дорастает (composables/useCelebrate.js).
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { fmtMoney } from '../utils/price'
@@ -29,10 +29,10 @@ watch(() => props.m.real, (to, from) => {
 onUnmounted(() => cancelAnimationFrame(raf))
 </script>
 <template>
-  <div v-if="m.plan || m.lost" class="wm" :title="`${label}: заработано ${fmtMoney(m.real)} из ${fmtMoney(m.plan)} (${pct}%)${m.lost ? `, потеряно из-за отмен ${fmtMoney(m.lost)}` : ''}${m.off ? `, отменено ${m.off} из ${m.all} (${m.offPct}%)` : ''}`">
+  <div v-if="m.plan || m.lost" class="wm" :title="`${label}: заработано ${fmtMoney(m.real)} из ${fmtMoney(m.plan)} (${pct}%)${m.lost ? `, потеряно из-за отмен ${fmtMoney(m.lost)} — ${m.offPct}% от суммы` : ''}${m.off ? `, отменено мест учеников: ${m.off} из ${m.all}` : ''}`">
     <span class="top"><b :key="flash" :class="{ up: flash }">{{ fmtMoney(shown) }}</b><small>из {{ fmtMoney(m.plan) }}</small></span>
     <span class="bar" aria-hidden="true"><i :style="{ width: pct + '%' }" /></span>
-    <span class="bot"><span class="per">{{ label }}</span><em v-if="m.lost || m.off" class="lost">−{{ fmtMoney(m.lost) }}<template v-if="m.off"> · {{ m.offPct }}%</template></em></span>
+    <span class="bot"><span class="per">{{ label }}</span><em v-if="m.lost" class="lost">−{{ fmtMoney(m.lost) }} · {{ m.offPct }}%</em></span>
   </div>
 </template>
 <style scoped>
