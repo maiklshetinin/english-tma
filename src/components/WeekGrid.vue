@@ -171,51 +171,61 @@ const onKey = (e) => {
   else if (e.key === 'Enter' && sel.value.length === 1) { const l = scheduleStore.lessons.find(x => x.id === sel.value[0]); if (l) { e.preventDefault(); sel.value = []; emit('lesson', l) } }
 }
 const closeMenu = () => { menu.value = null }
-// ── Тянуть выделенное за маску (как в конструкторе курсов): все выделенные уроки едут вместе, со сдвигом по дням и часам ──
-// Нельзя: за пределы недели / часов, в прошлое, на занятые невыделенными уроками места — рамка краснеет, уроки возвращаются.
-// Призраки не едут (это подсказки) — переносятся только уроки. Отмена — Ctrl+Z / «Отменить» в тосте.
-const gd = ref(null)      // { dx, dy, ok } — сдвиг в пикселях (по клеткам) и можно ли сюда
-let gs = null
-function cellAt(x, y) {
-  for (const el of wk.value.querySelectorAll('[data-drop="cell"]')) {
-    const b = el.getBoundingClientRect()
-    if (x >= b.left && x < b.right && y >= b.top && y < b.bottom) return { b, date: el.dataset.date, hour: +el.dataset.hour }
-  }
-  return null
-}
-function planMove(c) {
-  const ls = picked().lessons, ids = new Set(ls.map(l => l.id)), D = props.dates
-  const di = D.indexOf(c.date) - D.indexOf(gs.c.date), hi = HOURS.indexOf(c.hour) - HOURS.indexOf(gs.c.hour)
-  const moves = ls.map(l => ({ lesson: l, date: D[D.indexOf(l.date) + di], hour: HOURS[HOURS.indexOf(l.hour) + hi] }))
-  const ok = !!(di || hi) && moves.length > 0 && moves.every(m => m.date && m.hour != null && !slotPast(m.date, m.hour, now.value) && at(m.date, m.hour).every(o => ids.has(o.id)))
-  const k = (m) => D.indexOf(m.date) * 100 + HOURS.indexOf(m.hour)
-  moves.sort((a, b) => (di * 100 + hi > 0 ? k(b) - k(a) : k(a) - k(b)))      // по порядку, чтобы урок не вставал на место, которое ещё не освободилось
-  return { moves, ok }
-}
+// ── Тянуть выделенное за маску (как в конструкторе курсов): всё выделенное едет вместе, со сдвигом по дням и часам ──
+// Уроки переносятся; призрак на новом месте становится настоящим уроком (а подсказка со старого места убирается).
+// Нельзя: за пределы недели / часов, в прошлое, на места, занятые невыделенными уроками — рамка краснеет. За таблицу — удалить.
+// Быстро: клетки меряем один раз в начале, при движении двигаем только картинку (CSS-переменные, раз в кадр) — таблица не перерисовывается.
+const dragging = ref(false)      // один раз в начале и в конце: класс .gdrag (уроки не обрезаются, выделенные едут)
+const gstate = ref('')           // '' | 'bad' | 'out' — меняется только при смене состояния
+let gs = null, graf = 0
 function maskDown(e) {
   if (e.button !== 0) return
   e.preventDefault(); e.stopPropagation(); menu.value = null
-  gs = { x: e.clientX, y: e.clientY, c: cellAt(e.clientX, e.clientY), on: false, plan: null }
+  const cells = [...wk.value.querySelectorAll('[data-drop="cell"]')].map(el => ({ b: el.getBoundingClientRect(), date: el.dataset.date, hour: +el.dataset.hour }))
+  const hit = (x, y) => cells.find(c => x >= c.b.left && x < c.b.right && y >= c.b.top && y < c.b.bottom) ?? null
+  const p = picked()
+  gs = { x: e.clientX, y: e.clientY, hit, c: hit(e.clientX, e.clientY), on: false, plan: null, out: false, ls: p.lessons, gh: p.ghosts, ids: new Set(p.lessons.map(l => l.id)), key: '' }
   addEventListener('pointermove', maskMove); addEventListener('pointerup', maskUp, { once: true })
+}
+function planMove(c) {
+  const D = props.dates, di = D.indexOf(c.date) - D.indexOf(gs.c.date), hi = HOURS.indexOf(c.hour) - HOURS.indexOf(gs.c.hour)
+  const to = (x) => ({ date: D[D.indexOf(x.date) + di], hour: HOURS[HOURS.indexOf(x.hour) + hi] })
+  const moves = gs.ls.map(l => ({ lesson: l, ...to(l) })), ghosts = gs.gh.map(g => ({ ghost: g, ...to(g) }))
+  const free = (m) => m.date && m.hour != null && !slotPast(m.date, m.hour, now.value) && at(m.date, m.hour).every(o => gs.ids.has(o.id))
+  const ok = !!(di || hi) && moves.length + ghosts.length > 0 && moves.every(free) && ghosts.every(free)
+  const k = (m) => D.indexOf(m.date) * 100 + HOURS.indexOf(m.hour)
+  moves.sort((a, b) => (di * 100 + hi > 0 ? k(b) - k(a) : k(a) - k(b)))      // по порядку, чтобы урок не вставал на место, которое ещё не освободилось
+  return { moves, ghosts, ok }
+}
+function setG(dx, dy, st) {
+  const el = wk.value; if (!el) return
+  el.style.setProperty('--gdx', dx + 'px'); el.style.setProperty('--gdy', dy + 'px')
+  if (gstate.value !== st) gstate.value = st
 }
 function maskMove(e) {
   if (!gs) return
   if (!gs.on && Math.hypot(e.clientX - gs.x, e.clientY - gs.y) < 5) return
-  gs.on = true
-  const free = { dx: e.clientX - gs.x, dy: e.clientY - gs.y }
-  if (outOfTable(e.clientX, e.clientY)) { gs.plan = null; gs.out = true; gd.value = { ...free, ok: true, out: true }; return }      // за таблицей — отпустить = удалить
+  if (!gs.on) { gs.on = true; dragging.value = true }
+  gs.ex = e.clientX; gs.ey = e.clientY
+  if (!graf) graf = requestAnimationFrame(frame)
+}
+function frame() {
+  graf = 0; if (!gs) return
+  const x = gs.ex, y = gs.ey, fx = x - gs.x, fy = y - gs.y
+  if (outOfTable(x, y)) { gs.plan = null; gs.out = true; gs.key = ''; return setG(fx, fy, 'out') }      // за таблицей — отпустить = удалить
   gs.out = false
-  const c = gs.c && cellAt(e.clientX, e.clientY)
-  if (!c) { gs.plan = null; gd.value = { ...free, ok: false }; return }      // над шапкой / часами — едут за курсором, сюда нельзя
-  gs.plan = planMove(c)
-  const same = c.b.left === gs.c.b.left && c.b.top === gs.c.b.top      // на месте — не красим
-  gd.value = { dx: c.b.left - gs.c.b.left, dy: c.b.top - gs.c.b.top, ok: same || gs.plan.ok }
+  const c = gs.c && gs.hit(x, y)
+  if (!c) { gs.plan = null; gs.key = ''; return setG(fx, fy, 'bad') }      // над шапкой / часами — едут за курсором, сюда нельзя
+  const key = c.date + '|' + c.hour
+  if (key !== gs.key) { gs.key = key; gs.plan = planMove(c) }      // план пересчитываем только при смене клетки
+  setG(c.b.left - gs.c.b.left, c.b.top - gs.c.b.top, c === gs.c || gs.plan.ok ? '' : 'bad')
 }
 function maskUp(e) {
-  removeEventListener('pointermove', maskMove)
-  const g = gs; gs = null; gd.value = null
+  removeEventListener('pointermove', maskMove); cancelAnimationFrame(graf); graf = 0
+  const g = gs; gs = null; dragging.value = false; gstate.value = ''
+  wk.value?.style.removeProperty('--gdx'); wk.value?.style.removeProperty('--gdy')
   if (!g) return
-  if (g.on) { if (g.out) removeSel(); else if (g.plan?.ok) emit('move-many', g.plan.moves); return }      // выбросили за таблицу — удалить (Ctrl+Z вернёт)
+  if (g.on) { if (g.out) removeSel(); else if (g.plan?.ok) emit('move-many', { moves: g.plan.moves, ghosts: g.plan.ghosts }); return }      // выбросили за таблицу — удалить (Ctrl+Z вернёт)
   // просто нажали — как в Figma: выбрать урок под курсором (дважды — открыть), мимо уроков — снять выделение
   const el = [...wk.value.querySelectorAll('[data-pick]')].find(x => { const b = x.getBoundingClientRect(); return e.clientX >= b.left && e.clientX < b.right && e.clientY >= b.top && e.clientY < b.bottom })
   if (!el) { clearSel(); return }
@@ -235,12 +245,12 @@ function placeSel() {
 watch([sel, () => scheduleStore.lessons.map(l => `${l.id}${l.date}${l.hour}${l.minute ?? ''}`).join(), () => props.ghosts.length], () => nextTick(placeSel))
 onMounted(() => addEventListener('resize', placeSel)); onUnmounted(() => removeEventListener('resize', placeSel))
 onMounted(() => { addEventListener('pointerdown', offChip, true); addEventListener('keydown', onKey); addEventListener('scroll', closeMenu, true); addEventListener('resize', closeMenu) })
-onUnmounted(() => { removeEventListener('pointermove', maskMove); removeEventListener('pointerdown', offChip, true); removeEventListener('keydown', onKey); removeEventListener('scroll', closeMenu, true); removeEventListener('resize', closeMenu); removeEventListener('pointermove', mqMove) })
+onUnmounted(() => { cancelAnimationFrame(graf); removeEventListener('pointermove', maskMove); removeEventListener('pointerdown', offChip, true); removeEventListener('keydown', onKey); removeEventListener('scroll', closeMenu, true); removeEventListener('resize', closeMenu); removeEventListener('pointermove', mqMove) })
 </script>
 
 <template>
-  <div ref="wk" class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]), boxing: !!box, many: sel.length > 1, gdrag: !!gd }]" :style="gd ? { '--gdx': gd.dx + 'px', '--gdy': gd.dy + 'px' } : null" @pointerdown="mqDown" @contextmenu="ctxBg">
-    <div v-if="selRect && !box" class="selbox" :class="{ bad: gd && (!gd.ok || gd.out), out: gd?.out }" :style="selRect" aria-hidden="true"><em v-if="gd?.out" class="seldel">Отпустите — удалить</em><b class="selmask" title="Тяните — выделенные уроки поедут вместе. Нажмите — выбрать урок, дважды — открыть" @pointerdown="maskDown" @contextmenu.stop.prevent="maskCtx" /><i /><i /><i /><i /></div>
+  <div ref="wk" class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]), boxing: !!box, many: sel.length > 1, gdrag: dragging }]" @pointerdown="mqDown" @contextmenu="ctxBg">
+    <div v-if="selRect && !box" class="selbox" :class="{ bad: !!gstate, out: gstate === 'out' }" :style="selRect" aria-hidden="true"><em v-if="gstate === 'out'" class="seldel">Отпустите — удалить</em><b class="selmask" title="Тяните — выделенные уроки поедут вместе. Нажмите — выбрать урок, дважды — открыть" @pointerdown="maskDown" @contextmenu.stop.prevent="maskCtx" /><i /><i /><i /><i /></div>
     <i v-if="box" class="mq" :style="{ left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px' }" aria-hidden="true" />
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
@@ -453,7 +463,8 @@ html[data-theme='dark'] .dsum.shine::after { background: linear-gradient(100deg,
 .mq { position: absolute; z-index: 8; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }      /* как в конструкторе курсов */
 .selbox { position: absolute; z-index: 7; border: 3px solid #0d99ff; pointer-events: none }      /* линия потолще, чем в конструкторе: таблица мельче холста */
 .selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .06); touch-action: none } .selmask:active { cursor: grabbing }      /* лёгкая голубая маска: за неё тянется всё выделенное */
-.wk.gdrag .selbox, .wk.gdrag .chip.sel:not(.ghost) { transform: translate(var(--gdx), var(--gdy)) } .wk.gdrag .chip.sel:not(.ghost) { z-index: 6; opacity: .85 }      /* едут по клеткам вместе с рамкой */
+.wk.gdrag .selbox, .wk.gdrag .chip.sel { transform: translate(var(--gdx, 0), var(--gdy, 0)); will-change: transform } .wk.gdrag .chip.sel { z-index: 6; opacity: .85 }      /* едут по клеткам вместе с рамкой (и призраки) */
+.wk.gdrag .cell.free:hover { background: var(--card) }      /* пока тянем — клетки под курсором не мигают */
 .wk.gdrag { overflow: visible }      /* пока тянем — уроки не обрезаются краем таблицы */
 .seldel { position: absolute; left: 50%; top: -30px; translate: -50% 0; padding: 3px 10px; border-radius: 99px; background: var(--red); color: #fff; font-style: normal; font-size: 12px; font-weight: 800; white-space: nowrap }
 .selbox.out { border-style: dashed } .selbox.out i { display: none }

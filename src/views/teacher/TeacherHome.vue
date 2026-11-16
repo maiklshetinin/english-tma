@@ -234,13 +234,28 @@ function removeMany({ lessons, ghosts }) {
   const text = n && m ? `Удалено: уроков ${n}, подсказок ${m}` : n ? (n > 1 ? `Сняты уроки: ${n}` : `Урок снят: ${names(copies[0])}`) : (m > 1 ? `Подсказки убраны: ${m}` : 'Подсказка убрана')
   showToast(text, () => undo())
 }
-// Перенести выделенные уроки разом (тянули за голубую маску выделения): сдвиг по дням и часам уже проверен в таблице (WeekGrid).
-// Порядок переносов — такой, чтобы урок не вставал на ещё занятое место; отмена — в обратном порядке. Ctrl+Z / «Отменить» в тосте.
-function moveMany(moves) {
+// Перенести выделенное разом (тянули за голубую маску выделения): сдвиг по дням и часам уже проверен в таблице (WeekGrid).
+// Уроки переносятся (порядок — чтобы урок не вставал на ещё занятое место); призрак на новом месте становится уроком, его подсказка убирается.
+// Ctrl+Z / «Отменить» в тосте — всё обратно: созданные из призраков уроки снимаются, подсказки возвращаются, уроки — на прежние места.
+function moveMany({ moves, ghosts = [] }) {
   const was = moves.map(m => ({ lesson: m.lesson, date: m.lesson.date, hour: m.lesson.hour }))
-  const go = (list) => { for (const m of list) scheduleStore.move(m.lesson, m.date, m.hour) }
-  go(moves); pushUndo({ undo: () => go([...was].reverse()), redo: () => go(moves) }); haptic('light')
-  showToast(moves.length > 1 ? `Перенесены уроки: ${moves.length}` : `Урок перенесён: ${names(moves[0].lesson)} · ${fmtSlot(moves[0].date, moves[0].hour)}`, () => undo())
+  let made = []
+  const go = () => {
+    for (const m of moves) scheduleStore.move(m.lesson, m.date, m.hour)
+    made = ghosts.map(({ ghost: g, date, hour }) => {
+      const l = scheduleStore.create(g.studentIds, date, hour)
+      if (g.minute) scheduleStore.setDetails(l, { minute: g.minute })
+      setSkip(g, true); return l
+    })
+  }
+  const back = () => {
+    for (const l of made) if (scheduleStore.lessons.includes(l) && !l.done) scheduleStore.remove(l)
+    for (const { ghost: g } of ghosts) setSkip(g, false)
+    for (const m of [...was].reverse()) scheduleStore.move(m.lesson, m.date, m.hour)
+  }
+  go(); pushUndo({ undo: back, redo: go }); haptic('light')
+  const n = moves.length + ghosts.length, one = moves[0] ?? ghosts[0]
+  showToast(n > 1 ? `Перенесено: ${n}` : `${moves.length ? 'Урок перенесён' : 'Урок поставлен'}: ${names(one.lesson ?? one.ghost)} · ${fmtSlot(one.date, one.hour)}`, () => undo())
 }
 // Состав урока (группа): добавить / убрать учеников. Тост с «Отменить» возвращает прежний состав.
 function setStudents(lesson, ids) {
