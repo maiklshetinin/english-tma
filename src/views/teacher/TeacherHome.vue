@@ -221,6 +221,14 @@ function removeMany({ lessons, ghosts }) {
   const text = n && m ? `Удалено: уроков ${n}, подсказок ${m}` : n ? (n > 1 ? `Сняты уроки: ${n}` : `Урок снят: ${names(copies[0])}`) : (m > 1 ? `Подсказки убраны: ${m}` : 'Подсказка убрана')
   showToast(text, () => undo())
 }
+// Перенести выделенные уроки разом (тянули за голубую маску выделения): сдвиг по дням и часам уже проверен в таблице (WeekGrid).
+// Порядок переносов — такой, чтобы урок не вставал на ещё занятое место; отмена — в обратном порядке. Ctrl+Z / «Отменить» в тосте.
+function moveMany(moves) {
+  const was = moves.map(m => ({ lesson: m.lesson, date: m.lesson.date, hour: m.lesson.hour }))
+  const go = (list) => { for (const m of list) scheduleStore.move(m.lesson, m.date, m.hour) }
+  go(moves); pushUndo({ undo: () => go([...was].reverse()), redo: () => go(moves) }); haptic('light')
+  showToast(moves.length > 1 ? `Перенесены уроки: ${moves.length}` : `Урок перенесён: ${names(moves[0].lesson)} · ${fmtSlot(moves[0].date, moves[0].hour)}`, () => undo())
+}
 // Состав урока (группа): добавить / убрать учеников. Тост с «Отменить» возвращает прежний состав.
 function setStudents(lesson, ids) {
   if (lesson.done) return showToast('Урок проведён — сначала снимите отметку', null, 'bad')
@@ -318,7 +326,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <WeekMoney class="money" :m="money" />
             <WeekMoney class="money" :m="monthMoney" :label="monthName" />
           </div>
-          <WeekGrid class="wgrid" :dates="dates" :ghosts="ghosts" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" @remove-many="removeMany"
+          <WeekGrid class="wgrid" :dates="dates" :ghosts="ghosts" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" @remove-many="removeMany" @move-many="moveMany"
             :fresh-trial="freshTrial" @trial-edited="freshTrial = null" @trial-save="saveTrial" @trial-remove="removeTrial" />
         </div>
       </div>
