@@ -196,6 +196,24 @@ function unassign(lesson) {
   scheduleStore.remove(lesson); sheet.value = null; haptic('light')
   showToast(`Урок снят: ${names(copy)}`, () => scheduleStore.create(copy.studentIds, copy.date, copy.hour))
 }
+// Удалить выделенное в таблице (выделение рамкой / Shift, как в Figma): запланированные уроки снимаются, призраки убираются.
+// «Отменить» в тосте возвращает всё: уроки — на те же места, с минутами и заметкой.
+function removeMany({ lessons, ghosts }) {
+  const copies = lessons.filter(l => !l.done).map(l => ({ studentIds: [...l.studentIds], date: l.date, hour: l.hour, minute: l.minute, note: l.note }))
+  for (const l of lessons) if (!l.done) scheduleStore.remove(l)
+  for (const g of ghosts) setSkip(g, true)
+  haptic('light')
+  const n = copies.length, m = ghosts.length
+  const text = n && m ? `Удалено: уроков ${n}, подсказок ${m}` : n ? (n > 1 ? `Сняты уроки: ${n}` : `Урок снят: ${names(copies[0])}`) : (m > 1 ? `Подсказки убраны: ${m}` : 'Подсказка убрана')
+  showToast(text, () => {
+    for (const c of copies) {
+      if (occupant(c.date, c.hour)) continue      // место уже заняли — туда не возвращаем
+      const l = scheduleStore.create(c.studentIds, c.date, c.hour)
+      if (c.minute || c.note) scheduleStore.setDetails(l, { ...(c.minute ? { minute: c.minute } : {}), ...(c.note ? { note: c.note } : {}) })
+    }
+    for (const g of ghosts) setSkip(g, false)
+  })
+}
 // Состав урока (группа): добавить / убрать учеников. Тост с «Отменить» возвращает прежний состав.
 function setStudents(lesson, ids) {
   if (lesson.done) return showToast('Урок проведён — сначала снимите отметку', null, 'bad')
@@ -293,7 +311,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <WeekMoney class="money" :m="money" />
             <WeekMoney class="money" :m="monthMoney" :label="monthName" />
           </div>
-          <WeekGrid class="wgrid" :dates="dates" :ghosts="ghosts" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost"
+          <WeekGrid class="wgrid" :dates="dates" :ghosts="ghosts" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" @remove-many="removeMany"
             :fresh-trial="freshTrial" @trial-edited="freshTrial = null" @trial-save="saveTrial" @trial-remove="removeTrial" />
         </div>
       </div>

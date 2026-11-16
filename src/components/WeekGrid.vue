@@ -1,6 +1,7 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import AppIcon from './AppIcon.vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
@@ -17,7 +18,7 @@ const studentStore = useStudentsStore()
 const scheduleStore = useScheduleStore()
 // freshTrial — id только что приклеенного стикера: он сразу открывается для текста
 const props = defineProps({ dates: { type: Array, required: true }, ghosts: { type: Array, default: () => [] }, freshTrial: { type: String, default: null } })
-const emit = defineEmits(['cell', 'lesson', 'ghost', 'ghost-skip', 'trial-save', 'trial-remove', 'trial-edited'])
+const emit = defineEmits(['cell', 'lesson', 'ghost', 'ghost-skip', 'remove-many', 'trial-save', 'trial-remove', 'trial-edited'])
 // «Призраки» на следующей неделе — уроки этой недели в тех же днях и часах, пока не подтверждены (в базе их нет)
 const ghostMap = computed(() => new Map(props.ghosts.map(g => [slotKey(g.date, g.hour), g])))
 const ghostAt = (d, h) => (at(d, h).length ? null : ghostMap.value.get(slotKey(d, h)))
@@ -57,7 +58,7 @@ const down = (e, l) => { if (!l.done && !allOff(l) && !orphan(l)) pressStart(e, 
 // Подпись урока: ученик или участники группы; у «пустого» урока — подсказка, что его ученика больше нет
 const first = (l) => group(l)[0]
 const label = (l) => allOff(l) ? `Отменил ученик: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour, l.minute)} — без оплаты` : orphan(l) ? (goneName(l) ? `${goneName(l)} (удалён), ${hh(l.hour, l.minute)}` : `Урок без ученика (удалён или в архиве), ${hh(l.hour, l.minute)} — нажмите, чтобы убрать`) : isGroup(l) ? `Группа: ${group(l).map(s => s.name).join(', ')}, ${hh(l.hour, l.minute)}` : `${first(l).name}, ${hh(l.hour, l.minute)}`
-const clickCell = (d, h) => { sel.value = null; if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
+const clickCell = (d, h) => { if (skipClick) { skipClick = false; return } clearSel(); if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 // Урок закончился, а статуса нет — оранжевый «?» в углу (stores/schedule → needsStatus)
 const unknown = (l) => !orphan(l) && needsStatus(l, now.value)
 // «Урок проведён»: карточка подпрыгивает, над ней всплывает «+сумма», сумма дня мигает зелёным (composables/useCelebrate.js)
@@ -71,27 +72,105 @@ watch(doneBurst, (b) => {
   clearTimeout(burstT); burstT = setTimeout(() => { burst.value = null }, 1900)
 })
 const popping = (l) => burst.value?.id === l.id
-// Как в Figma: одно нажатие — выделить урок (синяя рамка), двойное — открыть карточку урока. Enter — открыть выделенный, Esc / нажатие мимо — снять.
-const sel = ref(null)
+// Как в Figma: выделение (16.11.2026). Выделяются только запланированные уроки (голубые) и призраки — их можно разом удалить.
+// Нажатие — выделить урок (синяя рамка), двойное — открыть карточку. Shift / Ctrl / ⌘ + нажатие — добавить или убрать из выделения.
+// Мышью от пустого места — тянется рамка, всё, что она задела, выделяется (с Shift / Ctrl / ⌘ — добавляется к выделенному).
+// Delete / Backspace — удалить выделенное (уроки сняты, призраки убраны; в тосте «Отменить»). Правая кнопка — меню. Enter — открыть, Esc — снять.
+const sel = ref([])      // id уроков и 'g:<ключ>' призраков
+const selSet = computed(() => new Set(sel.value))
+const pickable = (l) => !l.trial && !l.done && !allOff(l) && !orphan(l)      // запланированный: проведённые, отменённые, «пустые» и стикеры не выделяются
+const gk = (g) => 'g:' + g.key
+const isSel = (l) => selSet.value.has(l.id)
+const isSelG = (g) => selSet.value.has(gk(g))
+const clearSel = () => { if (sel.value.length) sel.value = [] }
+const toggle = (k) => { sel.value = selSet.value.has(k) ? sel.value.filter(x => x !== k) : [...sel.value, k] }
+const multi = (e) => e && (e.shiftKey || e.ctrlKey || e.metaKey)
+watch(() => props.dates.join(), () => { clearSel(); menu.value = null })      // другая неделя — выделение снимаем
+// Что выделено сейчас (уроки могли удалить или отметить проведёнными — такие отпадают)
+function picked() {
+  const ls = scheduleStore.lessons.filter(l => selSet.value.has(l.id) && pickable(l))
+  const gs = props.ghosts.filter(g => selSet.value.has(gk(g)))
+  return { lessons: ls, ghosts: gs }
+}
+function removeSel() {
+  const p = picked(); menu.value = null
+  if (!p.lessons.length && !p.ghosts.length) return
+  sel.value = []; emit('remove-many', p)
+}
 let last = { id: null, t: 0 }
-function tapLesson(l) {
+function tapLesson(l, e) {
   if (orphan(l)) { emit('lesson', l); return }      // «пустой» урок — сразу открыть, чтобы убрать
+  if (multi(e)) { if (pickable(l)) toggle(l.id); return }
   const t = Date.now()
-  if (last.id === l.id && t - last.t < 450) { last = { id: null, t: 0 }; emit('lesson', l); return }
-  last = { id: l.id, t }; sel.value = l.id
+  if (last.id === l.id && t - last.t < 450) { last = { id: null, t: 0 }; clearSel(); emit('lesson', l); return }
+  last = { id: l.id, t }; sel.value = pickable(l) ? [l.id] : []
 }
-const offChip = (e) => { if (sel.value && !e.target.closest?.('.chip')) sel.value = null }
+// Призрак: обычное нажатие — как раньше, поставить урок; с Shift / Ctrl / ⌘ — выделить
+function tapGhost(g, e) { if (multi(e)) { toggle(gk(g)); return } clearSel(); emit('ghost', g) }
+// ── Рамка выделения (только мышь: на телефоне палец листает страницу) ──
+const wk = ref(null)
+const box = ref(null)      // { x, y, w, h } — в координатах таблицы
+let mq = null, skipClick = false
+function mqDown(e) {
+  if (e.pointerType !== 'mouse' || e.button !== 0 || dnd.active) return
+  if (e.target.closest?.('.chip, .corner, .gx, button, select, input, textarea, [contenteditable]')) return
+  const cell = e.target.closest?.('.cell'); if (cell && !cell.classList.contains('free')) return      // со стикера / из занятой ячейки рамку не тянем
+  e.preventDefault()      // не выделять текст при протягивании
+  mq = { x: e.clientX, y: e.clientY, base: multi(e) ? [...sel.value] : [], on: false }
+  addEventListener('pointermove', mqMove); addEventListener('pointerup', mqUp, { once: true })
+}
+function mqMove(e) {
+  if (!mq) return
+  if (!mq.on && Math.hypot(e.clientX - mq.x, e.clientY - mq.y) < 5) return
+  mq.on = true; e.preventDefault()
+  const r = wk.value.getBoundingClientRect()
+  const x1 = Math.min(mq.x, e.clientX), x2 = Math.max(mq.x, e.clientX), y1 = Math.min(mq.y, e.clientY), y2 = Math.max(mq.y, e.clientY)
+  box.value = { x: x1 - r.left, y: y1 - r.top, w: x2 - x1, h: y2 - y1 }
+  const hit = []
+  for (const el of wk.value.querySelectorAll('[data-pick]')) {
+    const b = el.getBoundingClientRect()
+    if (b.right > x1 && b.left < x2 && b.bottom > y1 && b.top < y2) hit.push(el.dataset.pick)
+  }
+  sel.value = [...new Set([...mq.base, ...hit])]
+}
+function mqUp() {
+  removeEventListener('pointermove', mqMove)
+  if (mq?.on) { skipClick = true; setTimeout(() => { skipClick = false }, 0) }      // отпустили над ячейкой — не создавать урок
+  mq = null; box.value = null
+}
+// ── Контекстное меню (правая кнопка) ──
+const menu = ref(null)      // { x, y, lesson?, ghost? }
+function ctx(e, l, g) {
+  if (e.pointerType === 'touch') return
+  e.preventDefault()
+  const k = l ? (pickable(l) ? l.id : null) : gk(g)
+  if (k && !selSet.value.has(k)) sel.value = [k]
+  if (!k && l) sel.value = []
+  menu.value = { x: Math.min(e.clientX, innerWidth - 230), y: Math.min(e.clientY, innerHeight - 170), lesson: l, ghost: g }
+}
+function ctxBg(e) { if (sel.value.length) { e.preventDefault(); menu.value = { x: Math.min(e.clientX, innerWidth - 230), y: Math.min(e.clientY, innerHeight - 170) } } }
+const selCount = computed(() => { const p = picked(); return p.lessons.length + p.ghosts.length })
+const delLabel = computed(() => { const p = picked(); return p.lessons.length && p.ghosts.length ? `Удалить: ${selCount.value}` : p.ghosts.length ? (p.ghosts.length > 1 ? `Убрать подсказки: ${p.ghosts.length}` : 'Убрать подсказку') : (p.lessons.length > 1 ? `Удалить уроки: ${p.lessons.length}` : 'Удалить урок') })
+const menuOpen = () => { const m = menu.value; menu.value = null; clearSel(); if (m?.ghost) emit('ghost', m.ghost); else if (m?.lesson) emit('lesson', m.lesson) }
+const offChip = (e) => {
+  if (menu.value && !e.target.closest?.('.ctx')) menu.value = null
+  if (sel.value.length && !multi(e) && e.button !== 2 && !e.target.closest?.('.chip, .ctx')) sel.value = []      // правая кнопка — выделение остаётся (для меню)
+}
 const onKey = (e) => {
-  if (!sel.value) return
-  if (e.key === 'Escape') sel.value = null
-  else if (e.key === 'Enter' && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { const l = scheduleStore.lessons.find(x => x.id === sel.value); if (l) { e.preventDefault(); emit('lesson', l) } }
+  if (menu.value && e.key === 'Escape') { menu.value = null; return }
+  if (!sel.value.length || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return
+  if (e.key === 'Escape') sel.value = []
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeSel() }
+  else if (e.key === 'Enter' && sel.value.length === 1) { const l = scheduleStore.lessons.find(x => x.id === sel.value[0]); if (l) { e.preventDefault(); sel.value = []; emit('lesson', l) } }
 }
-onMounted(() => { addEventListener('pointerdown', offChip, true); addEventListener('keydown', onKey) })
-onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEventListener('keydown', onKey) })
+const closeMenu = () => { menu.value = null }
+onMounted(() => { addEventListener('pointerdown', offChip, true); addEventListener('keydown', onKey); addEventListener('scroll', closeMenu, true); addEventListener('resize', closeMenu) })
+onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEventListener('keydown', onKey); removeEventListener('scroll', closeMenu, true); removeEventListener('resize', closeMenu); removeEventListener('pointermove', mqMove) })
 </script>
 
 <template>
-  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]) }]">
+  <div ref="wk" class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]), boxing: !!box }]" @pointerdown="mqDown" @contextmenu="ctxBg">
+    <i v-if="box" class="mq" :style="{ left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px' }" aria-hidden="true" />
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
         <span>{{ tzShort(tz) }}</span>
@@ -108,8 +187,8 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
           <TrialSticker v-if="l.trial" :lesson="l" :auto-edit="freshTrial === l.id" @save="emit('trial-save', l, $event)" @remove="emit('trial-remove', l)" @edited="emit('trial-edited')" />
-          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), pop: popping(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
-            @pointerdown="down($event, l)" @click.stop="tapLesson(l)" @dragstart.prevent>
+          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), pop: popping(l), up: !l.done && !allOff(l) && !orphan(l), sel: isSel(l) }" :data-pick="pickable(l) ? l.id : null" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="isSel(l)"
+            @pointerdown="down($event, l)" @click.stop="tapLesson(l, $event)" @contextmenu.stop="ctx($event, l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
               <span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span>
@@ -125,7 +204,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
           </button>
         </template>
         <!-- Призрак: бледный урок с прошлой недели. Нажать — урок создан; × — убрать подсказку -->
-        <button v-for="g in [ghostAt(d, h)].filter(Boolean)" :key="g.key" class="chip ghost up" :class="{ hasmin: g.minute, group: ghostStu(g).length > 1 }" :title="`Как на этой неделе: ${ghostStu(g).map(s => s.name).join(', ')} — нажмите, чтобы поставить урок`" @click.stop="emit('ghost', g)">
+        <button v-for="g in [ghostAt(d, h)].filter(Boolean)" :key="g.key" class="chip ghost up" :class="{ hasmin: g.minute, group: ghostStu(g).length > 1, sel: isSelG(g) }" :data-pick="gk(g)" :title="`Как на этой неделе: ${ghostStu(g).map(s => s.name).join(', ')} — нажмите, чтобы поставить урок`" @click.stop="tapGhost(g, $event)" @contextmenu.stop="ctx($event, null, g)">
           <AvatarStack v-if="ghostStu(g).length > 1" class="st-lg" :students="ghostStu(g)" :size="39" :max="3" ring="var(--card)" /><AvatarStack v-if="ghostStu(g).length > 1" class="st-sm" :students="ghostStu(g)" :size="26" :max="2" ring="var(--card)" />
           <template v-else><Avatar :s="ghostStu(g)[0]" :size="39" /><span class="nm">{{ ghostStu(g)[0].name }}</span></template>
           <i v-if="g.minute" class="min">:{{ String(g.minute).padStart(2, '0') }}</i>
@@ -133,6 +212,15 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         </button>
       </div>
     </div>
+    <Teleport to="body">
+      <div v-if="menu" class="ctx" role="menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @contextmenu.prevent>
+        <button v-if="menu.ghost && selCount <= 1" role="menuitem" @click="menuOpen"><AppIcon name="plus" :size="16" />Поставить урок</button>
+        <button v-else-if="menu.lesson && selCount <= 1" role="menuitem" @click="menuOpen"><AppIcon name="pencil" :size="16" />Открыть урок</button>
+        <button v-if="selCount" role="menuitem" class="danger" @click="removeSel"><AppIcon name="trash" :size="16" />{{ delLabel }}<kbd>Del</kbd></button>
+        <button v-if="selCount" role="menuitem" @click="menu = null; sel = []"><AppIcon name="x" :size="16" />Снять выделение<kbd>Esc</kbd></button>
+        <p v-if="!selCount && menu.lesson" class="ctx-n">{{ menu.lesson.done ? 'Проведённый урок не удаляется' : 'Этот урок не удаляется отсюда' }}</p>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -285,4 +373,18 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @keyframes sumShine { from { left: -70% } to { left: 120% } }
 html[data-theme='dark'] .dsum.shine::after { background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .35), transparent) }
 @media (prefers-reduced-motion: reduce) { .chip.pop, .chip.pop::after, .chip.pop .tick, .plus, .dsum.bump, .dsum.shine, .dsum.shine::after { animation: none } }
+/* Выделение как в Figma: синяя рамка у выделенных (и у призраков — они при этом ярче), голубая рамка-область при протягивании мышью */
+.wk { position: relative }
+.wk.boxing { user-select: none; -webkit-user-select: none } .wk.boxing .cell.free:hover { background: var(--card) }
+.mq { position: absolute; z-index: 8; border: 1px solid #0d99ff; background: rgba(13, 153, 255, .1); pointer-events: none }
+.chip.ghost.sel { opacity: .85 }
+</style>
+<style>
+/* Контекстное меню таблицы — в body (Teleport), поэтому без scoped */
+.ctx { position: fixed; z-index: 70; min-width: 220px; display: grid; padding: 4px; border-radius: 12px; background: var(--card); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 0 0 1px rgba(0, 0, 0, .05); animation: ctxIn .12s ease-out; transform-origin: top left }
+@keyframes ctxIn { from { opacity: 0; transform: scale(.95) } }
+.ctx button { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; font-size: 14px; font-weight: 700; text-align: left; cursor: pointer }
+.ctx button:hover { background: var(--surface) } .ctx button.danger { color: var(--red-d) } .ctx button.danger:hover { background: var(--red-l) }
+.ctx kbd { margin-left: auto; padding-left: 12px; font: inherit; font-size: 11px; font-weight: 800; color: var(--hint) }
+.ctx-n { margin: 0; padding: 8px 10px; font-size: 12px; font-weight: 700; color: var(--hint) }
 </style>
