@@ -206,7 +206,7 @@ function demoLessons(from, to) {
           <span><i class="d grp" />Групповые <em>{{ fmtMoney(bars[hover].r.grp) }}</em></span>
           <span class="tot">Итого <em>{{ fmtMoney(bars[hover].r.real) }}</em></span>
           <span v-if="bars[hover].r.lost" class="r">Отмены ({{ lostPct(bars[hover].r) }}%) <em>−{{ fmtMoney(bars[hover].r.lost) }}</em></span>
-          <span v-if="bars[hover].r.now && bars[hover].r.plan"><i class="d plan" />Ещё запланировано <em>{{ fmtMoney(bars[hover].r.plan) }}</em></span>
+          <span v-if="bars[hover].r.now && bars[hover].r.plan"><i class="d plan" />Всего на месяц запланировано <em>{{ fmtMoney(bars[hover].r.real + bars[hover].r.plan) }}</em></span>
         </div>
       </div>
       <div class="legend">
