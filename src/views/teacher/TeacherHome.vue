@@ -8,6 +8,7 @@ import { setDropHandler, pressStart, dnd } from '../../composables/useDnd'
 import { STICKERS, lastSticker } from '../../utils/sticker'
 import { showToast } from '../../composables/useToast'
 import { celebrateDone } from '../../composables/useCelebrate'
+import { pushUndo, undo } from '../../composables/useScheduleUndo'
 import { useTelegram } from '../../composables/useTelegram'
 import GridStyleButton from '../../components/GridStyleButton.vue'
 import WeekGrid from '../../components/WeekGrid.vue'
@@ -200,22 +201,25 @@ function unassign(lesson) {
   showToast(`Урок снят: ${names(copy)}`, () => scheduleStore.create(copy.studentIds, copy.date, copy.hour))
 }
 // Удалить выделенное в таблице (выделение рамкой / Shift, как в Figma): запланированные уроки снимаются, призраки убираются.
-// «Отменить» в тосте возвращает всё: уроки — на те же места, с минутами и заметкой.
+// Отмена — Ctrl+Z, пункт меню или «Отменить» в тосте (один стек, composables/useScheduleUndo.js): уроки встают на те же места, с минутами и заметкой.
 function removeMany({ lessons, ghosts }) {
-  const copies = lessons.filter(l => !l.done).map(l => ({ studentIds: [...l.studentIds], date: l.date, hour: l.hour, minute: l.minute, note: l.note }))
-  for (const l of lessons) if (!l.done) scheduleStore.remove(l)
-  for (const g of ghosts) setSkip(g, true)
-  haptic('light')
-  const n = copies.length, m = ghosts.length
-  const text = n && m ? `Удалено: уроков ${n}, подсказок ${m}` : n ? (n > 1 ? `Сняты уроки: ${n}` : `Урок снят: ${names(copies[0])}`) : (m > 1 ? `Подсказки убраны: ${m}` : 'Подсказка убрана')
-  showToast(text, () => {
+  let live = lessons.filter(l => !l.done)
+  const copies = live.map(l => ({ studentIds: [...l.studentIds], date: l.date, hour: l.hour, minute: l.minute, note: l.note }))
+  const drop = () => { for (const l of live) if (!l.done && scheduleStore.lessons.includes(l)) scheduleStore.remove(l); for (const g of ghosts) setSkip(g, true) }
+  const back = () => {
+    live = []
     for (const c of copies) {
       if (occupant(c.date, c.hour)) continue      // место уже заняли — туда не возвращаем
       const l = scheduleStore.create(c.studentIds, c.date, c.hour)
       if (c.minute || c.note) scheduleStore.setDetails(l, { ...(c.minute ? { minute: c.minute } : {}), ...(c.note ? { note: c.note } : {}) })
+      live.push(l)
     }
     for (const g of ghosts) setSkip(g, false)
-  })
+  }
+  drop(); pushUndo({ undo: back, redo: drop }); haptic('light')
+  const n = copies.length, m = ghosts.length
+  const text = n && m ? `Удалено: уроков ${n}, подсказок ${m}` : n ? (n > 1 ? `Сняты уроки: ${n}` : `Урок снят: ${names(copies[0])}`) : (m > 1 ? `Подсказки убраны: ${m}` : 'Подсказка убрана')
+  showToast(text, () => undo())
 }
 // Состав урока (группа): добавить / убрать учеников. Тост с «Отменить» возвращает прежний состав.
 function setStudents(lesson, ids) {

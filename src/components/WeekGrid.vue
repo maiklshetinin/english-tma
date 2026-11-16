@@ -1,7 +1,7 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
-import AppIcon from './AppIcon.vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { undo, redo, undoN, redoN, ctrlKey } from '../composables/useScheduleUndo'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
@@ -146,30 +146,49 @@ function ctx(e, l, g) {
   const k = l ? (pickable(l) ? l.id : null) : gk(g)
   if (k && !selSet.value.has(k)) sel.value = [k]
   if (!k && l) sel.value = []
-  menu.value = { x: Math.min(e.clientX, innerWidth - 230), y: Math.min(e.clientY, innerHeight - 170), lesson: l, ghost: g }
+  menu.value = { x: Math.min(e.clientX, innerWidth - 270), y: Math.min(e.clientY, innerHeight - 220), lesson: l, ghost: g }
 }
-function ctxBg(e) { if (sel.value.length) { e.preventDefault(); menu.value = { x: Math.min(e.clientX, innerWidth - 230), y: Math.min(e.clientY, innerHeight - 170) } } }
+function ctxBg(e) { if (e.pointerType === 'touch') return; e.preventDefault(); menu.value = { x: Math.min(e.clientX, innerWidth - 270), y: Math.min(e.clientY, innerHeight - 220) } }
 const selCount = computed(() => { const p = picked(); return p.lessons.length + p.ghosts.length })
-const delLabel = computed(() => { const p = picked(); return p.lessons.length && p.ghosts.length ? `Удалить: ${selCount.value}` : p.ghosts.length ? (p.ghosts.length > 1 ? `Убрать подсказки: ${p.ghosts.length}` : 'Убрать подсказку') : (p.lessons.length > 1 ? `Удалить уроки: ${p.lessons.length}` : 'Удалить урок') })
+const delLabel = computed(() => (selCount.value > 1 ? `Удалить · ${selCount.value}` : 'Удалить'))
+const cmDo = (f) => { menu.value = null; f() }
+const menuUndo = () => { undo(); sel.value = [] }, menuRedo = () => { redo(); sel.value = [] }
 const menuOpen = () => { const m = menu.value; menu.value = null; clearSel(); if (m?.ghost) emit('ghost', m.ghost); else if (m?.lesson) emit('lesson', m.lesson) }
 const offChip = (e) => {
-  if (menu.value && !e.target.closest?.('.ctx')) menu.value = null
-  if (sel.value.length && !multi(e) && e.button !== 2 && !e.target.closest?.('.chip, .ctx')) sel.value = []      // правая кнопка — выделение остаётся (для меню)
+  if (menu.value && !e.target.closest?.('.cmenu')) menu.value = null
+  if (sel.value.length && !multi(e) && e.button !== 2 && !e.target.closest?.('.chip, .cmenu')) sel.value = []      // правая кнопка — выделение остаётся (для меню)
 }
 const onKey = (e) => {
   if (menu.value && e.key === 'Escape') { menu.value = null; return }
-  if (!sel.value.length || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return
+  if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !document.querySelector('.sheet-bg')) {      // Ctrl+Z / Ctrl+Shift+Z (и Ctrl+Y) — история удалений
+    if (e.shiftKey ? redo() : undo()) { e.preventDefault(); sel.value = [] } return
+  }
+  if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY' && !document.querySelector('.sheet-bg')) { if (redo()) { e.preventDefault(); sel.value = [] } return }
+  if (!sel.value.length) return
   if (e.key === 'Escape') sel.value = []
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeSel() }
   else if (e.key === 'Enter' && sel.value.length === 1) { const l = scheduleStore.lessons.find(x => x.id === sel.value[0]); if (l) { e.preventDefault(); sel.value = []; emit('lesson', l) } }
 }
 const closeMenu = () => { menu.value = null }
+// Рамка вокруг выделенного, как в конструкторе курсов: синяя линия 2px и квадратики по углам (считаем по экрану, в координатах таблицы)
+const selRect = ref(null)
+function placeSel() {
+  if (!wk.value || !sel.value.length) { selRect.value = null; return }
+  const r = wk.value.getBoundingClientRect(), bs = [...wk.value.querySelectorAll('[data-pick]')].filter(el => selSet.value.has(el.dataset.pick)).map(el => el.getBoundingClientRect())
+  if (!bs.length) { selRect.value = null; return }
+  const p = 4, x0 = Math.min(...bs.map(b => b.left)) - p, y0 = Math.min(...bs.map(b => b.top)) - p, x1 = Math.max(...bs.map(b => b.right)) + p, y1 = Math.max(...bs.map(b => b.bottom)) + p
+  selRect.value = { left: Math.round(x0 - r.left) + 'px', top: Math.round(y0 - r.top) + 'px', width: Math.round(x1 - x0) + 'px', height: Math.round(y1 - y0) + 'px' }
+}
+watch([sel, () => scheduleStore.lessons.map(l => `${l.id}${l.date}${l.hour}${l.minute ?? ''}`).join(), () => props.ghosts.length], () => nextTick(placeSel))
+onMounted(() => addEventListener('resize', placeSel)); onUnmounted(() => removeEventListener('resize', placeSel))
 onMounted(() => { addEventListener('pointerdown', offChip, true); addEventListener('keydown', onKey); addEventListener('scroll', closeMenu, true); addEventListener('resize', closeMenu) })
 onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEventListener('keydown', onKey); removeEventListener('scroll', closeMenu, true); removeEventListener('resize', closeMenu); removeEventListener('pointermove', mqMove) })
 </script>
 
 <template>
-  <div ref="wk" class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]), boxing: !!box }]" @pointerdown="mqDown" @contextmenu="ctxBg">
+  <div ref="wk" class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]), boxing: !!box, many: sel.length > 1 }]" @pointerdown="mqDown" @contextmenu="ctxBg">
+    <div v-if="selRect && !box" class="selbox" :style="selRect" aria-hidden="true"><i /><i /><i /><i /></div>
     <i v-if="box" class="mq" :style="{ left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px' }" aria-hidden="true" />
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
@@ -213,12 +232,16 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
       </div>
     </div>
     <Teleport to="body">
-      <div v-if="menu" class="ctx" role="menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @contextmenu.prevent>
-        <button v-if="menu.ghost && selCount <= 1" role="menuitem" @click="menuOpen"><AppIcon name="plus" :size="16" />Поставить урок</button>
-        <button v-else-if="menu.lesson && selCount <= 1" role="menuitem" @click="menuOpen"><AppIcon name="pencil" :size="16" />Открыть урок</button>
-        <button v-if="selCount" role="menuitem" class="danger" @click="removeSel"><AppIcon name="trash" :size="16" />{{ delLabel }}<kbd>Del</kbd></button>
-        <button v-if="selCount" role="menuitem" @click="menu = null; sel = []"><AppIcon name="x" :size="16" />Снять выделение<kbd>Esc</kbd></button>
-        <p v-if="!selCount && menu.lesson" class="ctx-n">{{ menu.lesson.done ? 'Проведённый урок не удаляется' : 'Этот урок не удаляется отсюда' }}</p>
+      <div v-if="menu" class="cmenu" role="menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @pointerdown.stop @contextmenu.prevent>
+        <template v-if="(menu.ghost || menu.lesson) && selCount <= 1">
+          <button v-if="menu.ghost" role="menuitem" @click="menuOpen">Поставить урок</button>
+          <button v-else role="menuitem" @click="menuOpen">Открыть урок<kbd>Enter</kbd></button>
+          <i />
+        </template>
+        <button role="menuitem" :disabled="!selCount" :title="selCount ? '' : 'Выделите запланированные уроки или подсказки — проведённые не удаляются'" @click="removeSel">{{ delLabel }}<kbd>Delete</kbd></button>
+        <i />
+        <button role="menuitem" :disabled="!undoN" @click="cmDo(menuUndo)">Отменить<kbd>{{ ctrlKey }}+Z</kbd></button>
+        <button role="menuitem" :disabled="!redoN" @click="cmDo(menuRedo)">Повторить<kbd>{{ ctrlKey }}+Shift+Z</kbd></button>
       </div>
     </Teleport>
   </div>
@@ -376,15 +399,18 @@ html[data-theme='dark'] .dsum.shine::after { background: linear-gradient(100deg,
 /* Выделение как в Figma: синяя рамка у выделенных (и у призраков — они при этом ярче), голубая рамка-область при протягивании мышью */
 .wk { position: relative }
 .wk.boxing { user-select: none; -webkit-user-select: none } .wk.boxing .cell.free:hover { background: var(--card) }
-.mq { position: absolute; z-index: 8; border: 1px solid #0d99ff; background: rgba(13, 153, 255, .1); pointer-events: none }
+.mq { position: absolute; z-index: 8; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }      /* как в конструкторе курсов */
+.selbox { position: absolute; z-index: 7; border: 2px solid #0d99ff; pointer-events: none }
+.selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: var(--card) }
+.selbox i:nth-of-type(1) { left: -7px; top: -7px } .selbox i:nth-of-type(2) { right: -7px; top: -7px } .selbox i:nth-of-type(3) { left: -7px; bottom: -7px } .selbox i:nth-of-type(4) { right: -7px; bottom: -7px }
+.wk .chip.sel { outline: none } .wk.many .chip.sel { outline: 1.5px solid #0d99ff; outline-offset: 1px }      /* один урок — только рамка с квадратиками; несколько — ещё и тонкая обводка у каждого */
 .chip.ghost.sel { opacity: .85 }
 </style>
 <style>
-/* Контекстное меню таблицы — в body (Teleport), поэтому без scoped */
-.ctx { position: fixed; z-index: 70; min-width: 220px; display: grid; padding: 4px; border-radius: 12px; background: var(--card); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 0 0 1px rgba(0, 0, 0, .05); animation: ctxIn .12s ease-out; transform-origin: top left }
-@keyframes ctxIn { from { opacity: 0; transform: scale(.95) } }
-.ctx button { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; font-size: 14px; font-weight: 700; text-align: left; cursor: pointer }
-.ctx button:hover { background: var(--surface) } .ctx button.danger { color: var(--red-d) } .ctx button.danger:hover { background: var(--red-l) }
-.ctx kbd { margin-left: auto; padding-left: 12px; font: inherit; font-size: 11px; font-weight: 800; color: var(--hint) }
-.ctx-n { margin: 0; padding: 8px 10px; font-size: 12px; font-weight: 700; color: var(--hint) }
+/* Правое меню таблицы — чёрное, как в конструкторе курсов (CourseEditor → .cmenu); в body (Teleport), поэтому без scoped */
+.cmenu { position: fixed; z-index: 70; display: grid; min-width: 250px; padding: 8px; border-radius: 14px; background: #1e1e1e; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); color: #fff }
+.cmenu button { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 7px 12px; border: 0; border-radius: 7px; background: none; color: #fff; font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer }
+.cmenu button:hover:not(:disabled) { background: #0d99ff } .cmenu button:disabled { color: #6f6f6f; cursor: default }
+.cmenu kbd { font: inherit; font-size: 13px; font-weight: 600; color: #bdbdbd } .cmenu button:hover:not(:disabled) kbd { color: #fff } .cmenu button:disabled kbd { color: #5a5a5a }
+.cmenu i { height: 1px; margin: 6px 4px; background: #383838 }
 </style>
