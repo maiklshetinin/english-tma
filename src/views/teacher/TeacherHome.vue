@@ -7,6 +7,7 @@ import { goUp } from '../../router'
 import { setDropHandler, pressStart, dnd } from '../../composables/useDnd'
 import { STICKERS, lastSticker } from '../../utils/sticker'
 import { showToast } from '../../composables/useToast'
+import { celebrateDone } from '../../composables/useCelebrate'
 import { useTelegram } from '../../composables/useTelegram'
 import GridStyleButton from '../../components/GridStyleButton.vue'
 import WeekGrid from '../../components/WeekGrid.vue'
@@ -248,7 +249,8 @@ function setDetails(lesson, d) {
 }
 function toggleDone(lesson) {
   const was = !!lesson.done
-  scheduleStore.setDone(lesson, !was); sheet.value = null; haptic('light')
+  scheduleStore.setDone(lesson, !was); sheet.value = null; haptic(was ? 'light' : 'medium')
+  if (!was) celebrateDone(lesson)      // карточка подпрыгивает, «+сумма», деньги досчитываются (composables/useCelebrate.js)
   showToast(was ? 'Отметка «проведён» снята' : `Урок проведён: ${names(lesson)}`, () => scheduleStore.setDone(lesson, was))
 }
 // Уроки, которые прошли, а статуса нет (не «проведён» и не отменён): над таблицей — «Укажите статус · N».

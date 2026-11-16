@@ -1,12 +1,13 @@
 <script setup>
 // Одна неделя: время × дни. Ячейка — цель для drop, урок — «чип» (аватарка ученика), который можно тащить дальше.
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
 import { gridStyle, gridFrame, lessonStyle, pastShade, statusStyle } from '../utils/gridStyle'
 import TrialSticker from './TrialSticker.vue'
 import Avatar from './Avatar.vue'
-import { sumMoney, fmtMoney } from '../utils/price'
+import { sumMoney, fmtMoney, lessonMoney } from '../utils/price'
+import { doneBurst, reducedMotion } from '../composables/useCelebrate'
 // На телефоне суммы дня короче: 2 200 → «2,2к», 950 → «950»
 const kShort = (n) => (n >= 1000 ? String(Math.round(n / 100) / 10).replace('.', ',') + 'к' : String(n || 0))
 import AvatarStack from './AvatarStack.vue'
@@ -59,6 +60,16 @@ const label = (l) => allOff(l) ? `Отменил ученик: ${group(l).map(s 
 const clickCell = (d, h) => { sel.value = null; if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 // Урок закончился, а статуса нет — оранжевый «?» в углу (stores/schedule → needsStatus)
 const unknown = (l) => !orphan(l) && needsStatus(l, now.value)
+// «Урок проведён»: карточка подпрыгивает, над ней всплывает «+сумма», сумма дня мигает зелёным (composables/useCelebrate.js)
+const burst = ref(null)
+let burstT
+watch(doneBurst, (b) => {
+  if (!b || !props.dates.includes(b.date) || reducedMotion()) return
+  const l = scheduleStore.lessons.find(x => x.id === b.id)
+  burst.value = { ...b, amount: l ? lessonMoney(l, studentStore.byId).real : 0 }
+  clearTimeout(burstT); burstT = setTimeout(() => { burst.value = null }, 1700)
+})
+const popping = (l) => burst.value?.id === l.id
 // Статус словом под именем (настройка «Статус урока» → «Словом»): проведён / отмена / нужен статус / запланирован
 const stKey = (l) => allOff(l) ? 'off' : l.done ? 'ok' : unknown(l) ? 'q' : 'plan'
 const ST_WORD = { ok: 'проведён', off: 'отмена', q: 'нужен статус', plan: 'запланирован' }
@@ -89,7 +100,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         <select :value="tz" aria-label="Часовой пояс расписания" @change="setTz($event.target.value)"><option v-for="z in TIMEZONES" :key="z.id" :value="z.id">{{ z.label }}</option></select>
       </label>
       <span v-for="(d, i) in dates" :key="d" class="dh" :class="{ we: i > 4, today: d === now.date }"><span class="dn"><b>{{ DAYS[i] }}</b><small>{{ +d.slice(8) }}</small></span>
-        <span class="dsum" :class="{ ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'"><i class="full">{{ money(d).plan ? fmtMoney(money(d).plan) : 0 }}</i><i class="kk">{{ kShort(money(d).plan) }}</i></span>
+        <span :key="burst?.date === d ? burst.t : 0" class="dsum" :class="{ bump: burst?.date === d, ok: money(d).plan && money(d).real === money(d).plan, zero: !money(d).plan }" :title="money(d).plan ? `Факт ${fmtMoney(money(d).real)} из ${fmtMoney(money(d).plan)}` : 'Уроков нет'"><i class="full">{{ money(d).plan ? fmtMoney(money(d).plan) : 0 }}</i><i class="kk">{{ kShort(money(d).plan) }}</i></span>
         <span v-if="money(d).lost" class="dlost" :title="`Потеряно из-за отмен: ${fmtMoney(money(d).lost)}`">−<i class="full">{{ fmtMoney(money(d).lost) }}</i><i class="kk">{{ kShort(money(d).lost) }}</i></span></span>
     </div>
     <div v-for="h in HOURS" :key="h" class="g" :class="{ nowrow: rowNow(h) }">
@@ -99,7 +110,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
           <TrialSticker v-if="l.trial" :lesson="l" :auto-edit="freshTrial === l.id" @save="emit('trial-save', l, $event)" @remove="emit('trial-remove', l)" @edited="emit('trial-edited')" />
-          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), need: unknown(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
+          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), need: unknown(l), pop: popping(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
             @pointerdown="down($event, l)" @click.stop="tapLesson(l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
@@ -112,6 +123,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
             <span v-if="allOff(l)" class="tick x" title="Отменён"><svg viewBox="0 0 16 16"><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" /></svg></span><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
+            <i v-if="popping(l) && burst.amount" :key="burst.t" class="plus" aria-hidden="true">+{{ fmtMoney(burst.amount) }}</i>
             <i v-if="at(d, h).length > 1" class="more">+{{ at(d, h).length - 1 }}</i>
           </button>
         </template>
@@ -280,4 +292,17 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 }
 .stw.ok { color: var(--green-d) } .stw.off { color: var(--red-d) } .stw.q { color: var(--orange-d) } .stw.plan { color: var(--blue) }
 html[data-theme='dark'] .stw.ok { color: var(--green) } html[data-theme='dark'] .stw.off { color: var(--red) } html[data-theme='dark'] .stw.q { color: var(--orange) }
+/* «Урок проведён» — маленький праздник: карточка подпрыгивает с зелёной волной, галочка «выстреливает», над уроком всплывает «+сумма» */
+.chip.pop { z-index: 5; animation: chipPop .55s cubic-bezier(.34, 1.56, .64, 1) }
+.chip.pop::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: chipWave .8s ease-out forwards }
+.chip.pop .tick { animation: tickPop .5s .12s cubic-bezier(.34, 1.8, .64, 1) both }
+@keyframes chipPop { 0% { transform: scale(1) } 35% { transform: scale(1.12) } 100% { transform: scale(1) } }
+@keyframes chipWave { from { box-shadow: 0 0 0 0 rgba(88, 204, 2, .55) } to { box-shadow: 0 0 0 14px rgba(88, 204, 2, 0) } }
+@keyframes tickPop { from { transform: scale(0) rotate(-40deg) } to { transform: scale(1) rotate(0) } }
+.plus { position: absolute; left: 50%; bottom: 100%; z-index: 7; padding: 2px 8px; border-radius: 99px; background: var(--green); color: #fff; font-style: normal; font-size: 13px; font-weight: 900; white-space: nowrap; pointer-events: none; box-shadow: 0 3px 10px rgba(88, 167, 0, .35); animation: plusUp 1.5s ease-out forwards }
+@keyframes plusUp { 0% { opacity: 0; transform: translate(-50%, 12px) scale(.6) } 18% { opacity: 1; transform: translate(-50%, -2px) scale(1.08) } 30% { transform: translate(-50%, -4px) scale(1) } 75% { opacity: 1 } 100% { opacity: 0; transform: translate(-50%, -26px) } }
+/* Сумма дня в шапке — короткая зелёная вспышка */
+.dsum.bump { animation: sumBump .9s .25s ease-out both }
+@keyframes sumBump { 0% { transform: scale(1) } 30% { transform: scale(1.25); color: var(--green-d) } 100% { transform: scale(1) } }
+@media (prefers-reduced-motion: reduce) { .chip.pop, .chip.pop::after, .chip.pop .tick, .plus, .dsum.bump { animation: none } }
 </style>
