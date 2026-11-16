@@ -1,10 +1,16 @@
 <script setup>
-// Деньги недели — две цифры: факт (проведённые уроки) и план (все уроки недели); под ними мелко красным — сколько потеряно из-за отмен учеников и какая это доля уроков недели.
-// Учитель отметил «Урок проведён» — факт плавно досчитывается до новой суммы и мигает зелёным (composables/useCelebrate.js).
-import { ref, watch, onUnmounted } from 'vue'
+// Деньги за период — неделя и месяц выглядят одинаково (16.11.2026, вариант «компактно»): крупно зелёным — заработано (проведённые уроки),
+// рядом «из …» — прогноз (все уроки с запланированными); полоска — какая доля прогноза уже заработана;
+// внизу в одну строку — период слева и отмены справа красным: сколько потеряно и какая это доля мест учеников.
+// Учитель отметил «Урок проведён» — заработанное плавно досчитывается, мигает зелёным, полоска дорастает (composables/useCelebrate.js).
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { fmtMoney } from '../utils/price'
 import { justCelebrated, reducedMotion } from '../composables/useCelebrate'
-const props = defineProps({ m: { type: Object, required: true } })      // { real, plan, lost, offPct, off, all }
+const props = defineProps({
+  m: { type: Object, required: true },      // { real, plan, lost, offPct, off, all }
+  label: { type: String, default: 'неделя' },
+})
+const pct = computed(() => (props.m.plan ? Math.min(100, Math.round(props.m.real / props.m.plan * 100)) : 0))
 const shown = ref(props.m.real)
 const flash = ref(0)
 let raf = 0
@@ -23,18 +29,22 @@ watch(() => props.m.real, (to, from) => {
 onUnmounted(() => cancelAnimationFrame(raf))
 </script>
 <template>
-  <div v-if="m.plan || m.lost" class="wm" :title="`Факт ${fmtMoney(m.real)} из ${fmtMoney(m.plan)}${m.lost ? `, потеряно ${fmtMoney(m.lost)}` : ''}${m.off ? `, отменено ${m.off} из ${m.all} (${m.offPct}%)` : ''}`">
+  <div v-if="m.plan || m.lost" class="wm" :title="`${label}: заработано ${fmtMoney(m.real)} из ${fmtMoney(m.plan)} (${pct}%)${m.lost ? `, потеряно из-за отмен ${fmtMoney(m.lost)}` : ''}${m.off ? `, отменено ${m.off} из ${m.all} (${m.offPct}%)` : ''}`">
     <span class="top"><b :key="flash" :class="{ up: flash }">{{ fmtMoney(shown) }}</b><small>из {{ fmtMoney(m.plan) }}</small></span>
-    <span v-if="m.lost || m.off" class="lost"><em>−{{ fmtMoney(m.lost) }}</em> отмены<template v-if="m.off"> · {{ m.offPct }}%</template></span>
+    <span class="bar" aria-hidden="true"><i :style="{ width: pct + '%' }" /></span>
+    <span class="bot"><span class="per">{{ label }}</span><em v-if="m.lost || m.off" class="lost">−{{ fmtMoney(m.lost) }}<template v-if="m.off"> · {{ m.offPct }}%</template></em></span>
   </div>
 </template>
 <style scoped>
-.wm { flex: none; display: grid; justify-items: end; padding: 4px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15 }
-.top { display: flex; align-items: baseline; gap: 5px }
-b { font-size: 18px; font-weight: 900; color: var(--green-d); font-variant-numeric: tabular-nums } small { font-size: 13px; font-weight: 800; color: var(--hint) }
+.wm { flex: none; display: grid; min-width: 118px; padding: 4px 12px 5px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap }
+.top { justify-self: end; display: flex; align-items: baseline; gap: 5px }
+b { font-size: 18px; font-weight: 900; color: var(--green-d); font-variant-numeric: tabular-nums } small { font-size: 12px; font-weight: 800; color: var(--hint) }
 b.up { display: inline-block; transform-origin: right center; animation: wmUp 1s ease-out }
 @keyframes wmUp { 0% { transform: scale(1) } 25% { transform: scale(1.18); text-shadow: 0 0 12px rgba(88, 204, 2, .55) } 100% { transform: scale(1); text-shadow: none } }
-@media (prefers-reduced-motion: reduce) { b.up { animation: none } }
-.lost { font-size: 11px; font-weight: 800; color: var(--red-d) } .lost em { font-style: normal }
+.bar { height: 4px; margin: 4px 0 3px; border-radius: 2px; background: var(--border); overflow: hidden }
+.bar i { display: block; height: 100%; border-radius: 2px; background: var(--green); transition: width .9s cubic-bezier(.22, 1, .36, 1) }      /* отметили «проведён» — полоска плавно дорастает */
+.bot { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 800 }
+.per { color: var(--hint) } .lost { font-style: normal; color: var(--red-d) }
+@media (prefers-reduced-motion: reduce) { b.up { animation: none } .bar i { transition: none } }
 html[data-theme='dark'] b { color: var(--green) } html[data-theme='dark'] .lost { color: var(--red) }
 </style>
