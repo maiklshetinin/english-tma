@@ -14,6 +14,7 @@
 // прогресс (pct) и итог (stats) приходят от ветки; на итоге — «Заново» и «Во весь экран».
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
+import { useTelegram } from '../composables/useTelegram'
 import BackButton from './BackButton.vue'
 import { KINDS, shuffle, orderParts, tipParts, gapParts, sameAnswer } from '../utils/lesson'
 
@@ -51,6 +52,7 @@ const src = (v, k) => (v ? props.resolve(v, k) : '')
 // ---- состояние текущего экрана ----
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
+const { hapticResult, hapticTick } = useTelegram()      // виброотклик на ответы (в Профиле можно выключить)
 const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', res: null, showTr: false, hint: false, mode: '', text: '' })
 function setup() {
   Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', res: null, showTr: false, hint: false, mode: '', text: '' }); Object.assign(mine, { ok: 0, all: 0 })
@@ -92,12 +94,12 @@ function tap(side, k) {
   st[side] = st[side] === k ? null : k
   if (st.left == null || st.right == null) return
   const a = st.left, b = st.right; st.left = st.right = null; score.all++; mine.all++
-  if (a === b) { st.matched.push(a); score.ok++; mine.ok++; if (st.matched.length === full(step.value).length) st.done = true }
-  else { st.bad = [a, 'r' + b]; if (!st.wrong.includes(a)) st.wrong.push(a); setTimeout(() => { st.bad = [] }, 550) }
+  if (a === b) { st.matched.push(a); score.ok++; mine.ok++; if (st.matched.length === full(step.value).length) { st.done = true; hapticResult(true) } else hapticTick() }      // пара сошлась — лёгкий щелчок, все пары — «верно»
+  else { hapticResult(false); st.bad = [a, 'r' + b]; if (!st.wrong.includes(a)) st.wrong.push(a); setTimeout(() => { st.bad = [] }, 550) }
 }
 
 // ---- проверка ответа (choice / order / gap): верно → зелёный низ, нет → красный и правильный ответ ----
-function verdict(ok) { st.res = ok; st.done = true; score.all++; mine.all++; if (ok) { score.ok++; mine.ok++ } }
+function verdict(ok) { hapticResult(ok); st.res = ok; st.done = true; score.all++; mine.all++; if (ok) { score.ok++; mine.ok++ } }
 
 // ---- собери фразу ----
 const pw = computed(() => orderParts(step.value))

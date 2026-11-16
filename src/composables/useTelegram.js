@@ -18,6 +18,16 @@ function applyTheme() {
 }
 /** Переключить светлую / тёмную (выбор запоминается; «как в системе» — снова, если стереть выбор) */
 export function toggleTheme() { pref = theme.value === 'dark' ? 'light' : 'dark'; try { localStorage.setItem(TK, pref) } catch { /* приватный режим */ } applyTheme() }
+// Вибрация (виброотклик Telegram, 16.11.2026): включена по умолчанию, выключается в Профиле; выбор запоминается на устройстве.
+// Работает только в Telegram на телефоне — в браузере и на компьютере тихо ничего не делает.
+const HK = 'tma.haptic'
+export const hapticOn = ref((() => { try { return localStorage.getItem(HK) !== '0' } catch { return true } })())
+export function setHaptic(on) {
+  hapticOn.value = !!on; try { localStorage.setItem(HK, on ? '1' : '0') } catch { /* приватный режим */ }
+  if (on) try { tg?.HapticFeedback?.notificationOccurred('success') } catch { /* старый клиент */ }      // включили — сразу чувствуется, как это
+}
+const hf = () => (hapticOn.value ? tg?.HapticFeedback : null)
+const safe = (f) => { try { f() } catch { /* старый клиент Telegram */ } }
 export function initTelegram() {
   applyTheme(); mq?.addEventListener?.('change', applyTheme)
   if (!tg) return
@@ -30,7 +40,9 @@ export function initTelegram() {
 export const useTelegram = () => ({
   tg,
   user: tg?.initDataUnsafe?.user ?? { first_name: 'Гость' },
-  haptic: (type = 'light') => tg?.HapticFeedback?.impactOccurred(type),
+  haptic: (type = 'light') => safe(() => hf()?.impactOccurred(type)),                    // «тук»: light / medium / heavy / rigid / soft
+  hapticResult: (ok) => safe(() => hf()?.notificationOccurred(ok ? 'success' : 'error')),  // ответ: верно — мягкий отклик, ошибка — двойная «дрожь»
+  hapticTick: () => safe(() => hf()?.selectionChanged()),                                // самый лёгкий «щелчок»
   notify: (msg) => say(msg),                                // своё окно в стиле приложения (и в Telegram, и в браузере)
   openChat: (username) => {
     const url = `https://t.me/${username}`

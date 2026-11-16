@@ -6,6 +6,7 @@ import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import AppVersion from '../../components/AppVersion.vue'
 import { showToast } from '../../composables/useToast'
+import { hapticOn, setHaptic } from '../../composables/useTelegram'
 import { apiFetch, canLogout } from '../../firebase'
 import { useStudentsStore } from '../../stores/students'
 import { useAuthStore } from '../../stores/auth'
@@ -54,6 +55,14 @@ async function ping() {
         <span class="tx"><span class="ttl">Песочница курса <em class="tst">ТЕСТ</em></span><small>Тестовые настройки: чекпоинт, повторение, напоминания</small></span>
         <span class="val">›</span>
       </router-link>
+    </section>
+
+    <section class="grp">
+      <label class="it">
+        <span class="ic"><AppIcon name="bell" :size="18" /></span>
+        <span class="tx">Вибрация<small>Отклик телефона: ответ верно / ошибка, «урок проведён»</small></span>
+        <input type="checkbox" class="sw" :checked="hapticOn" aria-label="Вибрация" @change="setHaptic($event.target.checked)" />
+      </label>
     </section>
 
     <!-- Для разработчика (DEV_IDS): проверка связи с сервером. Обычный преподаватель этого не видит -->
