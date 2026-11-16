@@ -53,7 +53,10 @@ const today = computed(() => nowIn(tz.value, nowTick.value).date)
 const monthStart = computed(() => today.value.slice(0, 8) + '01')
 const monthEnd = computed(() => today.value.slice(0, 8) + new Date(Date.UTC(+today.value.slice(0, 4), +today.value.slice(5, 7), 0)).getUTCDate())
 const monthWeek = computed(() => Math.floor((Date.parse(monthEnd.value) - Date.parse(w1.value[0])) / (7 * 864e5)))      // неделя с последним днём месяца; w1[0] — понедельник этой недели
-const maxWeek = computed(() => Math.max(1, monthWeek.value))
+// Вперёд планируем на 4 недели (AHEAD): автоподстановка, подсказки, листание. Загружаем и листаем — не меньше, чем до недели с концом месяца:
+// по ней считаются деньги месяца (каждый урок идёт в свой месяц по дате)
+const AHEAD = 4
+const maxWeek = computed(() => Math.max(AHEAD, monthWeek.value))
 const dates = computed(() => week.value === 0 ? w1.value : week.value === 1 ? w2.value : (nowTick.value, weekDates(week.value)))
 const weekName = computed(() => { const w = week.value; return w === 0 ? 'Эта неделя' : w === 1 ? 'Следующая' : w === -1 ? 'Прошлая' : w > 1 ? `Через ${w} нед.` : `${-w} нед. назад` })
 watch(() => dates.value[0], () => { if (week.value < 0 || week.value > 1) scheduleStore.loadWeek(dates.value[0]).catch(() => {}) })
@@ -84,8 +87,8 @@ function copiesOf(k, withSkipped = false) {      // withSkipped — и убра�
   }
   return out
 }
-// Подсказки — на всех неделях вперёд до конца месяца (не только на следующей): пустая неделя сразу видна бледными уроками «как на этой неделе»
-const ghostWeek = computed(() => (week.value >= 1 && week.value <= maxWeek.value ? week.value : 0))
+// Подсказки — на всех неделях вперёд, на 4 недели (не только на следующей): пустая неделя сразу видна бледными уроками «как на этой неделе»
+const ghostWeek = computed(() => (week.value >= 1 && week.value <= AHEAD ? week.value : 0))
 const ghosts = computed(() => ghostWeek.value ? copiesOf(ghostWeek.value) : [])
 // Кнопка-привидение в шапке (следующая неделя): видна, когда хоть один урок этой недели не повторён на следующей; число — сколько таких.
 // Есть убранные подсказки — нажатие возвращает их все; все видны — прячет (выключатель «показать / скрыть подсказки»). Ctrl+Z — обратно.
@@ -105,7 +108,7 @@ function toggleGhosts() {
 // снятый потом урок сам не вернётся. Правки этой недели на уже поставленные уроки не переносятся. Ученики видят эти уроки.
 const MON_GEN = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-const spreadEnd = computed(() => shift(w1.value[0], 7 * monthWeek.value + 6))        // воскресенье последней недели месяца
+const spreadEnd = computed(() => shift(w1.value[0], 7 * AHEAD + 6))        // воскресенье 4-й недели вперёд
 const spreadTo = computed(() => `до ${+spreadEnd.value.slice(8)} ${MON_GEN[+spreadEnd.value.slice(5, 7) - 1]}`)
 const AUTO_KEY = 'tma.autoFill', AUTO_DONE = 'tma.autoFill.done'
 const autoFill = ref((() => { try { return localStorage.getItem(AUTO_KEY) === '1' } catch { return false } })())
@@ -121,7 +124,7 @@ const saveDone = (set) => {                                  // прошедши
 const autoPlan = computed(() => {
   doneTick.value
   const done = doneSet(), all = [], todo = []
-  for (let k = 1; k <= monthWeek.value; k++) {
+  for (let k = 1; k <= AHEAD; k++) {
     const ws = shift(w1.value[0], 7 * k), skipped = skippedOf(ws)
     for (const l of scheduleStore.lessons) {
       if (!w1.value.includes(l.date)) continue
@@ -147,10 +150,10 @@ function runAuto() {
 }
 async function toggleAuto() {
   if (autoFill.value) { setAuto(false); haptic('light'); return showToast('Автоподстановка выключена — поставленные уроки остались') }
-  // Включаем заново — заполняем все свободные ячейки до конца месяца, забыв прежние отметки «уже подставляли» (иначе удалённые раньше уроки не вернулись бы)
+  // Включаем заново — заполняем все свободные ячейки на 4 недели вперёд, забыв прежние отметки «уже подставляли» (иначе удалённые раньше уроки не вернулись бы)
   { const all = new Set(autoPlan.value.all); saveDone(new Set([...doneSet()].filter(k => !all.has(k)))) }
   const n = autoPlan.value.todo.length, till = `${+spreadEnd.value.slice(8)} ${MONTHS_GEN[+spreadEnd.value.slice(5, 7) - 1]}`
-  if (!(await ask('Включить автоподстановку расписания?', { text: `Уроки этой недели будут сами ставиться на следующие недели до конца месяца (сейчас — до ${till}), только в свободное время. ${n ? `Сразу будет поставлено уроков — ${n}. ` : ''}Ученики увидят их в своём расписании.`, ok: 'Включить' }))) return
+  if (!(await ask('Включить автоподстановку расписания?', { text: `Уроки этой недели будут сами ставиться на 4 недели вперёд (сейчас — до ${till}), только в свободное время. Деньги считаются по месяцам — по дате каждого урока. ${n ? `Сразу будет поставлено уроков — ${n}. ` : ''}Ученики увидят их в своём расписании.`, ok: 'Включить' }))) return
   setAuto(true); runAuto()
 }
 const money = computed(() => weekMoney(dates.value))
@@ -347,12 +350,12 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
           <div class="wh">
             <BackButton class="wk-back" to="Предыдущая неделя" @click="week--" />
             <button class="wk-now" :class="{ on: week === 0 }" :title="week === 0 ? 'Эта неделя' : 'Вернуться к этой неделе'" @click="week = 0"><b>{{ weekName }}</b><small>{{ weekRange(dates) }}</small></button>
-            <button class="icon-btn wk-next" :disabled="week >= maxWeek" :title="week >= maxWeek ? 'Дальше — следующий месяц' : 'Следующая неделя'" aria-label="Следующая неделя" @click="week++"><AppIcon name="back" :size="20" /></button>
+            <button class="icon-btn wk-next" :disabled="week >= maxWeek" :title="week >= maxWeek ? 'Дальше пока не планируем' : 'Следующая неделя'" aria-label="Следующая неделя" @click="week++"><AppIcon name="back" :size="20" /></button>
             <WeekLoad class="wload" :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <i class="brk" aria-hidden="true" /><i class="brk b2" aria-hidden="true" />
             <GridStyleButton />
             <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Стикер: перетащите в свободную ячейку" aria-label="Стикер: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i v-for="(s, k) in pack" :key="s.id" :style="{ '--c': s.c, '--bg': s.bg, left: 8 + k * 6 + 'px', transform: `rotate(${k * 5 - 6}deg)` }" /></button>
-            <button class="af-sw" role="switch" :aria-checked="autoFill" :aria-label="`Автоподстановка расписания: ${autoFill ? 'включена' : 'выключена'}`" :title="`Автоподстановка (тест): уроки этой недели сами ставятся на следующие недели до конца месяца (сейчас — ${spreadTo}) — настоящими уроками, только в свободное время. Ученики их видят`" @click="toggleAuto"><i :class="{ on: autoFill }" aria-hidden="true" /><span><b>авто</b><small>{{ spreadTo }}</small></span></button>
+            <button class="af-sw" role="switch" :aria-checked="autoFill" :aria-label="`Автоподстановка расписания: ${autoFill ? 'включена' : 'выключена'}`" :title="`Автоподстановка (тест): уроки этой недели сами ставятся на 4 недели вперёд (сейчас — ${spreadTo}); деньги — по месяцам, по дате урока — настоящими уроками, только в свободное время. Ученики их видят`" @click="toggleAuto"><i :class="{ on: autoFill }" aria-hidden="true" /><span><b>авто</b><small>{{ spreadTo }}</small></span></button>
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="allGhosts.length" class="icon-btn gall gback" :class="{ on: !hiddenGhosts.length }" :aria-pressed="!hiddenGhosts.length"
               :title="hiddenGhosts.length ? `Вернуть подсказки (${hiddenGhosts.length}) — бледные уроки «как на этой неделе»` : `Скрыть подсказки (${allGhosts.length})`" :aria-label="hiddenGhosts.length ? `Вернуть подсказки: ${hiddenGhosts.length}` : `Скрыть подсказки: ${allGhosts.length}`" @click="toggleGhosts">
