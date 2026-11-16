@@ -69,7 +69,6 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .ls-pv b { position: absolute; left: 0; right: 0; top: 2px; bottom: 2px; border-radius: 5px; background: var(--surface); box-shadow: inset 0 0 0 1px #d0d7de }
 .ls-pv.gray b { background: var(--group); box-shadow: 0 1px 3px rgba(0, 0, 0, .14); border-radius: 99px }
 .ls-pv.blue b { background: var(--blue-l); box-shadow: 0 1px 3px rgba(28, 120, 200, .25); border-radius: 99px }
-.ls-pv.color b { background: var(--green-l); box-shadow: 0 1px 3px rgba(0, 0, 0, .14); border-radius: 99px } .ls-pv.color i { background: #1f883d }
 /* Переключатель как в Telegram */
 .sw { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 99px; background: var(--border); cursor: pointer; transition: background .15s }
 .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s }

@@ -105,7 +105,6 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
             <template v-else><Avatar :s="first(l)" :size="39" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
             <span v-if="unknown(l)" class="tick q" title="Урок прошёл — укажите статус: проведён или отменён">?</span>
-            <span v-else-if="!l.done && !allOff(l) && !orphan(l)" class="tick plan" title="Запланирован"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" /><path d="M8 5v3l2 1.5" /></svg></span>
             <span v-if="allOff(l)" class="tick x" title="Отменён"><svg viewBox="0 0 16 16"><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" /></svg></span><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
             <i v-if="l.note" class="note" :title="l.note" aria-label="Есть заметка" />
@@ -171,7 +170,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
   font: inherit; font-size: 12px; font-weight: 800; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: opacity .1s }
 /* Выделенный урок (одно нажатие) — синяя рамка, как выделение в Figma */
 .chip.sel { outline: 3px solid #0d99ff; outline-offset: 1px; z-index: 3 }      /* синий как выделение в Figma, линия 3px */
-.chip.done { box-shadow: none; background: var(--green-l); color: var(--green-d); cursor: pointer }      /* проведён — зелёная капсула */ .chip .tick { font-weight: 900 }
+.chip.done { box-shadow: none; background: transparent; color: var(--hint); cursor: pointer }      /* проведённый — серый, только зелёная галочка */ .chip .tick { font-weight: 900 }
 /* Цвета карточек: запланирован — серый, проведён — зелёный, отменён учеником — красный. Группу видно по стопке аватарок. */
 /* Группа: аватарки внахлёст без подписи — на телефоне две (вторая может быть «+N»), на широком экране до четырёх */
 .chip .st-lg { display: none } .chip .st-sm { display: inline-flex }
@@ -181,9 +180,9 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .chip.orphan { border: 2px dashed var(--hint-2); background: var(--surface); color: var(--hint); cursor: pointer }
 .chip .q { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--hint-2); color: #fff; font-weight: 900; font-size: 12px; flex: none }
 /* Отменил ученик (без оплаты): красная карточка, имя зачёркнуто; значок ✕ — в углу слева */
-.chip.canceled { box-shadow: none; background: var(--red-l); color: var(--red-d) }      /* отменён — розовая капсула, зачёркнут, красный кружок с крестиком */
-.chip.canceled .nm { text-decoration: line-through; color: var(--red-d) } .chip.canceled :deep(.av), .chip.canceled :deep(.stack) { opacity: .7 }
-.chip.done .nm { color: var(--green-d) }      /* проведён — зелёная капсула, имя зелёным */
+.chip.canceled { box-shadow: none; background: transparent; color: var(--hint) }      /* отменён — серый, зачёркнут, красный кружок с крестиком (как упавшая сборка в GitHub) */
+.chip.canceled .nm { text-decoration: line-through } .chip.canceled :deep(.av), .chip.canceled :deep(.stack) { opacity: .45 }
+.chip.done .nm, .chip.canceled .nm { color: var(--hint-2); opacity: 1 }      /* имя у прошедших — тоже бледное */      /* прошедший урок — бледнее, как отменённый (статус видно по кружку) */
 .off { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 5px; line-height: 1.3 }
 /* Начало внутри часа — бирка «:30» в правом нижнем углу; заметка — жёлтая точка в правом верхнем */
 @media (min-width: 720px) { .chip.hasmin { padding-right: 36px } }      /* имя не заезжает под «:30» */
@@ -197,7 +196,7 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (max-width: 420px) { .chip :deep(.av) { width: 29px !important; height: 29px !important } }
 .chip .nm { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; opacity: .85 }
 /* Галочка «проведён» — как в GitHub: белая галочка в зелёном кружке */
-.chip .tick { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #1f883d } .chip .tick.x { background: #cf222e } .chip .tick.plan { background: var(--blue) } .chip .tick.q { background: var(--orange); color: #fff; font-size: 11px; font-weight: 900; line-height: 1 } .chip .tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
+.chip .tick { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #1f883d } .chip .tick.x { background: #cf222e } .chip .tick.q { background: var(--orange); color: #fff; font-size: 11px; font-weight: 900; line-height: 1 } .chip .tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }  /* время в ячейке не пишем — только бирка «:30», если урок не с начала часа */
 .more { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 900; background: var(--orange); color: #fff; border-radius: 99px; padding: 1px 5px }
 @media (min-width: 720px) { .chip .nm { display: block } .chip { justify-content: flex-start; padding: 0 6px 0 1px; gap: 7px; font-size: 13px } .cell { height: 46px } .g { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) } }
 @media (max-width: 420px) { .dsum, .dlost { font-size: 10px; letter-spacing: -.2px } .wk { padding: 6px } .g { gap: 3px; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) } .chip { padding: 0 } .cell { height: 36px } }
@@ -224,9 +223,6 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
   .wk.ls-blue .chip.up :deep(.av), .wk.ls-gray .chip.up :deep(.av) { width: 34px !important; height: 34px !important; font-size: 15px !important }      /* кружок внутри капсулы, с отступом от края */
   .wk.ls-blue .chip.up { box-shadow: 0 2px 5px rgba(28, 120, 200, .18) } .wk.ls-blue .chip.up .nm { color: #1a5b8a }
   .wk.ls-gray .chip.up { box-shadow: 0 2px 5px rgba(0, 0, 0, .1) }
-  /* Проведён / отменён — та же капсула-пилюля, цветом вместо серого/голубого */
-  .chip.done, .chip.canceled { padding-left: 3px; border-radius: 999px }
-  .chip.done :deep(.av), .chip.canceled :deep(.av) { width: 34px !important; height: 34px !important; font-size: 15px !important }
 }
 .wk.ls-blue .chip.up { background: var(--blue-l) } .wk.ls-gray .chip.up { background: var(--group) }
 /* Группа — жёлтая плашка (как в панели учеников и в «Информации»); у прошедших подложки нет */
