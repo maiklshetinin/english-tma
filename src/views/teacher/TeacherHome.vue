@@ -83,13 +83,16 @@ function copiesOf(k, withSkipped = false) {      // withSkipped — и убра�
   return out
 }
 const ghosts = computed(() => week.value === 1 ? copiesOf(1) : [])
-// Убранные подсказки этой (следующей) недели — кнопка «Вернуть подсказки» в шапке: вернуть все разом (Ctrl+Z / «Отменить» — убрать снова)
-const hiddenGhosts = computed(() => week.value === 1 ? copiesOf(1, true).filter(g => skippedOf(g.ws).has(g.key)) : [])
-function restoreGhosts() {
-  const gs = hiddenGhosts.value; if (!gs.length) return
-  const on = () => gs.forEach(g => setSkip(g, false)), off = () => gs.forEach(g => setSkip(g, true))
+// Кнопка-привидение в шапке (следующая неделя): видна, когда хоть один урок этой недели не повторён на следующей; число — сколько таких.
+// Есть убранные подсказки — нажатие возвращает их все; все видны — прячет (выключатель «показать / скрыть подсказки»). Ctrl+Z — обратно.
+const allGhosts = computed(() => week.value === 1 ? copiesOf(1, true) : [])
+const hiddenGhosts = computed(() => allGhosts.value.filter(g => skippedOf(g.ws).has(g.key)))
+function toggleGhosts() {
+  const hidden = hiddenGhosts.value, show = hidden.length > 0, gs = show ? hidden : allGhosts.value
+  if (!gs.length) return
+  const on = () => gs.forEach(g => setSkip(g, !show)), off = () => gs.forEach(g => setSkip(g, show))
   on(); pushUndo({ undo: off, redo: on }); haptic('light')
-  showToast(gs.length > 1 ? `Подсказки возвращены: ${gs.length}` : 'Подсказка возвращена', () => undo())
+  showToast(show ? (gs.length > 1 ? `Подсказки возвращены: ${gs.length}` : 'Подсказка возвращена') : `Подсказки скрыты: ${gs.length}`, () => undo())
 }
 // «Автоподстановка» (выключатель в шапке, подпись — «авто · до 6 дек»; ТЕСТ, запоминается на устройстве): уроки этой недели сами ставятся
 // настоящими уроками на все следующие недели по ту, в которую попадает последний день месяца, — целиком, вместе с её днями следующего месяца
@@ -330,7 +333,9 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Стикер: перетащите в свободную ячейку" aria-label="Стикер: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i v-for="(s, k) in pack" :key="s.id" :style="{ '--c': s.c, '--bg': s.bg, left: 8 + k * 6 + 'px', transform: `rotate(${k * 5 - 6}deg)` }" /></button>
             <button class="af-sw" role="switch" :aria-checked="autoFill" :aria-label="`Автоподстановка расписания: ${autoFill ? 'включена' : 'выключена'}`" :title="`Автоподстановка (тест): уроки этой недели сами ставятся на следующие недели до конца месяца (сейчас — ${spreadTo}) — настоящими уроками, только в свободное время. Ученики их видят`" @click="toggleAuto"><i :class="{ on: autoFill }" aria-hidden="true" /><span><b>авто</b><small>{{ spreadTo }}</small></span></button>
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
-            <button v-if="hiddenGhosts.length" class="icon-btn gall gback" :title="`Вернуть убранные подсказки (${hiddenGhosts.length}) — снова появятся бледные уроки «как на этой неделе»`" :aria-label="`Вернуть убранные подсказки: ${hiddenGhosts.length}`" @click="restoreGhosts"><AppIcon name="undo" :size="18" /><i>{{ hiddenGhosts.length }}</i></button>
+            <button v-if="allGhosts.length" class="icon-btn gall gback" :class="{ on: !hiddenGhosts.length }" :aria-pressed="!hiddenGhosts.length"
+              :title="hiddenGhosts.length ? `Вернуть подсказки (${hiddenGhosts.length}) — бледные уроки «как на этой неделе»` : `Скрыть подсказки (${allGhosts.length})`" :aria-label="hiddenGhosts.length ? `Вернуть подсказки: ${hiddenGhosts.length}` : `Скрыть подсказки: ${allGhosts.length}`" @click="toggleGhosts">
+              <svg class="ghost-ic" viewBox="0 0 24 24" aria-hidden="true"><path class="gb" d="M12 2.4c-4.4 0-7.2 3.4-7.2 7.7 0 3.4-.5 6.5-1.9 9.4 1.5.4 2.6-.1 3.5-1.2.8 1.3 2.1 2 3.4 1.6.7 1.1 1.6 1.7 2.6 1.7s2-.6 2.6-1.7c1.3.4 2.6-.3 3.4-1.6.9 1.1 2 1.6 3.5 1.2-1.4-2.9-1.9-6-1.9-9.4 0-4.3-2.8-7.7-7.2-7.7z" /><ellipse class="ge" cx="9.6" cy="9.6" rx="1.4" ry="2.1" /><ellipse class="ge" cx="14.4" cy="9.6" rx="1.4" ry="2.1" /></svg><i>{{ hiddenGhosts.length || allGhosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i>Статус · {{ noStatus.length }}</button>
             <WeekMoney class="money" :m="money" />
             <WeekMoney class="money" :m="monthMoney" :label="monthName" />
@@ -372,7 +377,11 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 .trial-pad:hover { border-color: var(--hint-2) } .trial-pad.held { opacity: .55 }
 @media (min-width: 1024px) { .wh { flex-wrap: nowrap; gap: 8px } .wh > * { flex: none } .wh .wk-now { flex: 0 1 116px; min-width: 96px } .af-sw small { display: none } }      /* на компьютере шапка всегда в одну строку: если тесно, сжимается плашка недели */
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
-.gall { position: relative; border-color: var(--border); color: var(--blue) } .gback { color: var(--hint) } .gback i { background: var(--hint-2) }      /* «Вернуть подсказки» — серая, со счётчиком убранных */ .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
+.gall { position: relative; border-color: var(--border); color: var(--blue) }
+/* Кнопка-привидение (подсказки следующей недели): тёмная простыня со светлыми глазами; подсказки видны — голубая подложка; часть убрана — серый счётчик */
+.gback { display: grid; place-items: center } .ghost-ic { width: 28px; height: 28px } .ghost-ic .gb { fill: #5f7c99 } .ghost-ic .ge { fill: var(--card) }
+.gback i { background: var(--hint-2) } .gback.on { background: var(--blue-l); border-color: var(--blue-l) } .gback.on i { background: var(--blue) } .gback.on .ge { fill: var(--blue-l) }
+html[data-theme='dark'] .ghost-ic .gb { fill: #8fa9c3 } .gall i { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
 .ask { display: inline-flex; align-items: center; gap: 6px; background: var(--orange-l); color: var(--orange-d) } .ask i { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: #fff; font-style: normal; font-size: 11px; font-weight: 900 }
 .wh b { display: block; font-weight: 800; line-height: 1.2 } .wh span { font-size: 13px; font-weight: 700 }
 /* Телефон (вариант «Д»): 1-я строка — ‹, недели (кто здесь и заметки — строкой над страницей, PresenceBar); 2-я — приборы-квадраты: часометр, деньги, отмены, вид сетки;

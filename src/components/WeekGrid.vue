@@ -451,16 +451,16 @@ html[data-theme='dark'] .dsum.shine::after { background: linear-gradient(100deg,
 .wk { position: relative }
 .wk.boxing { user-select: none; -webkit-user-select: none } .wk.boxing .cell.free:hover { background: var(--card) }
 .mq { position: absolute; z-index: 8; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }      /* как в конструкторе курсов */
-.selbox { position: absolute; z-index: 7; border: 2px solid #0d99ff; pointer-events: none }
+.selbox { position: absolute; z-index: 7; border: 3px solid #0d99ff; pointer-events: none }      /* линия потолще, чем в конструкторе: таблица мельче холста */
 .selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .06); touch-action: none } .selmask:active { cursor: grabbing }      /* лёгкая голубая маска: за неё тянется всё выделенное */
 .wk.gdrag .selbox, .wk.gdrag .chip.sel:not(.ghost) { transform: translate(var(--gdx), var(--gdy)) } .wk.gdrag .chip.sel:not(.ghost) { z-index: 6; opacity: .85 }      /* едут по клеткам вместе с рамкой */
 .wk.gdrag { overflow: visible }      /* пока тянем — уроки не обрезаются краем таблицы */
 .seldel { position: absolute; left: 50%; top: -30px; translate: -50% 0; padding: 3px 10px; border-radius: 99px; background: var(--red); color: #fff; font-style: normal; font-size: 12px; font-weight: 800; white-space: nowrap }
 .selbox.out { border-style: dashed } .selbox.out i { display: none }
 .selbox.bad, .selbox.bad i { border-color: var(--red) } .selbox.bad .selmask { background: rgba(255, 75, 75, .08); cursor: not-allowed }      /* сюда нельзя — рамка красная */
-.selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: var(--card) }
-.selbox i:nth-of-type(1) { left: -7px; top: -7px } .selbox i:nth-of-type(2) { right: -7px; top: -7px } .selbox i:nth-of-type(3) { left: -7px; bottom: -7px } .selbox i:nth-of-type(4) { right: -7px; bottom: -7px }
-.wk .chip.sel { outline: none } .wk.many .chip.sel { outline: 1.5px solid #0d99ff; outline-offset: 1px }      /* один урок — только рамка с квадратиками; несколько — ещё и тонкая обводка у каждого */
+.selbox i { position: absolute; width: 14px; height: 14px; box-sizing: border-box; border: 3px solid #0d99ff; border-radius: 4px; background: var(--card) }
+.selbox i:nth-of-type(1) { left: -8.5px; top: -8.5px } .selbox i:nth-of-type(2) { right: -8.5px; top: -8.5px } .selbox i:nth-of-type(3) { left: -8.5px; bottom: -8.5px } .selbox i:nth-of-type(4) { right: -8.5px; bottom: -8.5px }
+.wk .chip.sel { outline: none } .wk.many .chip.sel { outline: 2px solid #0d99ff; outline-offset: 1px }      /* один урок — только рамка с квадратиками; несколько — ещё и тонкая обводка у каждого */
 .chip.ghost.sel { opacity: .85 }
 </style>
 <style>
