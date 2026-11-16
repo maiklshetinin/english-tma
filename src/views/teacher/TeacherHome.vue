@@ -84,10 +84,12 @@ function copiesOf(k, withSkipped = false) {      // withSkipped — и убра�
   }
   return out
 }
-const ghosts = computed(() => week.value === 1 ? copiesOf(1) : [])
+// Подсказки — на всех неделях вперёд до конца месяца (не только на следующей): пустая неделя сразу видна бледными уроками «как на этой неделе»
+const ghostWeek = computed(() => (week.value >= 1 && week.value <= maxWeek.value ? week.value : 0))
+const ghosts = computed(() => ghostWeek.value ? copiesOf(ghostWeek.value) : [])
 // Кнопка-привидение в шапке (следующая неделя): видна, когда хоть один урок этой недели не повторён на следующей; число — сколько таких.
 // Есть убранные подсказки — нажатие возвращает их все; все видны — прячет (выключатель «показать / скрыть подсказки»). Ctrl+Z — обратно.
-const allGhosts = computed(() => week.value === 1 ? copiesOf(1, true) : [])
+const allGhosts = computed(() => ghostWeek.value ? copiesOf(ghostWeek.value, true) : [])
 const hiddenGhosts = computed(() => allGhosts.value.filter(g => skippedOf(g.ws).has(g.key)))
 function toggleGhosts() {
   const hidden = hiddenGhosts.value, show = hidden.length > 0, gs = show ? hidden : allGhosts.value
@@ -145,6 +147,8 @@ function runAuto() {
 }
 async function toggleAuto() {
   if (autoFill.value) { setAuto(false); haptic('light'); return showToast('Автоподстановка выключена — поставленные уроки остались') }
+  // Включаем заново — заполняем все свободные ячейки до конца месяца, забыв прежние отметки «уже подставляли» (иначе удалённые раньше уроки не вернулись бы)
+  { const all = new Set(autoPlan.value.all); saveDone(new Set([...doneSet()].filter(k => !all.has(k)))) }
   const n = autoPlan.value.todo.length, till = `${+spreadEnd.value.slice(8)} ${MONTHS_GEN[+spreadEnd.value.slice(5, 7) - 1]}`
   if (!(await ask('Включить автоподстановку расписания?', { text: `Уроки этой недели будут сами ставиться на следующие недели до конца месяца (сейчас — до ${till}), только в свободное время. ${n ? `Сразу будет поставлено уроков — ${n}. ` : ''}Ученики увидят их в своём расписании.`, ok: 'Включить' }))) return
   setAuto(true); runAuto()
