@@ -3,7 +3,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
 import { dnd, pressStart } from '../composables/useDnd'
-import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
+import { gridStyle, gridFrame, lessonStyle, pastShade, statusStyle } from '../utils/gridStyle'
 import TrialSticker from './TrialSticker.vue'
 import Avatar from './Avatar.vue'
 import { sumMoney, fmtMoney } from '../utils/price'
@@ -59,6 +59,9 @@ const label = (l) => allOff(l) ? `Отменил ученик: ${group(l).map(s 
 const clickCell = (d, h) => { sel.value = null; if (!at(d, h).length) emit('cell', { date: d, hour: h }) }
 // Урок закончился, а статуса нет — оранжевый «?» в углу (stores/schedule → needsStatus)
 const unknown = (l) => !orphan(l) && needsStatus(l, now.value)
+// Статус словом под именем (настройка «Статус урока» → «Словом»): проведён / отмена / нужен статус / запланирован
+const stKey = (l) => allOff(l) ? 'off' : l.done ? 'ok' : unknown(l) ? 'q' : 'plan'
+const ST_WORD = { ok: 'проведён', off: 'отмена', q: 'нужен статус', plan: 'запланирован' }
 // Как в Figma: одно нажатие — выделить урок (синяя рамка), двойное — открыть карточку урока. Enter — открыть выделенный, Esc / нажатие мимо — снять.
 const sel = ref(null)
 let last = { id: null, t: 0 }
@@ -79,7 +82,7 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
 </script>
 
 <template>
-  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]) }]">
+  <div class="card wk" :class="[`gs-${gridStyle}`, `ls-${lessonStyle}`, `st-${statusStyle}`, { noframe: !gridFrame, shade: pastShade, 'td-first': dates[0] === now.date, 'td-last': dates[dates.length - 1] === now.date, 'tm-first': rowNow(HOURS[0]), 'tm-last': rowNow(HOURS[HOURS.length - 1]) }]">
     <div class="g head">
       <label class="corner" :title="`Часовой пояс расписания: ${TIMEZONES.find(z => z.id === tz)?.label ?? tz}`">
         <span>{{ tzShort(tz) }}</span>
@@ -96,14 +99,15 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
         <i v-if="cellNow(d, h)" class="nowline" :style="{ top: (now.minute / 60 * 100) + '%' }" aria-hidden="true" />
         <template v-for="l in at(d, h).slice(0, 1)" :key="l.id">
           <TrialSticker v-if="l.trial" :lesson="l" :auto-edit="freshTrial === l.id" @save="emit('trial-save', l, $event)" @remove="emit('trial-remove', l)" @edited="emit('trial-edited')" />
-          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
+          <button v-else class="chip" :class="{ hasmin: l.minute, lifted: lifted(l), done: l.done, group: isGroup(l), orphan: orphan(l), canceled: allOff(l), need: unknown(l), up: !l.done && !allOff(l) && !orphan(l), sel: sel === l.id }" :title="`${label(l)}${unknown(l) ? ' — укажите статус' : ''} · дважды нажмите, чтобы открыть`" :aria-label="label(l)" :aria-pressed="sel === l.id"
             @pointerdown="down($event, l)" @click.stop="tapLesson(l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
+              <span class="nb"><small class="stw" :class="stKey(l)">{{ ST_WORD[stKey(l)] }}</small></span>
               <span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span>
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
-            <template v-else><Avatar :s="first(l)" :size="39" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
+            <template v-else><Avatar :s="first(l)" :size="39" /><span class="nb"><span class="nm">{{ first(l).name }}</span><small class="stw" :class="stKey(l)">{{ ST_WORD[stKey(l)] }}</small></span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
             <span v-if="unknown(l)" class="tick q" title="Урок прошёл — укажите статус: проведён или отменён">?</span>
             <span v-if="allOff(l)" class="tick x" title="Отменён"><svg viewBox="0 0 16 16"><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" /></svg></span><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
@@ -253,4 +257,27 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (max-width: 420px) { .wk.gs-cells .tm.now { font-size: 9px; letter-spacing: -.3px; justify-items: start; padding-left: 3px } }      /* «13:24» влезает в узкий столбик и не прячется под точкой линии «сейчас» */
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 @media (max-width: 719px) { .min { top: auto; bottom: -5px; right: -4px; transform: none; font-size: 10px; padding: 0 3px } }      /* на телефоне — в правом нижнем углу, чтобы не закрывать кружок */
+/* Статус урока (utils/gridStyle.js → statusStyle, меню «Вид сетки» → «Статус урока») */
+.nb { display: none; min-width: 0 } .stw { display: none }
+@media (min-width: 720px) { .nb { display: grid; line-height: 1.15 } }
+/* Вариант «Цветная капсула»: вся карточка цветная — зелёная (проведён), красная (отмена), оранжевая (урок прошёл, статуса нет) */
+.wk.st-pill .chip.done { background: var(--green-l) }
+.wk.st-pill .chip.canceled { background: var(--red-l) }
+.wk.st-pill .chip.up.need { background: var(--orange-l); box-shadow: none }
+.wk.st-pill .chip.done .nm { color: var(--text); opacity: .85 }
+@media (min-width: 720px) {
+  .wk.st-pill .chip.done, .wk.st-pill .chip.canceled { padding-left: 3px; border-radius: 999px }      /* капсула, как у будущего урока */
+  .wk.st-pill .chip.done :deep(.av), .wk.st-pill .chip.canceled :deep(.av) { width: 34px !important; height: 34px !important; font-size: 15px !important }
+  .wk.st-pill .chip .tick { position: static; margin-left: auto; margin-right: 2px; box-shadow: none; width: 18px; height: 18px }      /* значок — в конце строки */
+  .wk.st-pill .chip .tick svg { width: 13px; height: 13px }
+}
+/* Вариант «Словом под именем»: подложки нет, под именем мелко цветом; значки на широком экране не нужны */
+@media (min-width: 720px) {
+  .wk.st-word .stw { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700 }
+  .wk.st-word .chip .tick { display: none }
+  .wk.st-word .chip.done .nm, .wk.st-word .chip.canceled .nm { color: var(--text); opacity: .85 }
+  .wk.st-word .chip.canceled .nm { text-decoration: line-through }
+}
+.stw.ok { color: var(--green-d) } .stw.off { color: var(--red-d) } .stw.q { color: var(--orange-d) } .stw.plan { color: var(--blue) }
+html[data-theme='dark'] .stw.ok { color: var(--green) } html[data-theme='dark'] .stw.off { color: var(--red) } html[data-theme='dark'] .stw.q { color: var(--orange) }
 </style>
