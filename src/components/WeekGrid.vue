@@ -70,9 +70,6 @@ watch(doneBurst, (b) => {
   clearTimeout(burstT); burstT = setTimeout(() => { burst.value = null }, 1700)
 })
 const popping = (l) => burst.value?.id === l.id
-// Статус словом под именем (настройка «Статус урока» → «Словом»): проведён / отмена / нужен статус / запланирован
-const stKey = (l) => allOff(l) ? 'off' : l.done ? 'ok' : unknown(l) ? 'q' : 'plan'
-const ST_WORD = { ok: 'проведён', off: 'отмена', q: 'нужен статус', plan: 'запланирован' }
 // Как в Figma: одно нажатие — выделить урок (синяя рамка), двойное — открыть карточку урока. Enter — открыть выделенный, Esc / нажатие мимо — снять.
 const sel = ref(null)
 let last = { id: null, t: 0 }
@@ -114,11 +111,10 @@ onUnmounted(() => { removeEventListener('pointerdown', offChip, true); removeEve
             @pointerdown="down($event, l)" @click.stop="tapLesson(l)" @dragstart.prevent>
             <template v-if="isGroup(l)">
               <AvatarStack class="st-lg" :students="group(l)" :size="39" :max="3" :ring="ringOf(l)" /><AvatarStack class="st-sm" :students="group(l)" :size="26" :max="2" :ring="ringOf(l)" />
-              <span class="nb"><small class="stw" :class="stKey(l)">{{ ST_WORD[stKey(l)] }}</small></span>
               <span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span>
             </template>
             <template v-else-if="orphan(l)"><span class="q">?</span><span class="nm">{{ goneName(l) || 'Нет ученика' }}</span></template>
-            <template v-else><Avatar :s="first(l)" :size="39" /><span class="nb"><span class="nm">{{ first(l).name }}</span><small class="stw" :class="stKey(l)">{{ ST_WORD[stKey(l)] }}</small></span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
+            <template v-else><Avatar :s="first(l)" :size="39" /><span class="nm">{{ first(l).name }}</span><span v-if="l.done" class="tick" title="Проведён"><svg viewBox="0 0 16 16"><path d="M4.5 8.2l2.3 2.3 4.7-4.9" /></svg></span></template>
             <span v-if="unknown(l)" class="tick q" title="Урок прошёл — укажите статус: проведён или отменён">?</span>
             <span v-if="allOff(l)" class="tick x" title="Отменён"><svg viewBox="0 0 16 16"><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" /></svg></span><i v-else-if="offCount(l)" class="off" :title="`Отменили: ${offCount(l)}`">✕{{ offCount(l) }}</i>
             <i v-if="l.minute" class="min" :title="`Начало в ${hh(l.hour, l.minute)}`">:{{ String(l.minute).padStart(2, '0') }}</i>
@@ -270,8 +266,6 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 .wk.noframe { border-color: transparent; box-shadow: none }      /* без внешней рамки (кнопка с решёткой → «Рамка») */
 @media (max-width: 719px) { .min { top: auto; bottom: -5px; right: -4px; transform: none; font-size: 10px; padding: 0 3px } }      /* на телефоне — в правом нижнем углу, чтобы не закрывать кружок */
 /* Статус урока (utils/gridStyle.js → statusStyle, меню «Вид сетки» → «Статус урока») */
-.nb { display: none; min-width: 0 } .stw { display: none }
-@media (min-width: 720px) { .nb { display: grid; line-height: 1.15 } }
 /* Вариант «Цветная капсула»: вся карточка цветная — зелёная (проведён), красная (отмена), оранжевая (урок прошёл, статуса нет) */
 .wk.st-pill .chip.done { background: var(--green-l) }
 .wk.st-pill .chip.canceled { background: var(--red-l) }
@@ -280,18 +274,11 @@ html[data-theme='dark'] .dsum.ok { color: var(--green) }
 @media (min-width: 720px) {
   .wk.st-pill .chip.done, .wk.st-pill .chip.canceled { padding-left: 3px; border-radius: 999px }      /* капсула, как у будущего урока */
   .wk.st-pill .chip.done :deep(.av), .wk.st-pill .chip.canceled :deep(.av) { width: 34px !important; height: 34px !important; font-size: 15px !important }
-  .wk.st-pill .chip .tick { position: static; margin-left: auto; margin-right: 2px; box-shadow: none; width: 18px; height: 18px }      /* значок — в конце строки */
-  .wk.st-pill .chip .tick svg { width: 13px; height: 13px }
+  .wk.st-pill .chip .tick, .wk.st-icon .chip .tick { position: static; margin-left: auto; margin-right: 2px; box-shadow: none; width: 18px; height: 18px }      /* значок — в конце строки */
+  .wk.st-pill .chip .tick svg, .wk.st-icon .chip .tick svg { width: 13px; height: 13px }
 }
-/* Вариант «Словом под именем»: подложки нет, под именем мелко цветом; значки на широком экране не нужны */
-@media (min-width: 720px) {
-  .wk.st-word .stw { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700 }
-  .wk.st-word .chip .tick { display: none }
-  .wk.st-word .chip.done .nm, .wk.st-word .chip.canceled .nm { color: var(--text); opacity: .85 }
-  .wk.st-word .chip.canceled .nm { text-decoration: line-through }
-}
-.stw.ok { color: var(--green-d) } .stw.off { color: var(--red-d) } .stw.q { color: var(--orange-d) } .stw.plan { color: var(--blue) }
-html[data-theme='dark'] .stw.ok { color: var(--green) } html[data-theme='dark'] .stw.off { color: var(--red) } html[data-theme='dark'] .stw.q { color: var(--orange) }
+/* Вариант «Значок в конце строки» (вариант 1): подложки нет, значок — справа; имя проведённого — обычным цветом, отменённого — зачёркнуто */
+@media (min-width: 720px) { .wk.st-icon .chip.done .nm { color: var(--text); opacity: .85 } }
 /* «Урок проведён» — маленький праздник: карточка подпрыгивает с зелёной волной, галочка «выстреливает», над уроком всплывает «+сумма» */
 .chip.pop { z-index: 5; animation: chipPop .55s cubic-bezier(.34, 1.56, .64, 1) }
 .chip.pop::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: chipWave .8s ease-out forwards }
