@@ -356,7 +356,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */
-  .home { --top-gap: 10px; grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: var(--top-gap) 0 40px; align-items: start }
+  .home { --top-gap: 8px; grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: var(--top-gap) 0 40px; align-items: start }
   .side { position: sticky; top: 12px; max-height: calc(100vh - var(--top-gap) - 16px); padding: 0; background: none; z-index: 1; display: grid; grid-template-rows: minmax(0, 1fr) }
 }
 </style>
