@@ -537,10 +537,18 @@ async function removeStepKey() {
 // Тянут: мини-окошко из «Интерактива» (новый экран), экран с ветки или с доски; выделенные рамкой экраны — все вместе.
 const SCR_W = 460, SCR_STEP = 520
 const freeOf = (st, x, y) => ({ id: freshId('f'), type: 'screen', title: '', x: Math.round(x), y: Math.round(y), steps: [st] })
-const sd = reactive({ on: false, list: [], tray: null, preview: [], extra: null, ox: 0, oy: 0, s0: { x: 0, y: 0 }, w: { x: 0, y: 0 }, to: null })
+const sd = reactive({ on: false, rail: null, list: [], tray: null, preview: [], extra: null, ox: 0, oy: 0, s0: { x: 0, y: 0 }, w: { x: 0, y: 0 }, to: null })
 let sdP = null
 // тащим сами окна, в полный размер (как в FigJam): сдвиг для экранов на ветках и на доске
-const sdMoving = computed(() => (sd.on && !sd.tray ? { ids: sd.list.map(o => o.s.id), dx: sd.w.x - sd.s0.x, dy: sd.w.y - sd.s0.y } : null))
+const sdMoving = computed(() => (sd.on && !sd.tray ? (sd.rail ? { ids: sd.list.map(o => o.s.id), dx: tileDx(), dy: 0, tile: true } : { ids: sd.list.map(o => o.s.id), dx: sd.w.x - sd.s0.x, dy: sd.w.y - sd.s0.y }) : null))
+// тянут плитку экрана с ветки (17.11.2026): плитка едет только по линии своей ветки, от первого до последнего места; увели далеко вверх/вниз — дальше тянется сам экран, как раньше
+const TILE_OFF = 220
+function tileDx() { const R = sd.rail; return Math.max(R.x0 - R.ax - 40, Math.min(R.x0 + (R.n - 1) * SCR_STEP - R.ax + 40, sd.w.x - sd.s0.x)) }
+function tileTarget() {
+  const R = sd.rail, r = lessonRails.value.find(v => v.x === R.L); if (!r) return null
+  const k = Math.max(0, Math.min(R.n - 1, Math.round((R.ax + tileDx() - R.x0) / SCR_STEP)))
+  return railHit(r, k > R.i0 ? k + 1 : k)          // правее себя — место «после k» (сам экран с ветки уходит)
+}
 // где лежит экран: на ветке урока (lesson, i) или на доске (screen); левый верх его карточки
 function whereStep(st) {
   for (const r of lessonRails.value) { const i = r.x.steps?.indexOf(st) ?? -1; if (i >= 0) return { host: r.x, i, x: r.p.x + RAIL_X0 + i * SCR_STEP, y: r.p.y + 40 } }
@@ -553,9 +561,7 @@ function screenTarget(w) {
   for (const r of lessonRails.value) {
     const n = r.x.steps?.length ?? 0, h = railHs[r.x.id] ?? 420, up = r.x.type === 'checkpoint'
     if ((up ? w.y < r.p.y - 40 - Math.min(700, h) - 30 || w.y > r.p.y + 70 : w.y < r.p.y - 70 || w.y > r.p.y + 40 + Math.min(700, h)) || w.x < r.p.x + 120 || w.x > r.p.x + RAIL_X0 + Math.max(1, n) * SCR_STEP + SCR_W + 40) continue          // до конца «Итога урока»
-    const i = Math.max(0, Math.min(n, Math.floor((w.x - r.p.x - RAIL_X0 + SCR_STEP / 2) / SCR_STEP)))
-    // mark.ly — сама линия ветки: там магнит и стыки (и у чекпоинта, где экраны над ней)
-    return { L: r.x, i, mark: { x: r.p.x + RAIL_X0 + i * SCR_STEP - 32, y: up ? r.p.y - Math.min(700, h) - 46 : r.p.y - 24, h: Math.min(700, h) + 70, ly: r.p.y }, gaps: Array.from({ length: n + 1 }, (_, k) => r.p.x + RAIL_X0 + k * SCR_STEP - 30).filter((_, k) => k !== i) }
+    return railHit(r, Math.max(0, Math.min(n, Math.floor((w.x - r.p.x - RAIL_X0 + SCR_STEP / 2) / SCR_STEP))))
   }
   for (const [k, x] of order.value.entries()) {
     if (!INTERACTIVE.includes(x.type)) continue
@@ -563,17 +569,26 @@ function screenTarget(w) {
   }
   return null
 }
-function sdStart(e, list, tray = null, extra = null) {
+// место i на ветке r: магнит и стыки
+function railHit(r, i) {
+  const n = r.x.steps?.length ?? 0, h = railHs[r.x.id] ?? 420, up = r.x.type === 'checkpoint'
+  // mark.ly — сама линия ветки: там магнит и стыки (и у чекпоинта, где экраны над ней)
+  return { L: r.x, i, mark: { x: r.p.x + RAIL_X0 + i * SCR_STEP - 32, y: up ? r.p.y - Math.min(700, h) - 46 : r.p.y - 24, h: Math.min(700, h) + 70, ly: r.p.y }, gaps: Array.from({ length: n + 1 }, (_, k) => r.p.x + RAIL_X0 + k * SCR_STEP - 30).filter((_, k) => k !== i) }
+}
+function sdStart(e, list, tray = null, extra = null, rail = null) {
   const w = toWorld(e.clientX, e.clientY)
-  sdP = { sx: e.clientX, sy: e.clientY, list, tray, w, extra }
+  sdP = { sx: e.clientX, sy: e.clientY, list, tray, w, extra, rail }
   addEventListener('pointermove', sdMove); addEventListener('pointerup', sdUp, { once: true }); addEventListener('pointercancel', sdUp, { once: true })
 }
 // с ветки или с доски: тащим этот экран, а если он среди выделенных рамкой — все выделенные свои экраны
-function grabStep({ e, s: st }) {
+function grabStep({ e, s: st, tile }) {
   const key = 'st:' + doc.id + ':' + st.id
   const sel2 = msel.value.includes(key) ? boxOf().filter(o => o.k === 'step' && o.course === doc.id && msel.value.includes(o.id)).map(o => o.s) : [st]
   const list = sel2.map(v => ({ s: v, at: whereStep(v) })).filter(o => o.at)
-  if (list.length) sdStart(e, list)
+  if (!list.length) return
+  // за плитку на ветке, один экран — плитка поедет по линии (экран остаётся на месте до отпускания)
+  const r = tile && list.length === 1 && lessonRails.value.find(v => v.x === list[0].at.host)
+  sdStart(e, list, null, null, r ? { L: r.x, y: r.p.y, x0: r.p.x + RAIL_X0, n: r.x.steps.length, i0: list[0].at.i, ax: list[0].at.x } : null)
 }
 function trayDown(e, id) { if (e.button === 0) sdStart(e, null, id) }
 // Выделено рамкой — тянуть можно с любого места выделения (как в FigJam): экраны, стикеры, рисунки и черновики-кружки едут вместе
@@ -608,11 +623,13 @@ function sdMove(e) {
     if (Math.hypot(e.clientX - sdP.sx, e.clientY - sdP.sy) < 6) return
     const first = sdP.list?.find(o => o.at.x || o.at.y)?.at
     const preview = sdP.tray ? (sdP.tray === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === sdP.tray).make()]) : []
-    Object.assign(sd, { on: true, tray: sdP.tray, preview, list: sdP.list ?? [], extra: sdP.extra, s0: sdP.w, ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
+    Object.assign(sd, { on: true, rail: sdP.rail ?? null, tray: sdP.tray, preview, list: sdP.list ?? [], extra: sdP.extra, s0: sdP.w, ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
     if (sdP.tray) tray.value = null
   }
   sd.w = toWorld(e.clientX, e.clientY)
   moveExtra(sd.extra, sd.w.x - sd.s0.x, sd.w.y - sd.s0.y)
+  if (sd.rail && Math.abs(sd.w.y - sd.rail.y) > TILE_OFF) sd.rail = null      // ушли с ветки — тянем сам экран
+  if (sd.rail) { sd.to = tileTarget(); return }
   sd.to = overToolbar(e.clientY) ? 'cancel' : sd.tray || sd.list.length ? screenTarget(sd.w) : null
 }
 async function sdUp(e) {
@@ -625,7 +642,7 @@ async function sdUp(e) {
 let placing = false
 function placeStart(id, e) {
   const w = toWorld(e.clientX, e.clientY)
-  Object.assign(sd, { on: true, tray: id, preview: id === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === id).make()], list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
+  Object.assign(sd, { on: true, rail: null, tray: id, preview: id === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === id).make()], list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
   tray.value = null; placing = true
   addEventListener('pointermove', sdMove); addEventListener('pointerdown', placeDown, true)
 }
@@ -637,9 +654,9 @@ function placeDown(e) {
   sdDrop(e)
 }
 function sdDrop(e) {
-  const to = overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
+  const to = sd.rail ? tileTarget() : overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
   const tr = sd.tray, list = sd.list, preview = sd.preview, extra = sd.extra, s0 = sd.s0
-  Object.assign(sd, { on: false, list: [], tray: null, preview: [], extra: null, to: null })
+  Object.assign(sd, { on: false, rail: null, list: [], tray: null, preview: [], extra: null, to: null })
   if (to === 'cancel') return moveExtra(extra, 0, 0)
   if (!tr && !list.length) return save()                    // ехали только стикеры, рисунки и черновики
   const moving = tr ? preview : list.map(o => o.s)

@@ -56,7 +56,10 @@ const base = computed(() => (steps.value.length ? order.value.length : 1))
 const finI = computed(() => base.value + auto.value.length + again.value.length)
 const endX = computed(() => cx(finI.value) + CW / 2)
 // Шапка карточки: тянуть — переставить на ветке, унести на другую ветку или на доску (тащит редактор курса, с выделенными вместе)
-function down(e, s) { if (e.button === 0) emit('grab', { e, s }) }
+function down(e, s, tile = false) { if (e.button === 0) emit('grab', { e, s, tile }) }      // tile — тянут за плитку на ветке: едет только плитка, по линии
+// плитку тянут по ветке (17.11.2026): экран стоит на месте (бледнее), плитка едет за курсором вдоль линии того же размера
+const tileMov = (s) => !!props.moving?.tile && props.moving.ids.includes(s.id)
+const tileStyle = (s) => (tileMov(s) ? { translate: `calc(-50% + ${props.moving.dx}px) -100%`, transition: 'none', pointerEvents: 'none' } : null)
 // как в Figma: выбранный экран тянут за любое место карточки — кроме кнопок, полей и плееров (их можно нажимать как обычно)
 const LIVE = 'button, input, textarea, select, a, video, audio, label, [contenteditable], [role="button"], .aw, .wave'
 function cardDown(e, s) { if (!props.readonly && !isEdit(s) && !e.target.closest?.(LIVE)) down(e, s) }
@@ -64,6 +67,7 @@ const cardStyle = (s, i) => {
   const lift = mv.on && s.id === mv.id
   const left = lift ? cx(steps.value.findIndex(v => v.id === s.id)) + mv.dx : cx(i)
   const mov = props.moving?.ids.includes(s.id)
+  if (mov && props.moving.tile) return { left: left + 'px', top: (props.up ? props.y + TOP : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: 10000 }
   if (mov) return { left: left + 'px', top: (props.free ? props.y : props.up ? props.y + TOP : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: 10000, transition: 'none', transform: `translate(${props.moving.dx}px, ${props.moving.dy}px)${props.up && !props.free ? ' translateY(-100%)' : ''}`, pointerEvents: 'none' }
   return { left: left + 'px', top: (props.free ? props.y : props.up ? props.y + TOP : props.y - TOP) + 'px', width: CW + 'px', '--c': KINDS[s.kind].c, zIndex: lift ? 7 : 3, transition: lift ? 'none' : undefined }
 }
@@ -224,16 +228,17 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
     <div v-if="mv.on" class="slot" :style="{ left: cx(mv.to) + 'px', top: (up ? y + TOP - (frameH[mv.id] ?? 380) + 48 : y - TOP + 48) + 'px', width: CW + 'px', height: (frameH[mv.id] ?? 380) - 48 + 'px' }" />
 
     <!-- Экраны — открытые карточки, висят на ветке урока -->
-    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: (mv.on && mv.id === s.id) || moving?.ids.includes(s.id), free, upb: up && !free }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
+    <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: (mv.on && mv.id === s.id) || (moving?.ids.includes(s.id) && !moving.tile), tdrag: tileMov(s), free, upb: up && !free }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
       <!-- станция на ветке с номером и ножка к экрану; за станцию тоже можно тянуть -->
       <!-- на линии вместо кружка с номером — плитка как в меню «Exercise» (17.11.2026): миниатюра, название, описание, навыки; номер — в уголке.
            За неё экран переставляют. У ветки чекпоинта (вверх) — прежний кружок с номером -->
       <template v-if="!free"><span class="stem" /><template v-if="up"><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span></template></template>
-      <span v-if="!free && !up" class="rmi" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
+      <span v-if="!free && !up" class="rmi" :class="{ done: i < run.at, now: i === run.at }" :style="tileStyle(s)" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s, true)">
         <i class="rnum">{{ i < run.at ? '✓' : i + 1 }}</i>
         <ExerciseMini :id="tplOf(s)" size="tray" />
         <small><b>{{ tplTitle(s) }}</b>{{ tplDesc(s) }}</small>
-        <span v-if="SKILLS[tplOf(s)]" class="rskl"><i v-for="k in SKILLS[tplOf(s)]" :key="k" class="rchip" :class="k">{{ SKILL_T[k] }}</i></span>
+        <!-- навыки — прямо на линии ветки; у экранов без навыков (знакомство, подсказка) на линии — точка -->
+        <span class="rskl"><template v-if="SKILLS[tplOf(s)]"><i v-for="k in SKILLS[tplOf(s)]" :key="k" class="rchip" :class="k">{{ SKILL_T[k] }}</i></template><i v-else class="rdot" /></span>
       </span>
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
       <div class="flab" :class="{ ro: readonly }" :title="readonly ? 'Экран другого курса — скопируйте и вставьте в свой' : 'Тяните: переставить, унести на другой урок или на доску'" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
@@ -489,17 +494,20 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
 .card.editing { border: 2px dashed #0d99ff }
 .ib.pen:hover, .ib.pen.on { background: var(--blue-l); color: var(--blue-d) }
-.stem { position: absolute; left: 50%; top: -26px; width: 4px; height: 40px; margin-left: -2px; background: #d9d9d9; border-radius: 2px }
+.stem { position: absolute; left: 50%; top: -40px; width: 4px; height: 54px;      /* от самой линии ветки (на ней теперь навыки плитки, а не кружок) */ margin-left: -2px; background: #d9d9d9; border-radius: 2px }
 .node { position: absolute; left: 50%; top: -54px; width: 34px; height: 34px; margin-left: -17px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px color-mix(in srgb, var(--c) 45%, transparent); cursor: grab; touch-action: none; user-select: none; z-index: 2 }
 .node:hover { transform: scale(1.08) } .frame.lift .node { cursor: grabbing; transform: scale(1.12) }
 /* плитка экрана на линии — как в меню «Exercise» (CourseEditor → .tray.inter .mi): миниатюра, название, описание, навыки; белая подложка закрывает линию */
-.rmi { position: absolute; left: 50%; top: -185px; translate: -50% 0; z-index: 2; display: grid; justify-items: center; align-content: start; gap: 5px; width: 132px; height: 168px; box-sizing: border-box; padding: 6px 4px 4px; border-radius: 14px; background: var(--card); box-shadow: 0 2px 10px rgba(0, 0, 0, .08); cursor: grab; touch-action: none; user-select: none }
+/* плитка — точь-в-точь как в меню «Exercise» (CourseEditor .tray.inter .mi): без своей подложки; низ (ряд навыков) — по центру линии: линия на 40px выше рамки, ряд 16px */
+.rmi { position: absolute; left: 50%; top: -32px; translate: -50% -100%; z-index: 2; display: grid; justify-items: center; align-content: start; gap: 5px; width: 124px; box-sizing: border-box; padding: 6px 4px 0; border-radius: 14px; cursor: grab; touch-action: none; user-select: none }
+.rmi:hover { background: var(--surface) }
 .rmi:hover :deep(.mini) { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0, 0, 0, .12) } .frame.lift .rmi { cursor: grabbing }
 .rmi small { display: grid; gap: 1px; font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--hint); text-align: center } .rmi small b { font-size: 12.5px; font-weight: 800; color: #2c2c2c }
-.rskl { display: flex; gap: 3px; justify-content: center } .rchip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }
+.rskl { display: flex; gap: 3px; justify-content: center; align-items: center; height: 16px; margin-top: 3px } .rdot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 3px #f5f5f5 }
+.frame.tdrag .rmi { z-index: 5; cursor: grabbing } .frame.tdrag .rmi :deep(.mini) { transform: translateY(-3px); box-shadow: 0 10px 22px rgba(0, 0, 0, .18) } .frame.tdrag > :not(.rmi) { opacity: .45; transition: opacity .15s } .rchip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }
 .rchip.L { background: #1cb0f6 } .rchip.R { background: #a560e8 } .rchip.W { background: #ff9600 } .rchip.S { background: #58cc02 }
-.rnum { position: absolute; top: -9px; left: -9px; z-index: 1; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 11px; font-style: normal; font-weight: 900; box-shadow: 0 0 0 3px #f5f5f5 }
-.rmi.done { box-shadow: 0 0 0 2px #1fbe78, 0 2px 10px rgba(0, 0, 0, .08) } .rmi.done .rnum { background: #1fbe78 } .rmi.now { box-shadow: 0 0 0 2px var(--c), 0 0 0 6px color-mix(in srgb, var(--c) 25%, transparent) }
+.rnum { position: absolute; top: -3px; left: -3px; z-index: 1; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 11px; font-style: normal; font-weight: 900; box-shadow: 0 0 0 3px #f5f5f5 }
+.rmi.done :deep(.mini) { border-color: #1fbe78; box-shadow: 0 0 0 1px #1fbe78 } .rmi.done .rnum { background: #1fbe78 } .rmi.now :deep(.mini) { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 0 0 5px color-mix(in srgb, var(--c) 25%, transparent) }
 .node.fin-n { width: 40px; height: 40px; margin-left: -20px; top: -57px; cursor: default } .node.fin-n svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round }
 .slot { position: absolute; z-index: 2; box-sizing: border-box; border: 3px dashed #0d99ff; border-radius: 22px; background: rgba(13, 153, 255, .06); transition: left .15s ease }
 .grip { flex: none; width: 16px; height: 16px; fill: #a5a5a5 }
