@@ -189,7 +189,14 @@ function ensureChapter(d) {
   if (d.items[0].type !== 'unit') { d.items.unshift(it('unit', 'Chapter 1', { sub: 'Тема' })); return true }
   return false
 }
+// Курс только открыли / пришёл с сервера (17.11.2026): пока раскладка устаканивается (подгрузка, замер высот экранов), без анимаций —
+// иначе уроки и экраны «едут по дереву» на свои места. Пока замеры ещё идут — тишина продлевается.
+const settling = ref(true)
+let settleT = 0
+function settle(ms = 1200) { settling.value = true; clearTimeout(settleT); settleT = setTimeout(() => { settling.value = false }, ms) }
+settle(1500)
 const fromServer = (c) => {
+  settle()
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
   const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], dirty: false })
@@ -965,6 +972,7 @@ const joints = computed(() => (drag.on && drag.item?.type === 'unit' && drag.fro
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
 const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0, lz: null, ax: null, ay: null })          // lz — урок целится в главу на доске
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
+watch(railHs, () => { if (settling.value) settle(600) })          // экраны ещё меряются — без анимаций, пока не устаканится
 // Чекпоинт — в самом конце главы: его ветка экранов идёт ВВЕРХ (над линией), под ним сразу низ плашки главы — всегда на одном расстоянии,
 // и видно, что после чекпоинта урок не вставить. hasRail — ветка вниз (у уроков), railUp — ветка вверх (у чекпоинта)
 // соседние курсы («Все курсы») раскладываются точь-в-точь как свой: и пустые уроки — с веткой (иначе их не видно, а копируются они)
@@ -1377,10 +1385,17 @@ function boardMove(e) {
     }
   }
   if (!pan) return
-  if (Math.hypot(e.clientX - pan.sx, e.clientY - pan.sy) > 3) pan.moved = true
-  view.x = pan.vx + e.clientX - pan.sx; view.y = pan.vy + e.clientY - pan.sy
+  if (Math.hypot(e.clientX - pan.sx, e.clientY - pan.sy) > 3) { pan.moved = true; panning.value = true }
+  // сдвиг холста — не чаще кадра экрана (мышь шлёт события чаще): холст успевает за курсором, без подтормаживания
+  panTo = { x: pan.vx + e.clientX - pan.sx, y: pan.vy + e.clientY - pan.sy }
+  if (!panRaf) panRaf = requestAnimationFrame(applyPan)
 }
+let panTo = null, panRaf = 0
+const panning = ref(false)
+function applyPan() { panRaf = 0; if (panTo) { view.x = panTo.x; view.y = panTo.y; panTo = null } }
 function boardUp(e) {
+  if (panRaf) { cancelAnimationFrame(panRaf); applyPan() }
+  panning.value = false
   if (ink) return inkEnd()
   if (mq.value) { mq.value = null; return }
   touches.delete(e.pointerId); if (touches.size < 2) pinch = null
@@ -1605,7 +1620,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 <template>
   <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
     <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
-    <div ref="board" class="board" :class="{ moving: sd.on, dragging: drag.on && drag.from === 'loose', placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="[dots, tool === 'pen' && !handOn && !noteTool ? { cursor: penCursor } : null]" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @pointerleave="ghost = null" @wheel="onWheel" @contextmenu.prevent="onCtx">
+    <div ref="board" class="board" :class="{ settling, panning, moving: sd.on, dragging: drag.on && drag.from === 'loose', placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="[dots, tool === 'pen' && !handOn && !noteTool ? { cursor: penCursor } : null]" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @pointerleave="ghost = null" @wheel="onWheel" @contextmenu.prevent="onCtx">
       <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
         <div v-if="noteTool && ghost" class="note ghost" :style="{ left: ghost.x + 'px', top: ghost.y + 'px', background: noteColor }" />
         <!-- Рисунки маркером -->
@@ -2160,6 +2175,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
 .ubar { position: relative; width: 370px; height: 10px; border-radius: 6px; background: var(--border) } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
 .ubar em { position: absolute; top: 50%; transform: translate(-50%, -50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
+.board.settling :deep(.lr *), .board.settling .bead, .board.settling .chapbox, .board.settling .world * { transition: none !important }      /* курс только открыли — без «езды по дереву» */
+.board.panning .world { will-change: transform } .board.panning .world * { pointer-events: none }      /* тянем холст: без наведений внутри — каждый кадр дешевле */
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
 .ftree { position: absolute; left: 0; top: 0; z-index: 10000; opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
 .ftree .bead, .ftree :deep(.lr *), .ftree .chapbox, .ftree .chrail { transition: none !important }          /* призрак главы / урока — ровно за курсором, без подъезда */

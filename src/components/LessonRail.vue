@@ -165,6 +165,15 @@ const algShut = ref(false)               // стикер «Как собирае
 const finName = computed(() => (isCk.value ? 'Итог Chapter' : 'Итог урока'))
 const frameH = reactive({})                     // высота каждого экрана — для пунктирного места при перетаскивании
 const ro2 = new ResizeObserver((es) => { for (const e of es) if (e.target.dataset.id) frameH[e.target.dataset.id] = e.target.offsetHeight })
+// Режимы экрана — один размер (17.11.2026): JSON и правка открываются в карточке той же высоты, что живой экран, — ничего не прыгает.
+// Высоту живого экрана запоминаем (viewH); в JSON и правке карточка той же высоты, лишнее прокручивается внутри.
+// Экран, ни разу не показанный живым (пустой — сразу в правке), — высотой как обычно у соседей.
+const viewH = reactive({})
+const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.target.dataset; if (d.id && d.view === '1') viewH[d.id] = e.target.offsetHeight } })
+const cardEls = new WeakSet()
+const watchCard = (el) => { if (el && !cardEls.has(el)) { cardEls.add(el); ro3.observe(el) } }
+const typicalH = computed(() => { const v = Object.values(viewH).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 560 })
+const fixH = (s) => (jsonOn[s.id] || isEdit(s) ? { height: (viewH[s.id] ?? typicalH.value) + 'px' } : null)
 const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.observe(el); ro2.observe(el) } }
 // ---------- Живая ветка: экраны проходятся прямо здесь, как у ученика ----------
 // Карандаш — экран правится; «Сохранить» — снова живой. Пустой (незаполненный) экран сразу открыт для правки.
@@ -236,7 +245,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <span v-if="!free && !up" class="rmi" :class="{ done: i < run.at, now: i === run.at }" :style="tileStyle(s)" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s, true)">
         <i class="rnum">{{ i < run.at ? '✓' : i + 1 }}</i>
         <ExerciseMini :id="tplOf(s)" size="tray" />
-        <small><b>{{ tplTitle(s) }}</b>{{ tplDesc(s) }}</small>
+        <small :title="tplTitle(s) + ' — ' + tplDesc(s)"><b>{{ tplTitle(s) }}</b><span>{{ tplDesc(s) }}</span></small>      <!-- одна высота у всех плиток: название — в строку, описание — не больше 2 строк -->
         <!-- навыки — прямо на линии ветки; у экранов без навыков (знакомство, подсказка) на линии — точка -->
         <span class="rskl"><template v-if="SKILLS[tplOf(s)]"><i v-for="k in SKILLS[tplOf(s)]" :key="k" class="rchip" :class="k">{{ SKILL_T[k] }}</i></template><i v-else class="rdot" /></span>
       </span>
@@ -252,7 +261,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <button v-if="!isEdit(s)" class="ib rs" title="Сбросить экран — пройти заново" @pointerdown.stop @click="resetStep(s)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></svg></button>
         <button v-if="!readonly" class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
-      <div class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at }]" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
+      <div :ref="watchCard" class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: jsonOn[s.id] || isEdit(s) }]" :data-id="s.id" :data-view="jsonOn[s.id] || isEdit(s) ? 0 : 1" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
       <!-- JSON экрана (кнопка «{ }») — вместо живого экрана, в той же карточке -->
       <div v-if="jsonOn[s.id]" class="jv" :class="jsonTheme" @pointerdown.stop>
@@ -493,6 +502,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 /* текущий экран на ветке — без пульсации (07.11): в редакторе «дышит» только текущий урок на рельсе */
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
 .card.editing { border: 2px dashed #0d99ff }
+.card.fixh { min-height: 0 } .card.fixh.editing { overflow-y: auto; overscroll-behavior: contain } .card.fixh .jv pre { max-height: none; min-height: 0 }      /* JSON и правка — высотой с живой экран (fixH), лишнее — прокруткой внутри */
 .ib.pen:hover, .ib.pen.on { background: var(--blue-l); color: var(--blue-d) }
 .stem { position: absolute; left: 50%; top: -40px; width: 4px; height: 54px;      /* от самой линии ветки (на ней теперь навыки плитки, а не кружок) */ margin-left: -2px; background: #d9d9d9; border-radius: 2px }
 .node { position: absolute; left: 50%; top: -54px; width: 34px; height: 34px; margin-left: -17px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px color-mix(in srgb, var(--c) 45%, transparent); cursor: grab; touch-action: none; user-select: none; z-index: 2 }
@@ -502,7 +512,10 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .rmi { position: absolute; left: 50%; top: -32px; translate: -50% -100%; z-index: 2; display: grid; justify-items: center; align-content: start; gap: 5px; width: 124px; box-sizing: border-box; padding: 6px 4px 0; border-radius: 14px; cursor: grab; touch-action: none; user-select: none }
 .rmi:hover { background: var(--surface) }
 .rmi:hover :deep(.mini) { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0, 0, 0, .12) } .frame.lift .rmi { cursor: grabbing }
-.rmi small { display: grid; gap: 1px; font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--hint); text-align: center } .rmi small b { font-size: 12.5px; font-weight: 800; color: #2c2c2c }
+/* текст плитки — одной высоты у всех (название 1 строка, описание ровно 2 строки места): миниатюры и навыки стоят на одной высоте */
+.rmi small { display: grid; grid-template-rows: 15px 25px; gap: 1px; width: 100%; font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--hint); text-align: center }
+.rmi small b { overflow: hidden; font-size: 12.5px; font-weight: 800; color: #2c2c2c; text-overflow: ellipsis; white-space: nowrap }
+.rmi small span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2 }
 .rskl { display: flex; gap: 3px; justify-content: center; align-items: center; height: 16px; margin-top: 3px } .rdot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 3px #f5f5f5 }
 .frame.tdrag .rmi { z-index: 5; cursor: grabbing } .frame.tdrag .rmi :deep(.mini) { transform: translateY(-3px); box-shadow: 0 10px 22px rgba(0, 0, 0, .18) } .frame.tdrag > :not(.rmi) { opacity: .45; transition: opacity .15s } .rchip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }
 .rchip.L { background: #1cb0f6 } .rchip.R { background: #a560e8 } .rchip.W { background: #ff9600 } .rchip.S { background: #58cc02 }
