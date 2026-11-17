@@ -591,14 +591,14 @@ function grabStep({ e, s: st, tile }) {
   const r = tile && list.length === 1 && lessonRails.value.find(v => v.x === list[0].at.host)
   sdStart(e, list, null, null, r ? { L: r.x, y: r.p.y, x0: r.p.x + RAIL_X0, n: r.x.steps.length, i0: list[0].at.i, ax: list[0].at.x } : null)
 }
-// плитку из меню тянут как есть (17.11.2026): та же плитка с того же места едет за курсором; в окно экрана превращается только там,
-// где её можно поставить — над веткой урока, кружком урока или свободным местом доски; над экранами, панелями и снизу у меню — снова плитка
+// плитку из меню тянут как есть (17.11.2026): та же плитка с того же места едет за курсором; в окно экрана превращается только над веткой
+// урока или кружком урока (магнит). Над доской, экранами, панелями и меню — плитка; отпустили на свободном месте доски — там встаёт экран
 function trayDown(e, id) { if (e.button !== 0) return; const b = e.currentTarget.getBoundingClientRect(); sdStart(e, null, id, null, null, { dx: e.clientX - b.left, dy: e.clientY - b.top }) }
 const TRAY_ITEMS = XGROUPS.flatMap(g => g.items)
 const tileItem = computed(() => (sd.tray ? TRAY_ITEMS.find(t => t.id === sd.tray) : null))
 // под курсором не свободное место: экран, стикер, панель — или вообще не доска
 function blockedAt(x, y) { const el = document.elementFromPoint(x, y); return !el || !board.value?.contains(el) || !!el.closest('.frame, .note, .fl, .och') }
-const tileNow = (e, to) => to === 'cancel' || (!to && blockedAt(e.clientX, e.clientY))
+const tileNow = (e, to) => !to || to === 'cancel'          // окном — только над веткой урока или кружком урока; над доской — плиткой
 // Выделено рамкой — тянуть можно с любого места выделения (как в FigJam): экраны, стикеры, рисунки и черновики-кружки едут вместе
 // выделен один урок (глава, задание) на рельсе — вместе с его экранами: за выделение тянется сам урок, как с рельса
 const maskItem = computed(() => {
@@ -664,7 +664,7 @@ function placeDown(e) {
 function sdDrop(e) {
   const to = sd.rail ? tileTarget() : overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
   const tr = sd.tray, list = sd.list, preview = sd.preview, extra = sd.extra, s0 = sd.s0
-  const blocked = !!tr && to !== 'cancel' && tileNow(e, to)          // отпустили плиткой (над экраном, панелью) — никуда не ставим
+  const blocked = !!tr && !to && blockedAt(e.clientX, e.clientY)          // отпустили над экраном, стикером, панелью — никуда не ставим (на свободное место доски — встаёт экраном)
   Object.assign(sd, { on: false, rail: null, asTile: false, list: [], tray: null, preview: [], extra: null, to: null })
   if (to === 'cancel' || blocked) return moveExtra(extra, 0, 0)
   if (tr) tray.value = null
@@ -1854,7 +1854,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <!-- Снизу: панель как в FigJam — группа, над ней ряд элементов -->
     <!-- плитка из меню, пока её тянут не над местом, куда можно поставить: того же размера, с того же места под курсором -->
     <div v-if="sd.on && sd.asTile && tileItem" class="mig" :style="{ left: sd.cx - (sd.tileOff?.dx ?? 62) + 'px', top: sd.cy - (sd.tileOff?.dy ?? 50) + 'px' }">
-      <ExerciseMini :id="tileItem.id" size="tray" />
+      <ExerciseMini :id="tileItem.id" size="rail" />          <!-- не "tray": класс .tray здесь — сама панель меню (fixed внизу экрана), плитка уезжала бы туда -->
       <small><b>{{ tileItem.t }}</b>{{ tileItem.d }}</small>
       <span v-if="SKILLS[tileItem.id]" class="skl"><i v-for="k in SKILLS[tileItem.id]" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
     </div>
