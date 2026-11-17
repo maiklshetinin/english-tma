@@ -1956,6 +1956,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           </span>
           <small :title="t.t + ' — ' + t.d"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
+          <span v-if="t.mine" class="mact" @pointerdown.stop.prevent><i title="Открыть в конструкторе" @click.stop="openBuilder(t.tpl)">✎</i><i class="del" title="Удалить из меню" @click.stop="delTpl(t.id)">✕</i></span>
         </button>
         </div></div>
       </template>
@@ -2377,4 +2378,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
 }
 .rin { pointer-events: auto; width: 100%; margin: 0; padding: 2px 6px; border: 2px solid #0d99ff; border-radius: 6px; background: var(--card); font: inherit; font-size: 15px; font-weight: 800; color: var(--text); outline: none; user-select: text }
 .uh.ren { display: grid; gap: 4px } .rin.big { font-size: 20px; font-weight: 900 }
+/* «Мои»: при наведении — открыть в конструкторе / удалить */
+.tray.inter .mi { position: relative }
+.mact { position: absolute; top: 2px; right: 2px; display: flex; gap: 3px; opacity: 0; transition: opacity .12s }
+.mi:hover .mact { opacity: 1 }
+.mact i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--card); color: var(--hint); font-size: 11px; font-style: normal; font-weight: 800; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); cursor: pointer }
+.mact i:hover { color: var(--blue-d) } .mact i.del:hover { background: #ffe9e9; color: #d32f2f }
+@media (hover: none) { .mact { opacity: 1 } }
 </style>
