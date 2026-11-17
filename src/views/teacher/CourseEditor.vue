@@ -1268,6 +1268,8 @@ function aim(e) {
   drag.lz = !drag.over && !tb ? looseTarget(w) : null
 }
 const overToolbar = (cy) => cy > H.value - (phone.value ? 92 : 104)
+// колесо над меню — листает его вбок (группы в один ряд), а не двигает доску
+function trayWheel(e) { const el = e.currentTarget; if (el.scrollWidth > el.clientWidth + 1) { e.preventDefault(); el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY } }
 // над открытым меню (оно бывает высоким — «Мои», «Фразы и контекст») экран не превращается в окно: там плитка остаётся плиткой
 const overMenu = (e) => document.elementsFromPoint(e.clientX, e.clientY).some(el => el.closest?.('.fl.tray'))
 function startDrag(e, src) {
@@ -1913,7 +1915,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <span v-if="skillsT(tileItem).length" class="skl"><i v-for="k in skillsT(tileItem)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
     </div>
     <ExerciseBuilder v-if="xb" :tpl="xb.tpl" :resolve="resolveRef" @save="saveTpl" @del="delTpl" @close="xb = null" />
-    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop>
+    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop @wheel.stop="trayWheel">
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
         <!-- чекпоинт — как на рельсе: экраны НАД линией, линия снизу, в конце — итог Chapter -->
@@ -2336,7 +2338,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .och b { font-size: 22px; font-weight: 900 } .och small { font-size: 12px; font-weight: 700; color: var(--hint) }
 .bead.ro { cursor: default } .bead.ro:hover { transform: none }
 .allr.on { background: var(--blue-l); border-color: var(--blue); color: var(--blue-d) }
-.tray.inter { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 8px; overflow: visible; max-width: calc(100vw - 32px); box-sizing: border-box }          /* групп по тегам 6 — не влезли в ширину, переносятся вторым рядом */ .tray.inter .tt2 { align-self: center }
+.tray.inter { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 8px; overflow-x: auto; overflow-y: visible; max-width: calc(100vw - 32px); box-sizing: border-box }          /* группы по тегам — в один ряд (так легче читать); не влезло по ширине — листается вбок */
+.tray.inter .xg { flex: none } .tray.inter .tt2 { align-self: center }
 .xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea }          /* группы упражнений — рядом, по горизонтали */
 .xgh { display: grid; gap: 0; padding: 0 8px } .xgh b { font-size: 13.5px; font-weight: 900; color: #2c2c2c } .xgh small { font-size: 11px; font-weight: 600; color: var(--hint) }
 .xgc { display: grid; gap: 2px 4px }
