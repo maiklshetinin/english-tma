@@ -580,7 +580,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .paste:hover:not(:disabled) { background: var(--blue-l) }
 .ib.rs:hover { background: var(--blue-l); color: var(--blue-d) }
 .ib svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.cb { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 8px 60px 14px }
+.cb { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 10px 40px 20px }      /* поля — как у живого экрана (LessonPlayer .embedded .body): в правке ширина и отступы не меняются */
 .choice .cb, .pairs .cb { padding: 8px 34px 12px }
 .hd { text-align: center; font-size: 15px; font-weight: 800; margin: 4px 0 2px }
 input, textarea { user-select: text }
@@ -602,7 +602,7 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .add.deck { flex: none; margin-top: auto; border-style: solid; border-color: var(--blue-l); background: var(--blue-l) }
 .word { display: grid; gap: 0; padding: 6px; border-radius: 10px; background: #f1f6ff; text-align: center }
 .word input { text-align: center; font-size: 17px; font-weight: 900 } .word input.tr { font-size: 12px; font-weight: 700; color: var(--hint) }
-.ex { font-size: 13px; font-weight: 700 } .ex.tr { font-size: 12px; font-weight: 600; color: var(--hint) }
+.ex { font-size: 15px; font-weight: 500; line-height: 1.5 } .ex.tr { font-size: 13px; font-weight: 600; color: var(--hint) }      /* как текст на живом экране */
 .tg { display: flex; padding: 2px; border-radius: 8px; background: var(--surface) } .tg button { flex: 1; border: 0; border-radius: 6px; padding: 4px; background: none; font: inherit; font-size: 11px; font-weight: 800; color: var(--hint); cursor: pointer }
 .tg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .12) }
 .q { padding: 8px; border-radius: 10px; background: #f1f6ff; text-align: center; font-size: 15px; font-weight: 900; color: var(--hint) }
@@ -624,7 +624,7 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .chips.ed > span { display: flex; align-items: center; padding: 0 2px 0 0 } .chips.ed > span.right { border-color: #1fbe78; background: #e3fbef } .chips.ed input { text-align: center; font-size: 13px; font-weight: 700 }
 .xx { border: 0; background: none; color: var(--hint-2); font-size: 10px; cursor: pointer; padding: 2px }
 .gp { display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 12px; color: var(--hint); font-weight: 600 } .gp b { color: #1a73e8 }
-.trw { display: grid; grid-template-columns: auto 1fr 1fr auto; align-items: center; gap: 4px; border-bottom: 1px solid #efefef } .trw input { font-size: 13px; font-weight: 600 } .trw input.tr { color: var(--hint) }
+.trw { display: grid; grid-template-columns: auto 1fr 1fr auto; align-items: center; gap: 4px; padding: 3px 0; border-bottom: 1px solid #efefef } .trw input { font-size: 14px; font-weight: 600 } .trw input.tr { color: var(--hint) }
 .sn { border: 0; background: none; cursor: pointer; font-size: 13px; opacity: .35; padding: 2px } .sn.on { opacity: 1 }
 .pr { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center }
 .pr input { height: 44px; border: 1px solid #dcdcdc; border-radius: 9px; background: var(--card); text-align: center; font-size: 14px; font-weight: 600 }
