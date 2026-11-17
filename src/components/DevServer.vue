@@ -19,6 +19,10 @@ onMounted(() => { load(); timer = window.setInterval(() => document.visibilitySt
 onBeforeUnmount(() => clearInterval(timer))
 
 const pts = computed(() => data.value?.points ?? [])
+// графики — вкладками (один на экране, без прокрутки); выбранная запоминается
+const CHARTS = [['req', 'Запросы'], ['ms', 'Время ответа'], ['mem', 'Память'], ['cpu', 'Процессор']]
+const chart = ref((() => { try { const v = localStorage.getItem('tma.devServerChart'); return CHARTS.some(([k]) => k === v) ? v : 'req' } catch { return 'req' } })())
+watch(chart, (v) => { try { localStorage.setItem('tma.devServerChart', v) } catch { /* приватный режим */ } })
 const sum = (k) => pts.value.reduce((a, p) => a + (p[k] || 0), 0)
 const uptime = computed(() => {
   if (!data.value) return ''
@@ -52,10 +56,11 @@ const nice = (label) => NAMES[label.split(' /')[1]?.split('/')[0]] ?? label
       <p class="meta">коммит <code>{{ data.commit || '—' }}</code> · Node {{ data.node }} · с {{ new Date(data.startedAt).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</p>
 
       <div class="cg">
-        <div><h4>Запросы</h4><MiniChart :height="120" :points="pts" :step="data.step" :range="range" :series="[{ k: 'req', t: 'Запросы', c: '#4285f4' }, { k: 'e4', t: 'Ошибки 4xx', c: '#fa7b17' }, { k: 'e5', t: 'Ошибки 5xx', c: '#e8453c' }]" /></div>
-        <div><h4>Время ответа</h4><MiniChart :height="120" :points="pts" :step="data.step" :range="range" unit="мс" :series="[{ k: 'avg', t: 'Среднее', c: '#4285f4' }, { k: 'max', t: 'Самый долгий', c: '#fa7b17' }]" /></div>
-        <div><h4>Память</h4><MiniChart :height="120" :points="pts" :step="data.step" :range="range" unit="МБ" :limits="[{ v: MEM_LIMIT, t: 'лимит Render 512 МБ', c: '#e8453c' }]" :series="[{ k: 'rss', t: 'Всего (RSS)', c: '#9747ff' }, { k: 'heap', t: 'Куча JS', c: '#14ae5c' }]" /></div>
-        <div><h4>Процессор</h4><MiniChart :height="120" :points="pts" :step="data.step" :range="range" unit="%" :series="[{ k: 'cpu', t: 'CPU', c: '#00b5ce' }]" /></div>
+        <div class="ctabs" role="tablist"><button v-for="[k, t] in CHARTS" :key="k" type="button" role="tab" :aria-selected="chart === k" :class="{ on: chart === k }" @click="chart = k">{{ t }}</button></div>
+        <MiniChart v-if="chart === 'req'" :height="150" :points="pts" :step="data.step" :range="range" :series="[{ k: 'req', t: 'Запросы', c: '#4285f4' }, { k: 'e4', t: 'Ошибки 4xx', c: '#fa7b17' }, { k: 'e5', t: 'Ошибки 5xx', c: '#e8453c' }]" />
+        <MiniChart v-else-if="chart === 'ms'" :height="150" :points="pts" :step="data.step" :range="range" unit="мс" :series="[{ k: 'avg', t: 'Среднее', c: '#4285f4' }, { k: 'max', t: 'Самый долгий', c: '#fa7b17' }]" />
+        <MiniChart v-else-if="chart === 'mem'" :height="150" :points="pts" :step="data.step" :range="range" unit="МБ" :limits="[{ v: MEM_LIMIT, t: 'лимит Render 512 МБ', c: '#e8453c' }]" :series="[{ k: 'rss', t: 'Всего (RSS)', c: '#9747ff' }, { k: 'heap', t: 'Куча JS', c: '#14ae5c' }]" />
+        <MiniChart v-else :height="150" :points="pts" :step="data.step" :range="range" unit="%" :series="[{ k: 'cpu', t: 'CPU', c: '#00b5ce' }]" />
       </div>
 
       <div v-if="data.routes.length" class="tp">
@@ -86,7 +91,11 @@ const nice = (label) => NAMES[label.split(' /')[1]?.split('/')[0]] ?? label
 .kp span { display: grid; gap: 1px; padding: 7px 9px; border-radius: 10px; background: var(--surface) } .kp small { font-size: 11px; font-weight: 600; color: var(--hint) } .kp b { font-size: 17px; font-weight: 800 } .kp i { font-size: 10.5px; font-style: normal; font-weight: 600; color: var(--hint) }
 .warn { color: #e37400 !important } .bad { color: #d93025 !important }
 .meta { margin: 0; font-size: 11.5px; color: var(--hint) } .meta code { padding: 1px 5px; border-radius: 5px; background: var(--surface); color: var(--text); font-size: 11px; font-weight: 700 }
-.cg { display: grid; gap: 4px } .cg h4 { margin: 6px 0 0; font-size: 12.5px; font-weight: 700 }
+.cg { display: grid; gap: 6px }
+/* вкладки графиков — как в DevTools: плоская полоса, активная подчёркнута */
+.ctabs { display: flex; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border) }
+.ctabs button { flex: none; margin-bottom: -1px; padding: 6px 10px 5px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--hint); font: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: pointer }
+.ctabs button:hover { color: var(--text) } .ctabs button.on { color: #1a73e8; border-bottom-color: #1a73e8 }
 .tp { display: grid; gap: 4px; padding-top: 6px; border-top: 1px solid var(--border) }
 .th { display: grid; margin-bottom: 2px } .th b { font-size: 14px; font-weight: 700 } .th small { font-size: 11.5px; color: var(--hint) }
 .tr { display: grid; grid-template-columns: minmax(0, 1fr) 44px 70px 70px; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; text-align: right }
