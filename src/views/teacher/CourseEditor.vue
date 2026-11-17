@@ -193,9 +193,14 @@ function ensureChapter(d) {
 }
 // Курс только открыли / пришёл с сервера (17.11.2026): пока раскладка устаканивается (подгрузка, замер высот экранов), без анимаций —
 // иначе уроки и экраны «едут по дереву» на свои места. Пока замеры ещё идут — тишина продлевается.
+// Сам холст на это время спрятан (видно «Открываю курс…»), чтобы не было видно, как курс строится ряд за рядом; не дольше 4 с.
 const settling = ref(true)
-let settleT = 0
-function settle(ms = 1200) { settling.value = true; clearTimeout(settleT); settleT = setTimeout(() => { settling.value = false }, ms) }
+let settleT = 0, settle0 = 0
+function settle(ms = 1200) {
+  if (!settling.value) settle0 = Date.now()
+  settling.value = true; clearTimeout(settleT)
+  settleT = setTimeout(() => { settling.value = false }, Math.max(0, Math.min(ms, settle0 + 4000 - Date.now())))
+}
 settle(1500)
 const fromServer = (c) => {
   settle()
@@ -997,7 +1002,7 @@ const joints = computed(() => (drag.on && drag.item?.type === 'unit' && drag.fro
 const chapterKids = () => [newItem('lesson'), newItem('checkpoint')].map(v => ({ ...v, steps: [] }))
 const drag = reactive({ on: false, item: null, extra: null, ox: 0, oy: 0, from: null, over: false, to: 0, x: 0, y: 0, lz: null, ax: null, ay: null })          // lz — урок целится в главу на доске
 const railHs = reactive({})                  // фактическая высота экранов урока (сообщает LessonRail)
-watch(railHs, () => { if (settling.value) settle(600) })          // экраны ещё меряются — без анимаций, пока не устаканится
+watch(railHs, () => { if (settling.value) settle(500) }, { deep: true })          // экраны ещё меряются — без анимаций, пока не устаканится
 // Чекпоинт — в самом конце главы: его ветка экранов идёт ВВЕРХ (над линией), под ним сразу низ плашки главы — всегда на одном расстоянии,
 // и видно, что после чекпоинта урок не вставить. hasRail — ветка вниз (у уроков), railUp — ветка вверх (у чекпоинта)
 // соседние курсы («Все курсы») раскладываются точь-в-точь как свой: и пустые уроки — с веткой (иначе их не видно, а копируются они)
@@ -1646,6 +1651,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
   <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
     <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
     <div ref="board" class="board" :class="{ settling, panning, moving: sd.on, dragging: drag.on && drag.from === 'loose', placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="[dots, tool === 'pen' && !handOn && !noteTool ? { cursor: penCursor } : null]" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @pointerleave="ghost = null" @wheel="onWheel" @contextmenu.prevent="onCtx">
+      <div v-if="settling" class="opening"><i />Открываю курс…</div>
       <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
         <div v-if="noteTool && ghost" class="note ghost" :style="{ left: ghost.x + 'px', top: ghost.y + 'px', background: noteColor }" />
         <!-- Рисунки маркером -->
@@ -1895,7 +1901,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <!-- плитка из меню, пока её тянут не над местом, куда можно поставить: того же размера, с того же места под курсором -->
     <div v-if="sd.on && sd.asTile && tileItem" class="mig" :style="{ left: sd.cx - (sd.tileOff?.dx ?? 62) + 'px', top: sd.cy - (sd.tileOff?.dy ?? 50) + 'px' }">
       <ExerciseMini :id="tileItem.base || tileItem.id" size="rail" />          <!-- не "tray": класс .tray здесь — сама панель меню (fixed внизу экрана), плитка уезжала бы туда -->
-      <small><b>{{ tileItem.t }}</b>{{ tileItem.d }}</small>
+      <small><b>{{ tileItem.t }}</b><span>{{ tileItem.d }}</span></small>
       <span v-if="skillsT(tileItem).length" class="skl"><i v-for="k in skillsT(tileItem)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
     </div>
     <ExerciseBuilder v-if="xb" :tpl="xb.tpl" :resolve="resolveRef" @save="saveTpl" @del="delTpl" @close="xb = null" />
@@ -1924,7 +1930,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- мини-окошки: как выглядит экран -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="g.k"><div class="xgh"><b>{{ g.t }}</b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
         <!-- «Мои»: первой — собрать своё в конструкторе -->
-        <button v-if="g.mine" class="mi madd" title="Собрать своё упражнение из блоков" @click="openBuilder()"><span class="mini plus"><b>+</b></span><small><b>Своё упражнение</b>собрать из блоков</small></button>
+        <button v-if="g.mine" class="mi madd" title="Собрать своё упражнение из блоков" @click="openBuilder()"><span class="mini plus"><b>+</b></span><small><b>Своё упражнение</b><span>собрать из блоков</span></small></button>
         <button v-for="t in g.items" :key="t.id" class="mi" :title="t.mine ? 'Своё упражнение — тяните на ветку; двойной клик — открыть в конструкторе' : t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)" @dblclick="t.mine && openBuilder(t.tpl)">
           <ExerciseMini v-if="t.mine" :id="t.base" size="rail" />
           <span v-else class="mini" :class="t.id"><i class="mp" />
@@ -1943,7 +1949,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <template v-else><span class="ms"><i /><i /><i /></span></template>
             <i class="mb" />
           </span>
-          <small><b>{{ t.t }}</b>{{ t.d }}</small>
+          <small :title="t.t + ' — ' + t.d"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
         </button>
         </div></div>
@@ -2007,9 +2013,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .md.on { background: #9747ff; color: #fff }
 /* маркер, как в FigJam: торчит из панели, выбран — выше */
 .marker { position: relative; align-self: stretch; width: 60px; border: 0; background: none; padding: 0; cursor: pointer; clip-path: inset(-80px -20px 0 -20px) }   /* сверху вылезает на холст, снизу прячется в панель */
-.mk { position: absolute; left: 50%; top: 26px; width: 24px; height: 130px; margin-left: -12px; border-radius: 6px 6px 3px 3px; background: linear-gradient(90deg, #fafafa, #fff 40%, #e9e9e9); box-shadow: 0 2px 6px rgba(0, 0, 0, .18); transition: top .18s ease }
-.mk::before { content: ''; position: absolute; left: 3px; right: 3px; top: -14px; height: 16px; background: #2b2b2b; clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%) }
-.mk i { position: absolute; left: 50%; top: -20px; width: 6px; height: 8px; margin-left: -3px; border-radius: 3px 3px 0 0 }
+.marker .mk { position: absolute; left: 50%; top: 26px; width: 24px; height: 130px; margin-left: -12px; border-radius: 6px 6px 3px 3px; background: linear-gradient(90deg, #fafafa, #fff 40%, #e9e9e9); box-shadow: 0 2px 6px rgba(0, 0, 0, .18); transition: top .18s ease }
+.marker .mk::before { content: ''; position: absolute; left: 3px; right: 3px; top: -14px; height: 16px; background: #2b2b2b; clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%) }
+.marker .mk i { position: absolute; left: 50%; top: -20px; width: 6px; height: 8px; margin-left: -3px; border-radius: 3px 3px 0 0 }
 .marker:hover .mk { top: 10px } .marker.on .mk { top: -14px }
 .sw.pen { border-radius: 50% }
 .world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0 }
@@ -2205,6 +2211,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ubar { position: relative; width: 370px; height: 10px; border-radius: 6px; background: var(--border) } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78; transition: width .25s }
 .ubar em { position: absolute; top: 50%; transform: translate(-50%, -50%); padding: 1px 7px; border-radius: 8px; background: #1fbe78; color: #fff; font-size: 11px; font-weight: 900; font-style: normal }
 .board.settling :deep(.lr *), .board.settling .bead, .board.settling .chapbox, .board.settling .world * { transition: none !important }      /* курс только открыли — без «езды по дереву» */
+.board .world { transition: opacity .18s ease } .board.settling .world { opacity: 0 }      /* и не видно, как строится ряд за рядом — показываем готовым */
+.opening { position: absolute; left: 50%; top: 45%; translate: -50% -50%; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 12px; background: var(--card); box-shadow: 0 4px 18px rgba(0, 0, 0, .1); color: var(--hint); font-size: 13px; font-weight: 700; pointer-events: none }
+.opening i { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--border); border-top-color: #1cb0f6; animation: opr .8s linear infinite } @keyframes opr { to { rotate: 360deg } }
 .board.panning .world { will-change: transform } .board.panning .world * { pointer-events: none }      /* тянем холст: без наведений внутри — каждый кадр дешевле */
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
 .ftree { position: absolute; left: 0; top: 0; z-index: 10000; opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
@@ -2327,6 +2336,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tray.inter .mini { width: 112px; height: 86px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 124px; gap: 5px; padding: 6px 4px 4px; align-self: start }
 .tray.inter .mini .mb { right: 6px; bottom: 5px; width: 26px; height: 7px } .tray.inter .mini.lesson { overflow: visible } .tray.inter .mini .ms { transform: scale(.82); transform-origin: top center }
 .tray.inter .mi small { font-size: 10.5px; line-height: 1.2 } .tray.inter .mi small b { font-size: 12.5px }
+/* плитки меню — одной высоты: название в строку («…», целиком — в подсказке), описание — ровно 2 строки места; миниатюры и навыки — ровными рядами */
+.tray.inter .mi small, .mig small { display: grid; grid-template-rows: 15px 25px; gap: 1px; width: 100% }
+.tray.inter .mi small b, .mig small b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.tray.inter .mi small span, .mig small span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2 }
 .mini .mm { position: relative; display: block } .mini .mm .ma { position: absolute; left: 8%; right: 8%; bottom: 3px; width: auto; height: 5px; background: #1a73e8 } .mini .mm.sm { height: 24px }
 .mini .mr { display: grid; gap: 3px; width: 100% } .mini .mr i { height: 7px; border: 1px solid #e3e3e3; background: var(--card) } .mini .mr i.g { background: #8ff0c8; border-color: #5fe0aa }
 .mini .mc { display: flex; gap: 3px; justify-content: center; width: 100% } .mini .mc i.l { width: 9px }          /* «Собери слово» — плашки-буквы */ .mini .mc i { width: 18px; height: 8px; border: 1px solid #d5d5d5; background: var(--card) } .mini .mc i.o { border-color: #1a73e8 }
