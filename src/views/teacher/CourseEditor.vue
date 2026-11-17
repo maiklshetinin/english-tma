@@ -24,10 +24,11 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import ExerciseMini from '../../components/ExerciseMini.vue'
+import ExerciseBuilder from '../../components/ExerciseBuilder.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, skillsOf, tplOf } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -121,14 +122,15 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 let remote = false, shareT = 0
 const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), text: n.text ?? '', color: n.color, ...(n.by ? { by: n.by } : {}), ...(n.sz && n.sz !== 's' ? { sz: n.sz } : {}), ...(n.font ? { font: n.font } : {}), ...(n.b ? { b: true } : {}), ...(n.st ? { st: true } : {}), ...(n.list ? { list: true } : {}), ...(n.nob ? { nob: true } : {}) })
 const cleanInk = (k) => ({ id: k.id, c: k.c, w: k.w, p: k.p.map(Math.round) })
-const payload = () => ({ title: doc.title, mode: 'line', progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk) })
+const payload = () => ({ title: doc.title, mode: 'line', progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk),
+  templates: (doc.templates ?? []).map(t => ({ id: t.id, t: t.t, d: t.d, step: stepsOut([t.step])[0] })) })          // templates — свои упражнения из конструктора (меню «Exercise» → «Мои»)
 function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
   const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   remote = true
-  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], ink: d.ink ?? [], dirty: false })
+  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], ink: d.ink ?? [], templates: d.templates ?? doc.templates ?? [], dirty: false })
   nextTick(() => { remote = false })
   clearTimeout(pt); if (online) sync.value = 'saved'       // коллега сам сохранил это в базу
   try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ }
@@ -179,7 +181,7 @@ onUnmounted(() => {
 // Открыли редактор (из «Курсов»: #/courses?id=<курс> или ?id=new). В браузере — копия последнего открытого курса:
 // если в ней несохранённые правки другого курса — сначала отправляем их, потом открываем нужный.
 const blank = () => ({ id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'Новый курс', progress: 0, mode: 'line',
-  items: [it('unit', 'Chapter 1', { sub: 'Тема' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })], loose: [], notes: [], ink: [], dirty: false })
+  items: [it('unit', 'Chapter 1', { sub: 'Тема' }), it('lesson', 'Урок', { steps: [] }), it('checkpoint', 'Чекпоинт', { steps: [] })], loose: [], notes: [], ink: [], templates: [], dirty: false })
 // Курс всегда начинается с главы, как в Busuu: пустой рельс — сразу глава, урок и чекпоинт; рельс начинается с урока — сверху ставим главу
 function ensureChapter(d) {
   if (!d.items.length) {
@@ -199,7 +201,7 @@ const fromServer = (c) => {
   settle()
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
   const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
-  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], dirty: false })
+  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], templates: c.templates ?? [], dirty: false })
   localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'; histReset()
   if (ensureChapter(doc)) save()
 }
@@ -516,7 +518,7 @@ function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; 
 const TPL = [...TEMPLATES, { id: 'lesson', kind: 'intro', t: 'Готовый урок', d: '7 экранов-образцов' }]
 // Меню Exercise по группам (что тренируем) и навыкам (для аналитики): Слух, Чтение, Письмо, Речь
 // SKILL_T, SKILLS — в utils/lesson.ts (их же показывает ветка урока над экранами)
-const XGROUPS = (() => {
+const XGROUPS_STD = (() => {
   const gs = [
     { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip', 'lesson'], cols: 2 },
     { k: 'words', t: 'Слова', d: 'отдельные слова', ids: ['choice', 'audiotest', 'pairs', 'spell', 'sayword'], cols: 3 },          // от узнавания к воспроизведению
@@ -525,11 +527,35 @@ const XGROUPS = (() => {
   const used = new Set(gs.flatMap(g => g.ids)); gs[2].ids.push(...TPL.filter(t => !used.has(t.id)).map(t => t.id))          // новое упражнение без группы — в «Фразы»
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(t => t.id === id)).filter(Boolean) }))
 })()
+// «Мои» — свои упражнения из конструктора (doc.templates): плитка по основе, свои название и описание; первой — «+ Своё упражнение»
+const XGROUPS = computed(() => [...XGROUPS_STD, { k: 'mine', t: 'Мои', d: 'собраны в конструкторе', cols: 3, mine: true,
+  items: (doc.templates ?? []).map(x => ({ id: x.id, kind: x.step.kind, base: tplOf(x.step), t: x.t, d: x.d, mine: true, step: x.step, tpl: x })) }])
+const skillsT = (t) => (t.mine ? skillsOf({ ...t.step, tn: t.t }) : (SKILLS[t.id] ?? []))
+/** Экраны по плитке меню: «Готовый урок», своё упражнение (копия образца) или шаблон */
+function makeTpl(id) {
+  if (id === 'lesson') return fishLesson()
+  const m = (doc.templates ?? []).find(t => t.id === id)
+  if (m) return [{ ...JSON.parse(JSON.stringify(m.step)), id: stepId(), tn: m.t, td: m.d }]
+  return [TEMPLATES.find(t => t.id === id).make()]
+}
+// Конструктор упражнений (ExerciseBuilder.vue): открыть пустым («+ Своё упражнение») или своё — двойным кликом по плитке
+const xb = ref(null)
+const openBuilder = (tpl = null) => { tray.value = null; xb.value = { tpl } }
+function saveTpl({ id, t, d, step: st }) {
+  if (!Array.isArray(doc.templates)) doc.templates = []
+  const x = doc.templates.find(v => v.id === id)
+  if (x) Object.assign(x, { t, d, step: st }); else doc.templates.push({ id: stepId(), t, d, step: st })
+  xb.value = null; save(); showToast(x ? 'Упражнение сохранено' : 'Готово — оно в меню «Exercise» → «Мои»')
+}
+async function delTpl(id) {
+  if (!(await ask('Удалить своё упражнение из меню?', { text: 'Экраны, уже поставленные на ветки, останутся.', ok: 'Удалить', danger: true }))) return
+  doc.templates = (doc.templates ?? []).filter(v => v.id !== id); xb.value = null; save()
+}
 function addScreen(id) {
   let L = activeLesson.value ? findAny(activeLesson.value) : null
   if (!L) { L = it('lesson', 'Урок', { steps: [] }); doc.items.push(L) }
   if (!Array.isArray(L.steps)) L.steps = []
-  const add = id === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === id).make()]
+  const add = makeTpl(id)
   if (L.steps.length + add.length > STEPS_MAX) return say(`В уроке не больше ${STEPS_MAX} экранов`)
   L.steps.push(...add); const st = add[0]; tray.value = null
   selectStep(L.id, st.id); setProgress(doc.progress)
@@ -601,8 +627,7 @@ function grabStep({ e, s: st, tile }) {
 // плитку из меню тянут как есть (17.11.2026): та же плитка с того же места едет за курсором; в окно экрана превращается только над веткой
 // урока или кружком урока (магнит). Над доской, экранами, панелями и меню — плитка; отпустили на свободном месте доски — там встаёт экран
 function trayDown(e, id) { if (e.button !== 0) return; const b = e.currentTarget.getBoundingClientRect(); sdStart(e, null, id, null, null, { dx: e.clientX - b.left, dy: e.clientY - b.top }) }
-const TRAY_ITEMS = XGROUPS.flatMap(g => g.items)
-const tileItem = computed(() => (sd.tray ? TRAY_ITEMS.find(t => t.id === sd.tray) : null))
+const tileItem = computed(() => (sd.tray ? XGROUPS.value.flatMap(g => g.items).find(t => t.id === sd.tray) : null))
 // под курсором не свободное место: экран, стикер, панель — или вообще не доска
 function blockedAt(x, y) { const el = document.elementFromPoint(x, y); return !el || !board.value?.contains(el) || !!el.closest('.frame, .note, .fl, .och') }
 const tileNow = (e, to) => !to || to === 'cancel'          // окном — только над веткой урока или кружком урока; над доской — плиткой
@@ -637,7 +662,7 @@ function sdMove(e) {
   if (!sd.on) {
     if (Math.hypot(e.clientX - sdP.sx, e.clientY - sdP.sy) < 6) return
     const first = sdP.list?.find(o => o.at.x || o.at.y)?.at
-    const preview = sdP.tray ? (sdP.tray === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === sdP.tray).make()]) : []
+    const preview = sdP.tray ? makeTpl(sdP.tray) : []
     Object.assign(sd, { on: true, rail: sdP.rail ?? null, tileOff: sdP.tileOff ?? null, asTile: !!sdP.tray, tray: sdP.tray, preview, list: sdP.list ?? [], extra: sdP.extra, s0: sdP.w, ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
   }
   sd.w = toWorld(e.clientX, e.clientY); sd.cx = e.clientX; sd.cy = e.clientY
@@ -657,7 +682,7 @@ async function sdUp(e) {
 let placing = false
 function placeStart(id, e) {
   const w = toWorld(e.clientX, e.clientY)
-  Object.assign(sd, { on: true, rail: null, tileOff: { dx: 62, dy: 50 }, asTile: true, cx: e.clientX, cy: e.clientY, tray: id, preview: id === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === id).make()], list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
+  Object.assign(sd, { on: true, rail: null, tileOff: { dx: 62, dy: 50 }, asTile: true, cx: e.clientX, cy: e.clientY, tray: id, preview: makeTpl(id), list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
   placing = true          // меню не закрываем: над ним плитка остаётся плиткой, закроется, когда экран поставят
   addEventListener('pointermove', sdMove); addEventListener('pointerdown', placeDown, true)
 }
@@ -1869,10 +1894,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <!-- Снизу: панель как в FigJam — группа, над ней ряд элементов -->
     <!-- плитка из меню, пока её тянут не над местом, куда можно поставить: того же размера, с того же места под курсором -->
     <div v-if="sd.on && sd.asTile && tileItem" class="mig" :style="{ left: sd.cx - (sd.tileOff?.dx ?? 62) + 'px', top: sd.cy - (sd.tileOff?.dy ?? 50) + 'px' }">
-      <ExerciseMini :id="tileItem.id" size="rail" />          <!-- не "tray": класс .tray здесь — сама панель меню (fixed внизу экрана), плитка уезжала бы туда -->
+      <ExerciseMini :id="tileItem.base || tileItem.id" size="rail" />          <!-- не "tray": класс .tray здесь — сама панель меню (fixed внизу экрана), плитка уезжала бы туда -->
       <small><b>{{ tileItem.t }}</b>{{ tileItem.d }}</small>
-      <span v-if="SKILLS[tileItem.id]" class="skl"><i v-for="k in SKILLS[tileItem.id]" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
+      <span v-if="skillsT(tileItem).length" class="skl"><i v-for="k in skillsT(tileItem)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
     </div>
+    <ExerciseBuilder v-if="xb" :tpl="xb.tpl" :resolve="resolveRef" @save="saveTpl" @del="delTpl" @close="xb = null" />
     <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop>
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
@@ -1897,8 +1923,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-else-if="tray === 'inter'">
         <!-- мини-окошки: как выглядит экран -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="g.k"><div class="xgh"><b>{{ g.t }}</b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
-        <button v-for="t in g.items" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
-          <span class="mini" :class="t.id"><i class="mp" />
+        <!-- «Мои»: первой — собрать своё в конструкторе -->
+        <button v-if="g.mine" class="mi madd" title="Собрать своё упражнение из блоков" @click="openBuilder()"><span class="mini plus"><b>+</b></span><small><b>Своё упражнение</b>собрать из блоков</small></button>
+        <button v-for="t in g.items" :key="t.id" class="mi" :title="t.mine ? 'Своё упражнение — тяните на ветку; двойной клик — открыть в конструкторе' : t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)" @dblclick="t.mine && openBuilder(t.tpl)">
+          <ExerciseMini v-if="t.mine" :id="t.base" size="rail" />
+          <span v-else class="mini" :class="t.id"><i class="mp" />
             <template v-if="t.id === 'intro'"><i class="mh" /><span class="mm"><i class="ma" /></span><i class="mw" /><i class="ml" /></template>
             <template v-else-if="t.id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
             <template v-else-if="t.id === 'audiotest'"><i class="mh" /><span class="mm sm"><i class="ma" /></span><span class="mr"><i /><i class="g" /><i /></span></template>
@@ -1915,7 +1944,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <i class="mb" />
           </span>
           <small><b>{{ t.t }}</b>{{ t.d }}</small>
-          <span v-if="SKILLS[t.id]" class="skl"><i v-for="k in SKILLS[t.id]" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
+          <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
         </button>
         </div></div>
       </template>
@@ -2195,6 +2224,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .pgo:active { transform: translateY(2px); box-shadow: none }
 .sdmark { position: absolute; z-index: 10020; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
 .sdbead { position: absolute; z-index: 10020; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
+.tray.inter .mini.plus { display: grid; place-items: center; border: 2px dashed #9ec0ef; background: color-mix(in srgb, #1cb0f6 6%, var(--card)) } .tray.inter .mini.plus b { font-size: 34px; font-weight: 400; color: #1cb0f6 }
 .mig { position: fixed; z-index: 10060; display: grid; justify-items: center; gap: 5px; width: 124px; box-sizing: border-box; padding: 6px 4px 4px; pointer-events: none; animation: mig .12s ease-out }
 .mig :deep(.mini) { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(0, 0, 0, .2) }
 .mig small { display: grid; gap: 1px; font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--hint); text-align: center } .mig small b { font-size: 12.5px; font-weight: 800; color: #2c2c2c }

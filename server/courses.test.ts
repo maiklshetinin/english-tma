@@ -55,8 +55,8 @@ await C.put(me, 'k7', { ...course, items: [{ id: 'l3', type: 'lesson', title: 'P
 await C.put(me, 'k8', { ...course, items: [{ id: 'u1', type: 'unit', title: 'Глава', hl: 'none', hlw: true, hlc: '#C4E1FF', hlo: 40.4 }, { id: 'u2', type: 'unit', title: 'Глава 2', hl: 'pink', hlw: 'yes', hlc: 'red' }] })
 const k8 = store.get('courses/k8').items
 ok('подсветка главы: вид, с ветками, цвет; мусор выкинут', k8[0].hl === 'none' && k8[0].hlw === true && k8[0].hlc === '#c4e1ff' && k8[0].hlo === 40 && !('hl' in k8[1]) && !('hlw' in k8[1]) && !('hlc' in k8[1]))
-await C.put(me, 'k9', { ...course, loose: [{ id: 'gu', type: 'unit', title: 'Глава', x: 1, y: 2 }, { id: 'gl', type: 'lesson', title: '', x: 1, y: 90, grp: 'gu' }, { id: 'gx', type: 'lesson', title: '', x: 1, y: 90, grp: 'bad id!' }] })
-const k9 = store.get('courses/k9').loose
+await C.put(me, 'k19', { ...course, loose: [{ id: 'gu', type: 'unit', title: 'Глава', x: 1, y: 2 }, { id: 'gl', type: 'lesson', title: '', x: 1, y: 90, grp: 'gu' }, { id: 'gx', type: 'lesson', title: '', x: 1, y: 90, grp: 'bad id!' }] })
+const k9 = store.get('courses/k19').loose
 ok('глава на доске: урок помнит главу (grp), плохой grp выкинут', k9[1].grp === 'gu' && !('grp' in k9[2]))
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)
 await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
@@ -73,6 +73,14 @@ ok('стикер: автор, размер, шрифт и отметки сох�
 await C.put(me, 'k8', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's1', kind: 'order', phrase: 'bye', by: 'letters' }, { id: 's2', kind: 'order', phrase: 'a b', by: 'junk' }] }] })
 const st8 = store.get('courses/k8').items[0].steps
 ok('«Собери слово»: по буквам сохраняется, чужое значение — нет', st8[0].by === 'letters' && !('by' in st8[1]))
+// Конструктор упражнений: свои упражнения курса и свои поля экрана (задание, название, описание плитки)
+await C.put(me, 'k19', { ...course, items: [{ id: 'l9', type: 'lesson', title: 'Урок', steps: [{ id: 's9', kind: 'order', phrase: 'See you later!', head: 'Соберите фразу по фото', tn: 'Фраза по фото', td: 'Фото и слова по порядку', image: 'https://maiklshetinin.github.io/english-tma/fish/wave.jpg', bad: 1 }] }],
+  templates: [{ id: 'my1', t: 'Фраза по фото', d: 'Фото и слова по порядку', step: { id: 'x1', kind: 'order', phrase: 'See you later!', tn: 'Фраза по фото', image: 'https://maiklshetinin.github.io/english-tma/fish/wave.jpg' } }, { id: 'my2', t: '', step: { id: 'x2', kind: 'pairs', pairs: [{ a: 'hi', b: 'привет' }] } }] })
+const c9 = store.get('courses/k19'), s9 = c9.items[0].steps[0]
+ok('экран: своё задание, название и описание плитки сохраняются, лишнее — нет', s9.head === 'Соберите фразу по фото' && s9.tn === 'Фраза по фото' && s9.td === 'Фото и слова по порядку' && !('bad' in s9) && !!s9.image)
+ok('свои упражнения курса: сохраняются, пустое название — «Моё упражнение»', c9.templates.length === 2 && c9.templates[0].step.kind === 'order' && c9.templates[1].t === 'Моё упражнение')
+ok('свои упражнения — отдаются вместе с курсом', (await C.get('k19')).templates?.length === 2)
+ok('кривое упражнение — 400', await code(C.put(me, 'k19', { ...course, templates: [{ id: 'my1', step: { id: 'x', kind: 'nope' } }] })) === 400)
 ok('удалить, потом — 404', (await C.remove('k1'), !store.has('courses/k1')) && await code(C.get('k1')) === 404)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')

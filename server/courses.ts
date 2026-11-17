@@ -23,8 +23,8 @@ export interface Step { id: string; kind: string; [k: string]: unknown }
 export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; hlw?: true; hlc?: string; hlo?: number; grp?: string; x?: number; y?: number; steps?: Step[]; topic?: string }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
-export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; updatedAt?: number; assigned?: string[] }
-export const INK_MAX = 300, INK_POINTS = 4000
+export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; templates?: { id: string; t: string; d: string; step: Step }[]; updatedAt?: number; assigned?: string[] }
+export const INK_MAX = 300, INK_POINTS = 4000, TEMPLATES_MAX = 30          // TEMPLATES_MAX — своих упражнений из конструктора в курсе
 export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 
 export function makeCourses({ db, FieldValue }: CoursesDeps) {
@@ -39,6 +39,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     const o: Step = { id: String(r.id), kind }
     if (kind === 'intro') { for (const k of ['word', 'tr']) put(o, k, str(r[k], 120)); for (const k of ['ex', 'exTr']) put(o, k, str(r[k], 300)) }
     for (const k of ['image', 'audio', 'video', 'exAudio']) put(o, k, ref(r[k]))
+    // своё упражнение из конструктора: своё задание вверху экрана, название и описание плитки
+    put(o, 'head', str(r.head, 160)); put(o, 'tn', str(r.tn, 60)); put(o, 'td', str(r.td, 120))
     // примерное время экрана (минуты, шаг ½) — своё, если репетитор поставил
     if (typeof r.min === 'number' && Number.isFinite(r.min) && r.min > 0) (o as Record<string, unknown>).min = Math.min(60, Math.max(0.5, Math.round(r.min * 2) / 2))
     if (kind === 'choice') {
@@ -92,7 +94,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     return out
   }
   const pub = (id: string, d: Record<string, any>): Course => ({ id, title: d.title ?? '', mode: d.mode === 'line' ? 'line' : 'wave', progress: d.progress ?? 0,
-    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], ink: d.ink ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined, assigned: d.assigned ?? [] })          // assigned — кому назначен (learn.ts)
+    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], ink: d.ink ?? [], templates: d.templates ?? [], updatedAt: d.updatedAt?.toMillis?.() ?? undefined, assigned: d.assigned ?? [] })          // assigned — кому назначен (learn.ts)
   const found = async (id: string) => {
     const s = await col().doc(id).get()
     if (!s.exists) throw fail(404, 'course not found')
@@ -131,11 +133,17 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
         const p = (Array.isArray(r.p) ? r.p : []).slice(0, INK_POINTS).map(num)
         return { id: String(r.id), c: /^#[0-9a-f]{6}$/i.test(String(r.c)) ? String(r.c) : '#1e1e1e', w: Math.max(1, Math.min(20, num(r.w) || 4)), p: p.length % 2 ? p.slice(0, -1) : p }
       })
+      // Свои упражнения из конструктора (меню «Exercise» → «Мои»): образец экрана, название, описание
+      const templates = (Array.isArray(b.templates) ? b.templates : []).slice(0, TEMPLATES_MAX).map((raw) => {
+        const r = (raw ?? {}) as Record<string, unknown>
+        if (!ID.test(String(r.id))) throw fail(400, 'bad template')
+        return { id: String(r.id), t: str(r.t, 60) || 'Моё упражнение', d: str(r.d, 120), step: step(r.step) }
+      })
       const ref = col().doc(id), s = await ref.get()
       if (!s.exists && (await col().get()).size >= COURSES_MAX) throw fail(413, 'too many courses')
       const tasks = items.filter((x) => x.type !== 'unit').length
       const doc = { updatedBy: uid, title: str(b.title, 120) || 'Без названия', mode: b.mode === 'line' ? 'line' : 'wave',
-        progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, notes, ink, updatedAt: FieldValue.serverTimestamp() }
+        progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, notes, ink, templates, updatedAt: FieldValue.serverTimestamp() }
       await ref.set(s.exists ? doc : { ...doc, teacherId: uid, createdAt: FieldValue.serverTimestamp() }, { merge: true })
       return { id, ok: true }
     },

@@ -12,7 +12,7 @@ import AudioWave from './AudioWave.vue'
 import LessonPlayer from './LessonPlayer.vue'
 import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
-import { stepJson, tplOf, tplTitle, tplDesc, SKILLS, SKILL_T } from '../utils/lesson'
+import { stepJson, tplOf, tplTitle, tplDesc, SKILLS, SKILL_T, skillsOf } from '../utils/lesson'
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, orderParts, gapParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
@@ -247,7 +247,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <ExerciseMini :id="tplOf(s)" size="tray" />
         <small :title="tplTitle(s) + ' — ' + tplDesc(s)"><b>{{ tplTitle(s) }}</b><span>{{ tplDesc(s) }}</span></small>      <!-- одна высота у всех плиток: название — в строку, описание — не больше 2 строк -->
         <!-- навыки — прямо на линии ветки; у экранов без навыков (знакомство, подсказка) на линии — точка -->
-        <span class="rskl"><template v-if="SKILLS[tplOf(s)]"><i v-for="k in SKILLS[tplOf(s)]" :key="k" class="rchip" :class="k">{{ SKILL_T[k] }}</i></template><i v-else class="rdot" /></span>
+        <span class="rskl"><template v-if="skillsOf(s).length"><i v-for="k in skillsOf(s)" :key="k" class="rchip" :class="k">{{ SKILL_T[k] }}</i></template><i v-else class="rdot" /></span>
       </span>
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
       <div class="flab" :class="{ ro: readonly }" :title="readonly ? 'Экран другого курса — скопируйте и вставьте в свой' : 'Тяните: переставить, унести на другой урок или на доску'" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">

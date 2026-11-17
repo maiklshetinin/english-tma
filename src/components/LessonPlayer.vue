@@ -205,7 +205,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Новое слово -->
     <div v-else-if="step.kind === 'intro'" class="body">
-      <h3 class="hd">{{ KINDS.intro.head }}</h3>
+      <h3 class="hd">{{ step.head || KINDS.intro.head }}</h3>
       <!-- как в Busuu: фото со звуком поверх, под ним голубой блок со словом — одной карточкой -->
       <div class="nw">
         <div v-if="step.video || step.image" class="media">
@@ -223,7 +223,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Выбери ответ -->
     <div v-else-if="step.kind === 'choice'" class="body">
-      <h3 class="hd">{{ KINDS.choice.head }}</h3>
+      <h3 class="hd">{{ step.head || KINDS.choice.head }}</h3>
       <div v-if="step.image" class="nw"><div class="media"><img :src="src(step.image, 'image')" alt="" /><AudioPill v-if="step.ask === 'audio' && qAudio(step)" :key="qAudio(step)" :src="src(qAudio(step), 'audio')" class="over" /></div></div>
       <template v-if="step.image && step.ask === 'audio'" />
       <template v-else-if="step.ask === 'audio'"><AudioPill v-if="qAudio(step)" :key="qAudio(step)" :src="src(qAudio(step), 'audio')" class="qa" /><p v-else class="empty">Нет звука для вопроса</p></template>
@@ -239,7 +239,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Пары -->
     <div v-else-if="step.kind === 'pairs'" class="body">
-      <h3 class="hd">{{ KINDS.pairs.head }}</h3>
+      <h3 class="hd">{{ step.head || KINDS.pairs.head }}</h3>
+      <!-- своё упражнение (конструктор): фото / видео / аудио и тут -->
+      <div v-if="step.video || step.image" class="media xm"><video v-if="step.video" :src="src(step.video, 'video')" controls playsinline /><img v-else :src="src(step.image, 'image')" alt="" /></div>
+      <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
       <div v-if="full(step).length < 2" class="empty">Нужно хотя бы 2 пары</div>
       <div v-else class="pairs">
         <div class="col"><button v-for="k in st.L" :key="'l' + k" class="pr" :class="{ sel: st.left === k, ok: st.matched.includes(k), no: st.bad[0] === k }" :disabled="st.matched.includes(k)" @click="tap('left', k)">{{ full(step)[k].a }}</button></div>
@@ -249,7 +252,9 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Собери фразу -->
     <div v-else-if="step.kind === 'order'" class="body">
-      <h3 class="hd">{{ step.by === 'letters' ? 'Соберите слово по буквам' : KINDS.order.head }}</h3>
+      <h3 class="hd">{{ step.head || (step.by === 'letters' ? 'Соберите слово по буквам' : KINDS.order.head) }}</h3>
+      <!-- своё упражнение (конструктор): фото / видео над фразой -->
+      <div v-if="step.video || step.image" class="media xm"><video v-if="step.video" :src="src(step.video, 'video')" controls playsinline /><img v-else :src="src(step.image, 'image')" alt="" /></div>
       <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
       <div v-if="pw.length < 2" class="empty">{{ step.by === 'letters' ? 'Впишите слово хотя бы из 2 букв' : 'Впишите фразу хотя бы из 2 слов' }}</div>
       <template v-else>
@@ -260,7 +265,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Подсказка -->
     <div v-else-if="step.kind === 'tip'" class="body">
-      <h3 class="hd">{{ KINDS.tip.head }}</h3>
+      <h3 class="hd">{{ step.head || KINDS.tip.head }}</h3>
+      <!-- своё упражнение (конструктор): фото / видео / аудио и тут -->
+      <div v-if="step.video || step.image" class="media xm"><video v-if="step.video" :src="src(step.video, 'video')" controls playsinline /><img v-else :src="src(step.image, 'image')" alt="" /></div>
+      <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
       <p class="tip"><template v-for="(x, k) in tipParts(step.text)" :key="k"><b v-if="x.b">{{ x.x }}</b><template v-else>{{ x.x }}</template></template></p>
       <div v-if="step.opts?.length" class="tt">
         <div v-for="(o, k) in step.opts" :key="k" class="tr"><span><button v-if="o.audio" class="exs" title="Послушать" @click="say(o.audio)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button>{{ o.w }}</span><span>{{ o.t }}</span></div>
@@ -269,7 +277,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Повтори за диктором -->
     <div v-else-if="step.kind === 'speak'" class="body">
-      <h3 class="hd">{{ KINDS.speak.head }}</h3>
+      <h3 class="hd">{{ step.head || KINDS.speak.head }}</h3>
       <div class="nw">
         <div v-if="step.video || step.image" class="media">
           <video v-if="step.video" ref="vid" :src="src(step.video, 'video')" playsinline :autoplay="!single && !embedded" @click="again" />
@@ -292,7 +300,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Заполни пропуск / Закончи предложение -->
     <div v-else-if="step.kind === 'gap'" class="body">
-      <h3 class="hd">{{ KINDS.gap.head }}</h3>
+      <h3 class="hd">{{ step.head || KINDS.gap.head }}</h3>
       <div v-if="step.video || step.image" class="nw"><div class="media">
         <video v-if="step.video" ref="vid" :src="src(step.video, 'video')" playsinline :autoplay="!single && !embedded" @click="again" />
         <img v-else :src="src(step.image, 'image')" alt="" />
@@ -308,7 +316,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 
     <!-- Ответь на вопрос -->
     <div v-else-if="step.kind === 'answer'" class="body">
-      <h3 class="hd">{{ KINDS.answer.head }}</h3>
+      <h3 class="hd">{{ step.head || KINDS.answer.head }}</h3>
       <div class="nw">
         <div v-if="step.image || step.video" class="media"><video v-if="step.video" :src="src(step.video, 'video')" playsinline controls /><img v-else :src="src(step.image, 'image')" alt="" /></div>
         <div class="word" :class="{ joined: step.image || step.video }"><b class="qq">{{ step.text || '…' }}</b>
@@ -354,7 +362,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .qa { width: 100%; max-width: 420px; align-self: center; height: 34px; border-radius: 17px; margin: 6px 0 10px }
 .nw { width: 100%; max-width: 380px; align-self: center; display: grid }
 .media { position: relative; border-radius: 12px 12px 0 0; overflow: hidden; background: #000; aspect-ratio: 16 / 9 } .media video, .media img { display: block; width: 100%; height: 100%; object-fit: cover }
-.media:last-child { border-radius: 12px }
+.media:last-child { border-radius: 12px } .media.xm { border-radius: 12px; margin-bottom: 10px }
 .media .over { position: absolute; left: 8%; right: 8%; bottom: 10px }
 .aw { align-self: stretch }
 .word { display: grid; justify-items: center; gap: 4px; padding: 12px; border-radius: 12px; background: #f1f6ff; text-align: center }

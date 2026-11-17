@@ -25,6 +25,8 @@ export interface Step {
                                      // «Собери фразу»: фраза (слова через пробел), перевод — в tr, пояснение
   text?: string                                                      // «Подсказка»: текст правила; фразы с переводом и звуком — в opts; «Ответь на вопрос»: вопрос
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
+  head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
+  tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
 }
 
 /** Задания курса, в которые можно собрать экраны */
@@ -150,8 +152,16 @@ export function tplOf(s: Step): string {
   if (s.kind === 'gap') return s.opts?.length ? 'fill' : 'type'
   return s.kind
 }
-export const tplTitle = (s: Step) => TEMPLATES.find((t) => t.id === tplOf(s))?.t ?? KINDS[s.kind].t
-export const tplDesc = (s: Step) => TEMPLATES.find((t) => t.id === tplOf(s))?.d ?? ''
+export const tplTitle = (s: Step) => s.tn || (TEMPLATES.find((t) => t.id === tplOf(s))?.t ?? KINDS[s.kind].t)
+export const tplDesc = (s: Step) => s.td ?? (TEMPLATES.find((t) => t.id === tplOf(s))?.d ?? '')
+/** Навыки экрана: по шаблону, а у своих упражнений из конструктора — ещё «Слух», если добавлены аудио или видео */
+export function skillsOf(s: Step): string[] {
+  const k = [...(SKILLS[tplOf(s)] ?? [])]
+  if (s.tn && (s.audio || s.video) && !k.includes('L') && s.kind !== 'intro' && s.kind !== 'tip') k.unshift('L')
+  return k
+}
+/** Образцы файлов для конструктора: добавил блок «Фото» / «Аудио» / «Видео» — сразу виден пример (потом меняется карандашом) */
+export const sampleMedia = () => ({ image: fish('wave.jpg'), audio: fish('see-you-later.mp3'), video: fish('hello.mp4') })
 /** Подпись экрана на рельсе: само слово, если оно уже есть */
 export function stepTitle(s: Step): string {
   if (s.kind === 'intro') return s.word?.trim() || KINDS.intro.t
