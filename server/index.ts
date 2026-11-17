@@ -21,6 +21,7 @@ import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
 import { makeNotes } from './notes.js'
 import { dropCache, cacheTtl, setCacheTtl, cacheStats, cacheSize } from './cache.js'
+import { makeRender } from './render.js'
 import { captureConsole, onLine, logs, onRequest, startSampler, serverStats, SRANGES, type SRange } from './devops.js'
 import { countFirestore, inRoute, google, ours, since as usageSince, RANGES, type Range } from './metrics.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
@@ -135,22 +136,29 @@ app.get('/dev/usage', requireUser, requireDev, wrap(async (req, res) => {
 // Сервер (devops.ts): запросы, время ответа, память, CPU по минутам; консоль; перезапуск и пересборка. ?range=hour|day
 app.get('/dev/server', requireUser, requireDev, (req, res) => {
   const range = (String(req.query.range) in SRANGES ? String(req.query.range) : 'hour') as SRange
-  res.json({ ...serverStats(range), commit: (env.RENDER_GIT_COMMIT || '').slice(0, 7), deployHook: !!env.RENDER_DEPLOY_HOOK, conns: live.people().length })
+  res.json({ ...serverStats(range), commit: (env.RENDER_GIT_COMMIT || '').slice(0, 7), deployVia: render.api ? 'api' : render.hook ? 'hook' : '', conns: live.people().length })
 })
 app.get('/dev/logs', requireUser, requireDev, (req, res) => { res.json({ lines: logs(Number(req.query.after) || 0) }) })
-// Перезапуск: процесс завершается, Render поднимает его заново (тот же код), ~30–60 с
-app.post('/dev/restart', requireUser, requireDev, (req, res) => {
-  console.warn(`⟳ перезапуск сервера по кнопке (${(req.user as { name?: string }).name || req.user.uid})`)
-  res.json({ ok: true })
-  setTimeout(() => process.exit(1), 400)
-})
-// Пересборка с последнего коммита: Deploy Hook из настроек сервиса на Render (переменная RENDER_DEPLOY_HOOK)
+// Сборки и перезапуск (render.ts): с RENDER_API_KEY — через Render API (статусы, логи сборки), без него — Deploy Hook и завершение процесса
+const render = makeRender({ key: env.RENDER_API_KEY, serviceId: env.RENDER_SERVICE_ID, hook: env.RENDER_DEPLOY_HOOK })
+const devName = (req: Request) => (req.user as { name?: string }).name || req.user.uid
+app.get('/dev/deploys', requireUser, requireDev, wrap(async (_req, res) => {
+  res.json({ via: render.api ? 'api' : render.hook ? 'hook' : '', deploys: await render.deploys(), commit: (env.RENDER_GIT_COMMIT || '').slice(0, 7), startedAt: serverStats('hour').startedAt })
+}))
+app.get('/dev/deploys/:id/logs', requireUser, requireDev, wrap(async (req, res) => {
+  res.json({ lines: await render.buildLogs(String(req.params.id), String(req.query.since || '')) })
+}))
 app.post('/dev/deploy', requireUser, requireDev, wrap(async (req, res) => {
-  if (!env.RENDER_DEPLOY_HOOK) return void res.json({ ok: false, error: 'Нет переменной RENDER_DEPLOY_HOOK на Render' })
-  const r = await fetch(env.RENDER_DEPLOY_HOOK, { method: 'POST' })
-  const body = await r.json().catch(() => ({})) as { deploy?: { id?: string } }
-  console.warn(`⟳ пересборка сервера по кнопке (${(req.user as { name?: string }).name || req.user.uid}): ${r.status} ${body.deploy?.id || ''}`)
-  res.json(r.ok ? { ok: true, id: body.deploy?.id || '' } : { ok: false, error: `Render ответил ${r.status}` })
+  const d = await render.deploy()
+  console.warn(`⟳ пересборка сервера по кнопке (${devName(req)}) через ${d.via === 'api' ? 'Render API' : 'Deploy Hook'} ${d.id}`)
+  res.json({ ok: true, ...d })
+}))
+// Перезапуск: тот же код, ~30–60 с. Через Render API — штатно; без ключа — процесс завершается, Render поднимает его заново
+app.post('/dev/restart', requireUser, requireDev, wrap(async (req, res) => {
+  console.warn(`⟳ перезапуск сервера по кнопке (${devName(req)})`)
+  const viaApi = await render.restart()
+  res.json({ ok: true, via: viaApi ? 'api' : 'exit' })
+  if (!viaApi) setTimeout(() => process.exit(1), 400)
 }))
 app.post('/dev/cache', requireUser, requireDev, wrap(async (req, res) => {          // { min } — срок в минутах (0 — выключить), или { clear: true }
   if (req.body?.clear === true) dropCache(db)

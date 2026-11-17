@@ -1,11 +1,10 @@
 <script setup>
 // Сервер — для разработчика: запросы и ошибки, время ответа, память и CPU по минутам (server/devops.ts), самые тяжёлые запросы,
-// кнопки «Перезапустить» (тот же код, ~30–60 с) и «Пересобрать» (свежий коммит с GitHub, через Deploy Hook на Render).
+// пересборка и перезапуск с прогрессом — DevDeploy.vue.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { request, post } from '../stores/api'
-import { ask, say } from '../composables/useDialog'
-import { showToast } from '../composables/useToast'
+import { request } from '../stores/api'
 import MiniChart from './MiniChart.vue'
+import DevDeploy from './DevDeploy.vue'
 
 const range = ref('hour')
 const data = ref(null), err = ref(''), busy = ref(false)
@@ -30,18 +29,6 @@ const MEM_LIMIT = 512          // бесплатный Render
 const memPct = computed(() => data.value ? Math.round((data.value.now.rss / MEM_LIMIT) * 100) : 0)
 const avgMs = computed(() => { const r = sum('req'); return r ? Math.round(pts.value.reduce((a, p) => a + p.avg * p.req, 0) / r) : 0 })
 
-async function restart() {
-  if (!(await ask('Перезапустить сервер?', { text: 'Тот же код, чистый старт: ~30–60 секунд приложение будет без сервера, у всех оборвётся живое соединение и переподключится само. Кэш базы обнулится.', ok: 'Перезапустить', danger: true }))) return
-  try { await post('/dev/restart', {}, 'Перезапуск'); showToast('Сервер перезапускается — через минуту обновите') } catch (e) { showToast(e.message) }
-}
-async function deploy() {
-  if (!data.value?.deployHook) return say('Нет Deploy Hook', { text: 'Render → сервис → Settings → Deploy Hook: скопируйте ссылку и добавьте её в Environment переменной RENDER_DEPLOY_HOOK. После этого кнопка заработает.' })
-  if (!(await ask('Пересобрать сервер с последнего коммита?', { text: 'Render скачает свежий код с GitHub и соберёт его — пара минут. Пока идёт сборка, работает старый сервер, потом Render переключит на новый (живое соединение у всех на секунду оборвётся).', ok: 'Пересобрать' }))) return
-  try {
-    const r = await post('/dev/deploy', {}, 'Пересборка')
-    showToast(r.ok ? 'Сборка запущена — следите в консоли ниже' : r.error)
-  } catch (e) { showToast(e.message) }
-}
 const NAMES = { schedule: 'Расписание', lessons: 'Уроки', students: 'Ученики', content: 'Пути и колоды', courses: 'Конструктор курсов', notes: 'Заметки', groups: 'Группы', review: 'Повторение', me: 'Профиль', auth: 'Вход', invites: 'Приглашения', dev: 'Панель разработчика', media: 'Медиа', srs: 'Слова', paths: 'Пути', decks: 'Колоды', presets: 'Пресеты', ping: 'Пинг' }
 const nice = (label) => NAMES[label.split(' /')[1]?.split('/')[0]] ?? label
 </script>
@@ -82,10 +69,8 @@ const nice = (label) => NAMES[label.split(' /')[1]?.split('/')[0]] ?? label
         </div>
       </div>
 
-      <div class="bt">
-        <button type="button" class="b1" @click="restart">⟳ Перезапустить</button>
-        <button type="button" class="b2" :class="{ off: !data.deployHook }" @click="deploy">⤓ Пересобрать с последнего коммита</button>
-      </div>
+      <!-- пересборка и перезапуск с прогрессом, история сборок и их логи -->
+      <DevDeploy />
     </template>
   </div>
 </template>
@@ -107,7 +92,4 @@ const nice = (label) => NAMES[label.split(' /')[1]?.split('/')[0]] ?? label
 .tr { display: grid; grid-template-columns: minmax(0, 1fr) 44px 70px 70px; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; text-align: right }
 .th2 { font-size: 10.5px; font-weight: 700; color: var(--hint); text-transform: uppercase } .th2 span:first-child { text-align: left }
 .tn { display: grid; min-width: 0; text-align: left } .tn small { overflow: hidden; font-size: 10.5px; font-weight: 500; color: var(--hint); text-overflow: ellipsis; white-space: nowrap } .tn em { color: #d93025; font-style: normal }
-.bt { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px }
-.bt button { padding: 9px 14px; border: 0; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer }
-.b1 { background: color-mix(in srgb, #e8453c 12%, transparent); color: #c5221f } .b2 { background: color-mix(in srgb, #4285f4 12%, transparent); color: #1a5fd0 } .b2.off { opacity: .55 }
 </style>
