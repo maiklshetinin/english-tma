@@ -65,7 +65,8 @@ function setup() {
   }
   if (s.kind === 'order') { const idx = orderParts(s).map((_, k) => k); let o = shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
-  if (s.kind === 'intro' || s.kind === 'tip' || s.kind === 'speak') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }          // без оценки — только «встречалось»
+  if (s.kind === 'intro' || s.kind === 'tip') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
+  if (s.kind === 'speak' && props.track) emit('answer', { step: s, ok: null })          // «Повтори» — без оценки, но «Продолжить» — только когда ученик правда что-то сказал (17.11.2026: молчание засчитывалось)          // без оценки — только «встречалось»
   if (!props.single && !props.embedded) autoplay()
 }
 const full = (s) => (s.pairs ?? []).filter(p => p.a?.trim() && p.b?.trim())
@@ -113,18 +114,44 @@ function check() { if (st.done || !st.typed.trim()) return; verdict(sameAnswer(s
 
 // ---- запись голоса («Повтори за диктором», «Ответь на вопрос» устно) ----
 const rec = reactive({ on: false, url: '', err: '' }); let mr = null, chunks = []
+// Слышно ли голос: пока пишем, меряем громкость (Web Audio). Набралось меньше ~0,4 с речи — запись не засчитываем
+const VOICE_MS = 400, VOICE_RMS = 0.025
+let vad = null
+function vadStart(stream) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), an = ctx.createAnalyser(); an.fftSize = 1024
+    ctx.createMediaStreamSource(stream).connect(an)
+    const buf = new Float32Array(an.fftSize), v = { ctx, ms: 0, t: performance.now(), timer: 0 }
+    v.timer = setInterval(() => {
+      an.getFloatTimeDomainData(buf); let sum = 0; for (const x of buf) sum += x * x
+      const now = performance.now(); if (Math.sqrt(sum / buf.length) > VOICE_RMS) v.ms += now - v.t; v.t = now
+    }, 50)
+    vad = v
+  } catch { vad = null }          // Web Audio нет — проверить нечем, засчитываем по длине записи
+}
+function vadStop() { if (!vad) return null; clearInterval(vad.timer); vad.ctx.close?.().catch(() => {}); const ms = vad.ms; vad = null; return ms }
 async function recToggle() {
   if (rec.on) return recStop()
   rec.err = ''
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    mr = new MediaRecorder(stream); chunks = []
+    mr = new MediaRecorder(stream); chunks = []; const t0 = performance.now()
+    vadStart(stream)
     mr.ondataavailable = (e) => chunks.push(e.data)
-    mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); if (chunks.length) { if (rec.url) URL.revokeObjectURL(rec.url); rec.url = URL.createObjectURL(new Blob(chunks, { type: mr.mimeType })); if (step.value?.kind === 'answer') st.done = true } }
+    mr.onstop = () => {
+      stream.getTracks().forEach(t => t.stop())
+      const voiced = vadStop(), long = performance.now() - t0
+      if (!chunks.length) return
+      if (rec.url) URL.revokeObjectURL(rec.url); rec.url = URL.createObjectURL(new Blob(chunks, { type: mr?.mimeType || chunks[0]?.type || 'audio/webm' }))
+      const k = step.value?.kind
+      if (k !== 'speak' && k !== 'answer') return
+      if ((voiced ?? long) >= VOICE_MS) { st.done = true; rec.err = '' }
+      else rec.err = 'Не слышно — скажите вслух и запишите ещё раз'
+    }
     mr.start(); rec.on = true
   } catch { rec.err = 'Нет доступа к микрофону' }
 }
-function recStop(drop) { if (!mr) return; if (drop) chunks = []; if (mr.state !== 'inactive') mr.stop(); mr = null; rec.on = false }
+function recStop(drop) { if (!mr) return; if (drop) { chunks = []; vadStop() } if (mr.state !== 'inactive') mr.stop(); mr = null; rec.on = false }
 onUnmounted(() => recStop(true))
 const vid = ref(null)
 function again() { const v = vid.value; if (v) { v.currentTime = 0; v.play().catch(() => {}) } else if (step.value?.audio) say(step.value.audio) }
@@ -282,7 +309,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
         <div v-if="step.video || step.image" class="media">
           <video v-if="step.video" ref="vid" :src="src(step.video, 'video')" playsinline :autoplay="!single && !embedded" @click="again" />
           <img v-else :src="src(step.image, 'image')" alt="" />
-          <span v-if="step.phrase" class="cap">{{ step.phrase }}</span>
+          <span v-if="step.phrase" class="cap" :class="{ up: !step.video && step.audio }">{{ step.phrase }}</span>
           <AudioPill v-if="!step.video && step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="over" />
         </div>
         <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" />
@@ -480,4 +507,5 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .embedded { height: auto; border-radius: inherit } .embedded .body { flex: none; overflow: visible; padding: 10px 40px 20px } .embedded .top { padding: 16px 110px 4px } .embedded .foot { padding: 10px 14px }
 .embedded .go { padding: 9px 22px; font-size: 14px } .go.ghost { background: var(--surface); color: var(--text); margin-right: auto }
 .embedded .pb i { transition: width .5s ease }
+.cap.up { bottom: 52px }          /* подпись над синей плашкой звука, а не под ней (раньше плашка её закрывала) */
 </style>
