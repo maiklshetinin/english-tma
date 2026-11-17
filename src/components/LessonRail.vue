@@ -217,6 +217,29 @@ const doneX = computed(() => (!steps.value.length ? props.x : run.at >= total.va
 // Стрелки ‹ › в подписи — переставить экран на шаг
 function shift(s, d) { const a = props.item.steps, i = a.indexOf(s), j = i + d; if (j < 0 || j >= a.length) return; a.splice(i, 1); a.splice(j, 0, s); changed() }
 onUnmounted(() => { ro.disconnect(); ro2.disconnect(); cancelAnimationFrame(hT) })
+// «Подсказка»: правило правится как у ученика — жирный виден жирным (не **звёздочками**). В данных по-прежнему **…** (tipParts).
+// Поле — contenteditable; пока в нём курсор, его не перерисовываем (иначе курсор прыгает)
+const mdToHtml = (t) => esc(t ?? '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>')
+function htmlToMd(el) {
+  let out = ''
+  const walk = (n) => n.childNodes.forEach((c) => {
+    if (c.nodeType === 3) out += c.nodeValue
+    else if (c.nodeName === 'BR') out += '\n'
+    else if (c.nodeName === 'B' || c.nodeName === 'STRONG' || (c.style && +c.style.fontWeight >= 600)) { const s = out; out = ''; walk(c); const inner = out; out = s + (inner.trim() ? '**' + inner + '**' : inner) }
+    else { if ((c.nodeName === 'DIV' || c.nodeName === 'P') && out && !out.endsWith('\n')) out += '\n'; walk(c) }
+  })
+  walk(el)
+  return out.replace(/\*\*\*\*/g, '').replace(/\u00a0/g, ' ')
+}
+function bindRule(el, s) { if (el && document.activeElement !== el && el.dataset.v !== (s.text ?? '')) { el.innerHTML = mdToHtml(s.text); el.dataset.v = s.text ?? '' } }
+function ruleInput(e, s) { s.text = htmlToMd(e.target); e.target.dataset.v = s.text; changed() }
+function rulePaste(e) { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')) }
+const boldBar = ref(null)          // id экрана, где выделен текст правила — над ним кнопки «B» / «убрать»
+function onSel() { const sel = getSelection(), n = sel?.anchorNode, el = (n?.nodeType === 3 ? n.parentElement : n)?.closest?.('.vrule'); boldBar.value = el && !sel.isCollapsed ? el.dataset.id : null }
+document.addEventListener('selectionchange', onSel)
+onUnmounted(() => document.removeEventListener('selectionchange', onSel))
+const boldCmd = (cmd) => document.execCommand(cmd)
+
 // Колёсико над экраном прокручивает сам экран; Ctrl + колёсико (и щипок) — масштаб холста, а не всей страницы браузера
 const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 // JSON экрана прямо в карточке (17.11.2026): «{ }» — переключить живой экран ↔ его JSON; «Скопировать»; тема кода — светлая / тёмная (запоминается)
@@ -363,8 +386,9 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       </div>
 
       <!-- Собери фразу, Подсказка, Повтори за диктором, Заполни пропуск, Ответь на вопрос -->
-      <div v-else-if="s.kind !== 'pairs'" class="cb">
-        <div class="hd">{{ KINDS[s.kind].head }}</div>
+      <div v-else-if="s.kind !== 'pairs'" class="cb" :class="{ vt: s.kind === 'tip' }">
+        <input v-if="s.kind === 'tip'" v-model="s.head" class="hd vf" :placeholder="KINDS.tip.head" @input="changed" />
+        <div v-else class="hd">{{ KINDS[s.kind].head }}</div>
         <!-- видео / фото -->
         <!-- «Закончи предложение» без фото: у ученика места под фото нет — и в правке не 16:9-заглушка, а кнопка (17.11.2026: окна одного размера) -->
         <button v-if="s.kind === 'gap' && !s.video && !s.image" class="add sm" title="16:9, фото лучше от 1280×720 — нажмите или перетащите" @click="pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">＋ Видео или фото<em v-if="pct(s, 'video') != null || pct(s, 'image') != null"> {{ pct(s, 'video') ?? pct(s, 'image') }}%</em></button>
@@ -389,15 +413,20 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
           <input v-model="s.tr" class="tr" :placeholder="s.by === 'letters' ? 'перевод слова' : 'перевод фразы'" @input="changed" />
           <textarea v-model="s.note" class="ex tr" rows="2" placeholder="Пояснение после ответа (необязательно)" @input="changed" />
         </template>
-        <!-- подсказка -->
+        <!-- подсказка — 1:1 с живым экраном (17.11.2026): правило с жирным, таблица та же, ячейки правятся на месте; «＋ Строка» — в подвале -->
         <template v-if="s.kind === 'tip'">
-          <textarea v-model="s.text" class="ex" rows="3" placeholder="Правило. **Жирным** — в двух звёздочках" @input="changed" />
-          <div v-for="(o, k) in s.opts" :key="k" class="trw">
-            <button class="sn" :class="{ on: o.audio }" :title="o.audio ? 'Заменить озвучку' : 'Добавить озвучку'" @click="pick(s, ['audio'], k)" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'], k)">🔈</button>
-            <input v-model="o.w" placeholder="See you later!" @input="changed" /><input v-model="o.t" class="tr" placeholder="Увидимся!" @input="changed" />
-            <button class="x in" title="Убрать строку" @click="delOpt(s, k)">✕</button>
+          <div v-if="s.video || s.image" class="media xm"><video v-if="s.video" :src="resolve(s.video, 'video')" controls playsinline preload="metadata" /><img v-else :src="resolve(s.image, 'image')" alt="" draggable="false" /><button class="x" title="Убрать" @click.stop="clear(s, s.video ? 'video' : 'image')">✕</button></div>
+          <div class="vrw">
+            <div :ref="(el) => bindRule(el, s)" class="vrule vf" :data-id="s.id" contenteditable="true" spellcheck="false" data-ph="Правило. Выделите слово — «B» сделает жирным" @input="ruleInput($event, s)" @paste="rulePaste" @pointerdown.stop />
+            <div v-if="boldBar === s.id" class="bbar"><button title="Жирный (Ctrl+B)" @mousedown.prevent="boldCmd('bold')"><b>B</b></button><button title="Убрать оформление" @mousedown.prevent="boldCmd('removeFormat')">убрать</button></div>
           </div>
-          <button v-if="(s.opts?.length ?? 0) < 6" class="add" @click="addTipRow(s)">＋ Строка таблицы</button>
+          <div class="vtt">
+            <div v-for="(o, k) in s.opts" :key="k" class="vtr" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'], k)">
+              <span><button class="vsn" :class="{ on: o.audio }" :title="o.audio ? 'Озвучка есть — нажмите, чтобы заменить' : 'Добавить озвучку (или перетащите файл на строку)'" @click="pick(s, ['audio'], k)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button><textarea v-model="o.w" class="vf" rows="1" placeholder="See you later!" @input="changed" /></span>
+              <textarea v-model="o.t" class="vf vt2" rows="1" placeholder="Увидимся!" @input="changed" />
+              <button class="rx" title="Убрать строку" @click="delOpt(s, k)">✕</button>
+            </div>
+          </div>
         </template>
         <!-- повтори за диктором -->
         <template v-if="s.kind === 'speak'">
@@ -429,7 +458,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <div class="prs"><div v-for="(p, k) in s.pairs" :key="k" class="pr"><input v-model="p.a" placeholder="I approve" @input="changed" /><input v-model="p.b" placeholder="одобряю" @input="changed" /><button class="x" title="Убрать пару" @click="s.pairs.splice(k, 1); changed()">✕</button></div></div>
       </div>
 
-      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'choice'" class="fdk"><button v-if="(s.opts?.length ?? 0) < OPTS_MAX" class="add sm" @click="addOpt(s)">＋ Вариант</button><button class="add sm deck" @click="openPk(s, 'opts')">Из карточек</button></span><span v-else-if="s.kind === 'pairs'" class="fdk"><button v-if="(s.pairs?.length ?? 0) < PAIRS_MAX" class="add sm" @click="addPair(s)">＋ Пара</button><button class="add sm deck" @click="openPk(s, 'pairs')">Из карточек</button></span><span v-else-if="s.kind === 'intro'" class="fdk"><button class="add sm deck" @click="openPk(s, 'intro')">{{ undo[s.id] ? 'Другая карточка' : 'Взять из карточек' }}</button><button v-if="undo[s.id]" class="add sm deck un" title="Вернуть, как было до карточки" @click="undoCard(s)">↺</button></span><button class="go play" @click="save(s)">Сохранить</button></div>
+      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'choice'" class="fdk"><button v-if="(s.opts?.length ?? 0) < OPTS_MAX" class="add sm" @click="addOpt(s)">＋ Вариант</button><button class="add sm deck" @click="openPk(s, 'opts')">Из карточек</button></span><span v-else-if="s.kind === 'pairs'" class="fdk"><button v-if="(s.pairs?.length ?? 0) < PAIRS_MAX" class="add sm" @click="addPair(s)">＋ Пара</button><button class="add sm deck" @click="openPk(s, 'pairs')">Из карточек</button></span><span v-else-if="s.kind === 'tip'" class="fdk"><button v-if="(s.opts?.length ?? 0) < 6" class="add sm" @click="addTipRow(s)">＋ Строка</button></span><span v-else-if="s.kind === 'intro'" class="fdk"><button class="add sm deck" @click="openPk(s, 'intro')">{{ undo[s.id] ? 'Другая карточка' : 'Взять из карточек' }}</button><button v-if="undo[s.id]" class="add sm deck un" title="Вернуть, как было до карточки" @click="undoCard(s)">↺</button></span><button class="go play" @click="save(s)">Сохранить</button></div>
       </template>
       </div>
     </div>
@@ -723,4 +752,19 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 @media (hover: none) { .chip.rp { opacity: 1 } }
 .qa2 { flex: none !important; font-size: 11px; padding: 0 4px }
 .cv .qbox { min-height: 34px; padding: 0 10px; border-radius: 17px }          /* звук — высотой с пилюлю у ученика (.qa 34px) */
+
+/* Подсказка — 1:1 с LessonPlayer (.tip 15/500/1.5, таблица .tt/.tr: 14/600, ячейки 11px 12px) */
+.vt { gap: 14px } .vt .hd.vf { margin: 8px 0 4px; font-size: 15px; font-weight: 800; text-align: center; line-height: normal }
+.vrw { position: relative }
+.vrule { min-height: 1.5em; font-size: 15px; font-weight: 500; line-height: 1.5; white-space: pre-wrap; cursor: text; user-select: text; -webkit-user-select: text } .vrule b, .vrule strong { font-weight: 800 }
+.vrule:empty::before { content: attr(data-ph); color: var(--hint-2) }
+.bbar { position: absolute; right: 0; top: -30px; z-index: 5; display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: #2c2c2a; box-shadow: 0 2px 8px rgba(0, 0, 0, .2) }
+.bbar button { border: 0; border-radius: 5px; padding: 3px 9px; background: none; color: #fff; font: inherit; font-size: 12px; cursor: pointer } .bbar button:hover { background: #444 }
+.vtt { border: 1px solid var(--border); border-radius: 12px }
+.vtr { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 11px 12px; font-size: 14px; font-weight: 600 } .vtr + .vtr { border-top: 1px solid var(--border) }
+.vtr span { display: flex; align-items: center; gap: 6px } .vtr .vt2 { color: var(--hint) } .vtr textarea { line-height: 1.35 }
+.vsn { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border: 0; padding: 0; background: none; color: #c4c4c4; cursor: pointer } .vsn.on { color: #1a73e8 } .vsn:hover { color: #1a73e8 }
+.vsn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.rx { position: absolute; right: -9px; top: 50%; translate: 0 -50%; width: 18px; height: 18px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--hint); font-size: 9px; cursor: pointer; opacity: 0 } .vtr:hover .rx { opacity: 1 }
+@media (hover: none) { .rx { opacity: 1 } }
 </style>
