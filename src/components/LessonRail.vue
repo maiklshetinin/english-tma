@@ -354,7 +354,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
            Выбери ответ: звук + варианты картинками. Аудиотест: фото + звук + варианты текстом. Какая форма — по самому экрану (show). -->
       <!-- Выбери ответ / Аудиотест: форма = живой экран (17.11.2026) — те же размеры, правка прямо на карточках, без скролла.
            Выбери ответ: звук + варианты картинками. Аудиотест: фото со звуком поверх + варианты текстом. Кружок — верный ответ. -->
-      <div v-else-if="s.kind === 'choice'" class="cb cv" :class="s.show === 'text' ? 'tx' : 'pc'">
+      <div v-else-if="s.kind === 'choice'" class="cb cv" :class="s.show === 'text' ? 'ctx' : 'cpx'">
         <input v-model="s.head" class="hd vf" :placeholder="KINDS.choice.head" :title="s.show === 'text' ? 'Аудиотест — фото и звук, ученик выбирает ответ текстом' : 'Выбери ответ — ученик слышит слово и выбирает картинку'" @input="changed" />
         <!-- Аудиотест: фото 16:9, синяя плашка звука поверх — как у ученика -->
         <div v-if="s.show === 'text'" class="media" :class="{ empty: !s.image }" @click="!s.image && pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">
@@ -455,7 +455,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 
       <!-- Пары -->
       <div v-else class="cb">
-        <div class="hd">{{ KINDS.pairs.head }}</div>
+        <input v-model="s.head" class="hd vf" :placeholder="KINDS.pairs.head" @input="changed" />
         <div class="prs"><div v-for="(p, k) in s.pairs" :key="k" class="pr"><input v-model="p.a" placeholder="I approve" @input="changed" /><input v-model="p.b" placeholder="одобряю" @input="changed" /><button class="x" title="Убрать пару" @click="s.pairs.splice(k, 1); changed()">✕</button></div></div>
       </div>
 
@@ -549,7 +549,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .node.done { background: #1fbe78; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px #9be6c4 }
 /* текущий экран на ветке — без пульсации (07.11): в редакторе «дышит» только текущий урок на рельсе */
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
-.card.editing { border: 2px dashed #0d99ff }
+.card.editing { border-color: #8cc8ff; box-shadow: 0 0 0 1px #8cc8ff, 0 2px 12px rgba(0, 0, 0, .06) }          /* правка — сплошная голубая рамка (пунктир раздражал, 17.11.2026) */
 .card.fixh { min-height: 0 } .card.fixh.editing { overflow: visible } .card.fixh .jv pre { max-height: none; min-height: 0 }      /* JSON и правка — высотой с живой экран (fixH), лишнее — прокруткой внутри */
 .ib.pen:hover, .ib.pen.on { background: var(--blue-l); color: var(--blue-d) }
 .stem { position: absolute; left: 50%; top: -40px; width: 4px; height: 54px;      /* от самой линии ветки (на ней теперь навыки плитки, а не кружок) */ margin-left: -2px; background: #d9d9d9; border-radius: 2px }
@@ -629,7 +629,6 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .ib.rs:hover { background: var(--blue-l); color: var(--blue-d) }
 .ib svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .cb { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 10px 40px 20px }      /* поля — как у живого экрана (LessonPlayer .embedded .body): в правке ширина и отступы не меняются */
-.choice .cb, .pairs .cb { padding: 8px 34px 12px }
 .hd { text-align: center; font-size: 15px; font-weight: 800; margin: 4px 0 2px }
 .tpk { margin: -4px 0 2px; color: var(--hint); font-size: 12px; text-align: center } .tpk b { color: var(--text) }      /* какая это форма — подпись под заданием */
 input, textarea { user-select: text }
@@ -638,14 +637,14 @@ input, textarea, select { font: inherit; color: var(--text); border: 1px solid t
 input:hover, textarea:hover { background: var(--surface) } input:focus, textarea:focus { border-color: var(--blue); background: var(--card) }
 input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 600 }
 .media { position: relative; flex: none; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000 }
-.media.empty { background: var(--surface); border: 1px dashed #cfcfcf; cursor: pointer } .media.empty:hover { background: var(--blue-l) }
+.media.empty { background: rgba(13, 153, 255, .06); border: 0; cursor: pointer } .media.empty:hover { background: var(--blue-l) }
 .media video, .media img { display: block; width: 100%; height: 100%; object-fit: cover }
 .ph { display: grid; place-items: center; align-content: center; height: 100%; gap: 2px; color: var(--blue-d); font-size: 13px; font-weight: 800 } .ph small { color: var(--hint); font-size: 10px; font-weight: 600 }
 .x { position: absolute; right: 5px; top: 5px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px; cursor: pointer; padding: 0 }
 .x.in { position: static; flex: none; background: var(--surface); color: var(--hint) }
 .up { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 6px; background: var(--card); color: var(--blue-d); font-size: 11px; font-weight: 900; font-style: normal }
 .aud { position: relative; display: flex; align-items: center; gap: 6px; min-height: 30px } .aud > :first-child:not(button) { flex: 1; min-width: 0 }
-.add { border: 1px dashed #cfcfcf; border-radius: 9px; padding: 6px 10px; background: none; font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-d); cursor: pointer; flex: 1 } .add:hover { background: var(--blue-l) }
+.add { border: 1px solid transparent; border-radius: 9px; padding: 6px 10px; background: rgba(13, 153, 255, .07); font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-d); cursor: pointer; flex: 1 } .add:hover { background: var(--blue-l) }
 .add.sm { flex: none; padding: 4px 8px; font-size: 11px }
 .dk { display: flex; gap: 6px; margin-top: auto } .dk .add.deck { flex: 1; margin-top: 0 } .add.deck.un { flex: none; background: var(--card); border-color: var(--border); color: var(--text) }
 .add.deck { flex: none; margin-top: auto; border-style: solid; border-color: var(--blue-l); background: var(--blue-l) }
@@ -711,7 +710,7 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .cv .qmeta em { font-style: normal; color: var(--blue-d); font-weight: 800 }
 .lnk { border: 0; background: none; padding: 0; font: inherit; font-weight: 800; color: var(--blue-d); cursor: pointer } .lnk:hover { text-decoration: underline }
 .co.pics { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; width: 100% }
-.co.rows { display: grid; gap: 8px; width: 100%; max-width: 420px; align-self: center }
+.co.rows { display: grid; gap: 8px; width: 100% }          /* ширина — как у ученика (.rows), иначе строки шире фото */
 .cop { position: relative; display: grid; border: 1px solid var(--border); border-radius: 12px; background: var(--card); overflow: hidden }
 .cop.right { border: 2px solid #1fbe78; margin: -1px }
 .cph { position: relative; aspect-ratio: 3 / 2; background: var(--surface); cursor: pointer } .cph img { display: block; width: 100%; height: 100%; object-fit: cover }
@@ -775,9 +774,13 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .qpw.ov { position: absolute; left: 8%; right: 8%; bottom: 10px; width: auto; height: 30px; margin: 0; z-index: 2 }
 .qp { width: 100%; height: 100%; border-radius: 17px }
 .qch { position: absolute; right: 40px; top: 50%; translate: 0 -50%; display: flex; gap: 4px } .qch .chip { padding: 2px 8px; font-size: 10.5px }
-.qe { width: 100%; height: 100%; border: 1.5px dashed #b9cff0; border-radius: 17px; background: rgba(13, 153, 255, .05); color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer } .qe:hover { background: rgba(13, 153, 255, .1) }
+.qe { width: 100%; height: 100%; border: 0; border-radius: 17px; background: rgba(13, 153, 255, .1); color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer } .qe:hover { background: rgba(13, 153, 255, .1) }
 .cop .ow { margin: 0; padding: 9px 10px; border-radius: 0; box-shadow: none; text-align: center; font-size: 14px; font-weight: 800; line-height: normal }
 .co.rows .cop .ow { padding: 13px 4px; font-weight: 600 }
 .co.rows .cop { padding: 0 10px }
 .fdk .add.sm { padding: 4px 9px; font-size: 11px; flex: none }
+.cf { height: 55px; padding: 0 14px; align-items: center; box-sizing: border-box }          /* подвал правки — ровно как у ученика (.foot 55px) */
+.pr input { height: 48px; box-sizing: border-box }
+.cb > .hd.vf { margin: 8px 0 4px; font-size: 15px; font-weight: 800; text-align: center; line-height: normal }
+.cb { gap: 14px }
 </style>
