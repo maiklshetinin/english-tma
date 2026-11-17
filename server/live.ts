@@ -42,8 +42,9 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
   const people = () => [...conns].map(({ cid, uid, dev, name, photo, color, where, course }) => ({ cid, uid, dev, name, photo, color, where, course }))
   const presence = () => { const m = { t: 'presence', users: people() }; for (const c of conns) send(c, m) }
-  // Активность преподавателей (для разработчика, 17.11.2026): пока человек что-то делает в приложении — отметка раз в минуту (в памяти;
-  // перезапуск сервера обнуляет). Заходы — отметки, разделённые паузой больше 5 минут. Видно под сообщением в чате: «заходил 3 раза и не ответил»
+  // Активность преподавателей (для разработчика, 17.11.2026): приложение раз в минуту шлёт «act», только пока человек правда за ним
+  // (вкладка на экране и за минуту было движение мышью / нажатие / касание — useActive.js); плюс действия в чате. Просто открытая вкладка
+  // и переподключения не считаются. Отметка — не чаще раза в минуту (в памяти; перезапуск сервера обнуляет). Заходы — отметки, разделённые паузой больше 5 минут. Видно под сообщением в чате: «заходил 3 раза и не ответил»
   const act = new Map<string, number[]>()
   function touch(c: Conn) { const a = act.get(c.uid) ?? [], t = Date.now(); if (!a.length || t - a[a.length - 1] >= 60_000) { a.push(t); if (a.length > 3000) a.splice(0, a.length - 3000); act.set(c.uid, a) } }
   function visits(uid: string, since: number) { const a = (act.get(uid) ?? []).filter((t) => t > since); let n = 0, prev = 0; for (const t of a) { if (!n || t - prev > 5 * 60_000) n++; prev = t } return { n, last: a[a.length - 1] ?? 0 } }
@@ -52,7 +53,8 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
   function onMessage(c: Conn, raw: string) {
     let m: Record<string, unknown>
     try { m = JSON.parse(raw) } catch { return }
-    if (m.t !== 'activity') touch(c)
+    if (m.t === 'act' || m.t === 'typing' || (typeof m.t === 'string' && m.t.startsWith('note'))) touch(c)
+    if (m.t === 'act') return
     if (m.t === 'where') { c.where = str(m.where, 40); c.course = str(m.course, 64); presence() }
     else if (m.t === 'cursor') room(c, { t: 'cursor', cid: c.cid, x: num(m.x), y: num(m.y) })
     else if (m.t === 'sel') room(c, { t: 'sel', cid: c.cid, id: str(m.id, 64) || null })
@@ -115,7 +117,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
         const u = await verify(token).catch(() => null)
         if (!u || u.role !== 'teacher') return ws.close(4401, 'unauthorized')
         const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
-        conns.add(c); touch(c)
+        conns.add(c)
         send(c, { ...hello(), t: 'hello', cid: c.cid, uid: c.uid, cursors, cursorsBy, notes: notes?.all() ?? [], drops })
         presence()
         ws.on('message', (d) => onMessage(c, String(d)))

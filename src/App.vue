@@ -13,8 +13,8 @@ import GlobalCursors from './components/GlobalCursors.vue'
 import ScreenNotes from './components/ScreenNotes.vue'
 import BlockGate from './components/BlockGate.vue'
 import { useTabBadge } from './composables/useTabBadge'
-import { startLive, stopLive, setWhere, onLive } from './composables/useLive'
-import { active, onActive } from './composables/useActive'
+import { startLive, stopLive, setWhere, onLive, liveSend } from './composables/useLive'
+import { active, onActive, idleFor } from './composables/useActive'
 import { useStudentsStore } from './stores/students'
 import { useScheduleStore } from './stores/schedule'
 import { useGroupsStore } from './stores/groups'
@@ -24,6 +24,10 @@ import { useBackButton } from './composables/useBackButton'
 import { useAuthStore } from './stores/auth'
 const auth = useAuthStore()
 useTabBadge()      // новые сообщения чата — в названии и на значке вкладки
+// «Человек здесь» — серверу раз в минуту, только пока правда за приложением (вкладка на экране, за минуту было движение / нажатие):
+// так разработчик видит в чате, заходил ли коллега после его сообщения (live.ts → activity). Открытая и забытая вкладка не считается
+setInterval(() => { if (auth.isTeacher && document.visibilityState === 'visible' && idleFor() < 60_000) liveSend({ t: 'act' }) }, 60_000)
+onActive(() => { if (auth.isTeacher) liveSend({ t: 'act' }) })
 
 const router = useRouter(), route = useRoute()
 // Роль становится известна только после входа: если адрес (закладка, обновление) не для этой роли — на первую вкладку роли

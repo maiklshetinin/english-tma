@@ -76,7 +76,7 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
     block(u: NoteAuthor, nid: unknown, mid: unknown, on: boolean): Note | null {
       const n = notes.get(str(nid, 64)), mm = n?.msgs.find((x) => x.id === str(mid, 64))
       if (!n || !mm || n.path !== CHAT_PATH || mm.uid !== u.uid) return null
-      if (on) { mm.block = true; mm.answered = {}; for (const x of n.msgs) if (x.at > mm.at && x.uid !== u.uid && !mm.answered[x.uid]) mm.answered[x.uid] = x.at }
+      if (on) { mm.block = true; mm.answered = {}; for (const x of n.msgs.slice(n.msgs.indexOf(mm) + 1)) if (x.uid !== u.uid && !mm.answered[x.uid]) mm.answered[x.uid] = x.at }      // по порядку, не по времени
       else { delete mm.block; delete mm.answered }
       save(n); return n
     },

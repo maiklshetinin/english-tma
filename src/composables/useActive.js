@@ -6,6 +6,8 @@ import { ref } from 'vue'
 const IDLE = 10 * 60_000
 export const active = ref(true)
 let last = Date.now(), awaySince = 0
+/** Сколько мс не было движения / нажатия (для «человек здесь» в live — App.vue) */
+export const idleFor = () => Date.now() - last
 const subs = new Set()
 /** Подписка на возвращение: fn(awayMs). Возвращает отписку. */
 export function onActive(fn) { subs.add(fn); return () => subs.delete(fn) }
