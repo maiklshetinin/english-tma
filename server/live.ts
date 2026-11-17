@@ -21,7 +21,7 @@ import type { Notes, NoteAuthor } from './notes.js'
 
 export interface LiveUser { uid: string; role: string; name: string; photo: string; dev?: boolean }
 type Verify = (token: string) => Promise<LiveUser | null>
-interface Conn { ws: WebSocket; cid: string; uid: string; dev: boolean; name: string; photo: string; color: string; where: string; course: string; alive: boolean; ver: string; logs?: boolean }      // logs — разработчик смотрит консоль сервера (devops.ts); ver — сборка сайта (commit), присылает сам
+interface Conn { ws: WebSocket; cid: string; uid: string; dev: boolean; name: string; photo: string; color: string; where: string; course: string; alive: boolean; ver: string; logs?: boolean; hidden?: boolean }      // hidden — разработчик-невидимка: остальные его не видят      // logs — разработчик смотрит консоль сервера (devops.ts); ver — сборка сайта (commit), присылает сам
 
 const COLORS = ['#f24822', '#0d99ff', '#14ae5c', '#9747ff', '#ffa629', '#ff24bd', '#00b5ce', '#e5a000']
 const colorOf = (uid: string) => COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length]
@@ -40,15 +40,18 @@ export function makeLive({ verify, origins, hello = () => ({}), notes, canEdit =
   let seq = 0, cursors = false, cursorsBy = ''
   const drops: Drop[] = []          // посылки на парашюте, ещё не открытые (в памяти: перезапуск сервера их очищает)
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
-  const people = () => [...conns].map(({ cid, uid, dev, name, photo, color, where, course, ver }) => ({ cid, uid, dev, name, photo, color, where, course, ver }))
-  const presence = () => { const m = { t: 'presence', users: people() }; for (const c of conns) send(c, m) }
+  // Невидимка (разработчик, 17.11.2026): его нет в «кто здесь», не видно его курсора, выделения и «печатает…» — у всех, кроме него самого
+  // и других разработчиков. Свои сообщения в чате видны как обычно (это уже осознанное действие).
+  const sees = (viewer: Conn | undefined, c: Conn) => !c.hidden || !viewer || viewer.uid === c.uid || viewer.dev
+  const people = (viewer?: Conn) => [...conns].filter((c) => sees(viewer, c)).map(({ cid, uid, dev, name, photo, color, where, course, ver, hidden }) => ({ cid, uid, dev, name, photo, color, where, course, ver, ...(hidden ? { hidden } : {}) }))
+  const presence = () => { for (const c of conns) send(c, { t: 'presence', users: people(c) }) }
   // Активность преподавателей (для разработчика, 17.11.2026): приложение раз в минуту шлёт «act», только пока человек правда за ним
   // (вкладка на экране и за минуту было движение мышью / нажатие / касание — useActive.js); плюс действия в чате. Просто открытая вкладка
   // и переподключения не считаются. Отметка — не чаще раза в минуту (в памяти; перезапуск сервера обнуляет). Заходы — отметки, разделённые паузой больше 5 минут. Видно под сообщением в чате: «заходил 3 раза и не ответил»
   const act = new Map<string, number[]>()
   function touch(c: Conn) { const a = act.get(c.uid) ?? [], t = Date.now(); if (!a.length || t - a[a.length - 1] >= 60_000) { a.push(t); if (a.length > 3000) a.splice(0, a.length - 3000); act.set(c.uid, a) } }
   function visits(uid: string, since: number) { const a = (act.get(uid) ?? []).filter((t) => t > since); let n = 0, prev = 0; for (const t of a) { if (!n || t - prev > 5 * 60_000) n++; prev = t } return { n, last: a[a.length - 1] ?? 0 } }
-  const room = (from: Conn, m: unknown) => { for (const c of conns) if (c !== from && from.course && c.course === from.course) send(c, m) }
+  const room = (from: Conn, m: unknown) => { for (const c of conns) if (c !== from && from.course && c.course === from.course && sees(c, from)) send(c, m) }
 
   function onMessage(c: Conn, raw: string) {
     let m: Record<string, unknown>
@@ -57,6 +60,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes, canEdit =
     if (m.t === 'act') return
     // версия сайта у этой вкладки — разработчику видно в «Профиле», у кого старая; «Обновить у всех» — всем (и себе): обновятся, когда сборка будет на сайте
     if (m.t === 'ver') { c.ver = str(m.ver, 20); presence() }
+    else if (m.t === 'hide' && c.dev) { c.hidden = m.on === true; presence() }          // невидимка: присылает сам при подключении и при переключении
     else if (m.t === 'logs' && c.dev) c.logs = m.on === true          // консоль сервера в «Профиле»: открыта — строки идут сразу
     else if (m.t === 'reload' && c.dev) { for (const o of conns) send(o, { t: 'reload', by: c.name }) }
     else if (m.t === 'where') { c.where = str(m.where, 40); c.course = str(m.course, 64); presence() }
@@ -66,7 +70,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes, canEdit =
     else if (m.t === 'pcursor') {
       const frac = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1, Math.min(2, v)) * 1000) / 1000 : 0)
       const out = { t: 'pcursor', cid: c.cid, path: str(m.path, 200), sel: str(m.sel, 600), rx: frac(m.rx), ry: frac(m.ry), x: num(m.x), y: num(m.y), click: m.click === true }
-      for (const o of conns) if (o !== c) send(o, out)
+      for (const o of conns) if (o !== c && sees(o, c)) send(o, out)
     }
     else if (m.t === 'cursors' && c.dev) { cursors = m.on === true; cursorsBy = c.name; for (const o of conns) send(o, { t: 'cursors', on: cursors, by: cursorsBy, mine: o.uid === c.uid }) }
     else if (m.t === 'doc' && m.doc && typeof m.doc === 'object' && canEdit(c.uid)) room(c, { t: 'doc', cid: c.cid, uid: c.uid, doc: m.doc })          // «только просмотр» — курс коллегам не правит
@@ -74,7 +78,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes, canEdit =
     // разработчик: кто сколько раз заходил после времени since (его сообщения в чате)
     else if (m.t === 'activity' && c.dev) { const since = num(m.since), users: Record<string, { n: number; last: number }> = {}; for (const uid of act.keys()) if (uid !== c.uid) users[uid] = visits(uid, since); send(c, { t: 'activity', since, users }) }
     // «печатает…» под заметкой — остальным, не храним
-    else if (m.t === 'typing') { const out = { t: 'typing', id: str(m.id, 64), uid: c.uid, name: c.name, color: c.color }; for (const o of conns) if (o.uid !== c.uid) send(o, out) }
+    else if (m.t === 'typing') { const out = { t: 'typing', id: str(m.id, 64), uid: c.uid, name: c.name, color: c.color }; for (const o of conns) if (o.uid !== c.uid && sees(o, c)) send(o, out) }
     // «Позвать»: у адресата (или у всех, если не указан) заметка открывается сама и всплывает уведомление
     else if (m.t === 'nudge' && notes?.get(str(m.id, 64))) {
       const to = str(m.to, 64), from = { uid: c.uid, name: c.name, photo: c.photo, color: c.color }

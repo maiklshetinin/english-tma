@@ -20,8 +20,12 @@ export const people = computed(() => {
 
 // Общие курсоры на всех экранах: включает разработчик (переключатель в «Профиле») — сразу для всех, кто в приложении.
 // Состояние хранит сервер (live.ts): новичок узнаёт его при подключении. Курсоры рисует GlobalCursors.vue.
-export const shared = reactive({ cursors: false, by: '' })
+export const shared = reactive({ cursors: false, by: '', hidden: false })
 export const setSharedCursors = (on) => liveSend({ t: 'cursors', on })
+// Невидимка (только разработчик): остальные не видят его в «кто здесь», его курсор и «печатает…». Запоминается в браузере,
+// серверу — при каждом подключении (сервер слушает это только от разработчика)
+shared.hidden = (() => { try { return localStorage.getItem('tma.invisible') === '1' } catch { return false } })()
+export function setHidden(on) { shared.hidden = on; try { localStorage.setItem('tma.invisible', on ? '1' : '0') } catch { /* приватный режим */ } liveSend({ t: 'hide', on }) }
 
 const subs = new Map()
 export function onLive(type, fn) { if (!subs.has(type)) subs.set(type, new Set()); subs.get(type).add(fn); return () => subs.get(type).delete(fn) }
@@ -39,7 +43,7 @@ async function connect() {
   if (!token) { timer = setTimeout(connect, 3000); return }
   const s = new WebSocket(`${API.replace(/^http/, 'ws')}/live?t=${encodeURIComponent(token)}`)
   ws = s
-  s.onopen = () => { retry = 0; live.on = true; liveSend({ t: 'ver', ver: __APP_COMMIT__ }); if (where) liveSend(where) }      // ver — какая сборка открыта (видно разработчику)
+  s.onopen = () => { retry = 0; live.on = true; liveSend({ t: 'ver', ver: __APP_COMMIT__ }); if (shared.hidden) liveSend({ t: 'hide', on: true }); if (where) liveSend(where) }      // ver — какая сборка открыта (видно разработчику)
   s.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data) } catch { return }
     if (m.t === 'hello') { live.cid = m.cid; liveHeaders['X-Live-Cid'] = m.cid; Object.assign(shared, { cursors: !!m.cursors, by: m.cursorsBy || '' }) }

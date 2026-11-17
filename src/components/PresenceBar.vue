@@ -4,7 +4,7 @@
 // inline — внутри панели редактора курсов; иначе — на компьютере плавает в правом верхнем углу, на телефоне — тонкая строка
 // над страницей (и только если в приложении есть кто-то ещё). Без соединения (демо) — не видно.
 import { ref, computed } from 'vue'
-import { live, people, WHERE, shared, setSharedCursors } from '../composables/useLive'
+import { live, people, WHERE, shared, setSharedCursors, setHidden } from '../composables/useLive'
 import AppIcon from './AppIcon.vue'
 import ThemeToggle from './ThemeToggle.vue'
 import { notesState, unreadCount, toggleChat } from '../composables/useNotes'
@@ -29,10 +29,14 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
     <button v-if="auth.isDev && !inline" class="cur" :class="{ on: shared.cursors }" :aria-pressed="shared.cursors"
       :title="shared.cursors ? 'Общие курсоры включены — нажмите, чтобы выключить у всех' : 'Включить общие курсоры: все увидят курсоры друг друга'" @click="setSharedCursors(!shared.cursors)">
       <svg viewBox="0 0 16 16"><path d="M2 1.5l5 13 1.9-5.4L14.5 7z" /></svg></button>
+    <!-- Разработчику: невидимка — другие не видят, что вы в приложении (ваш кружок, курсор, «печатает…») -->
+    <button v-if="auth.isDev && !inline" class="cur inv" :class="{ on: shared.hidden }" :aria-pressed="shared.hidden"
+      :title="shared.hidden ? 'Невидимка: вас никто не видит. Нажмите, чтобы снова стать видимым' : 'Стать невидимкой: другие не увидят, что вы в приложении'" @click="setHidden(!shared.hidden)">
+      <svg viewBox="0 0 24 24"><path v-if="shared.hidden" d="M3 3l18 18M10.6 6.2A9.7 9.7 0 0 1 12 6c5 0 9 6 9 6a16 16 0 0 1-2.6 3.2M6.4 7.6C4.3 9.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1.1M9.9 10a3 3 0 0 0 4.1 4.1" /><path v-else d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /></svg></button>
     <button v-if="!inline" class="nt" :class="{ on: chatOn }" :aria-pressed="chatOn" :title="`Чат${unreadCount ? ' — новых: ' + unreadCount : ''}`" aria-label="Чат" @click="toggleChat(); open = false">
       <AppIcon name="chat" :size="16" /><em v-if="unreadCount">{{ unreadCount }}</em></button>
     <button class="row" :title="people.map(p => (p.me ? 'Вы' : p.name) + ' — ' + label(p)).join('\n')" @click="open = !open">
-      <span v-for="p in shown" :key="p.uid" class="av" :style="{ '--c': p.color }">
+      <span v-for="p in shown" :key="p.uid" class="av" :class="{ ghost: p.me && shared.hidden }" :style="{ '--c': p.color }">
         <img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" @error="bad[p.uid] = true" />
         <b v-else :style="{ background: p.color }">{{ ini(p.name) }}</b>
       </span>
@@ -44,7 +48,7 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
       <div class="mh">Сейчас в приложении</div>
       <div v-for="p in people" :key="p.uid" class="mi">
         <span class="av sm" :style="{ '--c': p.color }"><img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" /><b v-else :style="{ background: p.color }">{{ ini(p.name) }}</b></span>
-        <span class="tx"><b>{{ p.name }}<i v-if="p.me"> (вы)</i><em v-if="p.dev" class="dv">разработчик</em></b><small>{{ label(p) }}<template v-if="p.cids.length > 1"> · {{ p.cids.length }} окна</template></small></span>
+        <span class="tx"><b>{{ p.name }}<i v-if="p.me"> (вы{{ shared.hidden ? ', невидимка' : '' }})</i><em v-if="p.dev" class="dv">разработчик</em></b><small>{{ label(p) }}<template v-if="p.cids.length > 1"> · {{ p.cids.length }} окна</template></small></span>
       </div>
     </div>
   </div>
@@ -56,6 +60,8 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
 .cur { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--card); color: var(--hint); box-shadow: 0 2px 10px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04); cursor: pointer; transition: background .12s, color .12s }
 .cur svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round }
 .cur:hover { color: var(--text) } .cur.on { background: #0d99ff; color: #fff }
+.cur.inv svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .cur.inv.on { background: #5f6368; color: #fff }      /* невидимка — серым */
+.av.ghost { opacity: .45; filter: grayscale(1) }      /* вы — невидимка: свой кружок бледный */
 .nt { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--card); color: var(--hint); box-shadow: 0 2px 10px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04); cursor: pointer }
 .nt:hover, .nt.on { color: var(--blue) }
 .nt em { position: absolute; right: -4px; top: -4px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box; border-radius: 99px; background: var(--red); color: #fff; font-style: normal; font-size: 10px; font-weight: 900; line-height: 17px; text-align: center; box-shadow: 0 0 0 2px var(--card) }
