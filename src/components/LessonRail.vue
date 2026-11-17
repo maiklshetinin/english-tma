@@ -249,7 +249,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
           </button>
           <button class="jc" :class="{ ok: copied === s.id }" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать' }}</button>
         </div>
-        <pre @wheel.stop v-html="jsonHtml(s)" />
+        <pre v-html="jsonHtml(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
         <small class="jft">Образец для ИИ. Обратно — Ctrl+V или перетащите JSON на холст</small>
       </div>
       <LessonPlayer v-else-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
