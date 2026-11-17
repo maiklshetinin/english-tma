@@ -638,7 +638,7 @@ function trayDown(e, id) { if (e.button !== 0) return; const b = e.currentTarget
 const tileItem = computed(() => (sd.tray ? XGROUPS.value.flatMap(g => g.items).find(t => t.id === sd.tray) : null))
 // под курсором не свободное место: экран, стикер, панель — или вообще не доска
 function blockedAt(x, y) { const el = document.elementFromPoint(x, y); return !el || !board.value?.contains(el) || !!el.closest('.frame, .note, .fl, .och') }
-const tileNow = (e, to) => !to || to === 'cancel'          // окном — только над веткой урока или кружком урока; над доской — плиткой
+const tileNow = () => true          // 17.11.2026: из меню тянется всегда плиткой — окном экран становится только после отпускания (над рельсом не дёргается)
 // Выделено рамкой — тянуть можно с любого места выделения (как в FigJam): экраны, стикеры, рисунки и черновики-кружки едут вместе
 // выделен один урок (глава, задание) на рельсе — вместе с его экранами: за выделение тянется сам урок, как с рельса
 const maskItem = computed(() => {
