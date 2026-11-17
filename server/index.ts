@@ -21,6 +21,7 @@ import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
 import { makeNotes } from './notes.js'
 import { dropCache, cacheTtl, setCacheTtl, cacheStats, cacheSize } from './cache.js'
+import { countFirestore, inRoute, google, ours, since as usageSince, RANGES, type Range } from './metrics.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -37,12 +38,17 @@ const DEV_IDS = list(env.DEV_IDS)                        // разработчи
 const isStaff = (uid: string) => { const id = String(uid).replace(/^tg:/, ''); return TEACHER_IDS.includes(id) || DEV_IDS.includes(id) }
 const roleOf = (u: { uid: string; role?: unknown }) => (u.role === 'teacher' && !isStaff(u.uid) ? undefined : u.role as 'teacher' | 'student' | undefined)
 
-initializeApp({ credential: cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) })
+const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT), cred = cert(sa)
+initializeApp({ credential: cred })
 const auth = getAuth(), db = getFirestore()
+countFirestore()          // свой счётчик чтений и записей по запросам (metrics.ts)
 
 const app = express()
 const small = express.json({ limit: '10kb' }), big = express.json({ limit: '1mb' })            // путь, пресеты и колоды с карточками — крупнее обычных запросов
 app.use(cors({ origin: list(env.ALLOWED_ORIGIN) }), (req, res, next) => (/^\/(paths|presets|decks|courses)\//.test(req.path) ? big : small)(req, res, next))
+// метка запроса для счётчика «кто читает» (metrics.ts): «GET /lessons/range», длинные id → :id
+const routeLabel = (req: Request) => req.method + ' /' + req.path.split('/').filter(Boolean).slice(0, 3).map((p) => (p.length >= 12 || /^\d+$/.test(p) || /^tg:/.test(p) ? ':id' : p)).join('/')
+app.use((req, _res, next) => inRoute(routeLabel(req), next))
 app.use((req, res, next) => {                              // строка в логах на каждый запрос: метод, путь, код ответа, время
   const t = Date.now()
   res.on('finish', () => req.path !== '/' && console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - t}ms`))
@@ -116,6 +122,14 @@ const cacheDoc = () => db.collection('settings').doc('cache')
 cacheDoc().get().then((d) => { const m = d.get('min'); if (typeof m === 'number') setCacheTtl(m * 60_000) }).catch((e) => console.error('settings/cache:', e))
 const cacheInfo = () => ({ min: cacheTtl() / 60_000, since: cacheStats.since, reads: cacheStats.reads, saved: cacheStats.saved, entries: cacheSize(db) })
 app.get('/dev/cache', requireUser, requireDev, (_req, res) => { res.json(cacheInfo()) })
+// Нагрузка на базу: Google Cloud Monitoring (как в Firebase) + свой счётчик по запросам. ?range=hour|day|month
+app.get('/dev/usage', requireUser, requireDev, wrap(async (req, res) => {
+  const range = (String(req.query.range) in RANGES ? String(req.query.range) : 'day') as Range
+  const own = ours(range)
+  let points = null, error: string | null = null
+  try { points = await google(() => cred.getAccessToken(), sa.project_id, range) } catch (e) { error = (e as Error).message }
+  res.json({ range, step: RANGES[range].step, points, error, ours: own.points, top: own.top, since: usageSince })
+}))
 app.post('/dev/cache', requireUser, requireDev, wrap(async (req, res) => {          // { min } — срок в минутах (0 — выключить), или { clear: true }
   if (req.body?.clear === true) dropCache(db)
   else {

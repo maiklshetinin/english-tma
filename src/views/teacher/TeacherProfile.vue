@@ -13,6 +13,7 @@ import { useAuthStore } from '../../stores/auth'
 import { live } from '../../composables/useLive'
 import { MY_VER, siteVer, updateAll } from '../../composables/useUpdate'
 import { request, post } from '../../stores/api'
+import DevUsage from '../../components/DevUsage.vue'
 const auth = useAuthStore()
 const studentStore = useStudentsStore()
 const name = computed(() => auth.user?.first_name || auth.teacher.name)
@@ -120,6 +121,8 @@ async function ping() {
           <span class="tx">Обновить у всех<small>после git push: обновятся, как только новая версия будет на сайте; кто работает — увидит плашку</small></span>
         </button>
         <!-- кэш чтений базы на сервере: дольше срок — меньше Reads в Firestore; любая правка через приложение всё равно сбрасывает нужное сразу -->
+        <!-- график чтений и записей базы (как Usage в Firebase) и «откуда чтения» -->
+        <div class="it vr"><DevUsage class="duw" /></div>
         <div class="it vr">
           <span class="ic"><AppIcon name="sliders" :size="18" /></span>
           <div class="tx">
@@ -191,6 +194,7 @@ async function ping() {
 .st { padding: 2px 8px; border-radius: 8px; background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green-d); font-size: 12px; font-weight: 800 } .vt tr.old .st { background: color-mix(in srgb, var(--orange-d) 15%, transparent); color: var(--orange-d) }
 .none { margin-top: 4px; font-size: 13px; color: var(--hint) }
 /* кэш: заголовок со сроком справа, ниже — цифры плитками */
+.duw { flex: 1; min-width: 0 }
 .ch { display: flex; align-items: center; justify-content: space-between; gap: 10px }
 .cs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0 4px } .cs span { display: grid; gap: 1px; padding: 6px 8px; border-radius: 10px; background: var(--surface); font-size: 11px; font-weight: 600; color: var(--hint) } .cs b { font-size: 16px; font-weight: 800; color: var(--text) }
 .cs .cg { background: color-mix(in srgb, var(--green) 14%, transparent) } .cs .cg b { color: var(--green-d) }
