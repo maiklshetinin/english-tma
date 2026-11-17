@@ -12,6 +12,8 @@ import PresenceBar from './components/PresenceBar.vue'
 import GlobalCursors from './components/GlobalCursors.vue'
 import ScreenNotes from './components/ScreenNotes.vue'
 import BlockGate from './components/BlockGate.vue'
+import UpdateBanner from './components/UpdateBanner.vue'
+import './composables/useUpdate'      // «Обновить у всех» от разработчика
 import { useTabBadge } from './composables/useTabBadge'
 import { startLive, stopLive, setWhere, onLive, liveSend } from './composables/useLive'
 import { active, onActive, idleFor } from './composables/useActive'
@@ -78,6 +80,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
     <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" /><ScreenNotes v-if="auth.isTeacher && route.name !== 'courses'" />
   </template>
   <AppDialog />
+  <UpdateBanner />
   <BlockGate v-if="auth.isTeacher" />      <!-- блокирующее сообщение разработчика: экран закрыт, пока не ответишь -->
 </template>
 

@@ -39,7 +39,7 @@ async function connect() {
   if (!token) { timer = setTimeout(connect, 3000); return }
   const s = new WebSocket(`${API.replace(/^http/, 'ws')}/live?t=${encodeURIComponent(token)}`)
   ws = s
-  s.onopen = () => { retry = 0; live.on = true; if (where) liveSend(where) }
+  s.onopen = () => { retry = 0; live.on = true; liveSend({ t: 'ver', ver: __APP_COMMIT__ }); if (where) liveSend(where) }      // ver — какая сборка открыта (видно разработчику)
   s.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data) } catch { return }
     if (m.t === 'hello') { live.cid = m.cid; liveHeaders['X-Live-Cid'] = m.cid; Object.assign(shared, { cursors: !!m.cursors, by: m.cursorsBy || '' }) }

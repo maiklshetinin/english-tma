@@ -21,7 +21,7 @@ import type { Notes, NoteAuthor } from './notes.js'
 
 export interface LiveUser { uid: string; role: string; name: string; photo: string; dev?: boolean }
 type Verify = (token: string) => Promise<LiveUser | null>
-interface Conn { ws: WebSocket; cid: string; uid: string; dev: boolean; name: string; photo: string; color: string; where: string; course: string; alive: boolean }
+interface Conn { ws: WebSocket; cid: string; uid: string; dev: boolean; name: string; photo: string; color: string; where: string; course: string; alive: boolean; ver: string }      // ver — сборка сайта (commit), присылает сам
 
 const COLORS = ['#f24822', '#0d99ff', '#14ae5c', '#9747ff', '#ffa629', '#ff24bd', '#00b5ce', '#e5a000']
 const colorOf = (uid: string) => COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length]
@@ -40,7 +40,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
   let seq = 0, cursors = false, cursorsBy = ''
   const drops: Drop[] = []          // посылки на парашюте, ещё не открытые (в памяти: перезапуск сервера их очищает)
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
-  const people = () => [...conns].map(({ cid, uid, dev, name, photo, color, where, course }) => ({ cid, uid, dev, name, photo, color, where, course }))
+  const people = () => [...conns].map(({ cid, uid, dev, name, photo, color, where, course, ver }) => ({ cid, uid, dev, name, photo, color, where, course, ver }))
   const presence = () => { const m = { t: 'presence', users: people() }; for (const c of conns) send(c, m) }
   // Активность преподавателей (для разработчика, 17.11.2026): приложение раз в минуту шлёт «act», только пока человек правда за ним
   // (вкладка на экране и за минуту было движение мышью / нажатие / касание — useActive.js); плюс действия в чате. Просто открытая вкладка
@@ -55,7 +55,10 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
     try { m = JSON.parse(raw) } catch { return }
     if (m.t === 'act' || m.t === 'typing' || (typeof m.t === 'string' && m.t.startsWith('note'))) touch(c)
     if (m.t === 'act') return
-    if (m.t === 'where') { c.where = str(m.where, 40); c.course = str(m.course, 64); presence() }
+    // версия сайта у этой вкладки — разработчику видно в «Профиле», у кого старая; «Обновить у всех» — всем (и себе): обновятся, когда сборка будет на сайте
+    if (m.t === 'ver') { c.ver = str(m.ver, 20); presence() }
+    else if (m.t === 'reload' && c.dev) { for (const o of conns) send(o, { t: 'reload', by: c.name }) }
+    else if (m.t === 'where') { c.where = str(m.where, 40); c.course = str(m.course, 64); presence() }
     else if (m.t === 'cursor') room(c, { t: 'cursor', cid: c.cid, x: num(m.x), y: num(m.y) })
     else if (m.t === 'sel') room(c, { t: 'sel', cid: c.cid, id: str(m.id, 64) || null })
     // «Курсоры на всех экранах» (режим разработчика): курсор с адресом страницы — всем, показывают те, кто на той же странице
@@ -116,7 +119,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
         const token = new URL(req.url || '', 'http://x').searchParams.get('t') || ''
         const u = await verify(token).catch(() => null)
         if (!u || u.role !== 'teacher') return ws.close(4401, 'unauthorized')
-        const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
+        const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true, ver: '' }
         conns.add(c)
         send(c, { ...hello(), t: 'hello', cid: c.cid, uid: c.uid, cursors, cursorsBy, notes: notes?.all() ?? [], drops })
         presence()

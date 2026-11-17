@@ -9,8 +9,11 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 const gitSha = () => { try { return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { return '' } }
 const commit = (process.env.GITHUB_SHA || gitSha()).slice(0, 7) || 'local'
 
+// version.json рядом с сайтом — по нему приложение понимает, что новая сборка уже выложена (useUpdate.js, «Обновить у всех»)
+const versionFile = { name: 'version-json', generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version: pkg.version, commit, at: new Date().toISOString() }) }) } }
+
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), versionFile],
   base: '/english-tma/', // Обязательно имя вашего репозитория с слэшами по бокам
   test: { environment: 'jsdom', include: ['src/**/*.test.ts'] },     // npm test (vitest)
   define: {

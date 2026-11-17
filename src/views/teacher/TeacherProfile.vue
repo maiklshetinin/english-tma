@@ -10,6 +10,8 @@ import { hapticOn, setHaptic } from '../../composables/useTelegram'
 import { apiFetch, canLogout } from '../../firebase'
 import { useStudentsStore } from '../../stores/students'
 import { useAuthStore } from '../../stores/auth'
+import { live } from '../../composables/useLive'
+import { MY_VER, siteVer, updateAll } from '../../composables/useUpdate'
 const auth = useAuthStore()
 const studentStore = useStudentsStore()
 const name = computed(() => auth.user?.first_name || auth.teacher.name)
@@ -18,6 +20,16 @@ const demo = import.meta.env.DEV || new URLSearchParams(location.search).has('de
 const noStudents = computed(() => auth.role === 'teacher' && !studentStore.list.length)
 const switchRole = () => { if (!noStudents.value) auth.setRole(auth.role === 'student' ? 'teacher' : 'student') }
 const busy = ref(false)
+// Разработчик: у кого какая версия сайта открыта (по вкладкам) и «Обновить у всех» (useUpdate.js)
+const site = ref('')
+if (auth.isDev) siteVer().then((v) => { site.value = v || '' })
+const fresh = computed(() => site.value || MY_VER)
+const vers = computed(() => {
+  const by = new Map()
+  for (const u of live.users) { const p = by.get(u.uid) ?? { uid: u.uid, name: u.name, me: false, vers: new Set() }; p.vers.add(u.ver || '?'); if (u.cid === live.cid) p.me = true; by.set(u.uid, p) }
+  return [...by.values()].map((p) => ({ ...p, vers: [...p.vers], old: [...p.vers].some((v) => v !== fresh.value) })).sort((a, b) => a.me - b.me)
+})
+function updateEveryone() { updateAll(); showToast('Отправлено: обновятся все, как только новая версия будет на сайте (тихо — или плашкой, если человек сейчас работает)') }
 async function ping() {
   if (!import.meta.env.VITE_API_URL) return showToast('Не задан API_URL — приложение не знает адрес сервера')
   busy.value = true
@@ -69,6 +81,17 @@ async function ping() {
     <template v-if="auth.isDev">
       <h4 class="gh">Для разработчика</h4>
       <section class="grp">
+        <div class="it vr">
+          <span class="ic"><AppIcon name="users" :size="18" /></span>
+          <span class="tx">Версии в приложении<small>на сайте: {{ fresh }}{{ site ? '' : ' (локально)' }}</small>
+            <span v-for="p in vers" :key="p.uid" class="vl" :class="{ old: p.old }">{{ p.me ? 'Вы' : p.name }} — {{ p.old ? 'старая' : 'свежая' }} <code>{{ p.vers.join(', ') }}</code></span>
+            <span v-if="!vers.length" class="vl">никого нет на связи</span>
+          </span>
+        </div>
+        <button class="it" @click="updateEveryone">
+          <span class="ic"><AppIcon name="download" :size="18" /></span>
+          <span class="tx">Обновить у всех<small>после git push: обновятся, как только новая версия будет на сайте; кто работает — увидит плашку</small></span>
+        </button>
         <button class="it" :disabled="busy" @click="ping">
           <span class="ic"><AppIcon name="refresh" :size="18" /></span>
           <span class="tx">Проверить связь с сервером</span>
@@ -101,4 +124,5 @@ async function ping() {
 .sw { appearance: none; flex: none; width: 46px; height: 28px; margin: 0; border-radius: 14px; background: var(--border); position: relative; cursor: pointer; transition: background .15s }
 .sw::after { content: ''; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s }
 .sw:checked { background: var(--green) } .sw:checked::after { transform: translateX(18px) }
+.vr { align-items: flex-start; cursor: default } .vl { display: block; margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--green-d) } .vl.old { color: var(--orange-d) } .vl code { font-size: 11px; color: var(--hint) }
 </style>
