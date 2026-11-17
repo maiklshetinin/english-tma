@@ -16,7 +16,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
 import { useTelegram } from '../composables/useTelegram'
 import BackButton from './BackButton.vue'
-import { KINDS, shuffle, orderParts, tipParts, gapParts, sameAnswer } from '../utils/lesson'
+import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts } from '../utils/lesson'
 
 const props = defineProps({
   steps: { type: Array, required: true },
@@ -53,9 +53,9 @@ const src = (v, k) => (v ? props.resolve(v, k) : '')
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
 const { hapticResult, hapticTick } = useTelegram()      // виброотклик на ответы (в Профиле можно выключить)
-const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', res: null, showTr: false, hint: false, mode: '', text: '' })
+const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '' })
 function setup() {
-  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', res: null, showTr: false, hint: false, mode: '', text: '' }); Object.assign(mine, { ok: 0, all: 0 })
+  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '' }); Object.assign(mine, { ok: 0, all: 0 })
   recStop(true); rec.url = ''; rec.err = ''
   const s = step.value; if (!s) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
@@ -109,8 +109,13 @@ function back(k) { if (st.done) return; st.built = st.built.filter(x => x !== k)
 
 // ---- пропуск ----
 const gp = computed(() => gapParts(step.value?.phrase))
-function fill(k) { if (st.done) return; st.picked = k; st.typed = step.value.opts[k].w; verdict(sameAnswer(st.typed, gp.value.gap)) }
-function check() { if (st.done || !st.typed.trim()) return; verdict(sameAnswer(st.typed, gp.value.gap)) }
+function fill(k) { if (st.done) return; st.picked = k; st.typed = step.value.opts[k].w; verdict(gapOk(st.typed, gp.value.gap)) }
+// «Закончи предложение»: пропусков может быть два, в каждом — несколько верных через «/» (упражнения по учебнику)
+const gl = computed(() => gapList(step.value?.phrase))
+const gaps = computed(() => gl.value.filter(x => x.g != null))
+const typedAll = computed(() => gaps.value.length > 0 && gaps.value.every(x => (st.tys[x.i] ?? '').trim()))
+function check() { if (st.done || !typedAll.value) return; st.typed = st.tys.join(' '); verdict(gaps.value.every(x => gapOk(st.tys[x.i], x.g))) }
+const gapOkAt = (x) => gapOk(st.tys[x.i], x.g)
 
 // ---- запись голоса («Повтори за диктором», «Ответь на вопрос» устно) ----
 const rec = reactive({ on: false, url: '', err: '' }); let mr = null, chunks = []
@@ -253,7 +258,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       <h3 class="hd">{{ step.head || KINDS.choice.head }}</h3>
       <div v-if="step.image" class="nw"><div class="media"><img :src="src(step.image, 'image')" alt="" /><AudioPill v-if="step.ask === 'audio' && qAudio(step)" :key="qAudio(step)" :src="src(qAudio(step), 'audio')" class="over" /></div></div>
       <template v-if="step.image && step.ask === 'audio'" />
-      <template v-else-if="step.ask === 'audio'"><AudioPill v-if="qAudio(step)" :key="qAudio(step)" :src="src(qAudio(step), 'audio')" class="qa" /><p v-else class="empty">Нет звука для вопроса</p></template>
+      <template v-else-if="step.ask === 'audio'"><AudioPill v-if="qAudio(step)" :key="qAudio(step)" :src="src(qAudio(step), 'audio')" class="qa" /><p v-else-if="step.show !== 'text'" class="empty">Нет звука для вопроса</p></template>
       <div v-else class="q">{{ answer?.t || '…' }}</div>
       <div v-if="!step.opts?.length" class="empty">Добавьте варианты — из карточек или свои</div>
       <div v-else :class="step.show === 'pics' ? 'pics' : 'rows'">
@@ -335,9 +340,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       </div></div>
       <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
       <div v-if="!gp.gap" class="empty">Отметьте пропуск: слово в [квадратных скобках]</div>
-      <p v-else class="sent">{{ gp.a }}<span v-if="step.opts?.length" class="slot" :class="{ ok: st.done && st.res, no: st.done && !st.res }">{{ st.typed || '\u00a0' }}</span><input v-else v-model="st.typed" class="slot in" :style="{ width: gp.gap.length + 3 + 'ch' }" :class="{ ok: st.done && st.res, no: st.done && !st.res }" :readonly="st.done" :size="Math.max(4, gp.gap.length + 1)" autocomplete="off" autocapitalize="off" spellcheck="false" @keydown.enter.stop="check" />{{ gp.b }}</p>
+      <p v-else-if="step.opts?.length" class="sent">{{ gp.a }}<span class="slot" :class="{ ok: st.done && st.res, no: st.done && !st.res }">{{ st.typed || '\u00a0' }}</span>{{ gp.b }}</p>
+      <p v-else class="sent"><template v-for="(x, n) in gl" :key="n"><template v-if="x.g == null">{{ x.t }}</template><input v-else v-model="st.tys[x.i]" class="slot in" :style="{ width: Math.max(...gapAlts(x.g).map(a => a.length)) + 3 + 'ch' }" :class="{ ok: st.done && gapOkAt(x), no: st.done && !gapOkAt(x) }" :readonly="st.done" autocomplete="off" autocapitalize="off" spellcheck="false" @keydown.enter.stop="check" /></template></p>
       <div v-if="step.opts?.length" class="pool">
-        <button v-for="k in st.order" :key="k" class="chip" :class="{ ok: st.done && sameAnswer(step.opts[k].w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ step.opts[k].w }}</button>
+        <button v-for="k in st.order" :key="k" class="chip" :class="{ ok: st.done && gapOk(step.opts[k].w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ step.opts[k].w }}</button>
       </div>
     </div>
 
@@ -366,11 +372,11 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
     <div class="foot" :class="{ good: !isFinal && checks && st.done && right, bad: !isFinal && checks && st.done && !right }">
       <span v-if="!isFinal && step.kind === 'choice' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span v-if="!right">{{ answer?.w }}</span><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'order' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильно так:' }}</b><span class="fs">{{ step.phrase }}</span><small>{{ step.tr }}</small><small v-if="step.note" class="fn">{{ step.note }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
-      <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gp.a }}{{ gp.gap }}{{ gp.b }}</span><small>{{ step.tr }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
+      <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gapFull(step.phrase) }}</span><small>{{ step.tr }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'answer' && st.done && step.tr" class="fb"><small>Пример ответа</small><span class="fs">{{ step.tr }}</span></span>
       <span v-else class="fb" />
       <template v-if="embedded && isFinal"><button class="go ghost" @click="emit('restart')">↺ Заново</button><button class="go" @click="emit('full')">Во весь экран</button></template>
-      <button v-else-if="needCheck && !single" class="go" :disabled="!st.typed.trim()" @click="check">Проверить</button>
+      <button v-else-if="needCheck && !single" class="go" :disabled="!typedAll" @click="check">Проверить</button>
       <button v-else-if="embedded" class="go" :disabled="!st.done" @click="next">Продолжить</button>
       <button v-else-if="isFinal" class="go" @click="emit('close')">{{ single ? 'Так увидит ученик' : 'Готово' }}</button>
       <button v-else class="go" :disabled="!st.done && !single" @click="next">{{ single ? 'Так увидит ученик' : 'Продолжить' }}</button>

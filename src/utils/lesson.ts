@@ -182,7 +182,7 @@ export function stepIssue(s: Step): string {
     if (o.length < 2) return 'Нужно хотя бы 2 варианта'
     const a = o[s.ans ?? 0]
     if (!a) return 'Не выбран верный ответ'
-    if (s.ask === 'audio' && !(s.audio || a.audio)) return 'Нет звука для вопроса'
+    if (s.ask === 'audio' && !(s.audio || a.audio) && s.show !== 'text') return 'Нет звука для вопроса'          // текстом можно и без звука: «Circle the uncountable noun» — вопрос в заголовке
     if (s.ask === 'tr' && !a.t?.trim()) return 'Нет перевода у верного ответа'
     if (s.show === 'pics' && o.some(x => !x.image)) return 'Не у всех вариантов есть фото'
     return ''
@@ -193,7 +193,8 @@ export function stepIssue(s: Step): string {
   if (s.kind === 'gap') {
     const g = gapParts(s.phrase).gap
     if (!g) return 'Отметьте пропуск: слово в [скобках]'
-    if (s.opts?.length && !s.opts.some(o => sameAnswer(o.w, g))) return 'Среди вариантов нет верного'
+    if (s.opts?.length && !s.opts.some(o => gapOk(o.w, g))) return 'Среди вариантов нет верного'
+    if (gapList(s.phrase).filter(x => x.g != null).length > (s.opts?.length ? 1 : GAPS_MAX)) return s.opts?.length ? 'С вариантами — только один пропуск' : 'Не больше 2 пропусков'
     return ''
   }
   if (s.kind === 'answer') return s.text?.trim() ? '' : 'Нет вопроса'
@@ -209,6 +210,25 @@ export function gapParts(p?: string) {
 /** Ответ верный без учёта регистра, апострофов и знаков препинания */
 const norm = (v?: string) => (v ?? '').toLowerCase().replace(/[’‘`]/g, "'").replace(/[^\p{L}\p{N}' ]+/gu, ' ').replace(/\s+/g, ' ').trim()
 export const sameAnswer = (a?: string, b?: string) => !!norm(b) && norm(a) === norm(b)
+// Упражнения по учебнику (17.11.2026): в пропуске можно несколько верных через «/» — [isn't/is not];
+// пропусков в фразе — до двух (вписать); подсказка в скобках — просто текст фразы: «(He) [His] father is a doctor.»
+export const GAPS_MAX = 2
+/** Верные ответы пропуска: «isn't/is not» → ['isn't', 'is not'] */
+export const gapAlts = (g?: string) => (g ?? '').split('/').map(x => x.trim()).filter(Boolean)
+/** Ответ подходит к пропуску — к любому из вариантов через «/» */
+export const gapOk = (a?: string, g?: string) => gapAlts(g).some(x => sameAnswer(a, x))
+/** Фраза → кусочки: текст и пропуски по порядку. «Do[es] he [like] it?» → [{t:'Do'},{g:'es',i:0},{t:' he '},{g:'like',i:1},{t:' it?'}] */
+export function gapList(p?: string): { t?: string; g?: string; i?: number }[] {
+  const out: { t?: string; g?: string; i?: number }[] = []; let i = 0, last = 0
+  for (const m of (p ?? '').matchAll(/\[([^\]]+)\]/g)) {
+    if (m.index! > last) out.push({ t: p!.slice(last, m.index) })
+    out.push({ g: m[1].trim(), i: i++ }); last = m.index! + m[0].length
+  }
+  if (last < (p ?? '').length) out.push({ t: p!.slice(last) })
+  return out
+}
+/** Фраза с первым верным ответом в каждом пропуске — для «Правильный ответ: …» */
+export const gapFull = (p?: string) => gapList(p).map(x => x.t ?? gapAlts(x.g)[0]).join('')
 /** Слова фразы для «Собери фразу» (по пробелам; знаки препинания остаются при словах) */
 export const phraseWords = (p?: string) => (p ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 12)
 /** Кусочки «Собери фразу / слово»: слова — или буквы (by: 'letters') */

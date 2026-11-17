@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TEMPLATES, gapParts, sameAnswer, newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs, stepMin, lessonMin, fmtMin } from './lesson'
+import { TEMPLATES, gapParts, sameAnswer, gapAlts, gapOk, gapList, gapFull, newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs, stepMin, lessonMin, fmtMin } from './lesson'
 
 describe('интерактивный урок', () => {
   it('новые экраны — с пустыми полями своего типа', () => {
@@ -41,6 +41,17 @@ describe('интерактивный урок', () => {
   })
   it('перемешивание не теряет элементы', () => {
     expect(shuffle([1, 2, 3, 4]).sort()).toEqual([1, 2, 3, 4])
+  })
+})
+
+describe('пропуски по учебнику', () => {
+  it('несколько верных через «/» и до двух пропусков', () => {
+    expect(gapAlts("isn't/is not")).toEqual(["isn't", 'is not'])
+    expect(gapOk('is not', "isn't/is not")).toBe(true); expect(gapOk('isnt', "isn't/is not")).toBe(false)
+    expect(gapList('[Does] he [like] it?')).toEqual([{ g: 'Does', i: 0 }, { t: ' he ' }, { g: 'like', i: 1 }, { t: ' it?' }])
+    expect(gapFull("It [isn't/is not] cold.")).toBe("It isn't cold.")
+    expect(stepIssue({ id: 'x', kind: 'gap', phrase: '[a] [b] [c]' } as any)).toBe('Не больше 2 пропусков')
+    expect(stepIssue({ id: 'x', kind: 'gap', phrase: '[Does] he [like] it?' } as any)).toBe('')
   })
 })
 
