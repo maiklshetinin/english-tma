@@ -9,6 +9,7 @@
 import { say } from '../composables/useDialog'
 import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
 import AudioWave from './AudioWave.vue'
+import AudioPill from './AudioPill.vue'
 import LessonPlayer from './LessonPlayer.vue'
 import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
@@ -354,24 +355,24 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <!-- Выбери ответ / Аудиотест: форма = живой экран (17.11.2026) — те же размеры, правка прямо на карточках, без скролла.
            Выбери ответ: звук + варианты картинками. Аудиотест: фото со звуком поверх + варианты текстом. Кружок — верный ответ. -->
       <div v-else-if="s.kind === 'choice'" class="cb cv" :class="s.show === 'text' ? 'tx' : 'pc'">
-        <div class="hd" :title="s.show === 'text' ? 'Аудиотест — фото и звук, ученик выбирает ответ текстом' : 'Выбери ответ — ученик слышит слово и выбирает картинку'">{{ s.head || KINDS.choice.head }}</div>
-        <!-- Аудиотест: фото 16:9, звук поверх -->
+        <input v-model="s.head" class="hd vf" :placeholder="KINDS.choice.head" :title="s.show === 'text' ? 'Аудиотест — фото и звук, ученик выбирает ответ текстом' : 'Выбери ответ — ученик слышит слово и выбирает картинку'" @input="changed" />
+        <!-- Аудиотест: фото 16:9, синяя плашка звука поверх — как у ученика -->
         <div v-if="s.show === 'text'" class="media" :class="{ empty: !s.image }" @click="!s.image && pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">
           <img v-if="s.image" :src="resolve(s.image, 'image')" alt="" draggable="false" />
           <span v-else class="ph">＋ Фото к вопросу<small>16:9, лучше от 1280×720 — нажмите или перетащите</small></span>
-          <button v-if="s.image" class="x" title="Убрать фото" @click.stop="clear(s, 'image')">✕</button>
-          <div v-if="s.ask !== 'tr'" class="qov" @click.stop @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
-            <AudioWave v-if="qAudio(s)" :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" small /> <button v-if="qAudio(s)" class="lnk qa2" :title="s.audio ? 'Свой звук — заменить' : 'Звук из верного ответа — загрузить свой'" @click="pick(s, ['audio'])">{{ s.audio ? 'Заменить' : 'Свой' }}{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button v-if="s.audio" class="lnk qa2" title="Убрать свой звук — будет звук верного ответа" @click="clear(s, 'audio')">Авто</button>
-            <button v-else class="add" @click="pick(s, ['audio'])">＋ Звук вопроса</button>
+          <template v-if="s.image"><button class="x" title="Убрать фото" @click.stop="clear(s, 'image')">✕</button><button class="chip rp" @click.stop="pick(s, ['image'])">Заменить фото</button></template>
+          <div v-if="s.ask !== 'tr'" class="qpw ov" @click.stop @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
+            <template v-if="qAudio(s)"><AudioPill :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" class="qp" /><span class="qch"><button class="chip" :title="s.audio ? 'Свой звук — заменить' : 'Сейчас звук верного ответа — загрузить свой'" @click="pick(s, ['audio'])">{{ s.audio ? 'Заменить' : 'Свой' }}{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button v-if="s.audio" class="chip" title="Убрать свой звук — будет звук верного ответа" @click="clear(s, 'audio')">Авто</button></span></template>
+            <button v-else class="qe" @click="pick(s, ['audio'])">＋ Звук вопроса{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button>
           </div>
         </div>
-        <!-- Выбери ответ: звук вопроса в пунктирной рамке -->
-        <div v-else-if="s.ask !== 'tr'" class="qbox" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
-          <AudioWave v-if="qAudio(s)" :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" small /> <button v-if="qAudio(s)" class="lnk qa2" :title="s.audio ? 'Свой звук — заменить' : 'Звук из верного ответа — загрузить свой'" @click="pick(s, ['audio'])">{{ s.audio ? 'Заменить' : 'Свой' }}{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button v-if="s.audio" class="lnk qa2" title="Убрать свой звук — будет звук верного ответа" @click="clear(s, 'audio')">Авто</button>
-          <button v-else class="add" @click="pick(s, ['audio'])">＋ Звук вопроса — нажмите или перетащите</button>
+        <!-- Выбери ответ: синяя плашка звука, как у ученика; кнопки — на ней -->
+        <div v-else-if="s.ask !== 'tr'" class="qpw" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
+          <template v-if="qAudio(s)"><AudioPill :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" class="qp" /><span class="qch"><button class="chip" :title="s.audio ? 'Свой звук — заменить' : 'Сейчас звук верного ответа — загрузить свой'" @click="pick(s, ['audio'])">{{ s.audio ? 'Заменить' : 'Свой' }}{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button v-if="s.audio" class="chip" title="Убрать свой звук — будет звук верного ответа" @click="clear(s, 'audio')">Авто</button></span></template>
+          <button v-else class="qe" @click="pick(s, ['audio'])">＋ Звук вопроса — нажмите или перетащите{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button>
         </div>
         <div v-if="s.ask === 'tr'" class="q">{{ s.opts?.[s.ans ?? 0]?.t || 'перевод верного ответа' }}</div>      <!-- старые экраны «вопрос переводом» — как были -->
-        <!-- варианты — как у ученика -->
+        <!-- варианты — как у ученика; кружок — верный ответ, ✕ и «Заменить» — при наведении -->
         <div class="co" :class="s.show === 'text' ? 'rows' : 'pics'">
           <div v-for="(o, k) in s.opts" :key="k" class="cop" :class="{ right: (s.ans ?? 0) === k }">
             <div v-if="s.show !== 'text'" class="cph" title="Фото 3:2, лучше от 600×400 — нажмите или перетащите" @click="pick(s, ['image'], k)" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'], k)">
@@ -379,7 +380,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
               <span v-if="o.image" class="rep">Заменить</span>
             </div>
             <button class="rad" :title="(s.ans ?? 0) === k ? 'Верный ответ' : 'Кружок — верный ответ: нажмите, чтобы сделать этот верным'" @click.stop="s.ans = k; changed()" />
-            <input v-model="o.w" placeholder="слово" @input="changed" />
+            <textarea v-model="o.w" class="vf ow" rows="1" placeholder="слово" @input="changed" />
             <button class="cx" title="Убрать вариант" @click.stop="delOpt(s, k)">✕</button>
           </div>
         </div>
@@ -458,7 +459,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <div class="prs"><div v-for="(p, k) in s.pairs" :key="k" class="pr"><input v-model="p.a" placeholder="I approve" @input="changed" /><input v-model="p.b" placeholder="одобряю" @input="changed" /><button class="x" title="Убрать пару" @click="s.pairs.splice(k, 1); changed()">✕</button></div></div>
       </div>
 
-      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'choice'" class="fdk"><button v-if="(s.opts?.length ?? 0) < OPTS_MAX" class="add sm" @click="addOpt(s)">＋ Вариант</button><button class="add sm deck" @click="openPk(s, 'opts')">Из карточек</button></span><span v-else-if="s.kind === 'pairs'" class="fdk"><button v-if="(s.pairs?.length ?? 0) < PAIRS_MAX" class="add sm" @click="addPair(s)">＋ Пара</button><button class="add sm deck" @click="openPk(s, 'pairs')">Из карточек</button></span><span v-else-if="s.kind === 'tip'" class="fdk"><button v-if="(s.opts?.length ?? 0) < 6" class="add sm" @click="addTipRow(s)">＋ Строка</button></span><span v-else-if="s.kind === 'intro'" class="fdk"><button class="add sm deck" @click="openPk(s, 'intro')">{{ undo[s.id] ? 'Другая карточка' : 'Взять из карточек' }}</button><button v-if="undo[s.id]" class="add sm deck un" title="Вернуть, как было до карточки" @click="undoCard(s)">↺</button></span><button class="go play" @click="save(s)">Сохранить</button></div>
+      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'choice'" class="fdk"><button v-if="(s.opts?.length ?? 0) < OPTS_MAX" class="add sm" title="Добавить вариант" @click="addOpt(s)">＋</button><button class="add sm deck" @click="openPk(s, 'opts')">Из карточек</button></span><span v-else-if="s.kind === 'pairs'" class="fdk"><button v-if="(s.pairs?.length ?? 0) < PAIRS_MAX" class="add sm" @click="addPair(s)">＋ Пара</button><button class="add sm deck" @click="openPk(s, 'pairs')">Из карточек</button></span><span v-else-if="s.kind === 'tip'" class="fdk"><button v-if="(s.opts?.length ?? 0) < 6" class="add sm" @click="addTipRow(s)">＋ Строка</button></span><span v-else-if="s.kind === 'intro'" class="fdk"><button class="add sm deck" @click="openPk(s, 'intro')">{{ undo[s.id] ? 'Другая карточка' : 'Взять из карточек' }}</button><button v-if="undo[s.id]" class="add sm deck un" title="Вернуть, как было до карточки" @click="undoCard(s)">↺</button></span><button class="go play" @click="save(s)">Сохранить</button></div>
       </template>
       </div>
     </div>
@@ -732,8 +733,8 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .pr input { height: 46px }
 
 /* Новое слово — правка 1:1 с живым экраном (LessonPlayer .embedded): те же размеры; поля — без своих отступов, пунктир — outline (не занимает места) */
-.vf { display: block; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 4px; background: transparent; font: inherit; color: inherit; text-align: inherit; outline: 1px dashed #b9cff0; outline-offset: 1px; resize: none; field-sizing: content; min-height: 0; box-sizing: border-box }
-.vf:hover { outline-color: #6fa8f0 } .vf:focus { outline: 1.5px solid #0d99ff }
+.vf { display: block; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 5px; background: rgba(13, 153, 255, .07); box-shadow: 0 0 0 2px rgba(13, 153, 255, .07); font: inherit; color: inherit; text-align: inherit; outline: 0; resize: none; field-sizing: content; min-height: 0; box-sizing: border-box; transition: background .12s, box-shadow .12s }          /* правится — лёгкая подсветка (не пунктир), места не занимает */
+.vf:hover { background: rgba(13, 153, 255, .12); box-shadow: 0 0 0 2px rgba(13, 153, 255, .12) } .vf:focus { background: #fff; box-shadow: 0 0 0 2px #0d99ff }
 .iv { gap: 14px }
 .iv .hd.vf { margin: 8px 0 4px; font-size: 15px; font-weight: 800; text-align: center; line-height: normal }
 .iv .nw { display: grid; width: 100%; max-width: 380px; align-self: center }
@@ -767,4 +768,16 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .vsn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .rx { position: absolute; right: -9px; top: 50%; translate: 0 -50%; width: 18px; height: 18px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--hint); font-size: 9px; cursor: pointer; opacity: 0 } .vtr:hover .rx { opacity: 1 }
 @media (hover: none) { .rx { opacity: 1 } }
+
+/* Выбери ответ / Аудиотест — 1:1 с LessonPlayer: звук .qa (34px, синяя плашка), варианты .op/.ow 14/800 (строки — 600) */
+.cv { gap: 14px } .cv .hd.vf { margin: 8px 0 4px; font-size: 15px; font-weight: 800; text-align: center; line-height: normal }
+.qpw { position: relative; width: 100%; max-width: 420px; align-self: center; height: 34px; margin: 6px 0 10px }
+.qpw.ov { position: absolute; left: 8%; right: 8%; bottom: 10px; width: auto; height: 30px; margin: 0; z-index: 2 }
+.qp { width: 100%; height: 100%; border-radius: 17px }
+.qch { position: absolute; right: 40px; top: 50%; translate: 0 -50%; display: flex; gap: 4px } .qch .chip { padding: 2px 8px; font-size: 10.5px }
+.qe { width: 100%; height: 100%; border: 1.5px dashed #b9cff0; border-radius: 17px; background: rgba(13, 153, 255, .05); color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer } .qe:hover { background: rgba(13, 153, 255, .1) }
+.cop .ow { margin: 0; padding: 9px 10px; border-radius: 0; box-shadow: none; text-align: center; font-size: 14px; font-weight: 800; line-height: normal }
+.co.rows .cop .ow { padding: 13px 4px; font-weight: 600 }
+.co.rows .cop { padding: 0 10px }
+.fdk .add.sm { padding: 4px 9px; font-size: 11px; flex: none }
 </style>
