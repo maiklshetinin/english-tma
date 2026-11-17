@@ -904,7 +904,8 @@ onUnmounted(() => removeEventListener('resize', onResize))
 const dots = computed(() => { let s = 20 * view.z; while (s < 10) s *= 4; return { backgroundSize: `${s}px ${s}px`, backgroundPosition: `${view.x}px ${view.y}px` } })
 
 // ---------- Раскладка рельса (в координатах холста; центр линии — x = 0) ----------
-const G = { step: 116, unitGap: 160 }          // рельс всегда прямой («Волну» убрали)
+const G = { step: 116, unitGap: 160 }
+const MINI_UP = 110          // над линией урока — плитки экранов (LessonRail → .rmi), им нужно место под экранами урока выше          // рельс всегда прямой («Волну» убрали)
 // за курсором мимо рельса: элементы структуры и где они лягут (в координатах холста)
 const flyTree = computed(() => {
   if (!drag.on || (drag.over && drag.item?.type !== 'unit') || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
@@ -965,7 +966,7 @@ const layoutOf = (list, key = '') => {
       // глава: от низа плашки предыдущей главы — всегда CH_GAP (низ плашки = последнее задание + 56, у урока с веткой — + ветка)
       if (x.type === 'unit') y += 56 + (hasRail(prev, key) ? 40 + (railHs[key + prev.id] ?? RAIL_H) : 0) + CH_GAP + 70
       else {
-        let d = hasRail(prev, key) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + 70) : gap
+        let d = hasRail(prev, key) ? Math.max(gap, 40 + (railHs[key + prev.id] ?? RAIL_H) + 70 + (hasRail(x, key) && !railUp(x, key) ? MINI_UP : 0)) : gap
         if (railUp(x, key)) d = Math.max(d, (hasRail(prev, key) ? 40 + (railHs[key + prev.id] ?? RAIL_H) : 0) + 40 + (railHs[key + x.id] ?? RAIL_H) + 70)          // место над чекпоинтом — под его ветку
         y += d
       }

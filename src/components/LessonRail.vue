@@ -12,7 +12,7 @@ import AudioWave from './AudioWave.vue'
 import LessonPlayer from './LessonPlayer.vue'
 import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
-import { stepJson, tplOf, tplTitle, SKILLS, SKILL_T } from '../utils/lesson'
+import { stepJson, tplOf, tplTitle, tplDesc, SKILLS, SKILL_T } from '../utils/lesson'
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, orderParts, gapParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
@@ -226,14 +226,14 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
     <!-- Экраны — открытые карточки, висят на ветке урока -->
     <div v-for="(s, i) in order" :key="s.id" class="frame" :class="{ lift: (mv.on && mv.id === s.id) || moving?.ids.includes(s.id), free, upb: up && !free }" :style="cardStyle(s, i)" :ref="watchFrame" :data-id="s.id">
       <!-- станция на ветке с номером и ножка к экрану; за станцию тоже можно тянуть -->
-      <!-- над экраном — мини-карточка, как в меню «Exercise»: миниатюра, название, навыки (17.11.2026, вместо кружка с номером); за неё тоже тянут.
-           У ветки чекпоинта (вверх) — прежний кружок с номером -->
-      <template v-if="!free"><span class="stem" :class="{ xs: !up }" /><template v-if="up"><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span></template><span v-else class="xd" :class="{ done: i < run.at, now: i === run.at }" /></template>
-      <span v-if="!free && !up" class="xn" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
-        <i class="xnn">{{ i < run.at ? '✓' : i + 1 }}</i>
-        <ExerciseMini :id="tplOf(s)" size="rail" />
-        <b>{{ tplTitle(s) }}</b>
-        <span v-if="SKILLS[tplOf(s)]" class="skl"><i v-for="k in SKILLS[tplOf(s)]" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
+      <!-- на линии вместо кружка с номером — плитка как в меню «Exercise» (17.11.2026): миниатюра, название, описание, навыки; номер — в уголке.
+           За неё экран переставляют. У ветки чекпоинта (вверх) — прежний кружок с номером -->
+      <template v-if="!free"><span class="stem" /><template v-if="up"><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span></template></template>
+      <span v-if="!free && !up" class="rmi" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
+        <i class="rnum">{{ i < run.at ? '✓' : i + 1 }}</i>
+        <ExerciseMini :id="tplOf(s)" size="tray" />
+        <small><b>{{ tplTitle(s) }}</b>{{ tplDesc(s) }}</small>
+        <span v-if="SKILLS[tplOf(s)]" class="rskl"><i v-for="k in SKILLS[tplOf(s)]" :key="k" class="rchip" :class="k">{{ SKILL_T[k] }}</i></span>
       </span>
       <!-- подпись над экраном, как имя фрейма в Figma: за неё экран и переставляют -->
       <div class="flab" :class="{ ro: readonly }" :title="readonly ? 'Экран другого курса — скопируйте и вставьте в свой' : 'Тяните: переставить, унести на другой урок или на доску'" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">
@@ -492,16 +492,14 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .stem { position: absolute; left: 50%; top: -26px; width: 4px; height: 40px; margin-left: -2px; background: #d9d9d9; border-radius: 2px }
 .node { position: absolute; left: 50%; top: -54px; width: 34px; height: 34px; margin-left: -17px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px color-mix(in srgb, var(--c) 45%, transparent); cursor: grab; touch-action: none; user-select: none; z-index: 2 }
 .node:hover { transform: scale(1.08) } .frame.lift .node { cursor: grabbing; transform: scale(1.12) }
-.stem.xs { top: -37px; height: 51px }      /* ножка от линии до мини-карточки */
-.xd { position: absolute; left: 50%; top: -45px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 3px #f5f5f5; z-index: 2 } .xd.done { background: #1fbe78 }
-/* мини-карточка экрана на ветке: миниатюра как в меню «Exercise», название, теги навыков; номер — в уголке (пройден — ✓) */
-.xn { position: relative; z-index: 2; display: grid; justify-items: center; align-content: start; gap: 4px; width: 132px; height: 164px; box-sizing: border-box; margin: 14px auto 0; padding: 6px 6px 7px; border: 2px solid var(--c); border-radius: 14px; background: var(--card); box-shadow: 0 2px 10px rgba(0, 0, 0, .06); cursor: grab; touch-action: none; user-select: none; transition: transform .15s }
-.xn:hover { transform: translateY(-2px) } .frame.lift .xn { cursor: grabbing }
-.xn b { font-size: 12.5px; font-weight: 800; line-height: 1.2; color: #2c2c2c; text-align: center }
-.xnn { position: absolute; top: -10px; left: -10px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 12px; font-style: normal; font-weight: 900; box-shadow: 0 0 0 3px #f5f5f5 }
-.xn.done { border-color: #1fbe78 } .xn.done .xnn { background: #1fbe78 } .xn.now { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent) }
-.skl { display: flex; gap: 3px; justify-content: center } .chip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }          /* как в меню «Exercise» */
-.chip.L { background: #1cb0f6 } .chip.R { background: #a560e8 } .chip.W { background: #ff9600 } .chip.S { background: #58cc02 }
+/* плитка экрана на линии — как в меню «Exercise» (CourseEditor → .tray.inter .mi): миниатюра, название, описание, навыки; белая подложка закрывает линию */
+.rmi { position: absolute; left: 50%; top: -185px; translate: -50% 0; z-index: 2; display: grid; justify-items: center; align-content: start; gap: 5px; width: 132px; height: 168px; box-sizing: border-box; padding: 6px 4px 4px; border-radius: 14px; background: var(--card); box-shadow: 0 2px 10px rgba(0, 0, 0, .08); cursor: grab; touch-action: none; user-select: none }
+.rmi:hover :deep(.mini) { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0, 0, 0, .12) } .frame.lift .rmi { cursor: grabbing }
+.rmi small { display: grid; gap: 1px; font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--hint); text-align: center } .rmi small b { font-size: 12.5px; font-weight: 800; color: #2c2c2c }
+.rskl { display: flex; gap: 3px; justify-content: center } .rchip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }
+.rchip.L { background: #1cb0f6 } .rchip.R { background: #a560e8 } .rchip.W { background: #ff9600 } .rchip.S { background: #58cc02 }
+.rnum { position: absolute; top: -9px; left: -9px; z-index: 1; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 11px; font-style: normal; font-weight: 900; box-shadow: 0 0 0 3px #f5f5f5 }
+.rmi.done { box-shadow: 0 0 0 2px #1fbe78, 0 2px 10px rgba(0, 0, 0, .08) } .rmi.done .rnum { background: #1fbe78 } .rmi.now { box-shadow: 0 0 0 2px var(--c), 0 0 0 6px color-mix(in srgb, var(--c) 25%, transparent) }
 .node.fin-n { width: 40px; height: 40px; margin-left: -20px; top: -57px; cursor: default } .node.fin-n svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round }
 .slot { position: absolute; z-index: 2; box-sizing: border-box; border: 3px dashed #0d99ff; border-radius: 22px; background: rgba(13, 153, 255, .06); transition: left .15s ease }
 .grip { flex: none; width: 16px; height: 16px; fill: #a5a5a5 }

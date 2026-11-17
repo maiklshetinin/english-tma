@@ -151,6 +151,7 @@ export function tplOf(s: Step): string {
   return s.kind
 }
 export const tplTitle = (s: Step) => TEMPLATES.find((t) => t.id === tplOf(s))?.t ?? KINDS[s.kind].t
+export const tplDesc = (s: Step) => TEMPLATES.find((t) => t.id === tplOf(s))?.d ?? ''
 /** Подпись экрана на рельсе: само слово, если оно уже есть */
 export function stepTitle(s: Step): string {
   if (s.kind === 'intro') return s.word?.trim() || KINDS.intro.t
