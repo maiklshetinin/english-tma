@@ -35,7 +35,7 @@ const emojiList = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((e): 
 interface Drop { id: string; note: string; mid: string; cargo: string; via: string; emoji: string[]; x: number; by: NoteAuthor; to: string; at: number }
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : 0)
 
-export function makeLive({ verify, origins, hello = () => ({}), notes }: { verify: Verify; origins: string[]; hello?: () => Record<string, unknown>; notes?: Notes }) {
+export function makeLive({ verify, origins, hello = () => ({}), notes, canEdit = () => true }: { verify: Verify; origins: string[]; hello?: () => Record<string, unknown>; notes?: Notes; canEdit?: (uid: string) => boolean }) {
   const conns = new Set<Conn>()
   let seq = 0, cursors = false, cursorsBy = ''
   const drops: Drop[] = []          // посылки на парашюте, ещё не открытые (в памяти: перезапуск сервера их очищает)
@@ -69,7 +69,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
       for (const o of conns) if (o !== c) send(o, out)
     }
     else if (m.t === 'cursors' && c.dev) { cursors = m.on === true; cursorsBy = c.name; for (const o of conns) send(o, { t: 'cursors', on: cursors, by: cursorsBy, mine: o.uid === c.uid }) }
-    else if (m.t === 'doc' && m.doc && typeof m.doc === 'object') room(c, { t: 'doc', cid: c.cid, uid: c.uid, doc: m.doc })
+    else if (m.t === 'doc' && m.doc && typeof m.doc === 'object' && canEdit(c.uid)) room(c, { t: 'doc', cid: c.cid, uid: c.uid, doc: m.doc })          // «только просмотр» — курс коллегам не правит
     else if (notes && typeof m.t === 'string' && m.t.startsWith('note')) onNote(c, m)
     // разработчик: кто сколько раз заходил после времени since (его сообщения в чате)
     else if (m.t === 'activity' && c.dev) { const since = num(m.since), users: Record<string, { n: number; last: number }> = {}; for (const uid of act.keys()) if (uid !== c.uid) users[uid] = visits(uid, since); send(c, { t: 'activity', since, users }) }

@@ -86,6 +86,7 @@ const notes = makeNotes({ db })      // заметки на общем экра�
 notes.load().catch((e) => console.error('notes: не загрузились', e))
 const live = makeLive({
   notes,
+  canEdit: (uid) => !viewOnly.has(uid),          // «только просмотр» — правки курса коллегам не рассылаются
   origins: list(env.ALLOWED_ORIGIN),
   hello: () => ({ seen: students.recentSeen() }),
   verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(roleOf(u) ?? 'none'), name: String(u.tgName || ''), photo: String(u.tgPhoto || ''), dev: u.dev === true } },
@@ -121,9 +122,19 @@ app.post('/ping', wrap(async (req, res) => {
 }))
 
 // Дальше — запросы с Firebase ID-токеном (Authorization: Bearer …)
+// «Только просмотр» (назначает разработчик в «Профиле → Для разработчика → Права»): преподаватель всё видит, но ничего не меняет —
+// любой запрос, кроме чтения, — 403. Можно только своё служебное (/me, /ping) и чат на экране (он идёт по живому соединению, live.ts).
+// Список — в базе settings/access { viewOnly: [uid] }, читается один раз при запуске.
+const viewOnly = new Set<string>()
+const accessDoc = () => db.collection('settings').doc('access')
+accessDoc().get().then((d) => { for (const u of (d.get('viewOnly') ?? []) as string[]) viewOnly.add(String(u)) }).catch((e) => console.error('settings/access:', e))
+const VIEW_OK = /^\/(me|ping)(\/|$)/
 const requireUser = async (req: Request, res: Response, next: NextFunction) => {
-  try { const u = await auth.verifyIdToken((req.headers.authorization || '').replace(/^Bearer /, '')); req.user = { ...u, role: roleOf(u) }; next() }
-  catch { res.status(401).json({ error: 'unauthorized' }) }
+  let u
+  try { u = await auth.verifyIdToken((req.headers.authorization || '').replace(/^Bearer /, '')) } catch { return void res.status(401).json({ error: 'unauthorized' }) }
+  req.user = { ...u, role: roleOf(u) }
+  if (req.method !== 'GET' && viewOnly.has(u.uid) && u.dev !== true && !VIEW_OK.test(req.path)) return void res.status(403).json({ error: 'view only' })
+  next()
 }
 const requireTeacher = (req: Request, res: Response, next: NextFunction) => (req.user.role === 'teacher' ? next() : res.status(403).json({ error: 'teacher only' }))
 const requireDev = (req: Request, res: Response, next: NextFunction) => ((req.user as { dev?: boolean }).dev === true ? next() : res.status(403).json({ error: 'dev only' }))
@@ -165,6 +176,22 @@ app.post('/dev/restart', requireUser, requireDev, wrap(async (req, res) => {
   const viaApi = await render.restart()
   res.json({ ok: true, via: viaApi ? 'api' : 'exit' })
   if (!viaApi) setTimeout(() => process.exit(1), 400)
+}))
+// Права: кто из преподавателей — «только просмотр». Список преподавателей — TEACHER_IDS (имя и фото — из их записи users)
+app.get('/me/access', requireUser, (req, res) => { res.json({ viewOnly: viewOnly.has(req.user.uid) && (req.user as { dev?: boolean }).dev !== true }) })
+app.get('/dev/access', requireUser, requireDev, wrap(async (_req, res) => {
+  const ids = [...new Set(TEACHER_IDS)].filter((id) => !DEV_IDS.includes(id))
+  const docs = ids.length ? await db.getAll(...ids.map((id) => db.collection('users').doc(`tg:${id}`))) : []
+  res.json({ teachers: ids.map((id, i) => ({ uid: `tg:${id}`, name: String(docs[i]?.get('name') || 'id ' + id), photo: String(docs[i]?.get('photoUrl') || ''), viewOnly: viewOnly.has(`tg:${id}`) })) })
+}))
+app.post('/dev/access', requireUser, requireDev, wrap(async (req, res) => {
+  const uid = String(req.body?.uid || ''), on = req.body?.viewOnly === true
+  if (!/^tg:\d+$/.test(uid) || !TEACHER_IDS.includes(uid.slice(3))) return void res.status(400).json({ error: 'bad uid' })
+  if (on) viewOnly.add(uid); else viewOnly.delete(uid)
+  await accessDoc().set({ viewOnly: [...viewOnly] }, { merge: true })
+  console.warn(`права: ${uid} — ${on ? 'только просмотр' : 'полный доступ'}`)
+  live.broadcast({ t: 'access', uid, viewOnly: on })          // у неё сразу сменится режим, без перезахода
+  res.json({ ok: true })
 }))
 app.post('/dev/cache', requireUser, requireDev, wrap(async (req, res) => {          // { min } — срок в минутах (0 — выключить), или { clear: true }
   if (req.body?.clear === true) dropCache(db)
