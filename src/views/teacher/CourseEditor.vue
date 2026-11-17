@@ -677,7 +677,7 @@ function sdMove(e) {
   moveExtra(sd.extra, sd.w.x - sd.s0.x, sd.w.y - sd.s0.y)
   if (sd.rail && Math.abs(sd.w.y - sd.rail.y) > TILE_OFF) sd.rail = null      // ушли с ветки — тянем сам экран
   if (sd.rail) { sd.to = tileTarget(); return }
-  sd.to = overToolbar(e.clientY) ? 'cancel' : sd.tray || sd.list.length ? screenTarget(sd.w) : null
+  sd.to = overToolbar(e.clientY) || overMenu(e) ? 'cancel' : sd.tray || sd.list.length ? screenTarget(sd.w) : null
   sd.asTile = !!sd.tray && tileNow(e, sd.to)
 }
 async function sdUp(e) {
@@ -702,7 +702,7 @@ function placeDown(e) {
   sdDrop(e)
 }
 function sdDrop(e) {
-  const to = sd.rail ? tileTarget() : overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
+  const to = sd.rail ? tileTarget() : overToolbar(e.clientY) || overMenu(e) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
   const tr = sd.tray, list = sd.list, preview = sd.preview, extra = sd.extra, s0 = sd.s0
   const blocked = !!tr && !to && blockedAt(e.clientX, e.clientY)          // отпустили над экраном, стикером, панелью — никуда не ставим (на свободное место доски — встаёт экраном)
   Object.assign(sd, { on: false, rail: null, asTile: false, list: [], tray: null, preview: [], extra: null, to: null })
@@ -1265,6 +1265,8 @@ function aim(e) {
   drag.lz = !drag.over && !tb ? looseTarget(w) : null
 }
 const overToolbar = (cy) => cy > H.value - (phone.value ? 92 : 104)
+// над открытым меню (оно бывает высоким — «Мои», «Фразы и контекст») экран не превращается в окно: там плитка остаётся плиткой
+const overMenu = (e) => document.elementsFromPoint(e.clientX, e.clientY).some(el => el.closest?.('.fl.tray'))
 function startDrag(e, src) {
   if (e.button === 2) return                                  // правая кнопка — меню
   if (editing.value || touches.size > 1) return
