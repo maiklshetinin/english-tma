@@ -42,11 +42,17 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
   const send = (c: Conn, m: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(m)) }
   const people = () => [...conns].map(({ cid, uid, dev, name, photo, color, where, course }) => ({ cid, uid, dev, name, photo, color, where, course }))
   const presence = () => { const m = { t: 'presence', users: people() }; for (const c of conns) send(c, m) }
+  // Активность преподавателей (для разработчика, 17.11.2026): пока человек что-то делает в приложении — отметка раз в минуту (в памяти;
+  // перезапуск сервера обнуляет). Заходы — отметки, разделённые паузой больше 5 минут. Видно под сообщением в чате: «заходил 3 раза и не ответил»
+  const act = new Map<string, number[]>()
+  function touch(c: Conn) { const a = act.get(c.uid) ?? [], t = Date.now(); if (!a.length || t - a[a.length - 1] >= 60_000) { a.push(t); if (a.length > 3000) a.splice(0, a.length - 3000); act.set(c.uid, a) } }
+  function visits(uid: string, since: number) { const a = (act.get(uid) ?? []).filter((t) => t > since); let n = 0, prev = 0; for (const t of a) { if (!n || t - prev > 5 * 60_000) n++; prev = t } return { n, last: a[a.length - 1] ?? 0 } }
   const room = (from: Conn, m: unknown) => { for (const c of conns) if (c !== from && from.course && c.course === from.course) send(c, m) }
 
   function onMessage(c: Conn, raw: string) {
     let m: Record<string, unknown>
     try { m = JSON.parse(raw) } catch { return }
+    if (m.t !== 'activity') touch(c)
     if (m.t === 'where') { c.where = str(m.where, 40); c.course = str(m.course, 64); presence() }
     else if (m.t === 'cursor') room(c, { t: 'cursor', cid: c.cid, x: num(m.x), y: num(m.y) })
     else if (m.t === 'sel') room(c, { t: 'sel', cid: c.cid, id: str(m.id, 64) || null })
@@ -59,6 +65,8 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
     else if (m.t === 'cursors' && c.dev) { cursors = m.on === true; cursorsBy = c.name; for (const o of conns) send(o, { t: 'cursors', on: cursors, by: cursorsBy, mine: o.uid === c.uid }) }
     else if (m.t === 'doc' && m.doc && typeof m.doc === 'object') room(c, { t: 'doc', cid: c.cid, uid: c.uid, doc: m.doc })
     else if (notes && typeof m.t === 'string' && m.t.startsWith('note')) onNote(c, m)
+    // разработчик: кто сколько раз заходил после времени since (его сообщения в чате)
+    else if (m.t === 'activity' && c.dev) { const since = num(m.since), users: Record<string, { n: number; last: number }> = {}; for (const uid of act.keys()) if (uid !== c.uid) users[uid] = visits(uid, since); send(c, { t: 'activity', since, users }) }
     // «печатает…» под заметкой — остальным, не храним
     else if (m.t === 'typing') { const out = { t: 'typing', id: str(m.id, 64), uid: c.uid, name: c.name, color: c.color }; for (const o of conns) if (o.uid !== c.uid) send(o, out) }
     // «Позвать»: у адресата (или у всех, если не указан) заметка открывается сама и всплывает уведомление
@@ -89,6 +97,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
     const n = m.t === 'note+' ? notes!.create(author(c), m) : m.t === 'note:reply' ? notes!.reply(author(c), m.id, m)
       : m.t === 'note:react' ? notes!.react(author(c), m.id, m.mid, m.e)
       : m.t === 'note:seen' ? notes!.seen(author(c), m.id) : m.t === 'note:move' ? notes!.move(m.id, m)
+      : m.t === 'note:block' && c.dev ? notes!.block(author(c), m.id, m.mid, m.on === true)
       : m.t === 'note:edit' ? notes!.edit(author(c), m.id, m.mid, m) : m.t === 'note:msgdel' ? notes!.delMsg(author(c), m.id, m.mid) : null
     if (n) { const out = { t: 'note', note: n, by: c.uid, cid: c.cid, ref: str(m.ref, 40) }; for (const o of conns) send(o, out); return }
     if (m.t === 'note:del') { const gone = notes!.remove(m.id); if (gone) for (const o of conns) send(o, { t: 'note-', id: gone }) }
@@ -106,7 +115,7 @@ export function makeLive({ verify, origins, hello = () => ({}), notes }: { verif
         const u = await verify(token).catch(() => null)
         if (!u || u.role !== 'teacher') return ws.close(4401, 'unauthorized')
         const c: Conn = { ws, cid: 'c' + (++seq), uid: u.uid, dev: u.dev === true, name: u.name || 'Преподаватель', photo: u.photo || '', color: colorOf(u.uid), where: '', course: '', alive: true }
-        conns.add(c)
+        conns.add(c); touch(c)
         send(c, { ...hello(), t: 'hello', cid: c.cid, uid: c.uid, cursors, cursorsBy, notes: notes?.all() ?? [], drops })
         presence()
         ws.on('message', (d) => onMessage(c, String(d)))

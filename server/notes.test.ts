@@ -31,6 +31,18 @@ for (let k = 0; k < 230; k++) N.reply(stasya, chat.id, { text: 'm' + k })
 ok('общий чат: не упирается в 200 — хранит последние 200', chat.msgs.length === 200 && chat.msgs.at(-1)!.text === 'm229')
 { const last = chat.msgs.at(-1)!; ok('своё сообщение удалить', !!N.delMsg(stasya, chat.id, last.id) && chat.msgs.length === 199 && !chat.msgs.includes(last)) }
 N.remove(chat.id)
+{ // блокирующее сообщение (17.11.2026): ставится на уже отправленное своё сообщение в чате
+  const c2 = N.create(misha, { path: '/__chat', where: 'Чат', text: 'hi' })!
+  N.reply(misha, c2.id, { text: 'Ответь!' }); const b = c2.msgs.at(-1)!
+  ok('чужое сообщение не заблокировать', !N.block(stasya, c2.id, b.id, true) && !b.block)
+  N.block(misha, c2.id, b.id, true); ok('блокирующее', b.block === true && !Object.keys(b.answered!).length)
+  N.reply(misha, c2.id, { text: 'ещё' }); ok('свои сообщения блок не снимают', !b.answered!['tg:1'])
+  N.reply(stasya, c2.id, { text: 'Ок' }); ok('ответ в чат снимает блок у ответившего', !!b.answered!['tg:2'])
+  N.block(misha, c2.id, b.id, false); ok('снять блок', !b.block && !b.answered)
+  N.block(misha, c2.id, b.id, true); ok('кто уже ответил после сообщения — не блокируется', !!b.answered!['tg:2'])
+  const pin = N.create(misha, { path: '/', text: 'x' })!; ok('булавку не заблокировать', !N.block(misha, pin.id, pin.msgs[0].id, true))
+  N.remove(c2.id); N.remove(pin.id)
+}
 
 // --- через WebSocket ---
 const users: Record<string, any> = { a: { uid: 'tg:1', role: 'teacher', name: 'Миша', photo: '' }, b: { uid: 'tg:2', role: 'teacher', name: 'Стася', photo: '' }, c: { uid: 'tg:3', role: 'teacher', name: 'Оля', photo: '' } }

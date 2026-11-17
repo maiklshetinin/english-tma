@@ -6,7 +6,9 @@
 import type { Firestore } from 'firebase-admin/firestore'
 
 export interface NoteAuthor { uid: string; name: string; photo: string; color: string }
-export interface NoteMsg extends NoteAuthor { id: string; text: string; at: number; react: Record<string, string[]>; edited?: number }      // edited — когда исправлено      // react: реакция → uid тех, кто поставил
+// block — блокирующее (17.11.2026): разработчик видит, что коллега заходил и не ответил, и «Заблокировать» — у того экран закрыт, пока не ответит в чат;
+// answered: uid → когда ответил (ответ в чат после этого сообщения)
+export interface NoteMsg extends NoteAuthor { id: string; text: string; at: number; react: Record<string, string[]>; edited?: number; block?: true; answered?: Record<string, number> }      // edited — когда исправлено      // react: реакция → uid тех, кто поставил
 // seen: uid → когда человек последний раз прочитал заметку (закрыл всплывающее уведомление или открыл её) — для «Прочитано»
 export interface Note { id: string; path: string; where: string; sel: string; rx: number; ry: number; x: number; y: number; at: number; by: string; msgs: NoteMsg[]; seen: Record<string, number> }
 
@@ -49,7 +51,10 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
     reply(u: NoteAuthor, nid: unknown, m: Record<string, unknown>): Note | null {
       const n = notes.get(str(nid, 64)), t = text(m.text)
       if (!n || !t || (n.msgs.length >= NOTE_MSGS && n.path !== CHAT_PATH)) return null
-      if (n.path === CHAT_PATH) while (n.msgs.length >= NOTE_MSGS) n.msgs.shift()          // чат: старые уходят
+      if (n.path === CHAT_PATH) {
+        while (n.msgs.length >= NOTE_MSGS) n.msgs.shift()          // чат: старые уходят
+        for (const x of n.msgs) if (x.block && x.uid !== u.uid && !x.answered?.[u.uid]) x.answered = { ...x.answered, [u.uid]: now() }      // ответил в чат — блок снят
+      }
       n.msgs.push(msg(u, t)); n.seen = { ...n.seen, [u.uid]: now() }; save(n); return n
     },
     /** Реакция на сообщение: поставить / снять (повторное нажатие) */
@@ -66,6 +71,14 @@ export function makeNotes({ db, now = () => Date.now() }: { db?: Firestore; now?
     seen(u: NoteAuthor, nid: unknown): Note | null {
       const n = notes.get(str(nid, 64)); if (!n) return null
       n.seen = { ...n.seen, [u.uid]: now() }; save(n); return n
+    },
+    /** Блокирующее / обычное — своё сообщение в общем чате (в live — только разработчик). Кто уже ответил после него — сразу «ответил» */
+    block(u: NoteAuthor, nid: unknown, mid: unknown, on: boolean): Note | null {
+      const n = notes.get(str(nid, 64)), mm = n?.msgs.find((x) => x.id === str(mid, 64))
+      if (!n || !mm || n.path !== CHAT_PATH || mm.uid !== u.uid) return null
+      if (on) { mm.block = true; mm.answered = {}; for (const x of n.msgs) if (x.at > mm.at && x.uid !== u.uid && !mm.answered[x.uid]) mm.answered[x.uid] = x.at }
+      else { delete mm.block; delete mm.answered }
+      save(n); return n
     },
     /** Исправить своё сообщение (чужое нельзя) */
     edit(u: NoteAuthor, nid: unknown, mid: unknown, m: Record<string, unknown>): Note | null {

@@ -11,6 +11,8 @@ import WakeUp from './components/WakeUp.vue'
 import PresenceBar from './components/PresenceBar.vue'
 import GlobalCursors from './components/GlobalCursors.vue'
 import ScreenNotes from './components/ScreenNotes.vue'
+import BlockGate from './components/BlockGate.vue'
+import { useTabBadge } from './composables/useTabBadge'
 import { startLive, stopLive, setWhere, onLive } from './composables/useLive'
 import { active, onActive } from './composables/useActive'
 import { useStudentsStore } from './stores/students'
@@ -21,6 +23,7 @@ import { redirectFor, goUp } from './router'
 import { useBackButton } from './composables/useBackButton'
 import { useAuthStore } from './stores/auth'
 const auth = useAuthStore()
+useTabBadge()      // новые сообщения чата — в названии и на значке вкладки
 
 const router = useRouter(), route = useRoute()
 // Роль становится известна только после входа: если адрес (закладка, обновление) не для этой роли — на первую вкладку роли
@@ -71,6 +74,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
     <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" /><ScreenNotes v-if="auth.isTeacher && route.name !== 'courses'" />
   </template>
   <AppDialog />
+  <BlockGate v-if="auth.isTeacher" />      <!-- блокирующее сообщение разработчика: экран закрыт, пока не ответишь -->
 </template>
 
 <style>

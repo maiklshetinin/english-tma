@@ -17,9 +17,10 @@ import ParachuteDrop from './ParachuteDrop.vue'
 import ParcelArt from './ParcelArt.vue'
 import { showToast } from '../composables/useToast'
 import { live, WHERE } from '../composables/useLive'
-import { notesState as S, noteById, REACTIONS, unread, createNote, reply, react, removeNote, removeMsg, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO, CHAT_PATH, VIAS, PARCEL_EMOJI, PARCEL_EMOJI_MAX } from '../composables/useNotes'
+import { notesState as S, noteById, REACTIONS, unread, createNote, reply, setBlock, askActivity, react, removeNote, removeMsg, typing, openNote, closePopup, wireNotes, moveNote, editMsg, CARGO, CHAT_PATH, VIAS, PARCEL_EMOJI, PARCEL_EMOJI_MAX } from '../composables/useNotes'
 import { anchorAt, placeOf } from '../utils/anchor'
 import { ask } from '../composables/useDialog'
+import { useAuthStore } from '../stores/auth'
 
 wireNotes()
 const route = useRoute(), router = useRouter()
@@ -79,6 +80,24 @@ const readers = computed(() => {
 })
 const typer = computed(() => { void now.value; const t = S.typing[S.open || 'new']; return t && t.until > now.value && t.uid !== S.me ? t : null })
 const time = (at) => new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+// ---------- Разработчик: отслеживание и блокирующее сообщение (17.11.2026) ----------
+// Под моим последним сообщением в чате: по каждому коллеге — ответил ли, сколько раз заходил после сообщения (сервер считает заходы),
+// сейчас ли в приложении. Заходил и не ответил — «Заблокировать до ответа»: у него экран закроется, пока не ответит (BlockGate.vue).
+const auth = useAuthStore()
+const isChat = computed(() => note.value?.path === CHAT_PATH)
+const raz = (n) => (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'раза' : 'раз')
+const tracker = computed(() => {
+  const c = note.value, lm = lastMine.value
+  if (!auth.isDev || !isChat.value || !c || !lm) return []
+  const a = S.activity?.since === lm.at ? S.activity.users : {}
+  const uids = [...new Set(c.msgs.filter((x) => x.uid !== S.me).map((x) => x.uid))]
+  return uids.map((uid) => ({ uid, name: c.msgs.findLast((x) => x.uid === uid)?.name ?? 'Коллега', replied: c.msgs.some((x) => x.uid === uid && x.at > lm.at),
+    n: a[uid]?.n ?? 0, last: a[uid]?.last ?? 0, online: live.users.some((u) => u.uid === uid) }))
+})
+let actT = 0
+watch(() => (tracker.value.length ? lastMine.value?.at : 0), (at) => { clearInterval(actT); if (!at) return; askActivity(at); actT = setInterval(() => askActivity(at), 30000) }, { immediate: true })
+onUnmounted(() => clearInterval(actT))
+const blockInfo = (m) => { const who = Object.keys(m.answered ?? {}).map((uid) => note.value?.msgs.findLast((x) => x.uid === uid)?.name ?? 'коллега'); return who.length ? `ответили: ${who.join(', ')}` : 'ждёт ответа' }
 const ini = (s) => (s || '?').trim()[0]?.toUpperCase() || '?'
 
 // --- поле ответа ---
@@ -254,10 +273,18 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
             <span v-if="picker === m.id" class="pick" :style="pickAt"><button v-for="e in REACTIONS" :key="e" type="button" @click="react(note.id, m.id, e); picker = ''">{{ e }}</button></span></span>
           <textarea v-if="editing === m.id" v-model="editText" class="ed" rows="2" maxlength="1000" @keydown="onEditKey" @blur="saveEdit" />
           <span v-else class="mt">{{ m.text }}<small v-if="m.edited" class="edd"> (изм.)</small></span>
+          <span v-if="m.block" class="blk" title="Блокирующее: у коллег экран закрыт, пока не ответят в чат"><AppIcon name="lock" :size="11" />блокирует · {{ blockInfo(m) }}<button v-if="auth.isDev && mine(m)" type="button" @click="setBlock(note.id, m.id, false)">снять</button></span>
           <span v-if="reacts(m).length" class="re">
             <button v-for="r in reacts(m)" :key="r.e" class="r" :class="{ me: r.me }" type="button" @click="react(note.id, m.id, r.e)">{{ r.e }} {{ r.n }}</button>
           </span>
         </span>
+      </div>
+      <div v-if="tracker.length" class="trk">
+        <div v-for="p in tracker" :key="p.uid" class="tr" :class="{ ok: p.replied, ign: !p.replied && p.n }">
+          <template v-if="p.replied">✓ {{ p.name }} ответил(а)</template>
+          <template v-else><b>{{ p.name }}</b> {{ p.n ? `заходил(а) ${p.n} ${raz(p.n)} после сообщения (последний — ${time(p.last)})` : 'после сообщения не заходил(а)' }}{{ p.online ? ' · сейчас в приложении' : '' }} — не ответил(а)<em v-if="p.n">игнорирует</em></template>
+        </div>
+        <button v-if="!lastMine.block && tracker.some((p) => !p.replied)" class="blkbtn" type="button" title="У тех, кто не ответил, экран закроется, пока не ответят в чат" @click="setBlock(note.id, lastMine.id, true)"><AppIcon name="lock" :size="13" />Заблокировать до ответа</button>
       </div>
       <div v-if="lastMine" class="rd" :class="{ ok: readers.length }">{{ readers.length ? `✓✓ Прочитано · ${readers.join(', ')}` : '✓ Отправлено' }}</div>
     </div>
@@ -353,6 +380,12 @@ watch(() => route.fullPath, () => { menu.value = null; re() })          // ча�
 .ed { width: 100%; box-sizing: border-box; margin: 2px 0; padding: 6px 10px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--blue); font: inherit; font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--text); resize: none; field-sizing: content } .ed:focus { outline: none }
 .edd { font-size: 11px; font-weight: 700; color: var(--hint-2) }
 .mh .add { height: 22px; padding: 0 7px; font-size: 11px } .mh small { margin-left: 6px; font-weight: 700; color: var(--hint-2) }
+.blk { display: inline-flex; align-items: center; gap: 4px; width: fit-content; margin-top: 3px; padding: 2px 8px; border-radius: 99px; background: var(--red-l); color: var(--red-d); font-size: 11px; font-weight: 800 }      /* блокирующее сообщение */
+.blk button { margin-left: 4px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer }
+/* Разработчик: кто ответил / заходил и молчит + «Заблокировать до ответа» */
+.trk { display: grid; gap: 4px; margin: 4px 0 0 40px; padding: 8px 10px; border-radius: 12px; background: var(--surface); font-size: 12px; font-weight: 700; color: var(--hint); line-height: 1.35 }
+.tr b { color: var(--text) } .tr.ok { color: var(--green-d) } .tr em { margin-left: 6px; padding: 1px 6px; border-radius: 99px; background: var(--orange-l); color: var(--orange-d); font-style: normal; font-size: 10px; font-weight: 900 }
+.blkbtn { justify-self: start; display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; height: 28px; padding: 0 10px; border: 0; border-radius: 9px; background: var(--red-l); color: var(--red-d); font: inherit; font-size: 12px; font-weight: 900; cursor: pointer } .blkbtn:hover { filter: brightness(.96) }
 .mt { font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere }
 .re { position: relative; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px }
 .r { height: 24px; padding: 0 8px; border: 0; border-radius: 99px; background: var(--surface); font: inherit; font-size: 12.5px; font-weight: 800; color: var(--hint); cursor: pointer }

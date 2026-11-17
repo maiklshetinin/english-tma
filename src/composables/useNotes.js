@@ -25,7 +25,8 @@ export const notesState = reactive({
   typing: {},             // id заметки → { uid, name, color, until }
   popups: [],             // всплывающие уведомления: { id, mid, from, at }
   drops: [],              // посылки внизу экрана: { id, note, mid, cargo, via, emoji, x, by, to, at } (рисует ParachuteDrop.vue)
-  aim: null,              // посылка ждёт, куда её сбросить: { text, mode, note, pack: { via, emoji } } — нажатие на экран выбирает место
+  aim: null,
+  activity: null,         // разработчику: { since, users: { uid: { n, last } } } — кто сколько раз заходил после моего сообщения              // посылка ждёт, куда её сбросить: { text, mode, note, pack: { via, emoji } } — нажатие на экран выбирает место
 })
 const byId = (id) => notesState.list.find((n) => n.id === id)
 export const noteById = byId
@@ -38,6 +39,13 @@ export const unread = (n) => n.msgs.some((m) => m.uid !== notesState.me && m.at 
 export const CHAT_PATH = '/__chat'
 export const chatNote = computed(() => notesState.list.filter((n) => n.path === CHAT_PATH).sort((a, b) => a.at - b.at)[0] ?? null)
 export const unreadCount = computed(() => { const c = chatNote.value; return c ? c.msgs.filter((m) => m.uid !== notesState.me && m.at > (c.seen?.[notesState.me] ?? 0)).length : 0 })
+
+// Блокирующие сообщения разработчика, на которые я ещё не ответил — пока они есть, экран закрыт (BlockGate.vue)
+export const pendingBlocks = computed(() => { const c = chatNote.value, me = notesState.me; return c && me ? c.msgs.filter((m) => m.block && m.uid !== me && !m.answered?.[me]) : [] })
+/** Разработчик: сделать своё сообщение в чате блокирующим / снять блок */
+export const setBlock = (id, mid, on) => liveSend({ t: 'note:block', id, mid, on })
+/** Разработчик: кто сколько раз заходил после времени since — ответ в notesState.activity */
+export const askActivity = (since) => liveSend({ t: 'activity', since })
 
 let wired = false
 export function wireNotes() {
@@ -53,6 +61,7 @@ export function wireNotes() {
     if (notesState.open === m.note.id && m.by !== notesState.me && unread(m.note)) seen(m.note.id)          // заметка открыта у меня — сразу «прочитано»
   })
   onLive('note-', (m) => { notesState.list = notesState.list.filter((n) => n.id !== m.id); if (notesState.open === m.id) notesState.open = null; notesState.popups = notesState.popups.filter((p) => p.id !== m.id) })
+  onLive('activity', (m) => { notesState.activity = m })
   onLive('typing', (m) => { notesState.typing[m.id || 'new'] = { uid: m.uid, name: m.name, color: m.color, until: Date.now() + 4000 } })
   onLive('nudge', (m) => {
     if (!byId(m.id)) return
