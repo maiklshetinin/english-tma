@@ -6,6 +6,7 @@ import { fail } from './login.js'
 import { LEVELS } from './types.js'
 import { cleanUsername, isUsername } from './tgphoto.js'
 import { addDays } from './schedule.js'
+import { cached, dropAfterWrites } from './cache.js'
 import type { ArchivedStudent, Level, PriceChange, Student, StudentDoc, StudentInput, TokenUser } from './types.js'
 
 export { LEVELS }
@@ -45,11 +46,11 @@ export interface StudentsDeps {
 
 export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/Moscow', now = () => new Date() }: StudentsDeps) {
   const col = () => db.collection('students')
-  const alive = () => col().where('archived', '==', false).get()
+  const alive = () => cached(db, 'students:alive', () => col().where('archived', '==', false).get())      // из памяти сервера (cache.ts), сбрасывает любая правка учеников
   const seenMem = new Map<string, { uid: string; at: number; wrote: number }>()      // «в сети» — в памяти (см. seen)
   const withSeen = (x: Student): Student => { const at = seenMem.get(x.id)?.at; return at && at > (x.lastSeenAt ?? 0) ? { ...x, lastSeenAt: at } : x }
 
-  return {
+  const api = {
     // «В сети»: ученик открыл приложение — раз в минуту сообщает (зелёная точка у преподавателя, как в Telegram).
     // Чтобы не тратить чтения и записи базы каждую минуту: время держим в памяти сервера (преподавателям оно уходит сразу
     // через живое соединение — index.ts → live), а в базу пишем не чаще раза в 10 минут (для подписи «был(а) … назад» после
@@ -223,4 +224,6 @@ export function makeStudents({ db, FieldValue, photoByUsername, tz = 'Europe/Mos
       await batch.commit()
     },
   }
+  // кэш (cache.ts): после любой правки — сбросить прочитанное (students:, c:, g:)
+  return dropAfterWrites(api, db, ['students:', 'c:', 'g:'], ['seen', 'list', 'listArchived', 'recentSeen', 'archivedName'])
 }

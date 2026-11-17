@@ -48,6 +48,7 @@ const forStudent = (l: Lesson, me: string): Lesson => {
 }
 const HISTORY_MAX = 1000
 
+import { cached, dropCache } from './cache.js'
 export interface ScheduleDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; tz?: string; now?: () => Date }
 
 export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () => new Date() }: ScheduleDeps) {
@@ -55,6 +56,13 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
   let earn: { at: number; by: Record<string, Record<string, number>> } | null = null      // запас для earnings()
   const EARN_MS = 30 * 60_000
   const liveWeeks = () => { const w = weekStartOf(todayIn(tz, now())); return [w, addDays(w, 7)] }   // [текущая, следующая]
+  // Кэш (cache.ts): уроки недели читаем из базы один раз, дальше — из памяти; правка урока сбрасывает только свою неделю (touch).
+  // Тут же — история ученика ('hist:'), список недель ('weeks') и доход (earn): их сбрасывает любая правка уроков.
+  type WeekRow = { id: string; data: LessonDoc }
+  const weekData = (ws: string): Promise<WeekRow[]> => cached(db, 'w:' + ws, async () => (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => ({ id: d.id, data: d.data() as LessonDoc })))
+  const aliveIds = async () => new Set((await cached(db, 'students:alive', () => students().where('archived', '==', false).get())).docs.map((d) => d.id))
+  const touch = (...wss: (string | undefined)[]) => { dropCache(db, 'hist:', 'weeks', ...wss.filter(Boolean).map((w) => 'w:' + w)); earn = null }
+  const touchAll = () => { dropCache(db, 'w:', 'hist:', 'weeks'); earn = null }
 
   // Недели читаем и пишем целиком внутри транзакции: сначала все чтения, потом save() — одним махом
   type LoadedWeek = { ref: DocumentReference; ws: string; slots: WeekDoc['slots'] }
@@ -100,14 +108,14 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
 
     // Недели, которые есть в базе (в них есть уроки) — по возрастанию. По ним сайт листает назад; вперёд — сколько угодно.
     async weeksList(): Promise<string[]> {
-      return (await weeks().get()).docs.filter((d) => Object.keys(d.get('slots') || {}).length).map((d) => d.id).sort()
+      return cached(db, 'weeks', async () => (await weeks().get()).docs.filter((d) => Object.keys(d.get('slots') || {}).length).map((d) => d.id).sort())
     },
 
     // Одна неделя целиком (для листания): преподаватель — все уроки; понедельник в формате YYYY-MM-DD
     async week(start: unknown): Promise<ScheduleWeek> {
       const ws = typeof start === 'string' ? start : ''
       if (!parseYmd(ws) || weekStartOf(ws) !== ws) throw fail(400, 'week must be a Monday YYYY-MM-DD')
-      const docs = (await lessons().where('weekStart', '==', ws).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc))
+      const docs = (await weekData(ws)).map((d) => pub(d.id, d.data))
       return { weekStart: ws, lessons: docs.sort(byTime) }
     },
 
@@ -115,24 +123,26 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
     // или в архиве); урок, где никого не осталось, удаляется и освобождает слот. Проведённые уроки — история денег, их не трогаем.
     // Так в расписании не бывает «невидимых» уроков, занимающих ячейку. Возвращает, сколько уроков поправлено.
     // pre — уже прочитанные уроки недель (list читает их сам — чтобы не читать дважды)
-    async heal(pre?: Map<string, FirebaseFirestore.QueryDocumentSnapshot[]>): Promise<number> {
-      const alive = new Set((await students().where('archived', '==', false).get()).docs.map((d) => d.id))
+    async heal(pre?: Map<string, WeekRow[]>): Promise<number> {
+      const alive = await aliveIds()          // ученики — из кэша (раньше читались второй раз при каждом открытии расписания)
       let fixed = 0
       for (const ws of liveWeeks()) {
-        for (const d of pre?.get(ws) ?? (await lessons().where('weekStart', '==', ws).get()).docs) {
-          if (d.get('done') || (d.get('studentIds') as string[]).every((x) => alive.has(x))) continue
+        for (const d of pre?.get(ws) ?? await weekData(ws)) {
+          if (d.data.done || d.data.studentIds.every((x) => alive.has(x))) continue
+          const ref = lessons().doc(d.id)
           await db.runTransaction(async (tx) => {
-            const l = await tx.get(d.ref); if (!l.exists || l.get('done')) return
+            const l = await tx.get(ref); if (!l.exists || l.get('done')) return
             const rest = (l.get('studentIds') as string[]).filter((x) => alive.has(x))
             if (rest.length === l.get('studentIds').length) return
             fixed++
-            if (rest.length) return void tx.update(d.ref, { studentIds: rest })
+            if (rest.length) return void tx.update(ref, { studentIds: rest })
             const W = weekLoader(tx), w = await W.get(l.get('weekStart')), k = slotKey(l.get('date'), l.get('hour'))
             if (w.slots[k] === d.id) delete w.slots[k]
-            tx.delete(d.ref); W.save()
+            tx.delete(ref); W.save()
           })
         }
       }
+      if (fixed) touchAll()
       if (fixed) console.log(`  → расписание: убраны ученики-«сироты» из ${fixed} урок(ов)`)
       return fixed
     },
@@ -154,6 +164,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
           tx.delete(d.ref); W.save()
         })
       }
+      touchAll()
     },
 
     // Преподаватель — все уроки двух недель; ученик — только свои (и без чужих учеников в списке); остальным — пусто
@@ -164,7 +175,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
       if (user.role === 'teacher') sid = checkId(studentId)
       else { sid = await meOf(user); asStudent = true }
       if (!sid) return []
-      const all = (await lessons().where('studentIds', 'array-contains', sid).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc)).sort(byTime).slice(-HISTORY_MAX)
+      const all = await cached(db, 'hist:' + sid, async () => (await lessons().where('studentIds', 'array-contains', sid!).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc)).sort(byTime).slice(-HISTORY_MAX))
       return asStudent ? all.map((l) => forStudent(l, sid!)) : all
     },
 
@@ -192,20 +203,22 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
       const day = (v: unknown) => { if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) throw fail(400, 'bad date'); return v }
       const a = day(from), b = day(to)
       if (a > b || (Date.parse(b) - Date.parse(a)) / 864e5 > 400) throw fail(400, 'bad range')
-      return (await lessons().where('date', '>=', a).where('date', '<=', b).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc)).sort(byTime)
+      if ((Date.parse(b) - Date.parse(a)) / 864e5 > 70) return (await lessons().where('date', '>=', a).where('date', '<=', b).get()).docs.map((d) => pub(d.id, d.data() as LessonDoc)).sort(byTime)
+      // до 10 недель — по неделям из кэша (месяц для плашки «ноябрь» и календаря не читается из базы заново)
+      const wss: string[] = []; for (let ws = weekStartOf(a); ws <= b; ws = addDays(ws, 7)) wss.push(ws)
+      return (await Promise.all(wss.map(weekData))).flat().filter((d) => d.data.date >= a && d.data.date <= b).map((d) => pub(d.id, d.data)).sort(byTime)
     },
 
     async list(user: TokenUser): Promise<ScheduleResponse> {
       const [cur, next] = liveWeeks()
-      let me: string | null = null, pre: Map<string, FirebaseFirestore.QueryDocumentSnapshot[]> | null = null
-      const weekDocs = async (ws: string) => (await lessons().where('weekStart', '==', ws).get()).docs as FirebaseFirestore.QueryDocumentSnapshot[]
+      let me: string | null = null, pre: Map<string, WeekRow[]> | null = null
       if (user.role === 'teacher') {
-        pre = new Map([[cur, await weekDocs(cur)], [next, await weekDocs(next)]])
+        pre = new Map([[cur, await weekData(cur)], [next, await weekData(next)]])
         if (await this.heal(pre)) pre = null                     // что-то поправили — перечитаем свежие
       } else me = await meOf(user)
       const read = async (ws: string): Promise<ScheduleWeek> => {
         if (user.role !== 'teacher' && !me) return { weekStart: ws, lessons: [] }
-        let docs = (pre?.get(ws) ?? await weekDocs(ws)).map((d) => pub(d.id, d.data() as LessonDoc))
+        let docs = (pre?.get(ws) ?? await weekData(ws)).map((d) => pub(d.id, d.data))
         if (me) docs = docs.filter(l => l.studentIds.includes(me)).map(l => forStudent(l, me!))      // ученик: только он сам и только его цена
         return { weekStart: ws, lessons: docs.sort(byTime) }
       }
@@ -230,16 +243,18 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
         tx.set(ref, { ...data, weekStart: slot.ws, createdBy: by, createdAt: FieldValue.serverTimestamp() })
         W.save()
       })
+      touch(slot.ws)
       return pub(ref.id, data)
     },
 
     // Перенос урока в пустой слот (другая неделя тоже можно)
     async move(id: string, input: Partial<SlotInput> | undefined): Promise<Lesson> {
-      checkId(id); const slot = slotOf(input); let out: Lesson | undefined
+      checkId(id); const slot = slotOf(input); let out: Lesson | undefined, was = ''
       await db.runTransaction(async (tx) => {
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
         if (l.get('done')) throw fail(409, 'lesson already conducted')
+        was = l.get('weekStart')
         const W = weekLoader(tx), from = await W.get(l.get('weekStart')), to = await W.get(slot.ws)
         out = pub(id, { ...(l.data() as LessonDoc), date: slot.date, hour: slot.hour })
         const fromKey = slotKey(l.get('date'), l.get('hour'))
@@ -250,6 +265,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
         tx.update(ref, { date: slot.date, hour: slot.hour, weekStart: slot.ws })
         W.save()
       })
+      touch(was, slot.ws)
       return out!
     },
 
@@ -257,7 +273,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
     // Проведённый урок не меняем (цены уже зафиксированы) — сначала снимите отметку. Пустой урок нельзя: для этого есть «Убрать урок».
     async setStudents(id: string, input: Partial<StudentsInput> | undefined): Promise<Lesson> {
       checkId(id)
-      const ids = await studentIdsOf(input?.studentIds); let out: Lesson | undefined
+      const ids = await studentIdsOf(input?.studentIds); let out: Lesson | undefined, ws = ''
       await db.runTransaction(async (tx) => {
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
@@ -265,8 +281,9 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
         if (l.get('trial')) throw fail(409, 'trial lesson has no students')                 // пробный урок всегда бесплатный и без учеников
         const canceled = canceledOf({ studentIds: ids, canceled: l.get('canceled') })      // убранный из урока — и его отметка «отменил» уходит
         tx.update(ref, { studentIds: ids, canceled })
-        out = pub(id, { ...(l.data() as LessonDoc), studentIds: ids, canceled })
+        out = pub(id, { ...(l.data() as LessonDoc), studentIds: ids, canceled }); ws = l.get('weekStart')
       })
+      touch(ws)
       return out!
     },
 
@@ -278,13 +295,14 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
       if (input?.note !== undefined) { if (typeof input.note !== 'string') throw fail(400, 'note must be string'); patch.note = input.note.trim().slice(0, NOTE_MAX) }
       if (input?.color !== undefined) { if (!STICKER_COLORS.includes(input.color)) throw fail(400, 'color: ' + STICKER_COLORS.join(', ')); patch.color = input.color }      // цвет стикера-закладки
       if (!Object.keys(patch).length) throw fail(400, 'nothing to change')
-      let out: Lesson | undefined
+      let out: Lesson | undefined, ws = ''
       await db.runTransaction(async (tx) => {
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
         tx.update(ref, patch)
-        out = pub(id, { ...(l.data() as LessonDoc), ...patch })
+        out = pub(id, { ...(l.data() as LessonDoc), ...patch }); ws = l.get('weekStart')
       })
+      touch(ws)
       return out!
     },
 
@@ -294,7 +312,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
       checkId(id)
       const sid = checkId(input?.studentId)
       if (typeof input?.canceled !== 'boolean') throw fail(400, 'canceled must be boolean')
-      const on = input.canceled; let out: Lesson | undefined
+      const on = input.canceled; let out: Lesson | undefined, ws = ''
       await db.runTransaction(async (tx) => {
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
@@ -304,8 +322,9 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
         const canceled = { ...canceledOf(d) }
         if (on) canceled[sid] = canceled[sid] || now().toISOString(); else delete canceled[sid]
         tx.update(ref, { canceled })
-        out = pub(id, { ...d, canceled })
+        out = pub(id, { ...d, canceled }); ws = d.weekStart
       })
+      touch(ws)
       return out!
     },
 
@@ -313,6 +332,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
     async swap(aId: string, bId: string): Promise<void> {
       checkId(aId); checkId(bId)
       if (aId === bId) throw fail(400, 'same lesson')
+      let wss: string[] = []
       await db.runTransaction(async (tx) => {
         const [a, b] = [await tx.get(lessons().doc(aId)), await tx.get(lessons().doc(bId))]
         if (!a.exists || !b.exists) throw fail(404, 'lesson not found')
@@ -322,8 +342,9 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
         wa.slots[ka] = bId; wb.slots[kb] = aId
         tx.update(a.ref, { date: b.get('date'), hour: b.get('hour'), weekStart: b.get('weekStart') })
         tx.update(b.ref, { date: a.get('date'), hour: a.get('hour'), weekStart: a.get('weekStart') })
-        W.save()
+        W.save(); wss = [a.get('weekStart'), b.get('weekStart')]
       })
+      touch(...wss)
     },
 
     // «Урок проведён» / снять отметку. При отметке цена каждого ученика фиксируется (по истории цен на время урока) и дальше не меняется.
@@ -331,7 +352,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
     async setDone(id: string, input: Partial<DoneInput> | undefined): Promise<Lesson> {
       checkId(id)
       if (typeof input?.done !== 'boolean') throw fail(400, 'done must be boolean')
-      const done = input.done; let out: Lesson | undefined
+      const done = input.done; let out: Lesson | undefined, ws = ''
       await db.runTransaction(async (tx) => {
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
@@ -347,22 +368,24 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
         // отменившие ученики не платят: их цены в урок не попадают
         if (done) for (const sid of d.studentIds.filter((x) => !off[x])) { const st = await tx.get(students().doc(sid)); prices[sid] = st.exists ? priceAt(st.data() as any, d.date, d.hour) : 0 }
         tx.update(ref, done ? { done: true, prices, doneAt: FieldValue.serverTimestamp() } : { done: false, prices: {}, doneAt: null })
-        out = pub(id, { ...d, done, prices })
+        out = pub(id, { ...d, done, prices }); ws = d.weekStart
       })
+      touch(ws)
       return out!
     },
 
     // Урок удаляется, слот освобождается
     async remove(id: string): Promise<void> {
-      checkId(id)
+      checkId(id); let ws = ''
       await db.runTransaction(async (tx) => {
         const ref = lessons().doc(id), l = await tx.get(ref)
         if (!l.exists) throw fail(404, 'lesson not found')
         if (l.get('done')) throw fail(409, 'lesson already conducted')
         const W = weekLoader(tx), w = await W.get(l.get('weekStart')), k = slotKey(l.get('date'), l.get('hour'))
         if (w.slots[k] === id) delete w.slots[k]
-        tx.delete(ref); W.save()
+        tx.delete(ref); W.save(); ws = l.get('weekStart')
       })
+      touch(ws)
     },
 
     // Ученика архивировали: убираем его из НЕпроведённых уроков двух живых недель; если урок остался без учеников — удаляем его.
@@ -381,6 +404,7 @@ export function makeSchedule({ db, FieldValue, tz = 'Europe/Moscow', now = () =>
           })
         }
       }
+      touchAll()
     },
   }
 }

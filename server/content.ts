@@ -7,6 +7,7 @@
 import type { Firestore, FieldValue as FV, QueryDocumentSnapshot } from 'firebase-admin/firestore'
 import { fail } from './login.js'
 import { makeAccess } from './access.js'
+import { cached, dropAfterWrites } from './cache.js'
 import { cleanDeck, cleanPreset, cleanUnits, id } from './clean.js'
 import type { Card, CompleteResponse, ContentResponse, Deck, DeckDoc, PathUnit, Preset, PresetDoc, TokenUser } from './types.js'
 
@@ -23,18 +24,18 @@ export function makeContent({ db, FieldValue, now = Date.now }: ContentDeps) {
   const paths = () => db.collection('paths'), presets = () => db.collection('presets'), decks = () => db.collection('decks'), students = () => db.collection('students')
   const access = makeAccess(db)
 
-  return {
+  const api = {
     // Преподаватель — всё. Ученик — свой путь и только доступные ему колоды (для всех или назначенные ему); пресетов не видит.
     async list(user: TokenUser): Promise<ContentResponse> {
       if (user.role === 'teacher') {
-        const [p, pr, d] = await Promise.all([paths().get(), presets().get(), decks().get()])
+        const [p, pr, d] = await Promise.all([cached(db, 'c:paths', () => paths().get()), cached(db, 'c:presets', () => presets().get()), cached(db, 'c:decks', () => decks().get())])      // из памяти сервера (cache.ts)
         const out: Record<string, PathUnit[]> = {}
         for (const x of p.docs) out[x.id] = (x.get('units') as PathUnit[]) ?? []
         return { paths: out, presets: [...pr.docs].sort(byCreated).map(pubPreset), decks: [...d.docs].sort(byCreated).map(pubDeck) }
       }
       const sid = await access.ownStudentId(user)
       if (!sid) return { paths: {}, presets: [], decks: [] }
-      const [p, d] = await Promise.all([paths().doc(sid).get(), decks().get()])
+      const [p, d] = await Promise.all([paths().doc(sid).get(), cached(db, 'c:decks', () => decks().get())])
       return {
         paths: { [sid]: p.exists ? (p.get('units') as PathUnit[]) ?? [] : [] }, presets: [],
         decks: [...d.docs].sort(byCreated).map(pubDeck).filter((x) => x.forAll || x.assigned.includes(sid)),
@@ -101,4 +102,6 @@ export function makeContent({ db, FieldValue, now = Date.now }: ContentDeps) {
       return urls
     },
   }
+  // кэш (cache.ts): после любой правки — сбросить прочитанное (c:, students:)
+  return dropAfterWrites(api, db, ['c:', 'students:'], ['list'])
 }

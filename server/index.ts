@@ -20,6 +20,7 @@ import { makeLearn } from './learn.js'
 import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
 import { makeNotes } from './notes.js'
+import { dropCache } from './cache.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -49,10 +50,12 @@ app.use((req, res, next) => {                              // строка в л
 })
 // Правки в реальном времени: после удачной правки (не GET) остальным преподавателям — «перезагрузите это» (live.ts)
 const LIVE_SKIP = new Set(['courses', 'media', 'me', 'ping', 'auth'])        // курсы синхронизируются сами, остальное — не данные
+const CACHE_KEEP = new Set(['lessons', 'schedule', 'courses', 'media', 'me', 'ping', 'notes'])      // уроки сбрасывают кэш сами и точечно (schedule.ts), остальное кэш не трогает
 app.use((req, res, next) => {
   res.on('finish', () => {
     const what = req.path.split('/')[1] || ''
     if (req.method !== 'GET' && res.statusCode < 400 && (what === 'lessons' || what === 'schedule' || what === 'students')) schedule.dropEarnings()      // уроки или цены поменялись — доход пересчитать
+    if (req.method !== 'GET' && res.statusCode < 400 && !CACHE_KEEP.has(what)) dropCache(db)      // правка мимо уроков — кэш чтений (cache.ts) целиком сбросить, дёшево: правок мало
     if (req.method !== 'GET' && res.statusCode < 400 && req.user?.role === 'teacher' && !LIVE_SKIP.has(what)) live.changed(what, String(req.headers['x-live-cid'] || ''))
   })
   next()

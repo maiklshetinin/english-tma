@@ -6,6 +6,7 @@
 // Ученик, которого потом удалили или архивировали, может остаться в studentIds — сайт его просто не показывает.
 import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './login.js'
+import { cached, dropAfterWrites } from './cache.js'
 import type { Group } from './types.js'
 
 export interface GroupsDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
@@ -25,10 +26,10 @@ export function makeGroups({ db, FieldValue }: GroupsDeps) {
   }
   const groupId = (raw: unknown) => { const id = String(raw ?? ''); if (!ID.test(id)) throw fail(400, 'bad id'); return id }
 
-  return {
+  const api = {
     async list(): Promise<{ groups: Group[]; seeded: boolean }> {
-      const docs = (await col().get()).docs
-      return { groups: docs.map((d) => pub(d.id, d.data())), seeded: (await meta().get()).get('seeded') === true }
+      const docs = (await cached(db, 'g:list', () => col().get())).docs      // из памяти сервера (cache.ts)
+      return { groups: docs.map((d) => pub(d.id, d.data())), seeded: (await cached(db, 'g:meta', () => meta().get())).get('seeded') === true }
     },
 
     async create(input: unknown): Promise<Group> {
@@ -65,4 +66,6 @@ export function makeGroups({ db, FieldValue }: GroupsDeps) {
       return this.list()
     },
   }
+  // кэш (cache.ts): после любой правки — сбросить прочитанное (g:)
+  return dropAfterWrites(api, db, ['g:'], ['list'])
 }
