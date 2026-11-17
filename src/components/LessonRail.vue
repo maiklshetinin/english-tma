@@ -169,11 +169,15 @@ const ro2 = new ResizeObserver((es) => { for (const e of es) if (e.target.datase
 // Высоту живого экрана запоминаем (viewH); в JSON и правке карточка той же высоты, лишнее прокручивается внутри.
 // Экран, ни разу не показанный живым (пустой — сразу в правке), — высотой как обычно у соседей.
 const viewH = reactive({})
-const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.target.dataset; if (d.id && d.view === '1') viewH[d.id] = e.target.offsetHeight } })
+// Правка выше живого экрана — не прокручиваем (17.11.2026): оба окна растут до большей из двух высот (editH — высота правки), размер один
+const editH = reactive({})
+const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.target.dataset; if (!d.id) continue; if (d.view === '1') viewH[d.id] = e.target.offsetHeight; else if (d.edit === '1') editH[d.id] = e.target.offsetHeight } })
 const cardEls = new WeakSet()
 const watchCard = (el) => { if (el && !cardEls.has(el)) { cardEls.add(el); ro3.observe(el) } }
 const typicalH = computed(() => { const v = Object.values(viewH).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 560 })
-const fixH = (s) => (jsonOn[s.id] || isEdit(s) ? { height: (viewH[s.id] ?? typicalH.value) + 'px' } : null)
+const fixH = (s) => (jsonOn[s.id] ? { height: (viewH[s.id] ?? typicalH.value) + 'px' }
+  : isEdit(s) ? { minHeight: (viewH[s.id] ?? typicalH.value) + 'px' }
+  : editH[s.id] ? { minHeight: editH[s.id] + 'px' } : null)
 const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.observe(el); ro2.observe(el) } }
 // ---------- Живая ветка: экраны проходятся прямо здесь, как у ученика ----------
 // Карандаш — экран правится; «Сохранить» — снова живой. Пустой (незаполненный) экран сразу открыт для правки.
@@ -261,7 +265,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <button v-if="!isEdit(s)" class="ib rs" title="Сбросить экран — пройти заново" @pointerdown.stop @click="resetStep(s)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></svg></button>
         <button v-if="!readonly" class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
-      <div :ref="watchCard" class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: jsonOn[s.id] || isEdit(s) }]" :data-id="s.id" :data-view="jsonOn[s.id] || isEdit(s) ? 0 : 1" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
+      <div :ref="watchCard" class="card" :class="[s.kind, { on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: jsonOn[s.id] || isEdit(s) }]" :data-id="s.id" :data-view="jsonOn[s.id] || isEdit(s) ? 0 : 1" :data-edit="!jsonOn[s.id] && isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
       <!-- JSON экрана (кнопка «{ }») — вместо живого экрана, в той же карточке -->
       <div v-if="jsonOn[s.id]" class="jv" :class="jsonTheme" @pointerdown.stop>
@@ -313,7 +317,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
           <div class="exh"><small>Пример</small>
             <span class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'], null, 'exAudio')">
               <AudioWave v-if="s.exAudio" :key="s.exAudio" :src="resolve(s.exAudio, 'audio')" small />
-              <button v-else class="add sm" @click="pick(s, ['audio'], null, 'exAudio')">＋ Озвучка примера</button>
+              <button v-else class="lnk" @click="pick(s, ['audio'], null, 'exAudio')">＋ Озвучка примера</button>
               <button v-if="s.exAudio" class="x in" title="Убрать озвучку примера" @click="clear(s, 'exAudio')">✕</button>
               <em v-if="pct(s, 'exAudio') != null" class="up">{{ pct(s, 'exAudio') }}%</em>
             </span>
@@ -321,36 +325,54 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
           <textarea v-model="s.ex" class="ex" rows="1" placeholder="He said it’s fine." @input="changed" />
           <textarea v-model="s.exTr" class="ex tr" rows="1" placeholder="перевод примера" @input="changed" />
         </div>
-        <div class="dk"><button class="add deck" @click="openPk(s, 'intro')">{{ undo[s.id] ? 'Другая карточка' : 'Взять из карточек' }}</button><button v-if="undo[s.id]" class="add deck un" title="Вернуть, как было до карточки" @click="undoCard(s)">↺ Отменить</button></div>
       </div>
 
       <!-- Выбери ответ -->
       <!-- Выбери ответ / Аудиотест — у каждого своя простая форма (17.11.2026): без переключателей «на слух / переводом», «картинки / текст».
            Выбери ответ: звук + варианты картинками. Аудиотест: фото + звук + варианты текстом. Какая форма — по самому экрану (show). -->
-      <div v-else-if="s.kind === 'choice'" class="cb">
-        <div class="hd">{{ s.head || KINDS.choice.head }}</div>
-        <div v-if="s.show !== 'text'" class="tpk"><b>Выбери ответ</b> — ученик слышит слово и выбирает картинку</div>
-        <div v-else class="tpk"><b>Аудиотест</b> — фото и звук, ученик выбирает ответ текстом</div>
-        <div v-if="s.image" class="media" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])"><img :src="resolve(s.image, 'image')" alt="" draggable="false" /><button class="x" title="Убрать фото вопроса" @click.stop="clear(s, 'image')">✕</button></div>
-        <button v-else-if="s.show === 'text'" class="add sm" title="Фото 16:9, лучше от 1280×720 — обрежем и сожмём сами" @click="pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">＋ Фото к вопросу</button>
-        <div v-if="s.ask !== 'tr'" class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
-          <AudioWave v-if="qAudio(s)" :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" small />
-          <button class="add sm" :title="s.audio ? 'Свой звук вопроса' : 'Звук берётся из верного ответа — можно загрузить свой'" @click="pick(s, ['audio'])">{{ s.audio ? 'свой ✓' : qAudio(s) ? 'свой звук' : '＋ Звук вопроса' }}</button>
-          <button v-if="s.audio" class="x in" title="Убрать свой звук" @click="clear(s, 'audio')">✕</button>
-        </div>
-        <div v-else class="q">{{ s.opts?.[s.ans ?? 0]?.t || 'перевод верного ответа' }}</div>      <!-- старые экраны «вопрос переводом» — как были -->
-        <div class="opts" :class="s.show">
-          <div v-for="(o, k) in s.opts" :key="k" class="op" :class="{ right: (s.ans ?? 0) === k }">
-            <div v-if="s.show === 'pics'" class="oi" title="Фото варианта 3:2, лучше от 600×400 — обрежем по центру и сожмём. Нажмите или перетащите" @click="pick(s, ['image'], k)" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'], k)">
-              <img v-if="o.image" :src="resolve(o.image, 'image')" alt="" draggable="false" /><span v-else>＋ фото</span>
-            </div>
-            <input v-model="o.w" placeholder="слово" @input="changed" />
-            <button class="ok" :title="(s.ans ?? 0) === k ? 'Верный ответ' : 'Сделать верным'" @click="s.ans = k; changed()">✓</button>
-            <button class="x" title="Убрать вариант" @click="delOpt(s, k)">✕</button>
+      <!-- Выбери ответ / Аудиотест: форма = живой экран (17.11.2026) — те же размеры, правка прямо на карточках, без скролла.
+           Выбери ответ: звук + варианты картинками. Аудиотест: фото со звуком поверх + варианты текстом. Кружок — верный ответ. -->
+      <div v-else-if="s.kind === 'choice'" class="cb cv" :class="s.show === 'text' ? 'tx' : 'pc'">
+        <div class="hd" :title="s.show === 'text' ? 'Аудиотест — фото и звук, ученик выбирает ответ текстом' : 'Выбери ответ — ученик слышит слово и выбирает картинку'">{{ s.head || KINDS.choice.head }}</div>
+        <!-- Аудиотест: фото 16:9, звук поверх -->
+        <div v-if="s.show === 'text'" class="media" :class="{ empty: !s.image }" @click="!s.image && pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">
+          <img v-if="s.image" :src="resolve(s.image, 'image')" alt="" draggable="false" />
+          <span v-else class="ph">＋ Фото к вопросу<small>16:9, лучше от 1280×720 — нажмите или перетащите</small></span>
+          <button v-if="s.image" class="x" title="Убрать фото" @click.stop="clear(s, 'image')">✕</button>
+          <div v-if="s.ask !== 'tr'" class="qov" @click.stop @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
+            <AudioWave v-if="qAudio(s)" :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" small />
+            <button v-else class="add" @click="pick(s, ['audio'])">＋ Звук вопроса</button>
           </div>
-          <button v-if="(s.opts?.length ?? 0) < OPTS_MAX" class="op plus" @click="addOpt(s)">＋</button>
         </div>
-        <button class="add deck" @click="openPk(s, 'opts')">Варианты из карточек</button>
+        <!-- Выбери ответ: звук вопроса в пунктирной рамке -->
+        <div v-else-if="s.ask !== 'tr'" class="qbox" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
+          <AudioWave v-if="qAudio(s)" :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" small />
+          <button v-else class="add" @click="pick(s, ['audio'])">＋ Звук вопроса — нажмите или перетащите</button>
+        </div>
+        <div v-if="s.ask === 'tr'" class="q">{{ s.opts?.[s.ans ?? 0]?.t || 'перевод верного ответа' }}</div>      <!-- старые экраны «вопрос переводом» — как были -->
+        <div v-else class="qmeta">
+          <span>{{ s.audio ? 'свой звук' : qAudio(s) ? 'звук из верного ответа' : 'нет звука' }}</span>
+          <button class="lnk" @click="pick(s, ['audio'])">{{ s.audio ? 'Заменить' : 'Загрузить свой' }}</button>
+          <button v-if="s.audio" class="lnk" title="Убрать свой звук — будет звук верного ответа" @click="clear(s, 'audio')">Озвучить авто</button>
+          <em v-if="pct(s, 'audio') != null">{{ pct(s, 'audio') }}%</em>
+        </div>
+        <!-- варианты — как у ученика -->
+        <div class="co" :class="s.show === 'text' ? 'rows' : 'pics'">
+          <div v-for="(o, k) in s.opts" :key="k" class="cop" :class="{ right: (s.ans ?? 0) === k }">
+            <div v-if="s.show !== 'text'" class="cph" title="Фото 3:2, лучше от 600×400 — нажмите или перетащите" @click="pick(s, ['image'], k)" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'], k)">
+              <img v-if="o.image" :src="resolve(o.image, 'image')" alt="" draggable="false" /><i v-else>＋ фото</i>
+              <span v-if="o.image" class="rep">Заменить</span>
+            </div>
+            <button class="rad" :title="(s.ans ?? 0) === k ? 'Верный ответ' : 'Сделать верным'" @click.stop="s.ans = k; changed()" />
+            <input v-model="o.w" placeholder="слово" @input="changed" />
+            <button class="cx" title="Убрать вариант" @click.stop="delOpt(s, k)">✕</button>
+          </div>
+        </div>
+        <div class="cfoot">
+          <small>Кружок — правильный ответ</small>
+          <button v-if="(s.opts?.length ?? 0) < OPTS_MAX" class="add sm" @click="addOpt(s)">＋ Вариант</button>
+          <button class="add sm deck" @click="openPk(s, 'opts')">Из карточек</button>
+        </div>
       </div>
 
       <!-- Собери фразу, Подсказка, Повтори за диктором, Заполни пропуск, Ответь на вопрос -->
@@ -415,12 +437,11 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <!-- Пары -->
       <div v-else class="cb">
         <div class="hd">{{ KINDS.pairs.head }}</div>
-        <div v-for="(p, k) in s.pairs" :key="k" class="pr"><input v-model="p.a" placeholder="I approve" @input="changed" /><input v-model="p.b" placeholder="одобряю" @input="changed" /><button class="x" title="Убрать пару" @click="s.pairs.splice(k, 1); changed()">✕</button></div>
-        <button v-if="(s.pairs?.length ?? 0) < PAIRS_MAX" class="add" @click="addPair(s)">＋ Пара</button>
-        <button class="add deck" @click="openPk(s, 'pairs')">Пары из карточек</button>
+        <div class="prs"><div v-for="(p, k) in s.pairs" :key="k" class="pr"><input v-model="p.a" placeholder="I approve" @input="changed" /><input v-model="p.b" placeholder="одобряю" @input="changed" /><button class="x" title="Убрать пару" @click="s.pairs.splice(k, 1); changed()">✕</button></div></div>
+        <div class="cfoot"><small>Слева слово — справа перевод</small><button v-if="(s.pairs?.length ?? 0) < PAIRS_MAX" class="add sm" @click="addPair(s)">＋ Пара</button><button class="add sm deck" @click="openPk(s, 'pairs')">Из карточек</button></div>
       </div>
 
-      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'choice' && s.opts?.length" class="ca"><b>Верный ответ</b><em>{{ s.opts[s.ans ?? 0]?.w || '…' }}</em></span><button class="go play" @click="save(s)">Сохранить</button></div>
+      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'intro'" class="fdk"><button class="add sm deck" @click="openPk(s, 'intro')">{{ undo[s.id] ? 'Другая карточка' : 'Взять из карточек' }}</button><button v-if="undo[s.id]" class="add sm deck un" title="Вернуть, как было до карточки" @click="undoCard(s)">↺</button></span><button class="go play" @click="save(s)">Сохранить</button></div>
       </template>
       </div>
     </div>
@@ -511,7 +532,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 /* текущий экран на ветке — без пульсации (07.11): в редакторе «дышит» только текущий урок на рельсе */
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
 .card.editing { border: 2px dashed #0d99ff }
-.card.fixh { min-height: 0 } .card.fixh.editing { overflow-y: auto; overscroll-behavior: contain } .card.fixh .jv pre { max-height: none; min-height: 0 }      /* JSON и правка — высотой с живой экран (fixH), лишнее — прокруткой внутри */
+.card.fixh { min-height: 0 } .card.fixh.editing { overflow: visible } .card.fixh .jv pre { max-height: none; min-height: 0 }      /* JSON и правка — высотой с живой экран (fixH), лишнее — прокруткой внутри */
 .ib.pen:hover, .ib.pen.on { background: var(--blue-l); color: var(--blue-d) }
 .stem { position: absolute; left: 50%; top: -40px; width: 4px; height: 54px;      /* от самой линии ветки (на ней теперь навыки плитки, а не кружок) */ margin-left: -2px; background: #d9d9d9; border-radius: 2px }
 .node { position: absolute; left: 50%; top: -54px; width: 34px; height: 34px; margin-left: -17px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px color-mix(in srgb, var(--c) 45%, transparent); cursor: grab; touch-action: none; user-select: none; z-index: 2 }
@@ -670,9 +691,43 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .iv .word { gap: 4px; padding: 12px; border-radius: 0 0 12px 12px }
 .iv .word input { width: 70%; justify-self: center; border: 1px dashed #c9d8f0; border-radius: 8px; background: transparent; font-size: 16px; font-weight: 800 }
 .iv .word input.tr { width: 50%; font-size: 12px; font-weight: 600 }
-.iv .exb { display: grid; gap: 3px; width: 100%; max-width: 380px; align-self: center; padding: 8px 10px; border: 1px dashed #cfcfcf; border-radius: 10px; box-sizing: border-box }
-.iv .exh { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px }
+.iv .exb { display: grid; gap: 1px; width: 100%; max-width: 380px; align-self: center; padding: 4px 8px; border: 1px dashed #cfcfcf; border-radius: 10px; box-sizing: border-box }
+.iv .exh { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 18px; font-size: 11px }
 .iv .exh small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px }
 .iv .exh .aud { min-height: 0; flex: none; max-width: 70% }
-.iv .ex { font-size: 15px; font-weight: 600; line-height: 1.4; resize: none } .iv .ex.tr { font-size: 12px; color: var(--hint) }
+.iv .ex { font-size: 15px; font-weight: 600; line-height: 1.3; resize: none; padding: 0 } .iv .exb textarea { min-height: 0 } .iv .ex.tr { font-size: 12px; color: var(--hint) }
+
+/* Выбери ответ / Аудиотест — размеры как в LessonPlayer (embedded): .pics minmax(96px), фото 3:2, подпись 14/800, звук-пилюля 34px */
+.cv { gap: 10px }
+.cv .hd { margin: 8px 0 2px }
+.cv .qbox { width: 100%; max-width: 420px; align-self: center; padding: 2px 6px; border: 1px dashed #b9d3f5; border-radius: 19px; box-sizing: border-box; min-height: 38px; display: flex; align-items: center }
+.cv .qbox > * { flex: 1; min-width: 0 }
+.cv .media { width: 100%; max-width: 380px; align-self: center; border-radius: 12px }
+.cv .media.empty .ph { padding-bottom: 40px; box-sizing: border-box }
+.cv .qov { position: absolute; left: 8%; right: 8%; bottom: 8px; z-index: 2; display: flex; align-items: center; padding: 3px 8px; border-radius: 20px; background: rgba(255, 255, 255, .95); box-shadow: 0 2px 6px rgba(0, 0, 0, .15) }
+.cv .qov > * { flex: 1; min-width: 0 } .cv .qov .add { border: 0; padding: 4px }
+.cv .qmeta { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: -4px; font-size: 11px; color: var(--hint); font-weight: 600 }
+.cv .qmeta em { font-style: normal; color: var(--blue-d); font-weight: 800 }
+.lnk { border: 0; background: none; padding: 0; font: inherit; font-weight: 800; color: var(--blue-d); cursor: pointer } .lnk:hover { text-decoration: underline }
+.co.pics { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; width: 100% }
+.co.rows { display: grid; gap: 8px; width: 100%; max-width: 420px; align-self: center }
+.cop { position: relative; display: grid; border: 1px solid var(--border); border-radius: 12px; background: var(--card); overflow: hidden }
+.cop.right { border: 2px solid #1fbe78; margin: -1px }
+.cph { position: relative; aspect-ratio: 3 / 2; background: var(--surface); cursor: pointer } .cph img { display: block; width: 100%; height: 100%; object-fit: cover }
+.cph i { display: grid; place-items: center; height: 100%; font-style: normal; font-size: 12px; font-weight: 800; color: var(--blue-d) } .cph:hover i { background: var(--blue-l) }
+.cph .rep { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); padding: 2px 8px; border-radius: 8px; background: rgba(0, 0, 0, .6); color: #fff; font-size: 10px; font-weight: 800; white-space: nowrap; opacity: 0; transition: opacity .12s } .cph:hover .rep { opacity: 1 }
+.cop input { margin: 6px; width: auto; min-width: 0; padding: 4px; border: 1px dashed #cfd8e6; border-radius: 8px; background: transparent; text-align: center; font-size: 14px; font-weight: 800 }
+.rad { position: absolute; left: 6px; top: 6px; width: 18px; height: 18px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: rgba(0, 0, 0, .25); box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); cursor: pointer }
+.cop.right .rad { background: #1fbe78; box-shadow: 0 0 0 1px #1fbe78, inset 0 0 0 3px #fff }
+.cx { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; font-size: 10px; cursor: pointer; opacity: 0 } .cop:hover .cx { opacity: 1 }
+.co.rows .cop { grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; padding: 0 8px }
+.co.rows .rad, .co.rows .cx { position: static; flex: none } .co.rows .rad { border-color: #cfcfcf; background: var(--card); box-shadow: none } .co.rows .cop.right .rad { border-color: #1fbe78; background: #1fbe78; box-shadow: inset 0 0 0 3px #fff }
+.co.rows .cx { background: var(--surface); color: var(--hint) }
+.co.rows input { margin: 7px 0; font-size: 14px; font-weight: 600 }
+.cfoot { display: flex; align-items: center; gap: 8px; width: 100% } .cfoot small { flex: 1; font-size: 11px; color: var(--hint); font-weight: 600 }
+.cfoot .add.deck { flex: none; margin-top: 0 }
+@media (hover: none) { .cx, .cph .rep { opacity: 1 } }
+.fdk { display: flex; gap: 6px; margin-right: auto; margin-left: 10px } .fdk .add.deck { margin-top: 0 }          /* «Взять из карточек» у «Нового слова» — в подвале правки, чтобы окно было не выше живого */
+.prs { display: grid; gap: 10px; width: 100%; margin-top: 6px }          /* пары — с теми же отступами, что у ученика (.pairs gap 10) */
+.pr input { height: 46px }
 </style>
