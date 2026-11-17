@@ -20,7 +20,7 @@ import { makeLearn } from './learn.js'
 import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
 import { makeNotes } from './notes.js'
-import { dropCache } from './cache.js'
+import { dropCache, cacheTtl, setCacheTtl, cacheStats, cacheSize } from './cache.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -49,7 +49,7 @@ app.use((req, res, next) => {                              // строка в л
   next()
 })
 // Правки в реальном времени: после удачной правки (не GET) остальным преподавателям — «перезагрузите это» (live.ts)
-const LIVE_SKIP = new Set(['courses', 'media', 'me', 'ping', 'auth'])        // курсы синхронизируются сами, остальное — не данные
+const LIVE_SKIP = new Set(['courses', 'media', 'me', 'ping', 'auth', 'dev'])        // курсы синхронизируются сами, остальное — не данные
 const CACHE_KEEP = new Set(['lessons', 'schedule', 'courses', 'media', 'me', 'ping', 'notes'])      // уроки сбрасывают кэш сами и точечно (schedule.ts), остальное кэш не трогает
 app.use((req, res, next) => {
   res.on('finish', () => {
@@ -109,6 +109,23 @@ const requireUser = async (req: Request, res: Response, next: NextFunction) => {
   catch { res.status(401).json({ error: 'unauthorized' }) }
 }
 const requireTeacher = (req: Request, res: Response, next: NextFunction) => (req.user.role === 'teacher' ? next() : res.status(403).json({ error: 'teacher only' }))
+const requireDev = (req: Request, res: Response, next: NextFunction) => ((req.user as { dev?: boolean }).dev === true ? next() : res.status(403).json({ error: 'dev only' }))
+
+// Кэш чтений базы (cache.ts) — для разработчика: срок, счётчики, сброс. Срок хранится в базе (settings/cache), читается один раз при запуске
+const cacheDoc = () => db.collection('settings').doc('cache')
+cacheDoc().get().then((d) => { const m = d.get('min'); if (typeof m === 'number') setCacheTtl(m * 60_000) }).catch((e) => console.error('settings/cache:', e))
+const cacheInfo = () => ({ min: cacheTtl() / 60_000, since: cacheStats.since, reads: cacheStats.reads, saved: cacheStats.saved, entries: cacheSize(db) })
+app.get('/dev/cache', requireUser, requireDev, (_req, res) => { res.json(cacheInfo()) })
+app.post('/dev/cache', requireUser, requireDev, wrap(async (req, res) => {          // { min } — срок в минутах (0 — выключить), или { clear: true }
+  if (req.body?.clear === true) dropCache(db)
+  else {
+    const min = Number(req.body?.min)
+    if (!Number.isFinite(min) || min < 0 || min > 1440) return void res.status(400).json({ error: 'min 0…1440' })
+    setCacheTtl(min * 60_000); dropCache(db)                // новый срок — с чистого листа
+    await cacheDoc().set({ min: cacheTtl() / 60_000 }, { merge: true })
+  }
+  res.json(cacheInfo())
+}))
 
 // Ученики. Сайт не ходит в Firestore напрямую — только через эти маршруты; доступ определяется ролью в токене.
 const inviteUrl = (code: string) => `${APP_SHORT_NAME ? `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}` : `https://t.me/${BOT_USERNAME}`}?startapp=invite_${code}`

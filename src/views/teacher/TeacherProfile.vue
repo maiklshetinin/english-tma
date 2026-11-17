@@ -12,6 +12,7 @@ import { useStudentsStore } from '../../stores/students'
 import { useAuthStore } from '../../stores/auth'
 import { live } from '../../composables/useLive'
 import { MY_VER, siteVer, updateAll } from '../../composables/useUpdate'
+import { request, post } from '../../stores/api'
 const auth = useAuthStore()
 const studentStore = useStudentsStore()
 const name = computed(() => auth.user?.first_name || auth.teacher.name)
@@ -29,6 +30,16 @@ const vers = computed(() => {
   for (const u of live.users) { const p = by.get(u.uid) ?? { uid: u.uid, name: u.name, me: false, vers: new Set() }; p.vers.add(u.ver || '?'); if (u.cid === live.cid) p.me = true; by.set(u.uid, p) }
   return [...by.values()].map((p) => ({ ...p, vers: [...p.vers], old: [...p.vers].some((v) => v !== fresh.value) })).sort((a, b) => a.me - b.me)
 })
+// Кэш чтений базы на сервере (server/cache.ts): срок, сколько прочитано из базы и сколько отдано из памяти с запуска сервера
+const CACHE_OPTS = [[0, 'выкл'], [10, '10 мин'], [60, '1 ч'], [360, '6 ч'], [720, '12 ч'], [1440, '24 ч']]
+const cache = ref(null)
+const loadCache = () => request('/dev/cache', undefined, 'Кэш сервера').then((v) => { cache.value = v }).catch(() => { cache.value = null })
+if (auth.isDev) loadCache()
+const savedPct = computed(() => { const c = cache.value; return c && c.reads + c.saved ? Math.round((c.saved / (c.reads + c.saved)) * 100) : 0 })
+const awake = computed(() => cache.value && new Date(cache.value.since).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))
+async function setCache(body, msg) {
+  try { cache.value = await post('/dev/cache', body, 'Кэш сервера'); showToast(msg) } catch (e) { showToast(e.message) }
+}
 function updateEveryone() { updateAll(); showToast('Отправлено: обновятся все, как только новая версия будет на сайте (тихо — или плашкой, если человек сейчас работает)') }
 async function ping() {
   if (!import.meta.env.VITE_API_URL) return showToast('Не задан API_URL — приложение не знает адрес сервера')
@@ -92,6 +103,19 @@ async function ping() {
           <span class="ic"><AppIcon name="download" :size="18" /></span>
           <span class="tx">Обновить у всех<small>после git push: обновятся, как только новая версия будет на сайте; кто работает — увидит плашку</small></span>
         </button>
+        <!-- кэш чтений базы на сервере: дольше срок — меньше Reads в Firestore; любая правка через приложение всё равно сбрасывает нужное сразу -->
+        <label class="it">
+          <span class="ic"><AppIcon name="sliders" :size="18" /></span>
+          <span class="tx">Кэш базы на сервере<small v-if="cache">из памяти {{ cache.saved }} · из базы {{ cache.reads }} — экономия {{ savedPct }}%<br />сервер не засыпал с {{ awake }} · записей {{ cache.entries }}</small><small v-else>нет ответа от сервера (спит или старая сборка)</small></span>
+          <select class="sel" :value="cache?.min ?? 10" :disabled="!cache" aria-label="Срок кэша" @change="setCache({ min: +$event.target.value }, +$event.target.value ? 'Срок кэша изменён — кэш начат заново' : 'Кэш выключен')">
+            <option v-for="[m, t] in CACHE_OPTS" :key="m" :value="m">{{ t }}</option>
+          </select>
+        </label>
+        <button class="it" :disabled="!cache" @click="setCache({ clear: true }, 'Кэш сброшен — следующие открытия прочитают базу заново')">
+          <span class="ic"><AppIcon name="refresh" :size="18" /></span>
+          <span class="tx">Сбросить кэш<small>если правили данные руками в консоли Firebase</small></span>
+          <span class="val" @click.stop="loadCache" title="Обновить цифры">↻</span>
+        </button>
         <button class="it" :disabled="busy" @click="ping">
           <span class="ic"><AppIcon name="refresh" :size="18" /></span>
           <span class="tx">Проверить связь с сервером</span>
@@ -124,5 +148,6 @@ async function ping() {
 .sw { appearance: none; flex: none; width: 46px; height: 28px; margin: 0; border-radius: 14px; background: var(--border); position: relative; cursor: pointer; transition: background .15s }
 .sw::after { content: ''; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s }
 .sw:checked { background: var(--green) } .sw:checked::after { transform: translateX(18px) }
+.sel { flex: none; padding: 6px 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer }
 .vr { align-items: flex-start; cursor: default } .vl { display: block; margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--green-d) } .vl.old { color: var(--orange-d) } .vl code { font-size: 11px; color: var(--hint) }
 </style>

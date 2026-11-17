@@ -3,20 +3,29 @@
 // Все правки идут только через этот сервер, поэтому он может держать прочитанное у себя и сбрасывать при правке:
 //  • уроки — по неделям ('w:<понедельник>'), сбрасывает schedule.ts ровно ту неделю, которую поменял;
 //  • ученики ('students:'), контент ('c:'), группы ('g:') — сбрасывают их модули при своих правках и index.ts после удачных запросов.
-// Срок — 10 минут: правку руками в консоли Firebase сервер увидит не позже. Кэш свой у каждого экземпляра базы (тесты не мешают друг другу).
-const stores = new WeakMap<object, Map<string, { at: number; v: Promise<unknown> }>>()
+// Срок — по умолчанию 10 минут, разработчик меняет в «Профиле → Для разработчика» (0 — кэш выключен); правку руками в консоли Firebase
+// сервер увидит не позже срока. Кэш свой у каждого экземпляра базы (тесты не мешают друг другу).
+const stores = new WeakMap<object, Map<string, { at: number; v: Promise<unknown>; n: number }>>()
 export const CACHE_MS = 10 * 60_000
+let ttlMs = CACHE_MS
+export const cacheTtl = () => ttlMs
+export function setCacheTtl(ms: number): void { ttlMs = Math.max(0, Math.min(24 * 60 * 60_000, Math.round(ms) || 0)) }
 const of = (db: object) => { let m = stores.get(db); if (!m) stores.set(db, (m = new Map())); return m }
+// Счётчик для разработчика: сколько документов сервер прочитал из базы и сколько отдал из памяти (с запуска сервера)
+export const cacheStats = { since: Date.now(), reads: 0, saved: 0 }
+const docsIn = (v: unknown) => (Array.isArray(v) ? v.length : typeof (v as { size?: unknown })?.size === 'number' ? (v as { size: number }).size : 1)
 
-/** Прочитать через кэш: свежее (моложе ttl) — из памяти, иначе load(). Пока чтение идёт, повторные запросы ждут его же. */
-export function cached<T>(db: object, key: string, load: () => Promise<T>, ttl = CACHE_MS): Promise<T> {
+/** Прочитать через кэш: свежее (моложе срока) — из памяти, иначе load(). Пока чтение идёт, повторные запросы ждут его же. */
+export function cached<T>(db: object, key: string, load: () => Promise<T>, ttl = ttlMs): Promise<T> {
   const m = of(db), c = m.get(key)
-  if (c && Date.now() - c.at < ttl) return c.v as Promise<T>
-  const v = load()
-  m.set(key, { at: Date.now(), v })
-  v.catch(() => { if (m.get(key)?.v === v) m.delete(key) })          // ошибка чтения — не запоминаем
+  if (c && Date.now() - c.at < ttl) { cacheStats.saved += c.n; return c.v as Promise<T> }
+  const v = load(), e = { at: Date.now(), v: v as Promise<unknown>, n: 0 }
+  if (ttl > 0) m.set(key, e)
+  v.then((x) => { e.n = docsIn(x); cacheStats.reads += e.n }, () => { if (m.get(key) === e) m.delete(key) })          // ошибка чтения — не запоминаем
   return v
 }
+/** Сколько сейчас записей в кэше */
+export const cacheSize = (db: object) => stores.get(db)?.size ?? 0
 
 /** Сбросить ключи, начинающиеся с любого из префиксов (без префиксов — всё) */
 export function dropCache(db: object, ...prefixes: string[]): void {
