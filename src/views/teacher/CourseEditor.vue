@@ -436,7 +436,10 @@ function onPaste(e) {
   if (text && text !== jsonOut && stepsFromJson(text)) return importJson(text)      // чужой JSON (от ИИ) — собираем экраны
   doPaste()                                                                          // иначе — как раньше, из своего буфера
 }
-const isJsonDrag = (e) => { const it = e.dataTransfer?.items?.[0]; return !!it && (it.type === 'application/json' || (it.kind === 'string' && it.type === 'text/plain')) }
+// тип файла пока тянут виден не всегда (Windows даёт пустой тип у .json) — пустой тип тоже считаем «может быть JSON», разберёмся при броске
+const isJsonDrag = (e) => { const it = e.dataTransfer?.items?.[0]; return !!it && (it.type === 'application/json' || (it.kind === 'file' && !it.type) || (it.kind === 'string' && it.type === 'text/plain')) }
+// файл, брошенный мимо холста (или неизвестный), браузер не открывает вместо конструктора
+const keepPage = (e) => { if (hasFiles(e)) e.preventDefault() }
 // экраны из буфера — на доску рядом с точкой, по порядку слева направо
 async function pasteFree(w) {
   const made = []
@@ -1563,8 +1566,8 @@ const ctrl = isMac ? '⌘' : 'Ctrl'
 const onKeyUp = (e) => { if (e.code === 'Space') space.value = false }
 // Ctrl + колёсико над панелями (меню «Lesson», масштаб, шапка…) — масштаб холста, а не всей страницы браузера
 function onWinWheel(e) { if ((e.ctrlKey || e.metaKey) && board.value && !board.value.contains(e.target)) onWheel(e) }
-onMounted(() => { addEventListener('keydown', onKey); addEventListener('keyup', onKeyUp); addEventListener('wheel', onWinWheel, { passive: false }); addEventListener('paste', onPaste) })
-onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('wheel', onWinWheel); removeEventListener('paste', onPaste) })
+onMounted(() => { addEventListener('keydown', onKey); addEventListener('keyup', onKeyUp); addEventListener('wheel', onWinWheel, { passive: false }); addEventListener('paste', onPaste); addEventListener('dragover', keepPage); addEventListener('drop', keepPage) })
+onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('wheel', onWinWheel); removeEventListener('paste', onPaste); removeEventListener('dragover', keepPage); removeEventListener('drop', keepPage) })
 
 function exportJson() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
