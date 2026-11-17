@@ -1,15 +1,14 @@
 <script setup>
-// Нагрузка на базу — для разработчика, в стиле графика Usage в Firebase.
-// Цифры — из Google Cloud Monitoring (как в Firebase и в счёте), ниже — «откуда чтения»: свой счётчик сервера по запросам (server/metrics.ts).
-// Нет доступа к Google (роль Monitoring Viewer) — график рисуется по своему счётчику, с пометкой.
+// Нагрузка на базу — для разработчика, в стиле графика Usage в Firebase: свой счётчик сервера (server/metrics.ts) — чтения и записи,
+// которые делает наш сервер, и «откуда чтения» по запросам. Чтений из консоли Firebase тут нет (точные цифры — Firebase → Usage).
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { request } from '../stores/api'
 
 const RANGES = [['hour', 'Час'], ['day', 'Сутки'], ['month', 'Месяц']]
 const range = ref('day')
 const data = ref(null), busy = ref(false), err = ref('')
-const show = ref({ r: true, w: true, d: true })
-const SER = [{ k: 'r', t: 'Reads', c: '#4285f4' }, { k: 'w', t: 'Writes', c: '#fa7b17' }, { k: 'd', t: 'Deletes', c: '#e52592' }]
+const show = ref({ r: true, w: true })
+const SER = [{ k: 'r', t: 'Reads', c: '#4285f4' }, { k: 'w', t: 'Writes', c: '#fa7b17' }]
 const LIMITS = { r: 50000, w: 20000 }          // бесплатно в сутки (Spark): 50K чтений, 20K записей — как пунктир в Firebase
 
 async function load() {
@@ -22,8 +21,7 @@ let timer = 0
 onMounted(() => { load(); timer = window.setInterval(() => document.visibilityState === 'visible' && load(), 60_000) })
 onBeforeUnmount(() => clearInterval(timer))
 
-const fromGoogle = computed(() => !!data.value?.points)
-const pts = computed(() => data.value ? (data.value.points ?? data.value.ours.map(p => ({ ...p, d: 0 }))) : [])
+const pts = computed(() => data.value?.ours ?? [])
 const total = (k) => pts.value.reduce((a, p) => a + (p[k] || 0), 0)
 const fmt = (n) => (n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.0', '') + 'K' : n.toLocaleString('ru'))
 
@@ -73,7 +71,7 @@ const since = computed(() => data.value && new Date(data.value.since).toLocaleSt
 <template>
   <div class="du">
     <div class="hd">
-      <b>Нагрузка на базу</b>
+      <b>Нагрузка на базу <span class="src">наш сервер</span></b>
       <span class="seg" role="tablist">
         <button v-for="[k, t] in RANGES" :key="k" type="button" :class="{ on: range === k }" @click="range = k">{{ t }}</button>
       </span>
@@ -103,19 +101,19 @@ const since = computed(() => data.value && new Date(data.value.since).toLocaleSt
         </template>
         <text v-for="t in ticks" :key="t.i" :x="x(t.i)" :y="H - 6" :text-anchor="t.i === pts.length - 1 ? 'end' : t.i === 0 ? 'start' : 'middle'" class="ax">{{ t.t }}</text>
         <template v-for="s in SER" :key="s.k">
-          <path v-if="show[s.k] && (s.k !== 'd' || fromGoogle)" :d="path(s.k)" fill="none" :stroke="s.c" stroke-width="2" stroke-linejoin="round" />
+          <path v-if="show[s.k]" :d="path(s.k)" fill="none" :stroke="s.c" stroke-width="2" stroke-linejoin="round" />
         </template>
         <g v-if="hp">
           <line :x1="x(hov)" :x2="x(hov)" :y1="T" :y2="H - B" class="hl" />
-          <template v-for="s in SER" :key="s.k"><circle v-if="show[s.k] && (s.k !== 'd' || fromGoogle)" :cx="x(hov)" :cy="y(hp[s.k] || 0)" r="3.5" :fill="s.c" /></template>
+          <template v-for="s in SER" :key="s.k"><circle v-if="show[s.k]" :cx="x(hov)" :cy="y(hp[s.k] || 0)" r="3.5" :fill="s.c" /></template>
         </g>
       </svg>
       <div v-if="hp" class="tip" :style="{ left: (x(hov) / W) * 100 + '%' }" :class="{ flip: hov > pts.length / 2 }">
         <small>{{ hTime }}</small>
-        <template v-for="s in SER" :key="s.k"><span v-if="show[s.k] && (s.k !== 'd' || fromGoogle)" :style="{ '--c': s.c }"><i />{{ s.t }} <b>{{ (hp[s.k] || 0).toLocaleString('ru') }}</b></span></template>
+        <template v-for="s in SER" :key="s.k"><span v-if="show[s.k]" :style="{ '--c': s.c }"><i />{{ s.t }} <b>{{ (hp[s.k] || 0).toLocaleString('ru') }}</b></span></template>
       </div>
     </div>
-    <p class="nt">{{ fromGoogle ? 'Цифры Google — как в Firebase Usage, с задержкой 2–4 мин.' : 'Google не ответил (' + (data?.error || '…') + ') — показан свой счётчик сервера, без чтений из консоли.' }}</p>
+    <p v-if="data" class="nt">Чтения и записи, которые делает наш сервер, — с его запуска {{ since }}. Чтения из консоли Firebase (когда листаете базу) сюда не попадают; точные цифры для счёта — Firebase → Firestore → Usage.</p>
 
     <div v-if="top.length" class="tp">
       <div class="th"><b>Откуда чтения</b><small>свой счётчик сервера · {{ fmt(ownTotal) }} за период · с {{ since }}</small></div>
@@ -145,6 +143,7 @@ const since = computed(() => data.value && new Date(data.value.since).toLocaleSt
 .hl { stroke: var(--hint); stroke-width: 1; stroke-dasharray: 3 3 }
 .tip { position: absolute; top: 4px; translate: 10px 0; display: grid; gap: 3px; padding: 8px 10px; border-radius: 8px; background: var(--card); box-shadow: 0 2px 10px rgba(0, 0, 0, .18); font-size: 12px; white-space: nowrap; pointer-events: none; z-index: 2 }
 .tip.flip { translate: calc(-100% - 10px) 0 } .tip small { color: var(--hint); font-size: 11px } .tip span { display: flex; align-items: center; gap: 6px } .tip i { width: 8px; height: 8px; border-radius: 2px; background: var(--c) }
+.src { margin-left: 6px; padding: 2px 7px; border-radius: 7px; background: var(--surface); color: var(--hint); font-size: 11px; font-weight: 700; vertical-align: 2px }
 .nt { margin: 0; font-size: 11.5px; color: var(--hint) } .er { padding: 10px; border-radius: 10px; background: color-mix(in srgb, #e8453c 10%, transparent); color: #c5221f; font-size: 13px }
 .tp { display: grid; gap: 6px; padding-top: 6px; border-top: 1px solid var(--border) }
 .th { display: grid } .th b { font-size: 14px; font-weight: 700 } .th small { font-size: 11.5px; color: var(--hint) }

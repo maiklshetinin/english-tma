@@ -23,7 +23,7 @@ import { makeNotes } from './notes.js'
 import { dropCache, cacheTtl, setCacheTtl, cacheStats, cacheSize } from './cache.js'
 import { makeRender } from './render.js'
 import { captureConsole, onLine, logs, onRequest, startSampler, serverStats, SRANGES, type SRange } from './devops.js'
-import { countFirestore, inRoute, google, ours, since as usageSince, RANGES, type Range } from './metrics.js'
+import { countFirestore, inRoute, ours, since as usageSince, RANGES, type Range } from './metrics.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -41,8 +41,7 @@ const isStaff = (uid: string) => { const id = String(uid).replace(/^tg:/, ''); r
 const roleOf = (u: { uid: string; role?: unknown }) => (u.role === 'teacher' && !isStaff(u.uid) ? undefined : u.role as 'teacher' | 'student' | undefined)
 
 captureConsole()          // копия логов — в консоль разработчика (devops.ts)
-const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT), cred = cert(sa)
-initializeApp({ credential: cred })
+initializeApp({ credential: cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) })
 const auth = getAuth(), db = getFirestore()
 countFirestore()          // свой счётчик чтений и записей по запросам (metrics.ts)
 
@@ -125,14 +124,12 @@ const cacheDoc = () => db.collection('settings').doc('cache')
 cacheDoc().get().then((d) => { const m = d.get('min'); if (typeof m === 'number') setCacheTtl(m * 60_000) }).catch((e) => console.error('settings/cache:', e))
 const cacheInfo = () => ({ min: cacheTtl() / 60_000, since: cacheStats.since, reads: cacheStats.reads, saved: cacheStats.saved, entries: cacheSize(db) })
 app.get('/dev/cache', requireUser, requireDev, (_req, res) => { res.json(cacheInfo()) })
-// Нагрузка на базу: Google Cloud Monitoring (как в Firebase) + свой счётчик по запросам. ?range=hour|day|month
-app.get('/dev/usage', requireUser, requireDev, wrap(async (req, res) => {
+// Нагрузка на базу: свой счётчик сервера по запросам (metrics.ts). ?range=hour|day|month
+app.get('/dev/usage', requireUser, requireDev, (req, res) => {
   const range = (String(req.query.range) in RANGES ? String(req.query.range) : 'day') as Range
   const own = ours(range)
-  let points = null, error: string | null = null
-  try { points = await google(() => cred.getAccessToken(), sa.project_id, range) } catch (e) { error = (e as Error).message }
-  res.json({ range, step: RANGES[range].step, points, error, ours: own.points, top: own.top, since: usageSince })
-}))
+  res.json({ range, step: RANGES[range].step, ours: own.points, top: own.top, since: usageSince })
+})
 // Сервер (devops.ts): запросы, время ответа, память, CPU по минутам; консоль; перезапуск и пересборка. ?range=hour|day
 app.get('/dev/server', requireUser, requireDev, (req, res) => {
   const range = (String(req.query.range) in SRANGES ? String(req.query.range) : 'hour') as SRange
