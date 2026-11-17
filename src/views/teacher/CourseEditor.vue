@@ -2388,4 +2388,5 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .mact i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--card); color: var(--hint); font-size: 11px; font-style: normal; font-weight: 800; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); cursor: pointer }
 .mact i:hover { color: var(--blue-d) } .mact i.del:hover { background: #ffe9e9; color: #d32f2f }
 @media (hover: none) { .mact { opacity: 1 } }
+.fl.tray, .fl.tools { z-index: 21 }          /* меню и нижняя панель — поверх рамки выделения (.selbox 19), иначе рамка экрана залезала на меню */
 </style>
