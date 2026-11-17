@@ -120,7 +120,6 @@ export const fishAudiotest = (): Step => ({ id: stepId(), kind: 'choice', ask: '
   opts: [{ w: 'How’s it going?' }, { w: 'See you later!', t: 'Увидимся!' }, { w: 'My name’s Lisa.' }] })
 /** Пропуск с вариантами-плашками (по видео) */
 /** Собери слово: буквы вразброс, на слух */
-export const fishSpell = (): Step => ({ id: stepId(), kind: 'order', by: 'letters', phrase: 'bye', tr: 'пока', audio: fish('bye.mp3') })
 /** Повтори слово: фото, звук — ученик записывает себя */
 export const fishSayWord = (): Step => ({ id: stepId(), kind: 'speak', phrase: 'go ahead', tr: 'давай, вперёд', image: fish('go-ahead.jpg'), audio: fish('go-ahead.mp3') })
 export const fishFill = (): Step => ({ id: stepId(), kind: 'gap', phrase: '[Hello]!', tr: 'Привет!', video: fish('hello.mp4'), opts: [{ w: 'Halo' }, { w: 'Hello' }] })
@@ -131,11 +130,9 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'choice', kind: 'choice', t: 'Выбери ответ', d: 'На слух — ответы картинками', make: () => fishStep('choice') },
   { id: 'audiotest', kind: 'choice', t: 'Аудиотест', d: 'Фото со звуком — ответы текстом', make: fishAudiotest },
   { id: 'pairs', kind: 'pairs', t: 'Пары', d: 'Слово ↔ перевод', make: () => fishStep('pairs') },
-  { id: 'spell', kind: 'order', t: 'Собери слово', d: 'Буквы по порядку на слух', make: fishSpell },
-  { id: 'sayword', kind: 'speak', t: 'Повтори слово', d: 'Фото, звук и запись голоса', make: fishSayWord },
+  { id: 'sayword', kind: 'speak', t: 'Повтори слово', d: 'Фото или видео, звук и запись голоса', make: fishSayWord },          // «Повтори за диктором» (видео) — сюда же (17.11.2026)
   { id: 'order', kind: 'order', t: 'Собери фразу', d: 'Слова по порядку на слух', make: () => fishStep('order') },
   { id: 'tip', kind: 'tip', t: 'Подсказка', d: 'Мини-правило и фразы', make: () => fishStep('tip') },
-  { id: 'speak', kind: 'speak', t: 'Повтори за диктором', d: 'Видео и запись голоса', make: () => fishStep('speak') },
   { id: 'type', kind: 'gap', t: 'Закончи предложение', d: 'Вписать пропущенное слово', make: () => fishStep('gap') },
   { id: 'fill', kind: 'gap', t: 'Заполни пропуск', d: 'Видео — выбрать слово', make: fishFill },
   { id: 'answer', kind: 'answer', t: 'Ответь на вопрос', d: 'Устно или письменно', make: () => fishStep('answer') },
@@ -143,12 +140,14 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
 
 // Навыки упражнений (для меню «Exercise» и тегов на ветке урока): Слух, Чтение, Письмо, Речь — по id шаблона
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], spell: ['W'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], speak: ['S'], answer: ['S', 'W'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'] }
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
 export function tplOf(s: Step): string {
   if (s.kind === 'choice') return s.show === 'text' ? 'audiotest' : 'choice'
-  if (s.kind === 'order') return s.by === 'letters' ? 'spell' : 'order'
-  if (s.kind === 'speak') return s.image && !s.video ? 'sayword' : 'speak'
+  // «Собери слово» (по буквам) и «Повтори за диктором» убраны из меню как дубли (17.11.2026): старые такие экраны работают как раньше,
+  // а в меню и на ветке — «Собери фразу» и «Повтори слово»
+  if (s.kind === 'order') return 'order'
+  if (s.kind === 'speak') return 'sayword'
   if (s.kind === 'gap') return s.opts?.length ? 'fill' : 'type'
   return s.kind
 }

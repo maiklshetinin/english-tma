@@ -318,18 +318,20 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       </div>
 
       <!-- Выбери ответ -->
+      <!-- Выбери ответ / Аудиотест — у каждого своя простая форма (17.11.2026): без переключателей «на слух / переводом», «картинки / текст».
+           Выбери ответ: звук + варианты картинками. Аудиотест: фото + звук + варианты текстом. Какая форма — по самому экрану (show). -->
       <div v-else-if="s.kind === 'choice'" class="cb">
-        <div class="hd">{{ KINDS.choice.head }}</div>
+        <div class="hd">{{ s.head || KINDS.choice.head }}</div>
+        <div v-if="s.show !== 'text'" class="tpk"><b>Выбери ответ</b> — ученик слышит слово и выбирает картинку</div>
+        <div v-else class="tpk"><b>Аудиотест</b> — фото и звук, ученик выбирает ответ текстом</div>
         <div v-if="s.image" class="media" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])"><img :src="resolve(s.image, 'image')" alt="" draggable="false" /><button class="x" title="Убрать фото вопроса" @click.stop="clear(s, 'image')">✕</button></div>
-        <button v-else class="add sm" title="Фото 16:9, лучше от 1280×720 — обрежем и сожмём сами" @click="pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">＋ Фото к вопросу</button>
-        <div class="tg"><button :class="{ on: s.ask === 'audio' }" @click="s.ask = 'audio'; changed()">На слух</button><button :class="{ on: s.ask === 'tr' }" @click="s.ask = 'tr'; changed()">Переводом</button></div>
-        <div v-if="s.ask === 'audio'" class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
+        <button v-else-if="s.show === 'text'" class="add sm" title="Фото 16:9, лучше от 1280×720 — обрежем и сожмём сами" @click="pick(s, ['image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'])">＋ Фото к вопросу</button>
+        <div v-if="s.ask !== 'tr'" class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
           <AudioWave v-if="qAudio(s)" :key="qAudio(s)" :src="resolve(qAudio(s), 'audio')" small />
           <button class="add sm" :title="s.audio ? 'Свой звук вопроса' : 'Звук берётся из верного ответа — можно загрузить свой'" @click="pick(s, ['audio'])">{{ s.audio ? 'свой ✓' : qAudio(s) ? 'свой звук' : '＋ Звук вопроса' }}</button>
           <button v-if="s.audio" class="x in" title="Убрать свой звук" @click="clear(s, 'audio')">✕</button>
         </div>
-        <div v-else class="q">{{ s.opts?.[s.ans ?? 0]?.t || 'перевод верного ответа' }}</div>
-        <div class="tg"><button :class="{ on: s.show === 'pics' }" @click="s.show = 'pics'; changed()">Картинки</button><button :class="{ on: s.show === 'text' }" @click="s.show = 'text'; changed()">Текст</button></div>
+        <div v-else class="q">{{ s.opts?.[s.ans ?? 0]?.t || 'перевод верного ответа' }}</div>      <!-- старые экраны «вопрос переводом» — как были -->
         <div class="opts" :class="s.show">
           <div v-for="(o, k) in s.opts" :key="k" class="op" :class="{ right: (s.ans ?? 0) === k }">
             <div v-if="s.show === 'pics'" class="oi" title="Фото варианта 3:2, лучше от 600×400 — обрежем по центру и сожмём. Нажмите или перетащите" @click="pick(s, ['image'], k)" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['image'], k)">
@@ -583,6 +585,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .cb { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 10px 40px 20px }      /* поля — как у живого экрана (LessonPlayer .embedded .body): в правке ширина и отступы не меняются */
 .choice .cb, .pairs .cb { padding: 8px 34px 12px }
 .hd { text-align: center; font-size: 15px; font-weight: 800; margin: 4px 0 2px }
+.tpk { margin: -4px 0 2px; color: var(--hint); font-size: 12px; text-align: center } .tpk b { color: var(--text) }      /* какая это форма — подпись под заданием */
 input, textarea { user-select: text }
 textarea { field-sizing: content; overflow: hidden; min-height: 1.6em }
 input, textarea, select { font: inherit; color: var(--text); border: 1px solid transparent; border-radius: 7px; background: none; outline: none; padding: 3px 6px; min-width: 0; resize: none }

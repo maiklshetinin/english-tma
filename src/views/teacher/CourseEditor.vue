@@ -529,8 +529,8 @@ const TPL = [...TEMPLATES, { id: 'lesson', kind: 'intro', t: 'Готовый у�
 const XGROUPS_STD = (() => {
   const gs = [
     { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip', 'lesson'], cols: 2 },
-    { k: 'words', t: 'Слова', d: 'отдельные слова', ids: ['choice', 'audiotest', 'pairs', 'spell', 'sayword'], cols: 3 },          // от узнавания к воспроизведению
-    { k: 'ctx', t: 'Фразы и контекст', d: 'слова внутри предложения', ids: ['fill', 'order', 'type', 'speak', 'answer'], cols: 3 },          // проще → сложнее: выбрать, собрать из кнопок, вписать, сказать, ответить своими словами
+    { k: 'words', t: 'Слова', d: 'отдельные слова', ids: ['choice', 'audiotest', 'pairs', 'sayword'], cols: 3 },          // от узнавания к воспроизведению
+    { k: 'ctx', t: 'Фразы и контекст', d: 'слова внутри предложения', ids: ['fill', 'order', 'type', 'answer'], cols: 3 },          // проще → сложнее: выбрать, собрать из кнопок, вписать, сказать, ответить своими словами
   ]
   const used = new Set(gs.flatMap(g => g.ids)); gs[2].ids.push(...TPL.filter(t => !used.has(t.id)).map(t => t.id))          // новое упражнение без группы — в «Фразы»
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(t => t.id === id)).filter(Boolean) }))
