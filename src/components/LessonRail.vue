@@ -290,29 +290,36 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       </div>
 
       <!-- Новое слово -->
-      <div v-else-if="s.kind === 'intro'" class="cb">
-        <div class="hd">{{ KINDS.intro.head }}</div>
-        <div class="media" :class="{ empty: !s.video && !s.image }" @click="!s.video && !s.image && pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">
-          <video v-if="s.video" :src="resolve(s.video, 'video')" controls playsinline preload="metadata" />
-          <img v-else-if="s.image" :src="resolve(s.image, 'image')" alt="" draggable="false" />
-          <span v-else class="ph">＋ Видео или фото<small>16:9 — как в Busuu, фото лучше от 1280×720 (обрежем и сожмём сами)</small><small>нажмите или перетащите файл</small></span>
-          <button v-if="s.video || s.image" class="x" title="Убрать" @click.stop="clear(s, s.video ? 'video' : 'image')">✕</button>
-          <em v-if="pct(s, 'video') != null || pct(s, 'image') != null" class="up">{{ pct(s, 'video') ?? pct(s, 'image') }}%</em>
+      <!-- Новое слово: форма = живой экран (17.11.2026) — фото 16:9 со звуком поверх, под ним голубая карточка слова одним блоком, ниже «Пример» -->
+      <div v-else-if="s.kind === 'intro'" class="cb iv">
+        <div class="hd">{{ s.head || KINDS.intro.head }}</div>
+        <div class="nw">
+          <div class="media" :class="{ empty: !s.video && !s.image }" @click="!s.video && !s.image && pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">
+            <video v-if="s.video" :src="resolve(s.video, 'video')" controls playsinline preload="metadata" />
+            <img v-else-if="s.image" :src="resolve(s.image, 'image')" alt="" draggable="false" />
+            <span v-else class="ph">＋ Видео или фото<small>16:9, лучше от 1280×720</small><small>нажмите или перетащите файл</small></span>
+            <button v-if="s.video || s.image" class="x" title="Убрать" @click.stop="clear(s, s.video ? 'video' : 'image')">✕</button>
+            <em v-if="pct(s, 'video') != null || pct(s, 'image') != null" class="up">{{ pct(s, 'video') ?? pct(s, 'image') }}%</em>
+            <div v-if="!s.video" class="aud ov" :class="{ pill: s.audio }" @click.stop @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
+              <AudioWave v-if="s.audio" :key="s.audio" :src="resolve(s.audio, 'audio')" small />
+              <button v-else class="add" @click="pick(s, ['audio'])">＋ Аудио — нажмите или перетащите</button>
+              <button v-if="s.audio" class="x in" title="Убрать звук" @click="clear(s, 'audio')">✕</button>
+              <em v-if="pct(s, 'audio') != null" class="up">{{ pct(s, 'audio') }}%</em>
+            </div>
+          </div>
+          <div class="word"><input v-model="s.word" placeholder="слово" @input="changed" /><input v-model="s.tr" class="tr" placeholder="перевод" @input="changed" /></div>
         </div>
-        <div class="aud" :class="{ over: s.video || s.image }" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
-          <AudioWave v-if="s.audio" :key="s.audio" :src="resolve(s.audio, 'audio')" small />
-          <button v-else class="add" @click="pick(s, ['audio'])">＋ Аудио — нажмите или перетащите</button>
-          <button v-if="s.audio" class="x in" title="Убрать звук" @click="clear(s, 'audio')">✕</button>
-          <em v-if="pct(s, 'audio') != null" class="up">{{ pct(s, 'audio') }}%</em>
-        </div>
-        <div class="word"><input v-model="s.word" placeholder="слово" @input="changed" /><input v-model="s.tr" class="tr" placeholder="перевод" @input="changed" /></div>
-        <textarea v-model="s.ex" class="ex" rows="2" placeholder="Пример: He said it’s fine." @input="changed" />
-        <textarea v-model="s.exTr" class="ex tr" rows="1" placeholder="перевод примера" @input="changed" />
-        <div class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'], null, 'exAudio')">
-          <AudioWave v-if="s.exAudio" :key="s.exAudio" :src="resolve(s.exAudio, 'audio')" small />
-          <button v-else class="add sm" @click="pick(s, ['audio'], null, 'exAudio')">＋ Озвучка примера</button>
-          <button v-if="s.exAudio" class="x in" title="Убрать озвучку примера" @click="clear(s, 'exAudio')">✕</button>
-          <em v-if="pct(s, 'exAudio') != null" class="up">{{ pct(s, 'exAudio') }}%</em>
+        <div class="exb">
+          <div class="exh"><small>Пример</small>
+            <span class="aud" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'], null, 'exAudio')">
+              <AudioWave v-if="s.exAudio" :key="s.exAudio" :src="resolve(s.exAudio, 'audio')" small />
+              <button v-else class="add sm" @click="pick(s, ['audio'], null, 'exAudio')">＋ Озвучка примера</button>
+              <button v-if="s.exAudio" class="x in" title="Убрать озвучку примера" @click="clear(s, 'exAudio')">✕</button>
+              <em v-if="pct(s, 'exAudio') != null" class="up">{{ pct(s, 'exAudio') }}%</em>
+            </span>
+          </div>
+          <textarea v-model="s.ex" class="ex" rows="1" placeholder="He said it’s fine." @input="changed" />
+          <textarea v-model="s.exTr" class="ex tr" rows="1" placeholder="перевод примера" @input="changed" />
         </div>
         <div class="dk"><button class="add deck" @click="openPk(s, 'intro')">{{ undo[s.id] ? 'Другая карточка' : 'Взять из карточек' }}</button><button v-if="undo[s.id]" class="add deck un" title="Вернуть, как было до карточки" @click="undoCard(s)">↺ Отменить</button></div>
       </div>
@@ -650,4 +657,22 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .pc { display: flex; align-items: center; gap: 7px; padding: 4px; border: 0; border-radius: 7px; background: none; font: inherit; text-align: left; cursor: pointer; color: var(--text) } .pc:hover { background: var(--blue-l) }
 .pc img { width: 36px; height: 24px; border-radius: 4px; object-fit: cover; flex: none } .pc span { flex: 1; display: grid; min-width: 0 } .pc b { font-size: 12px } .pc small { font-size: 10px; color: var(--hint) } .pc i { color: var(--blue); font-style: normal }
 .pc.used { opacity: .4 }
+
+/* Новое слово — размеры как в LessonPlayer (embedded): .nw 380px, слово 16/12, пример 15/12 */
+.iv .hd { margin: 8px 0 4px }
+.iv .nw { display: grid; width: 100%; max-width: 380px; align-self: center }
+.iv .nw .media { border-radius: 12px 12px 0 0 }
+.iv .nw .media.empty { border-bottom: 0 }
+.iv .nw .ph { padding-bottom: 44px; box-sizing: border-box }
+.iv .ov { position: absolute; left: 8%; right: 8%; bottom: 10px; z-index: 2 }
+.iv .ov .add { background: var(--card) }
+.iv .ov.pill { padding: 4px 8px; border-radius: 20px; background: rgba(255, 255, 255, .95); box-shadow: 0 2px 6px rgba(0, 0, 0, .15) }
+.iv .word { gap: 4px; padding: 12px; border-radius: 0 0 12px 12px }
+.iv .word input { width: 70%; justify-self: center; border: 1px dashed #c9d8f0; border-radius: 8px; background: transparent; font-size: 16px; font-weight: 800 }
+.iv .word input.tr { width: 50%; font-size: 12px; font-weight: 600 }
+.iv .exb { display: grid; gap: 3px; width: 100%; max-width: 380px; align-self: center; padding: 8px 10px; border: 1px dashed #cfcfcf; border-radius: 10px; box-sizing: border-box }
+.iv .exh { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px }
+.iv .exh small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px }
+.iv .exh .aud { min-height: 0; flex: none; max-width: 70% }
+.iv .ex { font-size: 15px; font-weight: 600; line-height: 1.4; resize: none } .iv .ex.tr { font-size: 12px; color: var(--hint) }
 </style>
