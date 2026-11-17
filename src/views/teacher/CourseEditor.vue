@@ -26,7 +26,7 @@ import LessonRail from '../../components/LessonRail.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -507,8 +507,7 @@ function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; 
 // Экран добавляется «рыбой» — готовым образцом, который сразу можно пройти, а потом поправить (карандаш); 'lesson' — целый урок-образец
 const TPL = [...TEMPLATES, { id: 'lesson', kind: 'intro', t: 'Готовый урок', d: '7 экранов-образцов' }]
 // Меню Exercise по группам (что тренируем) и навыкам (для аналитики): Слух, Чтение, Письмо, Речь
-const SKILL_T = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
-const SKILLS = { choice: ['L'], audiotest: ['L'], pairs: ['R'], spell: ['W'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], speak: ['S'], answer: ['S', 'W'] }
+// SKILL_T, SKILLS — в utils/lesson.ts (их же показывает ветка урока над экранами)
 const XGROUPS = (() => {
   const gs = [
     { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip', 'lesson'], cols: 2 },

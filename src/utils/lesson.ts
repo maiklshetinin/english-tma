@@ -139,6 +139,18 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'answer', kind: 'answer', t: 'Ответь на вопрос', d: 'Устно или письменно', make: () => fishStep('answer') },
 ]
 
+// Навыки упражнений (для меню «Exercise» и тегов на ветке урока): Слух, Чтение, Письмо, Речь — по id шаблона
+export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], spell: ['W'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], speak: ['S'], answer: ['S', 'W'] }
+/** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
+export function tplOf(s: Step): string {
+  if (s.kind === 'choice') return s.show === 'text' ? 'audiotest' : 'choice'
+  if (s.kind === 'order') return s.by === 'letters' ? 'spell' : 'order'
+  if (s.kind === 'speak') return s.image && !s.video ? 'sayword' : 'speak'
+  if (s.kind === 'gap') return s.opts?.length ? 'fill' : 'type'
+  return s.kind
+}
+export const tplTitle = (s: Step) => TEMPLATES.find((t) => t.id === tplOf(s))?.t ?? KINDS[s.kind].t
 /** Подпись экрана на рельсе: само слово, если оно уже есть */
 export function stepTitle(s: Step): string {
   if (s.kind === 'intro') return s.word?.trim() || KINDS.intro.t
