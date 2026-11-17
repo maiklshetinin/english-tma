@@ -379,7 +379,9 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <div v-else-if="s.kind !== 'pairs'" class="cb">
         <div class="hd">{{ KINDS[s.kind].head }}</div>
         <!-- видео / фото -->
-        <div v-if="['speak', 'gap', 'answer'].includes(s.kind)" class="media" :class="{ empty: !s.video && !s.image }" @click="!s.video && !s.image && pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">
+        <!-- «Закончи предложение» без фото: у ученика места под фото нет — и в правке не 16:9-заглушка, а кнопка (17.11.2026: окна одного размера) -->
+        <button v-if="s.kind === 'gap' && !s.video && !s.image" class="add sm" title="16:9, фото лучше от 1280×720 — нажмите или перетащите" @click="pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">＋ Видео или фото<em v-if="pct(s, 'video') != null || pct(s, 'image') != null"> {{ pct(s, 'video') ?? pct(s, 'image') }}%</em></button>
+        <div v-else-if="['speak', 'gap', 'answer'].includes(s.kind)" class="media" :class="{ empty: !s.video && !s.image }" @click="!s.video && !s.image && pick(s, ['video', 'image'])" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">
           <video v-if="s.video" :src="resolve(s.video, 'video')" controls playsinline preload="metadata" />
           <img v-else-if="s.image" :src="resolve(s.image, 'image')" alt="" draggable="false" />
           <span v-else class="ph">＋ Видео или фото<small>16:9 — как в Busuu, фото лучше от 1280×720 (обрежем и сожмём сами)</small><small>нажмите или перетащите файл</small></span>
@@ -420,7 +422,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
           <textarea :ref="(el) => (gapEl[s.id] = el)" v-model="s.phrase" class="ex big" rows="1" placeholder="And [you]? — пропуск в [скобках]" @input="changed" />
           <div class="gp"><span v-if="gapParts(s.phrase).gap">Пропуск: <b>{{ gapParts(s.phrase).gap }}</b></span><button class="add sm" @click="markGap(s, gapEl[s.id])">Выделенное → пропуск</button></div>
           <input v-model="s.tr" class="tr" placeholder="перевод фразы" @input="changed" />
-          <div class="tg"><button :class="{ on: !s.opts?.length }" @click="s.opts = []; changed()">Вписать</button><button :class="{ on: s.opts?.length }" @click="!s.opts?.length && (s.opts = [{ w: gapParts(s.phrase).gap }, { w: '' }]); changed()">Варианты</button></div>
+          <!-- без переключателя «Вписать / Варианты» (17.11.2026): «Заполни пропуск» — с вариантами, «Закончи предложение» — вписать; это разные шаблоны меню -->
           <div v-if="s.opts?.length" class="chips ed">
             <span v-for="(o, k) in s.opts" :key="k" :class="{ right: o.w && o.w.trim().toLowerCase() === gapParts(s.phrase).gap.toLowerCase() }"><input v-model="o.w" :size="Math.max(4, o.w.length)" placeholder="слово" @input="changed" /><button class="xx" title="Убрать" @click="s.opts.splice(k, 1); changed()">✕</button></span>
             <button v-if="s.opts.length < OPTS_MAX" class="add sm" @click="s.opts.push({ w: '' }); changed()">＋</button>
