@@ -13,9 +13,7 @@ import { useAuthStore } from '../../stores/auth'
 import { live } from '../../composables/useLive'
 import { MY_VER, siteVer, updateAll } from '../../composables/useUpdate'
 import { request, post } from '../../stores/api'
-import DevUsage from '../../components/DevUsage.vue'
-import DevServer from '../../components/DevServer.vue'
-import DevConsole from '../../components/DevConsole.vue'
+import { devtools } from '../../composables/useNetLog'
 const auth = useAuthStore()
 const studentStore = useStudentsStore()
 const name = computed(() => auth.user?.first_name || auth.teacher.name)
@@ -123,11 +121,12 @@ async function ping() {
           <span class="tx">Обновить у всех<small>после git push: обновятся, как только новая версия будет на сайте; кто работает — увидит плашку</small></span>
         </button>
         <!-- кэш чтений базы на сервере: дольше срок — меньше Reads в Firestore; любая правка через приложение всё равно сбрасывает нужное сразу -->
-        <!-- график чтений и записей базы (как Usage в Firebase) и «откуда чтения» -->
-        <div class="it vr"><DevUsage class="duw" /></div>
-        <!-- сервер: запросы, время ответа, память, CPU, перезапуск и пересборка; ниже — консоль логов -->
-        <div class="it vr"><DevServer class="duw" /></div>
-        <div class="it vr"><DevConsole class="duw" /></div>
+        <!-- сеть, консоль сервера, нагрузка на базу, сервер — в панели разработчика (DevTools.vue), открывается на любом экране -->
+        <button class="it" @click="devtools.open = !devtools.open">
+          <span class="ic"><AppIcon name="sliders" :size="18" /></span>
+          <span class="tx">Панель разработчика<small>сеть с чтениями базы, консоль сервера, нагрузка, сервер · на любом экране: жучок в углу или Ctrl + `</small></span>
+          <span class="val">{{ devtools.open ? 'закрыть' : 'открыть' }}</span>
+        </button>
         <div class="it vr">
           <span class="ic"><AppIcon name="sliders" :size="18" /></span>
           <div class="tx">

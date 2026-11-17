@@ -13,6 +13,8 @@ import GlobalCursors from './components/GlobalCursors.vue'
 import ScreenNotes from './components/ScreenNotes.vue'
 import BlockGate from './components/BlockGate.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
+import DevTools from './components/DevTools.vue'
+import './composables/useNetLog'      // запросы к серверу — для вкладки «Сеть» панели разработчика (пишутся с самого старта)
 import './composables/useUpdate'      // «Обновить у всех» от разработчика
 import { useTabBadge } from './composables/useTabBadge'
 import { startLive, stopLive, setWhere, onLive, liveSend } from './composables/useLive'
@@ -81,6 +83,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
   </template>
   <AppDialog />
   <UpdateBanner />
+  <DevTools v-if="auth.isDev" />      <!-- панель разработчика, как DevTools в Chrome: жучок в углу или Ctrl + ` -->
   <BlockGate v-if="auth.isTeacher" />      <!-- блокирующее сообщение разработчика: экран закрыт, пока не ответишь -->
 </template>
 

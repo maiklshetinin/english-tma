@@ -14,15 +14,20 @@ export const RANGES: Record<Range, { step: number; n: number }> = {
 }
 
 // ── свой счётчик ──────────────────────────────────────────────────────────────────────────────
-const als = new AsyncLocalStorage<string>()
-export const inRoute = <T>(label: string, fn: () => T): T => als.run(label, fn)
+// Контекст запроса: метка и счёт именно этого запроса — уходит в ответ заголовками X-DB-* (вкладка «Сеть» в панели разработчика)
+export interface Ctx { label: string; r: number; w: number; c: number }          // r — чтений из базы, w — записей, c — документов отдано из кэша (cache.ts)
+const als = new AsyncLocalStorage<Ctx>()
+export const inRoute = <T>(label: string, fn: () => T, ctx: Ctx = { label, r: 0, w: 0, c: 0 }): T => als.run(ctx, fn)
+/** Кэш сервера отдал n документов вместо чтения базы — для заголовка X-DB-Cached */
+export function noteCached(n: number): void { const c = als.getStore(); if (c && n > 0) c.c += n }
 type Cnt = { r: number; w: number }
 const minutes = new Map<number, Map<string, Cnt>>()       // минута (unix/60) → метка → счёт; хранится сутки
 const hours = new Map<number, Map<string, Cnt>>()         // час (unix/3600) → метка → счёт; хранится 31 день
 export const since = Date.now()
 export function add(kind: 'r' | 'w', n: number): void {
   if (!(n > 0)) return
-  const label = als.getStore() ?? 'фон', now = Math.floor(Date.now() / 1000)
+  const ctx = als.getStore(), label = ctx?.label ?? 'фон', now = Math.floor(Date.now() / 1000)
+  if (ctx) ctx[kind] += n
   for (const [map, key, keep] of [[minutes, Math.floor(now / 60), 1440], [hours, Math.floor(now / 3600), 744]] as const) {
     let b = map.get(key)
     if (!b) { map.set(key, (b = new Map())); for (const k of map.keys()) if (k <= key - keep) map.delete(k) }

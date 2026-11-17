@@ -6,6 +6,7 @@ import { request } from '../stores/api'
 import { liveSend, onLive, live } from '../composables/useLive'
 import { showToast } from '../composables/useToast'
 
+defineProps({ fill: Boolean })          // fill — во всю высоту (вкладка «Консоль» панели разработчика)
 const MAX = 1500
 const lines = ref([]), paused = ref(false), held = ref([]), mode = ref('all'), q = ref(''), err = ref('')
 const box = ref(null)
@@ -51,7 +52,7 @@ async function copy() {
 </script>
 
 <template>
-  <div class="dc">
+  <div class="dc" :class="{ fill }">
     <div class="hd">
       <b>Консоль сервера</b>
       <i class="dot" :class="{ on: live.on }" :title="live.on ? 'новые строки приходят сразу' : 'нет живого соединения'" />
@@ -77,7 +78,7 @@ async function copy() {
 </template>
 
 <style scoped>
-.dc { display: grid; gap: 8px; min-width: 0 }
+.dc { display: grid; gap: 8px; min-width: 0 } .dc.fill { flex: 1; min-height: 0; grid-template-rows: auto auto auto minmax(0, 1fr) auto } .dc.fill .term { height: auto; min-height: 120px }
 .hd { display: flex; align-items: center; gap: 8px } .hd > b { font-size: 16px; font-weight: 600 } .hd .seg { margin-left: auto }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #9aa0a6 } .dot.on { background: #34a853; box-shadow: 0 0 0 3px color-mix(in srgb, #34a853 25%, transparent) }
 .seg { display: inline-flex; padding: 2px; border-radius: 10px; background: var(--surface) }

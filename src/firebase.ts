@@ -19,10 +19,19 @@ export const canLogout = !tg?.initData && !!fb
 /** Заголовки «живого» соединения (useLive): X-Live-Cid — чтобы сервер не слал «обнови» тому, кто сам правил. */
 export const liveHeaders: Record<string, string> = {}
 
+/** Подслушка запросов для вкладки «Сеть» панели разработчика (composables/useNetLog.js ставит её при старте) */
+export interface NetTap { start(e: { method: string; path: string; body?: unknown }): number; end(id: number, r: Response | null, err?: unknown): void }
+export const net: { tap: NetTap | null } = { tap: null }
+
 /** Запрос к нашему серверу с Firebase ID-токеном (он сам обновляется). */
 export const apiFetch = async (path: string, opts: RequestInit = {}): Promise<Response> => {
-  const token = await fb?.currentUser?.getIdToken()
-  return fetch(`${API}${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }), ...liveHeaders, ...opts.headers } })
+  const id = net.tap?.start({ method: (opts.method || 'GET').toUpperCase(), path, body: opts.body }) ?? 0
+  try {
+    const token = await fb?.currentUser?.getIdToken()
+    const r = await fetch(`${API}${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }), ...liveHeaders, ...opts.headers } })
+    if (id) net.tap?.end(id, r)
+    return r
+  } catch (e) { if (id) net.tap?.end(id, null, e); throw e }
 }
 
 /** То же, но сетевая ошибка превращается в понятное сообщение (бесплатный Render может спать до ~30 с). */

@@ -47,10 +47,19 @@ countFirestore()          // свой счётчик чтений и запис�
 
 const app = express()
 const small = express.json({ limit: '10kb' }), big = express.json({ limit: '1mb' })            // путь, пресеты и колоды с карточками — крупнее обычных запросов
-app.use(cors({ origin: list(env.ALLOWED_ORIGIN) }), (req, res, next) => (/^\/(paths|presets|decks|courses)\//.test(req.path) ? big : small)(req, res, next))
+app.use(cors({ origin: list(env.ALLOWED_ORIGIN), exposedHeaders: ['X-DB-Reads', 'X-DB-Writes', 'X-DB-Cached', 'X-Server-Ms'] }), (req, res, next) => (/^\/(paths|presets|decks|courses)\//.test(req.path) ? big : small)(req, res, next))
 // метка запроса для счётчика «кто читает» (metrics.ts): «GET /lessons/range», длинные id → :id
 const routeLabel = (req: Request) => req.method + ' /' + req.path.split('/').filter(Boolean).slice(0, 3).map((p) => (p.length >= 12 || /^\d+$/.test(p) || /^tg:/.test(p) ? ':id' : p)).join('/')
-app.use((req, _res, next) => inRoute(routeLabel(req), next))
+// Счёт каждого запроса — в заголовки ответа (перед отправкой): чтений и записей базы, отдано из кэша, время на сервере. Их показывает
+// вкладка «Сеть» панели разработчика (DevTools.vue) у каждого запроса
+app.use((req, res, next) => {
+  const ctx = { label: routeLabel(req), r: 0, w: 0, c: 0 }, t0 = performance.now(), wh = res.writeHead
+  res.writeHead = function (this: Response, ...a: unknown[]) {
+    if (!this.headersSent) { this.setHeader('X-DB-Reads', ctx.r); this.setHeader('X-DB-Writes', ctx.w); this.setHeader('X-DB-Cached', ctx.c); this.setHeader('X-Server-Ms', Math.round(performance.now() - t0)) }
+    return (wh as (...x: unknown[]) => Response).apply(this, a)
+  } as typeof res.writeHead
+  inRoute(ctx.label, next, ctx)
+})
 app.use((req, res, next) => {                              // строка в логах на каждый запрос: метод, путь, код ответа, время
   const t = Date.now()
   res.on('finish', () => { if (req.path === '/') return; const ms = Date.now() - t; console.log(`${req.method} ${req.path} ${res.statusCode} ${ms}ms`); onRequest(routeLabel(req), res.statusCode, ms) })
