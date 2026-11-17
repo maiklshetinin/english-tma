@@ -26,7 +26,7 @@ import LessonRail from '../../components/LessonRail.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -333,6 +333,7 @@ const clip = ref(null)                                   // { course, step }
 function copyStep(s, course = doc.id) {
   const list = (Array.isArray(s) ? s : [s]).filter(Boolean); if (!list.length) return
   clip.value = { course, steps: JSON.parse(JSON.stringify(list)) }
+  putJson(list)      // и JSON в системный буфер — можно сразу вставить в чат с ИИ
   showToast(`${list.length === 1 ? `Экран «${KINDS[list[0].kind].t}» скопирован` : `Скопировано экранов: ${list.length}`} — Ctrl+V: в выбранный урок (после выбранного экрана) или на доску у курсора`)
 }
 async function pasteStep(lessonId = pick.lesson ?? activeLesson.value, after = pick.lesson === lessonId ? pick.step : null) {
@@ -405,6 +406,37 @@ async function pasteItems(at = null) {           // at — точка холст
   }
   msel.value = list.map(x => x.id); sel.value = null; setProgress(doc.progress); save()
 }
+// ---------- JSON экранов (17.11.2026) ----------
+// «{ }» у экрана — его JSON в системный буфер (образец для ИИ). Ctrl+C экранов — тоже кладёт JSON.
+// Обратно: Ctrl+V с JSON в буфере (от ИИ) — экраны встают в выбранный урок (после выбранного экрана) или на доску у мыши;
+// перетащить на холст файл .json или выделенный JSON-текст — экраны ложатся на доску там, где отпустили. Неверные поля отбрасываются,
+// экраны с ошибками (нет перевода, нет верного ответа…) подписаны красным, как обычно.
+let jsonOut = ''                                          // что сами положили в буфер — такой Ctrl+V вставляет из своего буфера, как раньше
+function putJson(list) {
+  jsonOut = JSON.stringify(list.length === 1 ? stepJson(list[0]) : list.map(stepJson), null, 2)
+  navigator.clipboard?.writeText(jsonOut).catch(() => {})
+}
+function copyJson(s) {
+  putJson([s])
+  showToast(`JSON экрана «${KINDS[s.kind].t}» скопирован — дайте его ИИ как образец; ответ ИИ — Ctrl+V или перетащите на холст`)
+}
+async function importJson(text, at = null) {
+  const r = stepsFromJson(text); if (!r) return false
+  if (!r.steps.length) { say('В JSON нет экранов, которые мы знаем', { text: `Тип экрана (kind) — один из: ${Object.keys(KINDS).join(', ')}.` }); return true }
+  clip.value = { course: doc.id, steps: r.steps }
+  await doPaste(at)
+  const bad = r.steps.filter(stepIssue).length
+  showToast(`Из JSON: экранов — ${r.steps.length}${r.bad ? `, пропущено ${r.bad} (незнакомый тип)` : ''}${bad ? ` · с ошибками — ${bad}, подписаны красным` : ''}`)
+  return true
+}
+function onPaste(e) {
+  if (run.value || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName) || e.target?.isContentEditable) return      // в поле — обычная вставка
+  const text = e.clipboardData?.getData('text') ?? ''
+  e.preventDefault()
+  if (text && text !== jsonOut && stepsFromJson(text)) return importJson(text)      // чужой JSON (от ИИ) — собираем экраны
+  doPaste()                                                                          // иначе — как раньше, из своего буфера
+}
+const isJsonDrag = (e) => { const it = e.dataTransfer?.items?.[0]; return !!it && (it.type === 'application/json' || (it.kind === 'string' && it.type === 'text/plain')) }
 // экраны из буфера — на доску рядом с точкой, по порядку слева направо
 async function pasteFree(w) {
   const made = []
@@ -1383,6 +1415,7 @@ async function onPicked(e) {
 // Файл тащат из Telegram / проводника: на рельс — с местом вставки, мимо — на холст
 const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
 function fileOver(e) {
+  if (isJsonDrag(e) && !/^(INPUT|TEXTAREA)$/.test(e.target?.tagName)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; return }      // JSON экранов — ляжет на доску
   if (!hasFiles(e)) return
   e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
   if (!drag.on) {        // тип видно по первому файлу ещё до броска (картинка → «Фото», иначе — кружок)
@@ -1394,6 +1427,15 @@ function fileOver(e) {
 }
 function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.from === 'file') Object.assign(drag, { on: false, item: null }) }
 async function fileDrop(e) {
+  if (!/^(INPUT|TEXTAREA)$/.test(e.target?.tagName)) {      // JSON экранов: файл .json или перетащенный текст
+    const jf = [...(e.dataTransfer?.files ?? [])].find(f => f.type === 'application/json' || /\.json$/i.test(f.name))
+    const text = jf ? await jf.text().catch(() => '') : !hasFiles(e) ? e.dataTransfer?.getData('text/plain') ?? '' : ''
+    if (jf || text) {
+      e.preventDefault(); Object.assign(drag, { on: false, item: null, over: false })
+      if (!(await importJson(text, toWorld(e.clientX, e.clientY)))) say('Это не JSON экранов', { text: 'Нужен экран или список экранов, как у кнопки «{ }» у экрана.' })
+      return
+    }
+  }
   if (!hasFiles(e)) return
   e.preventDefault()
   const files = [...e.dataTransfer.files].filter(kindOf), first = drag.item, w = toWorld(e.clientX, e.clientY), onRail = drag.over
@@ -1458,9 +1500,10 @@ const onKey = (e) => {
   if ((e.ctrlKey || e.metaKey) && !run.value && (e.code === 'KeyC' || e.code === 'KeyV')) {
     const picked = msel.value.length || sel.value || pick.step       // что-то выделено на холсте — копируем его, а не случайно выделенный текст
     if (!picked && window.getSelection()?.toString()) return          // выделен текст — обычное копирование
+    if (e.code === 'KeyV') return          // вставка — в событии paste (onPaste): там виден системный буфер, JSON от ИИ тоже
     window.getSelection()?.removeAllRanges()
     e.preventDefault()
-    return e.code === 'KeyC' ? doCopy() : doPaste()
+    return doCopy()
   }
   if (e.key === 'Escape' && placing) return placeCancel()
   if (e.key === 'Escape' && placingItem) return itemPlaceCancel()
@@ -1520,8 +1563,8 @@ const ctrl = isMac ? '⌘' : 'Ctrl'
 const onKeyUp = (e) => { if (e.code === 'Space') space.value = false }
 // Ctrl + колёсико над панелями (меню «Lesson», масштаб, шапка…) — масштаб холста, а не всей страницы браузера
 function onWinWheel(e) { if ((e.ctrlKey || e.metaKey) && board.value && !board.value.contains(e.target)) onWheel(e) }
-onMounted(() => { addEventListener('keydown', onKey); addEventListener('keyup', onKeyUp); addEventListener('wheel', onWinWheel, { passive: false }) })
-onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('wheel', onWinWheel) })
+onMounted(() => { addEventListener('keydown', onKey); addEventListener('keyup', onKeyUp); addEventListener('wheel', onWinWheel, { passive: false }); addEventListener('paste', onPaste) })
+onUnmounted(() => { removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('wheel', onWinWheel); removeEventListener('paste', onPaste) })
 
 function exportJson() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })); a.download = 'course.json'; a.click()
@@ -1583,12 +1626,12 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :glow="sd.on" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
-          :can-paste="!!clip?.steps" @copy="copyStep" @paste="pasteStep(r.x.id, $event)" :auto="autoCk[r.x.id]" :to-ck="!!ckFor(r.x.id)" @weak="onWeak(r.x, $event)" @unauto="unAuto(r.x.id, $event)"
+          :can-paste="!!clip?.steps" @copy="copyStep" @json="copyJson" @paste="pasteStep(r.x.id, $event)" :auto="autoCk[r.x.id]" :to-ck="!!ckFor(r.x.id)" @weak="onWeak(r.x, $event)" @unauto="unAuto(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
         <!-- Экраны прямо на доске (унесли с ветки или положили из «Интерактива») -->
         <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" :style="layerSt(f.id)" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :moving="sdMoving"
-          @copy="copyStep" @change="save" @height="railHs[f.id] = $event" @select="selectStep(f.id, $event)" @grab="grabStep" />
+          @copy="copyStep" @json="copyJson" @change="save" @height="railHs[f.id] = $event" @select="selectStep(f.id, $event)" @grab="grabStep" />
         <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
         <!-- ветка урока: стыки между экранами; ближайший к экрану «магнитит» -->
         <template v-if="sd.on && sd.to && sd.to !== 'cancel' && sd.to.mark">
@@ -1609,7 +1652,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <svg class="rail" :height="o.h"><path :d="o.path" class="r0" /></svg>
           <LessonRail v-for="(x, i) in o.items.filter(v => hasRail(v) || railUp(v))" :key="'olr' + o.id + x.id" :item="x" :up="x.type === 'checkpoint'" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
             :sel="opick?.lesson === x.id ? opick.s.id : null" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly
-            @copy="copyStep($event, o.id)" @select="(sid) => { opick = sid && sid !== 'final' ? { course: o.id, lesson: x.id, s: x.steps.find(v => v.id === sid) } : null; if (sid) selectStep(null, null) }"
+            @copy="copyStep($event, o.id)" @json="copyJson" @select="(sid) => { opick = sid && sid !== 'final' ? { course: o.id, lesson: x.id, s: x.steps.find(v => v.id === sid) } : null; if (sid) selectStep(null, null) }"
             @height="railHs['o' + o.id + x.id] = $event" @focus="showPoint" />
           <div v-for="(x, i) in o.items" :key="'ob' + o.id + x.id" :data-sel="'oi:' + o.id + ':' + x.id" class="bead ro" :class="[x.type, o.st[i], 's-' + o.L[i].side, { on: isM('oi:' + o.id + ':' + x.id) }]" :style="beadStyle(x, { x: o.ox + o.L[i].x, y: o.L[i].y }, colorOf(x, null))" @pointerdown.stop="msel = [($event.shiftKey ? msel : []), 'oi:' + o.id + ':' + x.id].flat(); sel = null; selectStep(null, null)" @dblclick.stop="openOther(o.id)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
             <div v-if="x.type === 'unit'" class="uh"><b>{{ x.title }}<template v-if="x.sub">: {{ x.sub }}</template></b></div>

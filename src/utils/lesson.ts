@@ -226,3 +226,48 @@ export function keepLocalFiles(incoming: Step[] | undefined, local: Step[] | und
     return out
   })
 }
+
+// ---------- JSON экранов (17.11.2026): скопировать экран как JSON (образец для ИИ, обмен) и собрать экраны из JSON ----------
+/** Экран → JSON для копирования: без id и без файлов «только в этом браузере» */
+export function stepJson(s: Step): Omit<Step, 'id'> { const { id: _id, ...rest } = stepsOut([s])[0]; return rest }
+
+const STR = ['word', 'tr', 'ex', 'exTr', 'image', 'audio', 'video', 'exAudio', 'phrase', 'note', 'text'] as const
+const str = (v: unknown) => (typeof v === 'string' && v.trim() && !v.startsWith('idb:') && !v.startsWith('blob:') ? v : undefined)
+/** Один экран из «сырого» объекта: тип должен быть известным, остальные поля — только знакомые и нужного вида (лишнее отбрасываем) */
+function stepFrom(o: any): Step | null {
+  if (!o || typeof o !== 'object' || !(o.kind in KINDS)) return null
+  const s: any = { id: stepId(), kind: o.kind }
+  for (const k of STR) { const v = str(o[k]); if (v) s[k] = v }
+  if (o.ask === 'audio' || o.ask === 'tr') s.ask = o.ask
+  if (o.show === 'pics' || o.show === 'text') s.show = o.show
+  if (o.by === 'letters') s.by = 'letters'
+  if (Number.isInteger(o.ans) && o.ans >= 0) s.ans = o.ans
+  if (typeof o.min === 'number' && o.min > 0 && o.min <= 60) s.min = o.min
+  if (Array.isArray(o.opts)) {
+    const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
+      .map((x: any) => ({ w: x.w.trim(), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
+    if (opts.length) s.opts = o.kind === 'tip' ? opts : opts.slice(0, OPTS_MAX)
+    if (s.ans != null && s.opts && s.ans >= s.opts.length) delete s.ans
+  }
+  if (Array.isArray(o.pairs)) {
+    const pairs = o.pairs.map((x: any) => (Array.isArray(x) ? { a: x[0], b: x[1] } : x)).filter((x: any) => str(x?.a) && str(x?.b)).map((x: any) => ({ a: x.a.trim(), b: x.b.trim() }))
+    if (pairs.length) s.pairs = pairs.slice(0, PAIRS_MAX)
+  }
+  return s as Step
+}
+/** Текст (от ИИ или скопированный) → экраны. Понимает: один экран, массив экранов, { steps: [...] } (урок),
+ *  и текст с JSON внутри (```json … ``` или пояснения вокруг). null — это не JSON экранов. bad — сколько пропущено (незнакомый тип). */
+export function stepsFromJson(text: string): { steps: Step[]; bad: number } | null {
+  if (!text || !/[[{]/.test(text)) return null
+  let t = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+  let v: any
+  try { v = JSON.parse(t) } catch {
+    const a = t.search(/[[{]/), b = Math.max(t.lastIndexOf(']'), t.lastIndexOf('}'))      // вокруг JSON есть текст — берём от первой скобки до последней
+    if (a < 0 || b <= a) return null
+    try { v = JSON.parse(t.slice(a, b + 1)) } catch { return null }
+  }
+  const list = Array.isArray(v) ? v : Array.isArray(v?.steps) ? v.steps : v?.kind ? [v] : null
+  if (!list?.length || !list.some((o: any) => o?.kind)) return null
+  const steps = list.map(stepFrom).filter(Boolean) as Step[]
+  return { steps: steps.slice(0, STEPS_MAX), bad: list.length - steps.length }
+}
