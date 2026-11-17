@@ -523,17 +523,20 @@ const noop = () => {}
 function selectStep(lessonId, stepId) { pick.lesson = stepId ? lessonId : null; pick.step = stepId; if (stepId) sel.value = null }
 // «Интерактив» на панели: экран — в выбранный урок; ничего не выбрано — новый урок в конец рельса
 // Экран добавляется «рыбой» — готовым образцом, который сразу можно пройти, а потом поправить (карандаш); 'lesson' — целый урок-образец
-const TPL = [...TEMPLATES, { id: 'lesson', kind: 'intro', t: 'Готовый урок', d: '7 экранов-образцов' }]
-// Меню Exercise по группам (что тренируем) и навыкам (для аналитики): Слух, Чтение, Письмо, Речь
-// SKILL_T, SKILLS — в utils/lesson.ts (их же показывает ветка урока над экранами)
+const TPL = TEMPLATES          // «Готовый урок» убран из меню (17.11.2026)
+// Меню Exercise по навыкам (тегам): упражнения с одним тегом — в одном контейнере. Теги — SKILLS в utils/lesson.ts (их же показывает ветка урока)
+// «Ответь на вопрос» (Речь + Письмо) — в «Речи»: там его главное — сказать
 const XGROUPS_STD = (() => {
   const gs = [
-    { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip', 'lesson'], cols: 2 },
-    { k: 'words', t: 'Слова', d: 'отдельные слова', ids: ['choice', 'audiotest', 'pairs', 'sayword'], cols: 3 },          // от узнавания к воспроизведению
-    { k: 'ctx', t: 'Фразы и контекст', d: 'слова внутри предложения', ids: ['fill', 'order', 'type', 'answer'], cols: 3 },          // проще → сложнее: выбрать, собрать из кнопок, вписать, сказать, ответить своими словами
+    { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip'], cols: 2 },
+    { k: 'L', t: 'Слух', d: 'понять на слух', ids: ['choice', 'audiotest', 'fill'], cols: 3 },
+    { k: 'R', t: 'Чтение', d: 'понять написанное', ids: ['pairs'], cols: 1 },
+    { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type'], cols: 2 },
+    { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
-  const used = new Set(gs.flatMap(g => g.ids)); gs[2].ids.push(...TPL.filter(t => !used.has(t.id)).map(t => t.id))          // новое упражнение без группы — в «Фразы»
-  return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(t => t.id === id)).filter(Boolean) }))
+  const used = new Set(gs.flatMap(g => g.ids))
+  for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
+  return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
 // «Мои» — свои упражнения из конструктора (doc.templates): плитка по основе, свои название и описание; первой — «+ Своё упражнение»
 const XGROUPS = computed(() => [...XGROUPS_STD, { k: 'mine', t: 'Мои', d: 'собраны в конструкторе', cols: 3, mine: true,
@@ -2333,8 +2336,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .och b { font-size: 22px; font-weight: 900 } .och small { font-size: 12px; font-weight: 700; color: var(--hint) }
 .bead.ro { cursor: default } .bead.ro:hover { transform: none }
 .allr.on { background: var(--blue-l); border-color: var(--blue); color: var(--blue-d) }
-.tray.inter { display: flex; align-items: stretch; gap: 8px; overflow: visible } .tray.inter .tt2 { align-self: center }
-.xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.words { background: #eef7ff } .xg.ctx { background: #f3f0ff }          /* группы упражнений — рядом, по горизонтали */
+.tray.inter { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 8px; overflow: visible; max-width: calc(100vw - 32px); box-sizing: border-box }          /* групп по тегам 6 — не влезли в ширину, переносятся вторым рядом */ .tray.inter .tt2 { align-self: center }
+.xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea }          /* группы упражнений — рядом, по горизонтали */
 .xgh { display: grid; gap: 0; padding: 0 8px } .xgh b { font-size: 13.5px; font-weight: 900; color: #2c2c2c } .xgh small { font-size: 11px; font-weight: 600; color: var(--hint) }
 .xgc { display: grid; gap: 2px 4px }
 .skl { display: flex; gap: 3px; justify-content: center } .chip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }          /* навык → аналитика */
