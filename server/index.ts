@@ -21,6 +21,7 @@ import { isDeckKey, makeStorage } from './storage.js'
 import { makeLive } from './live.js'
 import { makeNotes } from './notes.js'
 import { dropCache, cacheTtl, setCacheTtl, cacheStats, cacheSize } from './cache.js'
+import { captureConsole, onLine, logs, onRequest, startSampler, serverStats, SRANGES, type SRange } from './devops.js'
 import { countFirestore, inRoute, google, ours, since as usageSince, RANGES, type Range } from './metrics.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
@@ -38,6 +39,7 @@ const DEV_IDS = list(env.DEV_IDS)                        // разработчи
 const isStaff = (uid: string) => { const id = String(uid).replace(/^tg:/, ''); return TEACHER_IDS.includes(id) || DEV_IDS.includes(id) }
 const roleOf = (u: { uid: string; role?: unknown }) => (u.role === 'teacher' && !isStaff(u.uid) ? undefined : u.role as 'teacher' | 'student' | undefined)
 
+captureConsole()          // копия логов — в консоль разработчика (devops.ts)
 const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT), cred = cert(sa)
 initializeApp({ credential: cred })
 const auth = getAuth(), db = getFirestore()
@@ -51,7 +53,7 @@ const routeLabel = (req: Request) => req.method + ' /' + req.path.split('/').fil
 app.use((req, _res, next) => inRoute(routeLabel(req), next))
 app.use((req, res, next) => {                              // строка в логах на каждый запрос: метод, путь, код ответа, время
   const t = Date.now()
-  res.on('finish', () => req.path !== '/' && console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - t}ms`))
+  res.on('finish', () => { if (req.path === '/') return; const ms = Date.now() - t; console.log(`${req.method} ${req.path} ${res.statusCode} ${ms}ms`); onRequest(routeLabel(req), res.statusCode, ms) })
   next()
 })
 // Правки в реальном времени: после удачной правки (не GET) остальным преподавателям — «перезагрузите это» (live.ts)
@@ -129,6 +131,26 @@ app.get('/dev/usage', requireUser, requireDev, wrap(async (req, res) => {
   let points = null, error: string | null = null
   try { points = await google(() => cred.getAccessToken(), sa.project_id, range) } catch (e) { error = (e as Error).message }
   res.json({ range, step: RANGES[range].step, points, error, ours: own.points, top: own.top, since: usageSince })
+}))
+// Сервер (devops.ts): запросы, время ответа, память, CPU по минутам; консоль; перезапуск и пересборка. ?range=hour|day
+app.get('/dev/server', requireUser, requireDev, (req, res) => {
+  const range = (String(req.query.range) in SRANGES ? String(req.query.range) : 'hour') as SRange
+  res.json({ ...serverStats(range), commit: (env.RENDER_GIT_COMMIT || '').slice(0, 7), deployHook: !!env.RENDER_DEPLOY_HOOK, conns: live.people().length })
+})
+app.get('/dev/logs', requireUser, requireDev, (req, res) => { res.json({ lines: logs(Number(req.query.after) || 0) }) })
+// Перезапуск: процесс завершается, Render поднимает его заново (тот же код), ~30–60 с
+app.post('/dev/restart', requireUser, requireDev, (req, res) => {
+  console.warn(`⟳ перезапуск сервера по кнопке (${(req.user as { name?: string }).name || req.user.uid})`)
+  res.json({ ok: true })
+  setTimeout(() => process.exit(1), 400)
+})
+// Пересборка с последнего коммита: Deploy Hook из настроек сервиса на Render (переменная RENDER_DEPLOY_HOOK)
+app.post('/dev/deploy', requireUser, requireDev, wrap(async (req, res) => {
+  if (!env.RENDER_DEPLOY_HOOK) return void res.json({ ok: false, error: 'Нет переменной RENDER_DEPLOY_HOOK на Render' })
+  const r = await fetch(env.RENDER_DEPLOY_HOOK, { method: 'POST' })
+  const body = await r.json().catch(() => ({})) as { deploy?: { id?: string } }
+  console.warn(`⟳ пересборка сервера по кнопке (${(req.user as { name?: string }).name || req.user.uid}): ${r.status} ${body.deploy?.id || ''}`)
+  res.json(r.ok ? { ok: true, id: body.deploy?.id || '' } : { ok: false, error: `Render ответил ${r.status}` })
 }))
 app.post('/dev/cache', requireUser, requireDev, wrap(async (req, res) => {          // { min } — срок в минутах (0 — выключить), или { clear: true }
   if (req.body?.clear === true) dropCache(db)
@@ -290,4 +312,6 @@ app.get('/sheets/csv', requireUser, requireTeacher, wrap(async (req, res) => {
   res.type('text/csv').send(await r.text())
 }))
 
-live.attach(app.listen(env.PORT || 3000, () => console.log('server up')))      // WebSocket /live — на том же порту
+onLine((l) => live.logLine(l))          // строки консоли — разработчику сразу
+startSampler(() => live.people().length)
+live.attach(app.listen(env.PORT || 3000, () => console.log(`server up${env.RENDER_GIT_COMMIT ? ' · ' + env.RENDER_GIT_COMMIT.slice(0, 7) : ''}`)))      // WebSocket /live — на том же порту

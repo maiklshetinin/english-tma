@@ -14,6 +14,8 @@ import { live } from '../../composables/useLive'
 import { MY_VER, siteVer, updateAll } from '../../composables/useUpdate'
 import { request, post } from '../../stores/api'
 import DevUsage from '../../components/DevUsage.vue'
+import DevServer from '../../components/DevServer.vue'
+import DevConsole from '../../components/DevConsole.vue'
 const auth = useAuthStore()
 const studentStore = useStudentsStore()
 const name = computed(() => auth.user?.first_name || auth.teacher.name)
@@ -123,6 +125,9 @@ async function ping() {
         <!-- кэш чтений базы на сервере: дольше срок — меньше Reads в Firestore; любая правка через приложение всё равно сбрасывает нужное сразу -->
         <!-- график чтений и записей базы (как Usage в Firebase) и «откуда чтения» -->
         <div class="it vr"><DevUsage class="duw" /></div>
+        <!-- сервер: запросы, время ответа, память, CPU, перезапуск и пересборка; ниже — консоль логов -->
+        <div class="it vr"><DevServer class="duw" /></div>
+        <div class="it vr"><DevConsole class="duw" /></div>
         <div class="it vr">
           <span class="ic"><AppIcon name="sliders" :size="18" /></span>
           <div class="tx">
