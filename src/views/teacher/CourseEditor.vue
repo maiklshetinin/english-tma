@@ -23,6 +23,7 @@ import { showToast } from '../../composables/useToast'
 import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
+import ExerciseMini from '../../components/ExerciseMini.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
@@ -537,7 +538,7 @@ async function removeStepKey() {
 // Тянут: мини-окошко из «Интерактива» (новый экран), экран с ветки или с доски; выделенные рамкой экраны — все вместе.
 const SCR_W = 460, SCR_STEP = 520
 const freeOf = (st, x, y) => ({ id: freshId('f'), type: 'screen', title: '', x: Math.round(x), y: Math.round(y), steps: [st] })
-const sd = reactive({ on: false, rail: null, list: [], tray: null, preview: [], extra: null, ox: 0, oy: 0, s0: { x: 0, y: 0 }, w: { x: 0, y: 0 }, to: null })
+const sd = reactive({ on: false, rail: null, tileOff: null, asTile: false, cx: 0, cy: 0, list: [], tray: null, preview: [], extra: null, ox: 0, oy: 0, s0: { x: 0, y: 0 }, w: { x: 0, y: 0 }, to: null })
 let sdP = null
 // тащим сами окна, в полный размер (как в FigJam): сдвиг для экранов на ветках и на доске
 const sdMoving = computed(() => (sd.on && !sd.tray ? (sd.rail ? { ids: sd.list.map(o => o.s.id), dx: tileDx(), dy: 0, tile: true } : { ids: sd.list.map(o => o.s.id), dx: sd.w.x - sd.s0.x, dy: sd.w.y - sd.s0.y }) : null))
@@ -575,9 +576,9 @@ function railHit(r, i) {
   // mark.ly — сама линия ветки: там магнит и стыки (и у чекпоинта, где экраны над ней)
   return { L: r.x, i, mark: { x: r.p.x + RAIL_X0 + i * SCR_STEP - 32, y: up ? r.p.y - Math.min(700, h) - 46 : r.p.y - 24, h: Math.min(700, h) + 70, ly: r.p.y }, gaps: Array.from({ length: n + 1 }, (_, k) => r.p.x + RAIL_X0 + k * SCR_STEP - 30).filter((_, k) => k !== i) }
 }
-function sdStart(e, list, tray = null, extra = null, rail = null) {
+function sdStart(e, list, tray = null, extra = null, rail = null, tileOff = null) {
   const w = toWorld(e.clientX, e.clientY)
-  sdP = { sx: e.clientX, sy: e.clientY, list, tray, w, extra, rail }
+  sdP = { sx: e.clientX, sy: e.clientY, list, tray, w, extra, rail, tileOff }
   addEventListener('pointermove', sdMove); addEventListener('pointerup', sdUp, { once: true }); addEventListener('pointercancel', sdUp, { once: true })
 }
 // с ветки или с доски: тащим этот экран, а если он среди выделенных рамкой — все выделенные свои экраны
@@ -590,7 +591,14 @@ function grabStep({ e, s: st, tile }) {
   const r = tile && list.length === 1 && lessonRails.value.find(v => v.x === list[0].at.host)
   sdStart(e, list, null, null, r ? { L: r.x, y: r.p.y, x0: r.p.x + RAIL_X0, n: r.x.steps.length, i0: list[0].at.i, ax: list[0].at.x } : null)
 }
-function trayDown(e, id) { if (e.button === 0) sdStart(e, null, id) }
+// плитку из меню тянут как есть (17.11.2026): та же плитка с того же места едет за курсором; в окно экрана превращается только там,
+// где её можно поставить — над веткой урока, кружком урока или свободным местом доски; над экранами, панелями и снизу у меню — снова плитка
+function trayDown(e, id) { if (e.button !== 0) return; const b = e.currentTarget.getBoundingClientRect(); sdStart(e, null, id, null, null, { dx: e.clientX - b.left, dy: e.clientY - b.top }) }
+const TRAY_ITEMS = XGROUPS.flatMap(g => g.items)
+const tileItem = computed(() => (sd.tray ? TRAY_ITEMS.find(t => t.id === sd.tray) : null))
+// под курсором не свободное место: экран, стикер, панель — или вообще не доска
+function blockedAt(x, y) { const el = document.elementFromPoint(x, y); return !el || !board.value?.contains(el) || !!el.closest('.frame, .note, .fl, .och') }
+const tileNow = (e, to) => to === 'cancel' || (!to && blockedAt(e.clientX, e.clientY))
 // Выделено рамкой — тянуть можно с любого места выделения (как в FigJam): экраны, стикеры, рисунки и черновики-кружки едут вместе
 // выделен один урок (глава, задание) на рельсе — вместе с его экранами: за выделение тянется сам урок, как с рельса
 const maskItem = computed(() => {
@@ -623,14 +631,14 @@ function sdMove(e) {
     if (Math.hypot(e.clientX - sdP.sx, e.clientY - sdP.sy) < 6) return
     const first = sdP.list?.find(o => o.at.x || o.at.y)?.at
     const preview = sdP.tray ? (sdP.tray === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === sdP.tray).make()]) : []
-    Object.assign(sd, { on: true, rail: sdP.rail ?? null, tray: sdP.tray, preview, list: sdP.list ?? [], extra: sdP.extra, s0: sdP.w, ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
-    if (sdP.tray) tray.value = null
+    Object.assign(sd, { on: true, rail: sdP.rail ?? null, tileOff: sdP.tileOff ?? null, asTile: !!sdP.tray, tray: sdP.tray, preview, list: sdP.list ?? [], extra: sdP.extra, s0: sdP.w, ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
   }
-  sd.w = toWorld(e.clientX, e.clientY)
+  sd.w = toWorld(e.clientX, e.clientY); sd.cx = e.clientX; sd.cy = e.clientY
   moveExtra(sd.extra, sd.w.x - sd.s0.x, sd.w.y - sd.s0.y)
   if (sd.rail && Math.abs(sd.w.y - sd.rail.y) > TILE_OFF) sd.rail = null      // ушли с ветки — тянем сам экран
   if (sd.rail) { sd.to = tileTarget(); return }
   sd.to = overToolbar(e.clientY) ? 'cancel' : sd.tray || sd.list.length ? screenTarget(sd.w) : null
+  sd.asTile = !!sd.tray && tileNow(e, sd.to)
 }
 async function sdUp(e) {
   removeEventListener('pointermove', sdMove); removeEventListener('pointercancel', sdUp); removeEventListener('pointerup', sdUp)
@@ -642,12 +650,12 @@ async function sdUp(e) {
 let placing = false
 function placeStart(id, e) {
   const w = toWorld(e.clientX, e.clientY)
-  Object.assign(sd, { on: true, rail: null, tray: id, preview: id === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === id).make()], list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
-  tray.value = null; placing = true
+  Object.assign(sd, { on: true, rail: null, tileOff: { dx: 62, dy: 50 }, asTile: true, cx: e.clientX, cy: e.clientY, tray: id, preview: id === 'lesson' ? fishLesson() : [TEMPLATES.find(t => t.id === id).make()], list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
+  placing = true          // меню не закрываем: над ним плитка остаётся плиткой, закроется, когда экран поставят
   addEventListener('pointermove', sdMove); addEventListener('pointerdown', placeDown, true)
 }
 function placeEnd() { placing = false; removeEventListener('pointermove', sdMove); removeEventListener('pointerdown', placeDown, true) }
-function placeCancel() { placeEnd(); Object.assign(sd, { on: false, tray: null, preview: [], to: null }) }
+function placeCancel() { placeEnd(); Object.assign(sd, { on: false, asTile: false, tray: null, preview: [], to: null }) }
 function placeDown(e) {
   e.stopPropagation(); e.preventDefault(); placeEnd()
   if (e.button !== 0) return placeCancel()
@@ -656,8 +664,10 @@ function placeDown(e) {
 function sdDrop(e) {
   const to = sd.rail ? tileTarget() : overToolbar(e.clientY) ? 'cancel' : screenTarget(toWorld(e.clientX, e.clientY)), w = toWorld(e.clientX, e.clientY)
   const tr = sd.tray, list = sd.list, preview = sd.preview, extra = sd.extra, s0 = sd.s0
-  Object.assign(sd, { on: false, rail: null, list: [], tray: null, preview: [], extra: null, to: null })
-  if (to === 'cancel') return moveExtra(extra, 0, 0)
+  const blocked = !!tr && to !== 'cancel' && tileNow(e, to)          // отпустили плиткой (над экраном, панелью) — никуда не ставим
+  Object.assign(sd, { on: false, rail: null, asTile: false, list: [], tray: null, preview: [], extra: null, to: null })
+  if (to === 'cancel' || blocked) return moveExtra(extra, 0, 0)
+  if (tr) tray.value = null
   if (!tr && !list.length) return save()                    // ехали только стикеры, рисунки и черновики
   const moving = tr ? preview : list.map(o => o.s)
   if (to) {
@@ -689,7 +699,7 @@ function unhook(list) {
   }
 }
 // новый экран из «Интерактива» — сразу в полный размер, как он ляжет
-const sdGhost = computed(() => (sd.on && sd.tray ? sd.preview.map((st, j) => ({ st, left: sd.w.x - sd.ox + j * SCR_STEP, top: sd.w.y - sd.oy })) : []))
+const sdGhost = computed(() => (sd.on && sd.tray && !sd.asTile ? sd.preview.map((st, j) => ({ st, left: sd.w.x - sd.ox + j * SCR_STEP, top: sd.w.y - sd.oy })) : []))
 const run = ref(null)                                             // «Пройти урок» — урок целиком, как ученик (как «Презентация» в Figma)
 // выбран урок с готовыми экранами (не тянем, не рамка) — под кружком карточка урока, как у ученика
 const peekOf = (x) => { if (sel.value !== x.id || drag.on || msel.value.length > 1 || !INTERACTIVE.includes(x.type)) return null; const ok = (x.steps ?? []).filter(v => !stepIssue(v)); return ok.length ? ok : null }
@@ -1842,6 +1852,12 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl zoom"><button title="Отдалить" @click="zoomBtn(1 / 1.25)">−</button><b title="100%" @click="zoomAt(1 / view.z, W / 2, H / 2)">{{ Math.round(view.z * 100) }}%</b><button title="Приблизить" @click="zoomBtn(1.25)">+</button><i class="vs" /><button class="all" title="Показать весь курс" @click="fit()">Весь курс</button></div>
 
     <!-- Снизу: панель как в FigJam — группа, над ней ряд элементов -->
+    <!-- плитка из меню, пока её тянут не над местом, куда можно поставить: того же размера, с того же места под курсором -->
+    <div v-if="sd.on && sd.asTile && tileItem" class="mig" :style="{ left: sd.cx - (sd.tileOff?.dx ?? 62) + 'px', top: sd.cy - (sd.tileOff?.dy ?? 50) + 'px' }">
+      <ExerciseMini :id="tileItem.id" size="tray" />
+      <small><b>{{ tileItem.t }}</b>{{ tileItem.d }}</small>
+      <span v-if="SKILLS[tileItem.id]" class="skl"><i v-for="k in SKILLS[tileItem.id]" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
+    </div>
     <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop>
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
@@ -2162,6 +2178,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .pgo:active { transform: translateY(2px); box-shadow: none }
 .sdmark { position: absolute; z-index: 10020; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
 .sdbead { position: absolute; z-index: 10020; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
+.mig { position: fixed; z-index: 10060; display: grid; justify-items: center; gap: 5px; width: 124px; box-sizing: border-box; padding: 6px 4px 4px; pointer-events: none; animation: mig .12s ease-out }
+.mig :deep(.mini) { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(0, 0, 0, .2) }
+.mig small { display: grid; gap: 1px; font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--hint); text-align: center } .mig small b { font-size: 12.5px; font-weight: 800; color: #2c2c2c }
+@keyframes mig { from { transform: scale(1.06); opacity: .6 } }
 .sdg { position: absolute; z-index: 10030; width: 460px; pointer-events: none; opacity: .95 }
 .sdl { display: flex; align-items: center; gap: 6px; height: 34px; font-size: 13px; color: var(--hint) } .sdl b { font-weight: 800 }
 .sdl .kc { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #fff } .sdl .kc svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
