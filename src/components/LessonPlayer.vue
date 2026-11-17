@@ -16,7 +16,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
 import { useTelegram } from '../composables/useTelegram'
 import BackButton from './BackButton.vue'
-import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts } from '../utils/lesson'
+import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts } from '../utils/lesson'
 
 const props = defineProps({
   steps: { type: Array, required: true },
@@ -53,9 +53,9 @@ const src = (v, k) => (v ? props.resolve(v, k) : '')
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
 const { hapticResult, hapticTick } = useTelegram()      // виброотклик на ответы (в Профиле можно выключить)
-const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '' })
+const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null })
 function setup() {
-  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '' }); Object.assign(mine, { ok: 0, all: 0 })
+  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null }); Object.assign(mine, { ok: 0, all: 0 })
   recStop(true); rec.url = ''; rec.err = ''
   const s = step.value; if (!s) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
@@ -65,6 +65,7 @@ function setup() {
   }
   if (s.kind === 'order') { const idx = orderParts(s).map((_, k) => k); let o = shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
+  if (s.kind === 'odd' || s.kind === 'sort') { const idx = (s.kind === 'odd' ? s.opts : s.items ?? []).map((_, k) => k); st.order = props.single || s.mix === false ? idx : shuffle(idx) }
   if (s.kind === 'intro' || s.kind === 'tip') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
   if (s.kind === 'speak' && props.track) emit('answer', { step: s, ok: null })          // «Повтори» — без оценки, но «Продолжить» — только когда ученик правда что-то сказал (17.11.2026: молчание засчитывалось)          // без оценки — только «встречалось»
   if (!props.single && !props.embedded) autoplay()
@@ -87,7 +88,7 @@ function pick(k) {
   st.picked = k; verdict(k === (step.value.ans ?? 0))
 }
 const right = computed(() => step.value?.kind === 'choice' ? st.picked === (step.value.ans ?? 0) : st.res === true)
-const checks = computed(() => ['choice', 'order', 'gap'].includes(step.value?.kind))
+const checks = computed(() => ['choice', 'order', 'gap', 'odd', 'sort'].includes(step.value?.kind))
 
 // ---- пары ----
 function tap(side, k) {
@@ -163,7 +164,7 @@ function again() { const v = vid.value; if (v) { v.currentTime = 0; v.play().cat
 function sendText() { if (st.text.trim()) st.done = true }
 
 // ---- дальше ----
-const later = computed(() => (retry || props.again) && st.done && ['choice', 'order', 'gap'].includes(step.value?.kind) && !right.value)          // ошибка → «вернёмся в конце»
+const later = computed(() => (retry || props.again) && st.done && ['choice', 'order', 'gap', 'odd', 'sort'].includes(step.value?.kind) && !right.value)          // ошибка → «вернёмся в конце»
 // на ветке в редакторе повтор встаёт в конец сразу, как только ответили неверно (не ждём «Продолжить»)
 watch(later, (v) => { if (v && props.embedded) emit('miss') })
 function next() { if (props.single || !st.done) return; if (props.embedded) return emit('next', { ...mine }); if (later.value) seq.value.push(cur.value); i.value++ }
@@ -185,7 +186,7 @@ const words = computed(() => {
 const say = (a) => { au?.pause(); au = new Audio(src(a, 'audio')); au.play().catch(() => {}) }
 // экран решён (или показан, если без оценки) — ответ в Review: верно / нет, у «Пар» — какие пары перепутали
 watch(() => st.done, (d) => {
-  const s = step.value; if (!d || !props.track || !s || !['choice', 'order', 'gap', 'pairs'].includes(s.kind)) return
+  const s = step.value; if (!d || !props.track || !s || !['choice', 'order', 'gap', 'pairs', 'odd', 'sort'].includes(s.kind)) return
   emit('answer', { step: s, ok: s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong] })
 })
 // всё объявлено — теперь можно запускать (immediate вызывает setup сразу)
@@ -193,7 +194,21 @@ watch([i, () => (props.single || props.embedded ? JSON.stringify(step.value) : p
 watch(() => props.start, (v) => { i.value = v })          // ветка в редакторе: экраны добавили / переставили — этот кадр показывает свой экран
 watch(isFinal, (v) => { if (v && !endT.value) { endT.value = Date.now(); emit('done', { ...score }) } }, { immediate: true })
 const onKey = (e) => { if (e.key === 'Enter' && !props.single && !props.embedded && !/INPUT|TEXTAREA/.test(e.target?.tagName)) isFinal.value ? emit('close') : next() }
-const needCheck = computed(() => step.value?.kind === 'gap' && !step.value.opts?.length && !st.done)
+const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !step.value.opts?.length) || step.value?.kind === 'odd' || step.value?.kind === 'sort'))
+// ---- книжные (экспериментальные): «Найди лишнее» и «Распредели по колонкам» ----
+const tile = (k, i) => TILE[tileK(k, i)]
+const sortLeft = computed(() => (step.value?.kind === 'sort' ? st.order.filter(k => st.place[k] == null).length : 0))
+const canCheck = computed(() => { const k = step.value?.kind; return k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.items?.length ?? 0) > 0 && sortLeft.value === 0 : typedAll.value })
+function sortPick(k) { if (!st.done) st.sel = st.sel === k ? null : k }
+function sortPut(c) { if (st.done || st.sel == null) return; st.place = { ...st.place, [st.sel]: c }; st.sel = null; hapticTick?.() }
+function sortBack(k) { if (st.done) return; const p = { ...st.place }; delete p[k]; st.place = p }
+const sortOkAt = (k) => st.place[k] === step.value.items[k].c
+function checkAny() {
+  const s = step.value; if (st.done || !canCheck.value) return
+  if (s.kind === 'odd') return verdict(st.picked === (s.ans ?? 0))
+  if (s.kind === 'sort') return verdict((s.items ?? []).every((_, k) => sortOkAt(k)))
+  check()
+}
 onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEventListener('keydown', onKey))
 </script>
 
@@ -341,9 +356,31 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
       <div v-if="!gp.gap" class="empty">Отметьте пропуск: слово в [квадратных скобках]</div>
       <p v-else-if="step.opts?.length" class="sent">{{ gp.a }}<span class="slot" :class="{ ok: st.done && st.res, no: st.done && !st.res }">{{ st.typed || '\u00a0' }}</span>{{ gp.b }}</p>
-      <p v-else class="sent"><template v-for="(x, n) in gl" :key="n"><template v-if="x.g == null">{{ x.t }}</template><input v-else v-model="st.tys[x.i]" class="slot in" :style="{ width: Math.max(...gapAlts(x.g).map(a => a.length)) + 3 + 'ch' }" :class="{ ok: st.done && gapOkAt(x), no: st.done && !gapOkAt(x) }" :readonly="st.done" autocomplete="off" autocapitalize="off" spellcheck="false" @keydown.enter.stop="check" /></template></p>
+      <p v-else class="sent"><template v-for="(x, n) in gl" :key="n"><template v-if="x.g == null"><template v-for="(h, j) in hintParts(x.t)" :key="j"><span v-if="h.h" class="brh">{{ h.x }}</span><template v-else>{{ h.x }}</template></template></template><input v-else v-model="st.tys[x.i]" class="slot in" :style="{ width: Math.min(30, Math.max(...gapAlts(x.g).map(a => a.length)) + 3) + 'ch' }" :placeholder="gl.length === 1 ? 'Напечатай здесь' : ''" :class="{ ok: st.done && gapOkAt(x), no: st.done && !gapOkAt(x) }" :readonly="st.done" autocomplete="off" autocapitalize="off" spellcheck="false" @keydown.enter.stop="check" /></template></p>
       <div v-if="step.opts?.length" class="pool">
         <button v-for="k in st.order" :key="k" class="chip" :class="{ ok: st.done && gapOk(step.opts[k].w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ step.opts[k].w }}</button>
+      </div>
+    </div>
+
+    <!-- Найди лишнее (книжный, экспериментальный) -->
+    <div v-else-if="step.kind === 'odd'" class="body">
+      <h3 class="hd">{{ step.head || KINDS.odd.head }}</h3>
+      <div class="oddg"><button v-for="k in st.order" :key="k" class="ot" :class="{ sel: st.picked === k && !st.done, ok: st.done && k === (step.ans ?? 0), no: st.done && k === st.picked && k !== (step.ans ?? 0) }" :style="{ background: tile(step.opts[k].k, k).bg, color: tile(step.opts[k].k, k).fg }" @click="!st.done && (st.picked = k)">{{ step.opts[k].w }}</button></div>
+    </div>
+
+    <!-- Распредели по колонкам (книжный, экспериментальный): нажать фразу, потом колонку -->
+    <div v-else-if="step.kind === 'sort'" class="body">
+      <h3 class="hd">{{ step.head || KINDS.sort.head }}</h3>
+      <p v-if="step.hint !== false" class="sub">Нажмите фразу, затем колонку</p>
+      <div class="spool"><button v-for="k in st.order.filter(k => st.place[k] == null)" :key="k" class="sw" :class="{ sel: st.sel === k }" :style="{ background: tile(step.items[k].k, k).bg, color: tile(step.items[k].k, k).fg }" @click="sortPick(k)">{{ step.items[k].w }}</button></div>
+      <div class="scols" :style="{ gridTemplateColumns: `repeat(${step.cols?.length || 2}, 1fr)` }">
+        <div v-for="(c, ci) in step.cols" :key="ci" class="scol">
+          <div class="sch">{{ c.t || '…' }}</div>
+          <div class="sbox" :class="{ hot: st.sel != null }" @click="sortPut(ci)">
+            <span v-for="k in st.order.filter(k => st.place[k] === ci)" :key="k" class="sw in" :class="{ ok: st.done && sortOkAt(k), no: st.done && !sortOkAt(k) }" :style="st.done ? null : { background: tile(step.items[k].k, k).bg, color: tile(step.items[k].k, k).fg }">{{ step.items[k].w }}<button v-if="!st.done" class="sx" title="Убрать обратно" @click.stop="sortBack(k)">✕</button></span>
+            <span v-if="st.sel != null" class="sadd">Нажмите, чтобы добавить сюда</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -374,9 +411,12 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       <span v-else-if="!isFinal && step.kind === 'order' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильно так:' }}</b><span class="fs">{{ step.phrase }}</span><small>{{ step.tr }}</small><small v-if="step.note" class="fn">{{ step.note }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gapFull(step.phrase) }}</span><small>{{ step.tr }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'answer' && st.done && step.tr" class="fb"><small>Пример ответа</small><span class="fs">{{ step.tr }}</span></span>
+      <span v-else-if="!isFinal && step.kind === 'odd' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Лишнее:' }}</b><span v-if="!right" class="fs">{{ step.opts?.[step.ans ?? 0]?.w }}</span><small v-if="step.note">{{ step.note }}</small></span>
+      <span v-else-if="!isFinal && step.kind === 'sort' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Есть ошибки — они красные' }}</b><small v-if="step.note">{{ step.note }}</small></span>
+      <span v-else-if="!isFinal && step.kind === 'sort'" class="fb"><small class="left">Осталось фраз: {{ sortLeft }}</small></span>
       <span v-else class="fb" />
       <template v-if="embedded && isFinal"><button class="go ghost" @click="emit('restart')">↺ Заново</button><button class="go" @click="emit('full')">Во весь экран</button></template>
-      <button v-else-if="needCheck && !single" class="go" :disabled="!typedAll" @click="check">Проверить</button>
+      <button v-else-if="needCheck && !single" class="go" :disabled="!canCheck" @click="checkAny">Проверить</button>
       <button v-else-if="embedded" class="go" :disabled="!st.done" @click="next">Продолжить</button>
       <button v-else-if="isFinal" class="go" @click="emit('close')">{{ single ? 'Так увидит ученик' : 'Готово' }}</button>
       <button v-else class="go" :disabled="!st.done && !single" @click="next">{{ single ? 'Так увидит ученик' : 'Продолжить' }}</button>
@@ -514,4 +554,24 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .embedded .go { padding: 9px 22px; font-size: 14px } .go.ghost { background: var(--surface); color: var(--text); margin-right: auto }
 .embedded .pb i { transition: width .5s ease }
 .cap.up { bottom: 52px }          /* подпись над синей плашкой звука, а не под ней (раньше плашка её закрывала) */
+
+/* книжные: Найди лишнее / Распредели по колонкам */
+.oddg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
+.ot { min-height: 64px; padding: 12px; border: 2px solid transparent; border-radius: 14px; font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; transition: border-color .12s, transform .12s }
+.ot:hover { transform: translateY(-1px) } .ot.sel { border-color: #1a73e8 } .ot.ok { border-color: #1fbe78; box-shadow: 0 0 0 2px #8ff0c8 } .ot.no { border-color: var(--red); animation: shake .3s }
+.sub { margin: -8px 0 0; text-align: center; font-size: 12px; font-weight: 600; color: var(--hint) }
+.spool { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; min-height: 36px }
+.sw { position: relative; padding: 7px 12px; border: 2px solid transparent; border-radius: 10px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; text-align: left }
+.sw.sel { border-color: #1a73e8; box-shadow: 0 0 0 3px rgba(26, 115, 232, .18) }
+.sw.in { display: flex; align-items: center; justify-content: space-between; gap: 6px; cursor: default } .sw.ok { background: #e3fbef; color: #128a55; border-color: #8ff0c8 } .sw.no { background: var(--red-l); color: var(--red-d); border-color: var(--red) }
+.sx { flex: none; border: 0; padding: 0 2px; background: none; color: inherit; opacity: .6; font-size: 11px; cursor: pointer } .sx:hover { opacity: 1 }
+.scols { display: grid; gap: 10px }
+.scol { display: grid; gap: 8px; align-content: start }
+.sch { padding: 8px; border: 1px solid var(--border); border-radius: 10px; text-align: center; font-size: 13px; font-weight: 800 }
+.sbox { display: grid; gap: 6px; align-content: start; min-height: 120px; padding: 8px; border: 1.5px dashed #c9dcfb; border-radius: 12px; background: #f6faff; cursor: pointer; transition: background .12s, border-color .12s }
+.sbox.hot { border-color: #1a73e8; background: #eaf3ff }
+.sadd { padding: 8px; border: 1px dashed #1a73e8; border-radius: 8px; color: #1a73e8; text-align: center; font-size: 11px; font-weight: 700 }
+.left { color: var(--hint) }
+.brh { color: #1a73e8 }          /* подсказка в скобках — «(lose)», как в учебнике */
+.oddg, .scols { width: 100% }
 </style>

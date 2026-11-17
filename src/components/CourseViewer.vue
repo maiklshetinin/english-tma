@@ -123,7 +123,7 @@ const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 // ---------- Чекпоинт собирается сам ----------
 // Экраны учителя (если положил) + экраны из уроков этой Chapter, где ученик ошибся (прогресс с сервера; в «Как видит ученик» — ошибки
 // этого просмотра). Ошибок нет — проверяемые экраны из уроков Chapter, до CK_MAX, равномерно — чекпоинт не бывает пустым.
-const GRADED = ['choice', 'order', 'gap', 'pairs'], CK_MAX = 8
+const GRADED = ['choice', 'order', 'gap', 'pairs', 'odd', 'sort'], CK_MAX = 8
 const open = ref(null)                         // открытое во весь экран задание
 const misses = reactive(new Set())             // экраны с ошибкой в открытом сейчас уроке
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))

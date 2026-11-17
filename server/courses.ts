@@ -14,7 +14,7 @@ import { isMediaUrl } from './media.js'
 export interface CoursesDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 export const COURSE_TYPES = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw', 'test', 'tutor', 'reward']
 export const COURSE_ITEMS_MAX = 500, COURSES_MAX = 100
-export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer'], STEPS_MAX = 40
+export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer', 'sort', 'odd'], STEPS_MAX = 40
 const ID = /^[\w-]{1,64}$/
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
@@ -60,6 +60,20 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (kind === 'speak' || kind === 'gap') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)) }
     if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 4).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))
     if (kind === 'answer') { put(o, 'text', str(r.text, 300)); put(o, 'note', str(r.note, 600)); put(o, 'tr', str(r.tr, 300)) }
+    // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.
+    // k — цвет плитки (o/g/y/p/b), mix — перемешивать у ученика, hint — подсказка «Нажмите фразу, затем колонку»
+    const KC = ['o', 'g', 'y', 'p', 'b'], kc = (v: unknown) => (KC.includes(String(v)) ? String(v) : undefined)
+    if (kind === 'odd' || kind === 'sort') { put(o, 'note', str(r.note, 600)); if (r.mix === false) o.mix = false }
+    if (kind === 'odd') {
+      o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120) }; put(out, 'k', kc(q.k)); return out })
+      o.ans = Math.max(0, Math.min((o.opts as unknown[]).length - 1, num(r.ans)))
+    }
+    if (kind === 'sort') {
+      o.cols = (Array.isArray(r.cols) ? r.cols : []).slice(0, 3).map((x) => ({ t: str(((x ?? {}) as Record<string, unknown>).t, 60) }))
+      const n = (o.cols as unknown[]).length
+      o.items = (Array.isArray(r.items) ? r.items : []).slice(0, 12).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120), c: Math.max(0, Math.min(Math.max(0, n - 1), num(q.c))) }; put(out, 'k', kc(q.k)); return out })
+      if (r.hint === false) o.hint = false
+    }
     if (kind === 'pairs') o.pairs = (Array.isArray(r.pairs) ? r.pairs : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>; return { a: str(q.a, 120), b: str(q.b, 120) } })
     return o
   }

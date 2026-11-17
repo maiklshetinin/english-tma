@@ -58,6 +58,13 @@ ok('подсветка главы: вид, с ветками, цвет; мусо
 await C.put(me, 'k19', { ...course, loose: [{ id: 'gu', type: 'unit', title: 'Глава', x: 1, y: 2 }, { id: 'gl', type: 'lesson', title: '', x: 1, y: 90, grp: 'gu' }, { id: 'gx', type: 'lesson', title: '', x: 1, y: 90, grp: 'bad id!' }] })
 const k9 = store.get('courses/k19').loose
 ok('глава на доске: урок помнит главу (grp), плохой grp выкинут', k9[1].grp === 'gu' && !('grp' in k9[2]))
+// книжные экраны: «Найди лишнее» и «Распредели по колонкам» — сохраняются, лишнее срезается
+await C.put(me, 'k8', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [
+  { id: 'o1', kind: 'odd', ans: 7, note: 'x', mix: false, opts: [{ w: 'egg', k: 'y' }, { w: 'coffee', k: 'zzz' }] },
+  { id: 'o2', kind: 'sort', cols: [{ t: 'A' }, { t: 'B' }, { t: 'C' }, { t: 'D' }], items: [{ w: 'p', c: 1, k: 'g' }, { w: 'q', c: 9 }], hint: false }] }] })
+{ const s = ((await C.get('k8')) as any).items[0].steps
+  ok('найди лишнее: опции, цвет, ответ в пределах', s[0].opts.length === 2 && s[0].opts[0].k === 'y' && !s[0].opts[1].k && s[0].ans === 1 && s[0].mix === false && s[0].note === 'x')
+  ok('распредели: до 3 колонок, колонка фразы в пределах', s[1].cols.length === 3 && s[1].items[0].c === 1 && s[1].items[1].c === 2 && s[1].hint === false) }
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)
 await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
 const nt = store.get('courses/k4').notes[0]

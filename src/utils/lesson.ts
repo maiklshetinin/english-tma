@@ -8,12 +8,15 @@
 //  • speak  — «Повтори за диктором»: видео (или фото со звуком) и фраза; ученик записывает себя и слушает.
 //  • gap    — «Заполни пропуск»: фраза с пропуском в [квадратных скобках]; есть варианты (opts) — выбрать плашку, нет — вписать самому.
 //  • answer — «Ответь на вопрос»: фото и вопрос, подсказка; ученик отвечает устно (запись) или письменно, пример ответа — в tr.
+//  • odd    — «Найди лишнее» (книжный, экспериментальный): плитки слов (opts, цвет k), одна лишняя — ans; пояснение — note.
+//  • sort   — «Распредели по колонкам» (книжный, экспериментальный): 2–3 колонки (cols), фразы (items: w, c — колонка, k — цвет).
 // «Аудиотест» — это «Выбери ответ» с фото вопроса (image) и звуком поверх, ответы текстом (шаблон в TEMPLATES).
 // Файл в поле image / audio / video: https-ссылка (фото и озвучка карточек), ключ файла курса в S3 (t/…/c/…)
 // или «idb:<id>» — файл пока только в этом браузере (без сервера или до загрузки), на сервер такой не уходит.
 
-export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer'
-export interface Opt { w: string; t?: string; image?: string; audio?: string }
+export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd'
+export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
+export interface SortItem { w: string; c: number; k?: string }
 export interface Pair { a: string; b: string }
 export interface Step {
   id: string; kind: StepKind
@@ -27,11 +30,12 @@ export interface Step {
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
   head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
   tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
+  cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean   // «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
 }
 
 /** Задания курса, в которые можно собрать экраны */
 export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test']
-export const STEPS_MAX = 40, OPTS_MAX = 4, PAIRS_MAX = 6
+export const STEPS_MAX = 40, OPTS_MAX = 4, PAIRS_MAX = 6, ODD_MAX = 6, SORT_MAX = 12
 /** Сколько места по вертикали занимает горизонтальный рельс урока с карточками экранов (редактор курса раздвигает рельс) */
 export const RAIL_H = 420
 /** На сколько вправо от кружка урока начинается ветка экранов (за плашкой главы с подписями уроков) */
@@ -54,11 +58,20 @@ export const KINDS: Record<StepKind, { t: string; d: string; c: string; dk: stri
     ic: '<path d="M3 17h4M17 17h4"/><path d="M9 17h6" stroke-dasharray="2 2"/><path d="M5 8h14"/>' },
   answer: { t: 'Ответь на вопрос', d: 'Фото и вопрос — ученик отвечает устно или письменно', c: 'var(--blue)', dk: 'var(--blue-d)', head: 'Ответь на вопрос',
     ic: '<path d="M4 5h16v10H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9M12 13.2v.1"/>' },
+  sort: { t: 'Распредели по колонкам', d: 'Фразы разложить по 2–3 колонкам', c: 'var(--purple)', dk: 'var(--purple-d)', head: 'Распределите фразы по колонкам',
+    ic: '<rect x="3.5" y="9" width="7.5" height="11" rx="1.8"/><rect x="13" y="9" width="7.5" height="11" rx="1.8"/><rect x="5" y="3.5" width="5" height="3" rx="1.2"/><rect x="13.5" y="3.5" width="6" height="3" rx="1.2"/>' },
+  odd: { t: 'Найди лишнее', d: 'Слово, которое не подходит к остальным', c: 'var(--pink, #ec4899)', dk: 'var(--pink-d, #be185d)', head: 'Найдите лишнее слово',
+    ic: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="M15 15l3 3M18 15l-3 3"/>' },
 }
+/** Цвета плиток книжных экранов: ключ → фон / текст (как у Насти: персик, мята, лимон, роза, небо) */
+export const TILE_K = ['o', 'g', 'y', 'p', 'b']
+export const TILE: Record<string, { bg: string; fg: string }> = { o: { bg: '#fbe1c8', fg: '#7a4314' }, g: { bg: '#cfeccf', fg: '#1f5c33' }, y: { bg: '#fbedb0', fg: '#6b5200' }, p: { bg: '#f8d3e2', fg: '#7a1f45' }, b: { bg: '#cfe6f7', fg: '#14507a' } }
+/** Цвет плитки: свой — или по кругу по номеру */
+export const tileK = (k: string | undefined, i: number) => (k && TILE[k] ? k : TILE_K[i % TILE_K.length])
 export const KIND_LIST = Object.keys(KINDS) as StepKind[]
 
 /** Примерное время экрана по типу, в минутах (как «11 MIN» у урока в Busuu); репетитор может поставить своё */
-export const KIND_MIN: Record<StepKind, number> = { intro: 0.5, choice: 0.5, pairs: 1, order: 1, tip: 1, speak: 1, gap: 0.5, answer: 1.5 }
+export const KIND_MIN: Record<StepKind, number> = { intro: 0.5, choice: 0.5, pairs: 1, order: 1, tip: 1, speak: 1, gap: 0.5, answer: 1.5, sort: 1, odd: 0.5 }
 export const MIN_CHOICES = [0.5, 1, 1.5, 2, 3, 5, 10]
 export const stepMin = (s: Step) => (typeof s.min === 'number' && s.min > 0 ? s.min : KIND_MIN[s.kind] ?? 1)
 /** Время урока — только сумма экранов (своё время ставят у экранов), округлённая вверх до минуты (пустой урок — 0) */
@@ -78,6 +91,8 @@ export function newStep(kind: StepKind): Step {
   if (kind === 'speak') return { id: stepId(), kind, phrase: '', tr: '' }
   if (kind === 'gap') return { id: stepId(), kind, phrase: '', tr: '', opts: [] }
   if (kind === 'answer') return { id: stepId(), kind, text: '', note: '', tr: '' }
+  if (kind === 'odd') return { id: stepId(), kind, opts: [], ans: 0 }
+  if (kind === 'sort') return { id: stepId(), kind, cols: [{ t: '' }, { t: '' }], items: [] }
   return { id: stepId(), kind, word: '', tr: '', ex: '', exTr: '' }
 }
 
@@ -104,6 +119,10 @@ export function fishStep(kind: StepKind): Step {
   if (kind === 'speak') return { id: stepId(), kind, phrase: 'Hello!', tr: 'Привет!', video: fish('hello.mp4') }
   if (kind === 'gap') return { id: stepId(), kind, phrase: 'I’m fine, thanks. And [you]?', tr: 'Хорошо, спасибо. А ты?', audio: fish('and-you.mp3'), opts: [] }
   if (kind === 'answer') return { id: stepId(), kind, text: 'What’s your name?', note: 'Начни с «My name’s…» или «I’m…»', tr: 'My name’s Anna.', image: fish('wave.jpg') }
+  if (kind === 'odd') return { id: stepId(), kind, ans: 1, note: 'Coffee — напиток, остальное — еда.', opts: [{ w: 'egg', k: 'y' }, { w: 'coffee', k: 'b' }, { w: 'apple', k: 'g' }, { w: 'banana', k: 'o' }] }
+  if (kind === 'sort') return { id: stepId(), kind, cols: [{ t: 'Active voice' }, { t: 'Passive voice' }], items: [
+    { w: 'Mike eats an apple', c: 0, k: 'g' }, { w: 'An apple is eaten by Mike', c: 1, k: 'o' }, { w: 'Mike buys apples', c: 0, k: 'o' },
+    { w: 'Apples are bought by Mike', c: 1, k: 'y' }, { w: 'My sister tidies the room', c: 0, k: 'p' }, { w: 'The room is tidied by my sister', c: 1, k: 'b' }] }
   if (kind === 'pairs') return { id: stepId(), kind, pairs: [{ a: 'I approve', b: 'одобряю' }, { a: 'no problem', b: 'без проблем' }, { a: 'I have no objection', b: 'я не возражаю' }] }
   return { id: stepId(), kind, word: 'it’s fine', tr: 'всё в порядке', ex: 'Jim said it’s fine if we meet at 3 o’clock.', exTr: 'Джим сказал, что можно встретиться в 3 часа.',
     image: fish('its-fine.jpg'), audio: fish('its-fine.mp3'), exAudio: fish('its-fine-ex.mp3') }
@@ -122,6 +141,10 @@ export const fishAudiotest = (): Step => ({ id: stepId(), kind: 'choice', ask: '
 /** Собери слово: буквы вразброс, на слух */
 /** Повтори слово: фото, звук — ученик записывает себя */
 export const fishSayWord = (): Step => ({ id: stepId(), kind: 'speak', phrase: 'go ahead', tr: 'давай, вперёд', image: fish('go-ahead.jpg'), audio: fish('go-ahead.mp3') })
+/** Переведи фразу: звук (по-русски или по-английски) — ученик пишет фразу целиком; вся фраза — один пропуск */
+export const fishTranslate = (): Step => ({ id: stepId(), kind: 'gap', head: 'Переведите фразу', phrase: '[See you later!/See you later]', tr: 'Увидимся!', audio: fish('see-you-later.mp3'), opts: [] })
+/** Раскрой скобки: глагол в скобках после пропуска — вписать в нужной форме (несколько верных — через /) */
+export const fishBrackets = (): Step => ({ id: stepId(), kind: 'gap', head: 'Раскройте скобки', phrase: 'She [has lost/’s lost] (lose) her keys. She can’t open the door.', tr: 'Она потеряла ключи. Она не может открыть дверь.', opts: [] })
 export const fishFill = (): Step => ({ id: stepId(), kind: 'gap', phrase: '[Hello]!', tr: 'Привет!', video: fish('hello.mp4'), opts: [{ w: 'Halo' }, { w: 'Hello' }] })
 
 /** Шаблоны в меню редактора: тип экрана + готовая «рыба» (у одного типа может быть несколько видов) */
@@ -136,11 +159,18 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'type', kind: 'gap', t: 'Закончи предложение', d: 'Вписать пропущенное слово', make: () => fishStep('gap') },
   { id: 'fill', kind: 'gap', t: 'Заполни пропуск', d: 'Видео — выбрать слово', make: fishFill },
   { id: 'answer', kind: 'answer', t: 'Ответь на вопрос', d: 'Устно или письменно', make: () => fishStep('answer') },
+  { id: 'brackets', kind: 'gap', t: 'Раскрой скобки', d: 'Глагол в скобках в нужной форме', make: fishBrackets },
+  { id: 'translate', kind: 'gap', t: 'Переведи фразу', d: 'Вписать перевод фразы', make: fishTranslate },
+  // книжные (экспериментальные, 17.11.2026) — по упражнениям из учебника; в меню — отдельной группой
+  { id: 'sort', kind: 'sort', t: 'Распредели по колонкам', d: 'Разложить фразы по группам', make: () => fishStep('sort') },
+  { id: 'odd', kind: 'odd', t: 'Найди лишнее', d: 'Выбрать слово, которое не подходит', make: () => fishStep('odd') },
 ]
+/** Книжные шаблоны (экспериментальные) — отдельная группа меню */
+export const BOOK_TPL = ['sort', 'odd']
 
 // Навыки упражнений (для меню «Exercise» и тегов на ветке урока): Слух, Чтение, Письмо, Речь — по id шаблона
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], translate: ['W'], brackets: ['W'], sort: ['R'], odd: ['R'] }
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
 export function tplOf(s: Step): string {
   if (s.kind === 'choice') return s.show === 'text' ? 'audiotest' : 'choice'
@@ -148,7 +178,7 @@ export function tplOf(s: Step): string {
   // а в меню и на ветке — «Собери фразу» и «Повтори слово»
   if (s.kind === 'order') return 'order'
   if (s.kind === 'speak') return 'sayword'
-  if (s.kind === 'gap') return s.opts?.length ? 'fill' : 'type'
+  if (s.kind === 'gap') return s.opts?.length ? 'fill' : isWhole(s.phrase) ? 'translate' : hasHint(s.phrase) ? 'brackets' : 'type'
   return s.kind
 }
 export const tplTitle = (s: Step) => s.tn || (TEMPLATES.find((t) => t.id === tplOf(s))?.t ?? KINDS[s.kind].t)
@@ -170,6 +200,8 @@ export function stepTitle(s: Step): string {
   if (s.kind === 'speak') return s.phrase?.trim() || KINDS.speak.t
   if (s.kind === 'gap') return gapParts(s.phrase).gap || KINDS.gap.t
   if (s.kind === 'answer') return s.text?.trim() || KINDS.answer.t
+  if (s.kind === 'odd') return s.opts?.[s.ans ?? 0]?.w?.trim() || KINDS.odd.t
+  if (s.kind === 'sort') return s.cols?.map(c => c.t).filter(Boolean).join(' / ') || KINDS.sort.t
   const n = s.pairs?.filter(p => p.a.trim() && p.b.trim()).length ?? 0
   return n ? `${n} ${n === 1 ? 'пара' : n < 5 ? 'пары' : 'пар'}` : KINDS.pairs.t
 }
@@ -198,6 +230,12 @@ export function stepIssue(s: Step): string {
     return ''
   }
   if (s.kind === 'answer') return s.text?.trim() ? '' : 'Нет вопроса'
+  if (s.kind === 'odd') { const o = (s.opts ?? []).filter(x => x.w?.trim()); return o.length < 3 ? 'Нужно хотя бы 3 слова' : !s.opts?.[s.ans ?? 0]?.w?.trim() ? 'Не отмечено лишнее' : '' }
+  if (s.kind === 'sort') {
+    const c = s.cols ?? [], it = (s.items ?? []).filter(x => x.w?.trim())
+    if (c.length < 2 || c.some(x => !x.t?.trim())) return 'Подпишите колонки'
+    return it.length < 2 ? 'Нужно хотя бы 2 фразы' : ''
+  }
   return (s.pairs?.filter(p => p.a.trim() && p.b.trim()).length ?? 0) >= 2 ? '' : 'Нужно хотя бы 2 пары'
 }
 /** Текст подсказки → кусочки: обычные и **жирные** */
@@ -227,6 +265,12 @@ export function gapList(p?: string): { t?: string; g?: string; i?: number }[] {
   if (last < (p ?? '').length) out.push({ t: p!.slice(last) })
   return out
 }
+/** После пропуска — подсказка в скобках: «[has lost] (lose)» → «Раскрой скобки» */
+export const hasHint = (p?: string) => /\]\s*\([^)]+\)/.test(p ?? '')
+/** Текст фразы → кусочки: обычный и (подсказка в скобках) — у ученика подсказка синяя */
+export const hintParts = (t?: string) => (t ?? '').split(/(\([^)]+\))/g).filter(Boolean).map(x => ({ x, h: /^\(.*\)$/.test(x) }))
+/** Вся фраза — один пропуск: «Переведи фразу» */
+export const isWhole = (p?: string) => /^\s*\[[^\]]+\]\s*$/.test(p ?? '')
 /** Фраза с первым верным ответом в каждом пропуске — для «Правильный ответ: …» */
 export const gapFull = (p?: string) => gapList(p).map(x => x.t ?? gapAlts(x.g)[0]).join('')
 /** Слова фразы для «Собери фразу» (по пробелам; знаки препинания остаются при словах) */
@@ -287,10 +331,14 @@ function stepFrom(o: any): Step | null {
   if (typeof o.min === 'number' && o.min > 0 && o.min <= 60) s.min = o.min
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
-      .map((x: any) => ({ w: x.w.trim(), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
-    if (opts.length) s.opts = o.kind === 'tip' ? opts : opts.slice(0, OPTS_MAX)
+      .map((x: any) => ({ w: x.w.trim(), ...(TILE[x.k] ? { k: x.k } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
+    if (opts.length) s.opts = o.kind === 'tip' ? opts : opts.slice(0, o.kind === 'odd' ? ODD_MAX : OPTS_MAX)
     if (s.ans != null && s.opts && s.ans >= s.opts.length) delete s.ans
   }
+  if (o.mix === false) s.mix = false
+  if (o.hint === false) s.hint = false
+  if (Array.isArray(o.cols)) s.cols = o.cols.map((x: any) => ({ t: String(typeof x === 'string' ? x : x?.t ?? '').trim() })).slice(0, 3)
+  if (Array.isArray(o.items)) s.items = o.items.filter((x: any) => str(x?.w)).map((x: any) => ({ w: x.w.trim(), c: Number.isInteger(x.c) && x.c >= 0 ? Math.min(x.c, (s.cols?.length ?? 2) - 1) : 0, ...(TILE[x.k] ? { k: x.k } : {}) })).slice(0, SORT_MAX)
   if (Array.isArray(o.pairs)) {
     const pairs = o.pairs.map((x: any) => (Array.isArray(x) ? { a: x[0], b: x[1] } : x)).filter((x: any) => str(x?.a) && str(x?.b)).map((x: any) => ({ a: x.a.trim(), b: x.b.trim() }))
     if (pairs.length) s.pairs = pairs.slice(0, PAIRS_MAX)

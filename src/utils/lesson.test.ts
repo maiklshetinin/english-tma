@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TEMPLATES, gapParts, sameAnswer, gapAlts, gapOk, gapList, gapFull, newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs, stepMin, lessonMin, fmtMin } from './lesson'
+import { TEMPLATES, BOOK_TPL, tplOf, stepsFromJson, gapParts, sameAnswer, gapAlts, gapOk, gapList, gapFull, newStep, fishStep, fishLesson, stepTitle, stepIssue, stepsOut, keepLocalFiles, cardToIntro, shuffle, stepRefs, stepMin, lessonMin, fmtMin } from './lesson'
 
 describe('интерактивный урок', () => {
   it('новые экраны — с пустыми полями своего типа', () => {
@@ -52,6 +52,18 @@ describe('пропуски по учебнику', () => {
     expect(gapFull("It [isn't/is not] cold.")).toBe("It isn't cold.")
     expect(stepIssue({ id: 'x', kind: 'gap', phrase: '[a] [b] [c]' } as any)).toBe('Не больше 2 пропусков')
     expect(stepIssue({ id: 'x', kind: 'gap', phrase: '[Does] he [like] it?' } as any)).toBe('')
+  })
+})
+
+describe('книжные экраны', () => {
+  it('образцы готовы, проверка и JSON', () => {
+    expect(tplOf(TEMPLATES.find(t => t.id === 'translate')!.make())).toBe('translate'); expect(tplOf({ id: 'x', kind: 'gap', phrase: 'And [you]?' } as any)).toBe('type')
+    expect(tplOf(TEMPLATES.find(t => t.id === 'brackets')!.make())).toBe('brackets'); expect(stepIssue(TEMPLATES.find(t => t.id === 'brackets')!.make())).toBe('')
+    for (const id of BOOK_TPL) expect(stepIssue(TEMPLATES.find(t => t.id === id)!.make())).toBe('')
+    expect(stepIssue({ id: 'x', kind: 'sort', cols: [{ t: 'A' }, { t: '' }], items: [] } as any)).toBe('Подпишите колонки')
+    expect(stepIssue({ id: 'x', kind: 'odd', opts: [{ w: 'a' }, { w: 'b' }], ans: 0 } as any)).toBe('Нужно хотя бы 3 слова')
+    const r = stepsFromJson('{"kind":"sort","cols":["A","B"],"items":[{"w":"x","c":5,"k":"g"},{"w":"y"}],"mix":false}')!
+    expect(r.steps[0].cols).toEqual([{ t: 'A' }, { t: 'B' }]); expect(r.steps[0].items).toEqual([{ w: 'x', c: 1, k: 'g' }, { w: 'y', c: 0 }]); expect(r.steps[0].mix).toBe(false)
   })
 })
 

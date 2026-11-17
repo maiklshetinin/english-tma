@@ -29,7 +29,7 @@ import { access, accessReady } from '../../composables/useAccess'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, skillsOf, tplOf } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, skillsOf, tplOf, BOOK_TPL } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -531,8 +531,9 @@ const XGROUPS_STD = (() => {
     { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip'], cols: 2 },
     { k: 'L', t: 'Слух', d: 'понять на слух', ids: ['choice', 'audiotest', 'fill'], cols: 3 },
     { k: 'R', t: 'Чтение', d: 'понять написанное', ids: ['pairs'], cols: 1 },
-    { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type'], cols: 2 },
+    { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'brackets', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
+    { k: 'book', t: 'Книжные', d: 'экспериментальные — по учебнику', ids: BOOK_TPL, cols: 2, exp: true },          // 17.11.2026: упражнения Насти по учебнику — пока пробуем
   ]
   const used = new Set(gs.flatMap(g => g.ids))
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
@@ -541,6 +542,7 @@ const XGROUPS_STD = (() => {
 // «Мои» — свои упражнения из конструктора (doc.templates): плитка по основе, свои название и описание; первой — «+ Своё упражнение»
 const XGROUPS = computed(() => [...XGROUPS_STD, { k: 'mine', t: 'Мои', d: 'собраны в конструкторе', cols: 3, mine: true,
   items: (doc.templates ?? []).map(x => ({ id: x.id, kind: x.step.kind, base: tplOf(x.step), t: x.t, d: x.d, mine: true, step: x.step, tpl: x })) }])
+const NEW_MINI = ['sort', 'odd', 'translate', 'brackets']          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
 const skillsT = (t) => (t.mine ? skillsOf({ ...t.step, tn: t.t }) : (SKILLS[t.id] ?? []))
 /** Экраны по плитке меню: «Готовый урок», своё упражнение (копия образца) или шаблон */
 function makeTpl(id) {
@@ -1938,11 +1940,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
         <!-- мини-окошки: как выглядит экран -->
-        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="g.k"><div class="xgh"><b>{{ g.t }}</b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
+        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="g.k"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">эксперимент</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
         <!-- «Мои»: первой — собрать своё в конструкторе -->
         <button v-if="g.mine" class="mi madd" title="Собрать своё упражнение из блоков" @click="openBuilder()"><span class="mini plus"><b>+</b></span><small><b>Своё упражнение</b><span>собрать из блоков</span></small></button>
         <button v-for="t in g.items" :key="t.id" class="mi" :title="t.mine ? 'Своё упражнение — тяните на ветку; двойной клик — открыть в конструкторе' : t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)" @dblclick="t.mine && openBuilder(t.tpl)">
-          <ExerciseMini v-if="t.mine" :id="t.base" size="rail" />
+          <ExerciseMini v-if="t.mine || NEW_MINI.includes(t.id)" :id="t.base || t.id" size="rail" />
           <span v-else class="mini" :class="t.id"><i class="mp" />
             <template v-if="t.id === 'intro'"><i class="mh" /><span class="mm"><i class="ma" /></span><i class="mw" /><i class="ml" /></template>
             <template v-else-if="t.id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
@@ -2340,7 +2342,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .allr.on { background: var(--blue-l); border-color: var(--blue); color: var(--blue-d) }
 .tray.inter { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 8px; overflow-x: auto; overflow-y: visible; max-width: calc(100vw - 32px); box-sizing: border-box }          /* группы по тегам — в один ряд (так легче читать); не влезло по ширине — листается вбок */
 .tray.inter .xg { flex: none } .tray.inter .tt2 { align-self: center }
-.xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea }          /* группы упражнений — рядом, по горизонтали */
+.xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea } .xg.book { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }          /* книжные — экспериментальные */          /* группы упражнений — рядом, по горизонтали */
 .xgh { display: grid; gap: 0; padding: 0 8px } .xgh b { font-size: 13.5px; font-weight: 900; color: #2c2c2c } .xgh small { font-size: 11px; font-weight: 600; color: var(--hint) }
 .xgc { display: grid; gap: 2px 4px }
 .skl { display: flex; gap: 3px; justify-content: center } .chip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }          /* навык → аналитика */
@@ -2392,4 +2394,5 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .mact i:hover { color: var(--blue-d) } .mact i.del:hover { background: #ffe9e9; color: #d32f2f }
 @media (hover: none) { .mact { opacity: 1 } }
 .fl.tray, .fl.tools { z-index: 21 }          /* меню и нижняя панель — поверх рамки выделения (.selbox 19), иначе рамка экрана залезала на меню */
+.xexp { margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #ffe7a8; color: #8a5a00; font-size: 10px; font-style: normal; font-weight: 800; vertical-align: 1px }
 </style>

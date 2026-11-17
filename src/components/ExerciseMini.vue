@@ -17,6 +17,10 @@ defineProps({ id: { type: String, required: true }, size: { type: String, defaul
     <template v-else-if="id === 'type'"><i class="mh" /><i class="ma" /><span class="mg"><i /><i class="d" /></span></template>
     <template v-else-if="id === 'fill'"><i class="mh" /><span class="mm sm" /><span class="mg"><i class="d" /></span><span class="mc"><i /><i class="o" /></span></template>
     <template v-else-if="id === 'answer'"><i class="mh" /><span class="mm sm" /><i class="mw" /><span class="mn"><i /><i /></span></template>
+    <template v-else-if="id === 'translate'"><i class="mh" /><i class="ma" /><span class="mg"><i class="d w" /></span></template>
+    <template v-else-if="id === 'brackets'"><span class="mg"><i /><i class="bx" /><i class="bh" /></span><i class="ml" /></template>
+    <template v-else-if="id === 'sort'"><span class="mt"><i class="o" /><i class="g" /><i class="y" /><i class="p" /></span><span class="mcol"><i /><i /></span></template>
+    <template v-else-if="id === 'odd'"><span class="mt q"><i class="y" /><i class="b s" /><i class="g" /><i class="o" /></span></template>
     <template v-else><span class="ms"><i /><i /><i /></span></template>
     <i class="mb" />
   </span>
@@ -48,4 +52,11 @@ defineProps({ id: { type: String, required: true }, size: { type: String, defaul
 .mini.tray, .mini.rail { width: 112px; height: 86px; padding: 6px 9px 16px; gap: 4px; overflow: hidden }
 .mini.tray .mb, .mini.rail .mb { right: 6px; bottom: 5px; width: 26px; height: 7px }
 .mini.lesson { overflow: visible } .mini .ms { transform: scale(.82); transform-origin: top center }
+/* книжные и «Переведи фразу» / «Раскрой скобки» (17.11.2026) */
+.mini .mg i.d.w { width: 70px }
+.mini .mg i.bx { width: 22px; height: 9px; border: 1px solid #1a73e8; border-radius: 3px; background: var(--card) } .mini .mg i.bh { width: 18px; height: 5px; background: #8fb8e8 }
+.mini .mt { display: flex; gap: 3px; justify-content: center; width: 100% } .mini .mt i { width: 18px; height: 7px; border-radius: 4px }
+.mini .mt.q { display: grid; grid-template-columns: 1fr 1fr; gap: 4px } .mini .mt.q i { width: auto; height: 20px; border-radius: 5px } .mini .mt i.s { box-shadow: 0 0 0 1.5px #1fbe78 }
+.mini .mt i.o { background: #fbe1c8 } .mini .mt i.g { background: #cfeccf } .mini .mt i.y { background: #fbedb0 } .mini .mt i.p { background: #f8d3e2 } .mini .mt i.b { background: #cfe6f7 }
+.mini .mcol { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100% } .mini .mcol i { height: 32px; border: 1px dashed #c9dcfb; border-radius: 5px; background: #f6faff }
 </style>
