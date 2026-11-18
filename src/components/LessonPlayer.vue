@@ -67,6 +67,7 @@ function setup() {
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
   if (s.kind === 'odd' || s.kind === 'sort') { const idx = (s.kind === 'odd' ? s.opts : s.items ?? []).map((_, k) => k); st.order = props.single || s.mix === false ? idx : shuffle(idx) }
   if (s.kind === 'intro' || s.kind === 'tip') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
+  if (s.kind === 'answer' && s.bk) st.mode = 'write'          // Т4 «Answer the questions about you» — сразу пишем, как в книге
   if (s.kind === 'speak' && props.track) emit('answer', { step: s, ok: null })          // «Повтори» — без оценки, но «Продолжить» — только когда ученик правда что-то сказал (17.11.2026: молчание засчитывалось)          // без оценки — только «встречалось»
   if (!props.single && !props.embedded) autoplay()
 }
@@ -215,7 +216,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 </script>
 
 <template>
-  <div class="lp" :class="{ single, embedded, book: isBook }">
+  <div class="lp" :class="{ single, embedded, book: isBook, qa: isBook && step?.bk === 'bkqa' }">
     <div class="top">
       <BackButton v-if="closable && closeText" :to="closeText" @click="emit('close')" />
       <button v-else-if="closable" class="x" title="Закрыть" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -358,9 +359,11 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       </div></div>
       <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
       <div v-if="!gp.gap" class="empty">Отметьте пропуск: слово в [квадратных скобках]</div>
+      <!-- Т5 «Underline the correct word»: варианты прямо в предложении, тап — подчёркивает, как ручкой -->
+      <p v-else-if="isBook && step.bk === 'bkpick' && step.opts?.length" class="sent bko">{{ gp.a }}<template v-for="(o, k) in step.opts" :key="k"><b class="uo" :class="{ on: st.picked === k, ok: st.done && gapOk(o.w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ o.w }}</b><template v-if="k < step.opts.length - 1"> / </template></template>{{ gp.b }}</p>
       <p v-else-if="step.opts?.length" class="sent">{{ gp.a }}<span class="slot" :style="{ minWidth: Math.min(30, Math.max(...step.opts.map(o => (o.w || '').length), 3) + 3) + 'ch' }" :class="{ ok: st.done && st.res, no: st.done && !st.res }">{{ st.typed || '\u00a0' }}</span>{{ gp.b }}</p>
       <p v-else class="sent"><template v-for="(x, n) in gl" :key="n"><template v-if="x.g == null"><template v-for="(h, j) in hintParts(x.t)" :key="j"><span v-if="h.h" class="brh">{{ h.x }}</span><template v-else>{{ h.x }}</template></template></template><input v-else v-model="st.tys[x.i]" class="slot in" :style="{ width: Math.min(30, Math.max(...gapAlts(x.g).map(a => a.length)) + 3) + 'ch' }" :placeholder="gl.length === 1 ? 'Напечатай здесь' : ''" :class="{ ok: st.done && gapOkAt(x), no: st.done && !gapOkAt(x) }" :readonly="st.done" autocomplete="off" autocapitalize="off" spellcheck="false" @keydown.enter.stop="check" /></template></p>
-      <div v-if="step.opts?.length" class="pool">
+      <div v-if="step.opts?.length && !(isBook && step.bk === 'bkpick')" class="pool">
         <button v-for="k in st.order" :key="k" class="chip" :class="{ ok: st.done && gapOk(step.opts[k].w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ step.opts[k].w }}</button>
       </div>
     </div>
@@ -368,7 +371,9 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
     <!-- Найди лишнее (книжный, экспериментальный) -->
     <div v-else-if="step.kind === 'odd'" class="body">
       <h3 class="hd">{{ step.head || KINDS.odd.head }}</h3>
-      <div class="oddg"><button v-for="k in st.order" :key="k" class="ot" :class="{ sel: st.picked === k && !st.done, ok: st.done && k === (step.ans ?? 0), no: st.done && k === st.picked && k !== (step.ans ?? 0) }" :style="{ background: tile(step.opts[k].k, k).bg, color: tile(step.opts[k].k, k).fg }" @click="!st.done && (st.picked = k)">{{ step.opts[k].w }}</button></div>
+      <!-- Т7 «Circle the …»: группа слов строкой, тап — обводит кружком -->
+      <p v-if="isBook" class="sent bko"><template v-for="(k, n) in st.order" :key="k"><b class="co" :class="{ on: st.picked === k && !st.done, ok: st.done && k === (step.ans ?? 0), no: st.done && k === st.picked && k !== (step.ans ?? 0) }" @click="!st.done && (st.picked = k)">{{ step.opts[k].w }}</b><template v-if="n < st.order.length - 1"> / </template></template></p>
+      <div v-else class="oddg"><button v-for="k in st.order" :key="k" class="ot" :class="{ sel: st.picked === k && !st.done, ok: st.done && k === (step.ans ?? 0), no: st.done && k === st.picked && k !== (step.ans ?? 0) }" :style="{ background: tile(step.opts[k].k, k).bg, color: tile(step.opts[k].k, k).fg }" @click="!st.done && (st.picked = k)">{{ step.opts[k].w }}</button></div>
     </div>
 
     <!-- Распредели по колонкам (книжный, экспериментальный): нажать фразу, потом колонку -->
@@ -601,4 +606,35 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .embedded .bkh { padding: 0 40px }          /* шапка учебника — по краю текста, как в правке (LessonRail .card.book .bkh) */
 .lp.book .foot { font-family: var(--font) }          /* кнопки — как во всём приложении */
 .lp.book .foot, .lp.book .foot button { font-family: var(--font) }
+
+/* ---- Как в учебнике, вид 2 (18.11.2026): белая страница, всё — как в книге; по одному пункту на экран ---- */
+.lp.book { background: #fff; color: #231f20 }
+.bkh b { border: 1.5px solid #d85a30; background: #f0997b; color: #231f20 }
+.lp.book .sent { line-height: 2.1 }
+.bko b { font-weight: 700; cursor: pointer; border-radius: 12px; transition: background .12s }
+.bko b:hover { background: #eef4ff }
+.bko .uo.on { text-decoration: underline 2px #1f5fbf; text-underline-offset: 4px; color: #1f5fbf }
+.bko .uo.ok { text-decoration: underline 2px #0f6e56; text-underline-offset: 4px; color: #0f6e56 } .bko .uo.no { text-decoration: line-through 2px #a32d2d; color: #a32d2d }
+.bko .co { padding: 1px 7px; border: 2px solid transparent; border-radius: 50% } .bko .co.on { border-color: #1f5fbf; color: #1f5fbf } .bko .co.ok { border-color: #0f6e56; color: #0f6e56 } .bko .co.no { border-color: #a32d2d; color: #a32d2d; text-decoration: line-through }
+/* Т3: ответ — строкой под вопросом */
+.lp.book.qa .sent input.slot.in { display: block; width: 100% !important; margin: 4px 0 0; text-align: left }
+/* Т4: вопрос и пунктир под ответ */
+.lp.book .word { padding: 0; background: none; text-align: left } .lp.book .word .qq { font-weight: 400; font-size: 17px }
+.lp.book .wr2 textarea { border: 0; border-bottom: 1.5px dotted #231f20; border-radius: 0; background: none; box-shadow: none; padding: 4px 0; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 16px; color: #1f5fbf; resize: none; line-height: 1.8 }
+.lp.book .wr2 textarea::placeholder { font-family: Arial, sans-serif; font-size: 13px; color: #b4b2a9 }
+/* Т6: банк слов — серой полосой (уже), картинка — в рамке */
+.lp.book .media { border-radius: 2px; box-shadow: 0 0 0 1px #c9c9c9 }
+/* Т8: таблица как в книге — синяя шапка, линии */
+.lp.book .spool { justify-content: flex-start; gap: 4px 14px; padding: 7px 12px; background: #f4f4f2; border-radius: 0 }
+.lp.book .spool .sw { padding: 2px 0; border: 0; border-radius: 0; background: none !important; color: #231f20 !important; font-size: 14px; font-weight: 700 } .lp.book .spool .sw.sel { color: #1f5fbf !important; text-decoration: underline 2px; box-shadow: none }
+.lp.book .scols { gap: 0; border-bottom: 1.5px solid #2d5bb8 }
+.lp.book .scol { gap: 0; border-right: 1px solid #2d5bb8 } .lp.book .scol:last-child { border-right: 0 }
+.lp.book .scol .sch { border: 0; border-radius: 0; background: #2d5bb8; color: #fff; padding: 6px 2px; font-size: 13px; font-weight: 700 }
+.lp.book .sbox { min-height: 96px; border: 0; border-radius: 0; background: repeating-linear-gradient(transparent 0 23px, #9db6e6 23px 24px); padding: 0 4px; gap: 0 }
+.lp.book .sbox.hot { background-color: #eef4ff }
+.lp.book .sbox .sw.in { padding: 0 2px; height: 24px; border: 0; border-radius: 0; background: none !important; color: #1f5fbf !important; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 13px; font-weight: 400 }
+.lp.book .sbox .sw.ok { color: #0f6e56 !important } .lp.book .sbox .sw.no { color: #a32d2d !important; text-decoration: line-through }
+.lp.book .sadd { border: 0; padding: 0 2px; height: 24px; line-height: 24px; text-align: left; font-size: 10.5px; color: #1f5fbf; background: none }
+.lp.book .sub { color: #888 }
+.lp.book .word { justify-items: start } .lp.book .wr2 .out { align-self: flex-start }
 </style>
