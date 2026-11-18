@@ -16,6 +16,8 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
 import { useTelegram } from '../composables/useTelegram'
 import BackButton from './BackButton.vue'
+import { review as rvStore, toggleFav } from '../stores/review'
+import { keyOf } from '../utils/review'
 import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -141,6 +143,10 @@ function srStart() {
     r.start(); sr = r
   } catch { sr = null }
 }
+// Закладка «в избранное» на экране «Новое слово» (как в Busuu): только когда ученик проходит урок (track) — в превью редактора её нет
+const favKey = computed(() => (props.track && step.value?.kind === 'intro' && step.value.word?.trim() ? keyOf(step.value.word) : ''))
+const favOn = computed(() => !!(favKey.value && rvStore.items[favKey.value]?.fav))
+const favToggle = () => { if (favKey.value) toggleFav(favKey.value, { step: step.value }) }
 const said = computed(() => (step.value?.kind === 'speak' && rec.heard ? speechMatch(step.value.phrase, rec.heard) : null))
 // Слышно ли голос: пока пишем, меряем громкость (Web Audio). Набралось меньше ~0,4 с речи — запись не засчитываем
 const VOICE_MS = 400, VOICE_RMS = 0.025
@@ -298,9 +304,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
           <video v-if="step.video" :src="src(step.video, 'video')" controls playsinline :autoplay="!single" />
           <img v-else :src="src(step.image, 'image')" alt="" />
           <AudioPill v-if="step.audio && !step.video" :key="step.audio" :src="src(step.audio, 'audio')" class="over" />
+          <button v-if="favKey" class="bmk" :class="{ on: favOn }" :aria-pressed="favOn" :title="favOn ? 'В избранном — убрать' : 'В избранное: слово будет в словаре в «Избранном»'" @click="favToggle"><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-3.5L7 20z" /></svg></button>
         </div>
         <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" />
-        <div v-if="step.word || step.tr" class="word" :class="{ joined: step.video || step.image }"><b>{{ step.word }}</b><span>{{ step.tr }}</span></div>
+        <div v-if="step.word || step.tr" class="word" :class="{ joined: step.video || step.image }"><b>{{ step.word }}</b><span>{{ step.tr }}</span><button v-if="favKey && !step.video && !step.image" class="bmk in" :class="{ on: favOn }" :aria-pressed="favOn" :title="favOn ? 'В избранном — убрать' : 'В избранное'" @click="favToggle"><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-3.5L7 20z" /></svg></button></div>
       </div>
       <div v-if="step.ex" class="ex"><small>Пример</small>
         <p><button v-if="step.exAudio" class="exs" title="Послушать пример" @click="say(step.exAudio)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button>{{ step.ex }}</p><span>{{ step.exTr }}</span></div>
@@ -704,4 +711,8 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .said small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px } .said.live small { color: #1a73e8 }
 .saidv { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--orange-d, #e07a00) } .saidv.ok { color: var(--green-d, #3a9a00) }
 .cap b, .q b { font-weight: inherit; transition: color .15s } .cap b.hit { color: #8ff0c8 } .q b.hit { color: #1fbe78 } .cap b.miss { color: #ffb4b4 } .q b.miss { color: var(--red-d, #c33) }
+/* закладка «в избранное» — как в Busuu: белый кружок с синей рамкой в углу фото; в избранном — синий */
+.bmk { position: absolute; top: 10px; right: 10px; z-index: 2; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 2px solid #1cb0f6; border-radius: 50%; background: #fff; color: #1cb0f6; cursor: pointer }
+.bmk svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round } .bmk.on { background: #1cb0f6; color: #fff } .bmk.on svg { fill: currentColor }
+.word { position: relative } .bmk.in { top: 50%; translate: 0 -50% }
 </style>

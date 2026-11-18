@@ -15,6 +15,7 @@ export interface ReviewItem {
   key: string; kind: 'word' | 'phrase' | 'skill' | 'topic' | 'screen'; text: string; tr: string; image?: string; audio?: string
   s: number; due: number; seen: number; ok: number; bad: number; hist: ReviewHist[]; course?: string; lesson?: string
   f?: ReviewMem                     // память по FSRS (считает сайт); нет — слово только встречалось или запись старая
+  fav?: true                        // «Избранное» — закладка в уроке / звёздочка в словаре (18.11.2026)
 }
 /** FSRS: стабильность (дни), сложность 1–10, время последнего ответа, ответов, провалов, состояние 0–3 */
 export interface ReviewMem { s: number; d: number; last: number; n: number; l: number; st: number }
@@ -65,6 +66,7 @@ export function cleanReviewItem(v: unknown): ReviewItem {
   const out: ReviewItem = { key, kind: v.kind as ReviewItem['kind'], text: str(v.text, 'text', 200, true), tr: str(v.tr, 'translation', 200),
     s: Math.round(s * 10) / 10, due: ms(v.due, 'due'), seen: ms(v.seen, 'seen'), ok: cnt(v.ok, 'ok'), bad: cnt(v.bad, 'bad'), hist }
   if (v.f != null) out.f = cleanMem(v.f)
+  if (v.fav === true) out.fav = true
   for (const k of ['image', 'audio'] as const) { const x = str(v[k], k, 500); if (x) out[k] = x }
   for (const k of ['course', 'lesson'] as const) { const x = str(v[k], k, 120); if (x) out[k] = x }
   return out

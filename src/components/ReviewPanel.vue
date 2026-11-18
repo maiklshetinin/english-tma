@@ -2,7 +2,9 @@
 // Review — как «Your vocabulary» в Busuu: слова и фразы из пройденных уроков, сила каждого (слабое / среднее / сильное).
 // Нажал на строку — история: где встречалось, верно / ошибка, когда повторить. Пока — данные этого браузера (stores/review.ts).
 import { ref, computed, watch } from 'vue'
-import { review, resetReview } from '../stores/review'
+import { review, resetReview, toggleFav, recordStep } from '../stores/review'
+import { practiceSteps, askable } from '../utils/practice'
+import LessonPlayer from './LessonPlayer.vue'
 import { ask } from '../composables/useDialog'
 import { showToast } from '../composables/useToast'
 import { stateOf, LV_DAYS } from '../utils/review'
@@ -23,11 +25,11 @@ const props = defineProps({
 })
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
-const chartOn = ref((() => { try { return localStorage.getItem('tma.review.chart') !== '0' } catch { return true } })())
+const chartOn = ref((() => { try { return localStorage.getItem('tma.review.chart.v2') === '1' } catch { return false } })())          // 18.11.2026: как в Busuu — сверху баночки, графики свёрнуты (по нажатию «График»)
 const view = ref((() => { try { return localStorage.getItem('tma.review.view') || 'piles' } catch { return 'mem' } })())      // «График запоминания» / «Где сейчас слова»
 watch(view, (v) => { try { localStorage.setItem('tma.review.view', v) } catch { /* приватный режим */ } })
 const VIEWS = [['piles', 'Слова', 'Где сейчас слова'], ['mem', 'Память', 'График запоминания']]      // короткая подпись — чтобы шапка графика была в одну строку; полная — в подсказке
-const toggleChart = () => { chartOn.value = !chartOn.value; try { localStorage.setItem('tma.review.chart', chartOn.value ? '1' : '0') } catch { /* приватный режим */ } }
+const toggleChart = () => { chartOn.value = !chartOn.value; try { localStorage.setItem('tma.review.chart.v2', chartOn.value ? '1' : '0') } catch { /* приватный режим */ } }
 const cfgNow = computed(() => ({ retention: algo.retention, maxDays: algo.maxDays }))
 // нажали слово на графике — открыть его строку с кривой памяти
 async function pick(key) { filter.value = 'all'; openKey.value = key; await nextTick(); document.querySelector(`[data-rk="${CSS.escape(key)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
@@ -39,9 +41,17 @@ watch(sec, (v) => { try { localStorage.setItem('tma.review.sec', v) } catch { /*
 const list = computed(() => { const now = Date.now(), cfg = { ...algo }; return Object.values(dict.value).map(x => { const st = stateOf(x, now, cfg); return { ...x, st, lv: st.level } })
   .sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })) })
 const count = (lv) => list.value.filter(x => x.lv === lv).length
-const shown = computed(() => list.value.filter(x => filter.value === 'all' || x.kind === filter.value || x.lv === filter.value))
-const FILTERS = computed(() => [['all', 'Все'], ['word', 'Слова'], ['phrase', 'Фразы'], ['weak', 'Слабые'], ['medium', 'Средние'], ['strong', 'Сильные']]
-  .map(([k, t]) => ({ k, t: `${t} (${k === 'all' ? list.value.length : list.value.filter(x => x.kind === k || x.lv === k).length})` })))
+const shown = computed(() => list.value.filter(x => filter.value === 'all' || (filter.value === 'fav' ? x.fav : x.kind === filter.value || x.lv === filter.value)))
+// баночки как в Busuu: высота заливки — доля слов этого уровня; нажал — список только их
+const JARS = [['weak', 'слабых', '#e8413c'], ['medium', 'средних', '#ff9600'], ['strong', 'сильных', '#3aa63a']]
+const favN = computed(() => list.value.filter(x => x.fav).length)
+// «Повторить эти слова»: тренировка из слов, что сейчас в списке (фильтр), — сначала слабые
+const toAsk = computed(() => shown.value.filter(askable).sort((a, b) => (a.st.isNew ? -1 : a.st.recall) - (b.st.isNew ? -1 : b.st.recall)))
+const prSteps = ref(null)
+function practice() { const s = practiceSteps(toAsk.value, Object.values(dict.value)); if (s.length) prSteps.value = s; else showToast('Не из чего составить тренировку — нужно хотя бы два слова с переводом') }
+const onPrAnswer = (a) => recordStep(a.step, a, { lesson: 'Повторение слов', noTags: true })
+const FILTERS = computed(() => [['all', 'Все'], ['fav', '★ Избранное'], ['word', 'Слова'], ['phrase', 'Фразы'], ['weak', 'Слабые'], ['medium', 'Средние'], ['strong', 'Сильные']]
+  .map(([k, t]) => ({ k, t: `${t} (${k === 'all' ? list.value.length : k === 'fav' ? favN.value : list.value.filter(x => x.kind === k || x.lv === k).length})` })))
 let au = null
 const play = (x) => { if (!x.audio) return; au?.pause(); au = new Audio(props.resolve(x.audio, 'audio')); au.play().catch(() => {}) }
 const when = (t) => new Date(t).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -60,6 +70,12 @@ async function reset() {
     <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" :student-id="studentId" />
     <template v-else>
     <div class="rcard flat">
+      <!-- баночки как в Busuu: сразу видно, сколько слабых / средних / сильных; нажал — список только их -->
+      <div v-if="list.length" class="jars">
+        <button v-for="[lv, t, c] in JARS" :key="lv" class="jar" :class="{ on: filter === lv }" :title="filter === lv ? 'Показать все' : 'Показать только эти в списке ниже'" @click="filter = filter === lv ? 'all' : lv">
+          <span class="jb"><i :style="{ height: (count(lv) / list.length * 100) + '%', background: c }" /></span><span class="jt"><b>{{ count(lv) }}</b>{{ t }}</span>
+        </button>
+      </div>
       <!-- шапка как над колодой в «Словах»: одна тонкая строка внутри рамки графика — счётчики (нажал — фильтр списка) · фильтр · вкладки графиков · вид · масштаб.
            Счётчики и вкладки — слоты графиков (lead / tabs); графика нет (выключен или словарь пуст) — счётчики отдельной строкой -->
       <template v-if="chartOn && list.length">
@@ -71,7 +87,7 @@ async function reset() {
           <template #tabs><div class="vt sm" role="tablist"><button v-for="[k, t, f] in VIEWS" :key="k" role="tab" :aria-selected="view === k" :class="{ on: view === k }" :title="f" @click="view = k">{{ t }}</button></div></template>
         </ReviewChart>
       </template>
-      <div v-else class="hdr"><span class="cn"><button v-for="(lv, n) in ['weak', 'medium', 'strong']" :key="lv" :class="[lv, { on: filter === lv, z: !count(lv) }]" @click="filter = filter === lv ? 'all' : lv"><template v-if="n"> · </template><b>{{ count(lv) }}</b> {{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</button><small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></span></div>
+      <div v-else class="hdr"><span class="cn"><button v-for="(lv, n) in (list.length ? [] : ['weak', 'medium', 'strong'])" :key="lv" :class="[lv, { on: filter === lv, z: !count(lv) }]" @click="filter = filter === lv ? 'all' : lv"><template v-if="n"> · </template><b>{{ count(lv) }}</b> {{ { weak: 'слабых', medium: 'средних', strong: 'сильных' }[lv] }}</button><small v-if="!items && review.sync !== 'local'" class="sy" :class="review.sync">{{ { loading: 'загрузка…', synced: 'сохранено', error: 'не сохранено — повторим' }[review.sync] }}</small></span></div>
       <div class="hbs"><button class="howb" :aria-expanded="chartOn" @click="toggleChart">График <span>{{ chartOn ? '▴' : '▾' }}</span></button>
       <button class="howb" :aria-expanded="how" @click="how = !how">Как это работает <span>{{ how ? '▴' : '▾' }}</span></button></div>
       <div v-if="how" class="how">
@@ -95,18 +111,19 @@ async function reset() {
         <span class="sp" />
         <slot name="actions" />          <!-- карточка ученика: «Сбросить прогресс» -->
         <template v-if="!readonly"><button class="ghost" title="Только для проверки алгоритма" @click="reset">Очистить</button>
-        <button class="go" disabled title="Следующим шагом: короткая тренировка из слабых слов">Повторить сейчас</button></template>
+        <button class="go" :disabled="!toAsk.length" :title="toAsk.length ? `Короткая тренировка: до 10 слов из списка, сначала слабые` : 'В списке нет слов с переводом или звуком'" @click="practice">Повторить эти слова</button></template>
       </div>
       <p v-if="!list.length && readonly" class="empty">Пока пусто — слова появятся, когда ученик пройдёт уроки курса.</p>
       <p v-else-if="!list.length" class="empty">Пока пусто. Пройдите урок курса — слова и фразы из его экранов появятся здесь: новые — слабыми, верные ответы делают их сильнее.</p>
       <div v-else class="tbl">
-        <div class="th"><span /><span>Английский</span><span>Перевод</span><span>Сила</span></div>
+        <div class="th"><span /><span>Английский</span><span>Перевод</span><span>Сила</span><span /></div>
         <template v-for="x in shown" :key="x.key">
           <div class="tr" :data-rk="x.key" :class="{ on: openKey === x.key }" role="button" tabindex="0" @click="openKey = openKey === x.key ? null : x.key">
             <span class="pic"><img v-if="x.image && resolve(x.image, 'image')" :src="resolve(x.image, 'image')" alt="" /><i v-else>{{ x.kind === 'phrase' ? 'Фр' : 'Сл' }}</i></span>
             <span class="w"><button v-if="x.audio" class="pl" title="Послушать" @click.stop="play(x)"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></button><span class="wt">{{ x.text }}<small v-if="x.tr" class="mt">{{ x.tr }}</small></span></span>
             <span class="t">{{ x.tr }}</span>
             <span class="str" :class="x.lv"><i v-for="n in 3" :key="n" :class="{ f: !x.st.isNew && n <= LV[x.lv].n }" />{{ x.st.isNew ? 'Новое' : LV[x.lv].t }}</span>
+            <button v-if="!readonly" class="star" :class="{ on: x.fav }" :aria-pressed="!!x.fav" :title="x.fav ? 'Убрать из избранного' : 'В избранное'" @click.stop="toggleFav(x.key)">★</button><span v-else class="star ro" :class="{ on: x.fav }" :title="x.fav ? 'В избранном у ученика' : ''">{{ x.fav ? '★' : '' }}</span>
           </div>
           <div v-if="openKey === x.key" class="det">
             <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
@@ -119,6 +136,7 @@ async function reset() {
       </div>
     </div>
     </template>
+    <Teleport to="body"><div v-if="prSteps" class="prc"><LessonPlayer :steps="prSteps" :resolve="resolve" closable close-text="К словарю" track @answer="onPrAnswer" @close="prSteps = null" /></div></Teleport>
   </div>
 </template>
 
@@ -151,7 +169,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .go { background: #1cb0f6; color: #fff } .go:disabled { opacity: .45; cursor: default } .ghost { background: var(--border); color: var(--hint) }
 .empty { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px; line-height: 1.45 }
 .tbl { display: grid; font-size: 14px }
-.th, .tr { display: grid; grid-template-columns: 52px minmax(0, 1.3fr) minmax(0, 1fr) 118px; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border) }
+.th, .tr { display: grid; grid-template-columns: 52px minmax(0, 1.3fr) minmax(0, 1fr) 118px 28px; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border) }
 .th { font-size: 12px; font-weight: 700; color: var(--hint) }
 .tr { cursor: pointer; border-radius: 10px } .tr:hover, .tr.on { background: var(--surface) }
 .pic { width: 52px; height: 36px; border-radius: 7px; overflow: hidden; background: var(--border); display: grid; place-items: center }
@@ -173,5 +191,14 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
   .lv3 { gap: 2px } .lvc { gap: 5px; padding: 2px } .jar { width: 14px; height: 34px; border-radius: 5px } .hdr .vt { margin-left: 0 } .lvc b { font-size: 19px } .lvc > span:last-child { font-size: 11.5px }
   .rbar .sp { flex-basis: 100%; height: 0 } .rbar .go, .rbar .ghost { flex: 1; padding: 9px 10px }
   .mt { display: block }
-  .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
+  .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px 26px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
+/* баночки (как «Your vocabulary» в Busuu) */
+.jars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 16px; border-radius: 18px; background: var(--card); box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05) }
+.jar { display: flex; align-items: center; gap: 12px; padding: 4px; border: 0; border-radius: 12px; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer } .jar:hover, .jar.on { background: var(--surface) }
+.jb { position: relative; flex: none; width: 62px; height: 82px; border-radius: 8px; box-shadow: inset 0 0 0 1.5px var(--border); background: var(--card); overflow: hidden } .jb i { position: absolute; left: 0; right: 0; bottom: 0; min-height: 3px }
+.jt { display: grid; font-size: 14px; font-weight: 700; color: var(--hint) } .jt b { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1.1 }
+.star { width: 26px; height: 26px; padding: 0; border: 0; background: none; font-size: 19px; line-height: 1; color: #cfd3d8; cursor: pointer } .star.on { color: #ff9600 } .star:hover:not(.ro) { color: #ffb84d } .star.ro { cursor: default; display: grid; place-items: center }
+/* тренировка «Повторить эти слова» — во весь экран, как урок */
+.prc { position: fixed; inset: 0; z-index: 3000; display: grid; background: var(--card); overflow: auto }
+@media (max-width: 600px) { .jars { gap: 6px } .jar { flex-direction: column; align-items: flex-start; gap: 6px } .jb { width: 52px; height: 66px } .jt b { font-size: 22px } }
 </style>

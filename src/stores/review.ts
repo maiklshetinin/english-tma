@@ -74,14 +74,24 @@ export async function syncReview(owner?: string | number | null) {
 }
 
 /** Ответ на экран урока → в словарь */
-export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[] }, ctx: { lesson?: string; course?: string; topic?: Topic; screen?: { key: string; text: string; tr?: string } } = {}) {
+export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[] }, ctx: { lesson?: string; course?: string; topic?: Topic; screen?: { key: string; text: string; tr?: string }; noTags?: boolean } = {}) {
   // слова экрана + его навыки и тема урока (вкладка «Грамматика и навыки»)
   // + сам экран (память упражнения — для «Повторения» Chapter); только проверяемые ответы
   const scr = ctx.screen && res.ok != null ? [{ key: ctx.screen.key, kind: 'screen' as const, text: ctx.screen.text, tr: ctx.screen.tr ?? '', ok: res.ok }] : []
-  const hits = [...hitsOf(step, res), ...tagHits(step, res, ctx.topic), ...scr]; if (!hits.length) return
+  const hits = [...hitsOf(step, res), ...(ctx.noTags ? [] : tagHits(step, res, ctx.topic)), ...scr]          // noTags — «Повторить эти слова»: только слова, навыки считаются по урокам; if (!hits.length) return
   applyHits(review.items, hits, { ex: exName(step), lesson: ctx.lesson, course: ctx.course }, Date.now(), { ...algo })
   for (const h of hits) { const k = h.key ?? keyOf(h.text); if (review.items[k]) pending.add(k) }
   save(); if (online()) later(2000)
+}
+
+/** «Избранное» (как закладка в Busuu): звёздочка в словаре или закладка на экране урока. Слова ещё нет в словаре — сначала
+ *  запишем его из экрана («встречалось»). Возвращает, в избранном ли теперь слово */
+export function toggleFav(key: string, from?: { step: Step; lesson?: string; course?: string }): boolean {
+  if (!review.items[key] && from) recordStep(from.step, { ok: null }, { lesson: from.lesson, course: from.course })
+  const x = review.items[key]; if (!x) return false
+  if (x.fav) delete x.fav; else x.fav = true
+  pending.add(key); save(); if (online()) later(1500)
+  return !!x.fav
 }
 
 /** «Очистить» — свой словарь целиком, и на сервере. Сначала ждём отправку, которая уже в пути, — иначе она вернула бы слова на сервер.

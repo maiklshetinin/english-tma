@@ -38,6 +38,7 @@ export interface RItem {
   s: number; due: number; seen: number; ok: number; bad: number; hist: RHist[]
   course?: string; lesson?: string
   f?: RMem                       // нет — слово только встречалось (без проверки) или запись старая (тогда память пересчитаем из истории)
+  fav?: true                     // «Избранное»: закладка на экране «Новое слово» или звёздочка в словаре
 }
 /** Что проверял экран: слово / фраза + как ответили (true / false; null — только показали, без оценки) */
 export interface RHit { text: string; tr?: string; image?: string; audio?: string; kind?: RKind; key?: string; ok: boolean | null }      // key — свой ключ (у навыков и тем)

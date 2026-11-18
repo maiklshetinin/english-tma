@@ -51,6 +51,10 @@ ok('слово с ключом навыка → 400', (await code(R.save(masha, 
 ok('нет items → 400', (await code(R.save(masha, {}))) === 400)
 ok('слишком большая пачка → 413', (await code(R.save(masha, { items: Object.fromEntries(Array.from({ length: REVIEW_LIMITS.batch + 1 }, (_, k) => ['w' + k, it('w' + k)])) }))) === 413)
 
+// --- избранное ---
+await R.save(masha, { items: { apply: it('apply', { fav: true }), go: it('go', { fav: 'yes' }) } })
+ok('избранное сохраняется (только true)', store.get('review/s1').items.apply.fav === true && !('fav' in store.get('review/s1').items.go))
+
 // --- снимки навыков и тем по месяцам («Аналитика прогресса») ---
 { const f = { s: 12, d: 5, last: T0, n: 3, l: 0, st: 2 }, sk = (o: object = {}) => ({ key: 'skill:W', kind: 'skill', text: 'Письмо', tr: '', s: 90, due: T0 + 864e6, seen: T0, ok: 3, bad: 0, f, hist: [{ t: T0, ok: true, ex: 'Собери фразу' }], ...o })
   await R.save(masha, { items: { 'skill:W': sk(), hello: it('Hello') } })
