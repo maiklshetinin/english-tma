@@ -78,12 +78,7 @@ async function ping() {
     <section class="grp">
       <router-link class="it" :to="{ name: 'course-how' }">
         <span class="ic"><AppIcon name="book" :size="18" /></span>
-        <span class="tx">Как работает курс<small>Куда уходят слова: Review, повторение, чекпоинт</small></span>
-        <span class="val">›</span>
-      </router-link>
-      <router-link class="it" :to="{ name: 'course-sandbox' }">
-        <span class="ic"><AppIcon name="sliders" :size="18" /></span>
-        <span class="tx"><span class="ttl">Песочница курса <em class="tst">ТЕСТ</em></span><small>Тестовые настройки: чекпоинт, повторение, напоминания</small></span>
+        <span class="tx">Как работает курс<small>Живой пример и песочница: куда уходят слова, повторение, чекпоинт, настройки; правила</small></span>
         <span class="val">›</span>
       </router-link>
     </section>

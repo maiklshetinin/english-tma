@@ -101,3 +101,17 @@ describe('«Песочница курса»: свой курс целиком + 
     w.unmount(); localStorage.removeItem('tma.courseRail.v1')
   })
 })
+
+describe('«Как работает курс» — одна страница с песочницей', () => {
+  it('настройки — плашками, описание по «?»; правила внизу', async () => {
+    const w = mk()
+    expect(w.find('h1').text()).toBe('Как работает курс')
+    expect(w.findAll('.sets .swb').length).toBe(6)
+    expect(w.find('.note').exists()).toBe(false)
+    await w.find('.inf').trigger('click')
+    expect(w.find('.note').text()).toContain('Строгий чекпоинт')
+    expect(w.find('.rules').text()).toContain('Повторить навыки')
+    expect(w.find('.rules').text()).toContain('Что куда засчитывается')
+    w.unmount()
+  })
+})

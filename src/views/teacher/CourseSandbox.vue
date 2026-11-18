@@ -8,7 +8,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import BackButton from '../../components/BackButton.vue'
 import AppIcon from '../../components/AppIcon.vue'
-import { rate, recallAt, intervalOf, hitsOf, exName } from '../../utils/review'
+import { rate, recallAt, intervalOf, hitsOf, exName, LV_DAYS } from '../../utils/review'
 import { INTERACTIVE, stepIssue } from '../../utils/lesson'
 import { algo } from '../../stores/algo'
 import { API, apiRequest, fb, isDemo } from '../../firebase'
@@ -19,14 +19,16 @@ const pctR = computed(() => Math.round(algo.retention * 100))
 // ── тестовые настройки ──
 const cfg = reactive({ thr: false, pct: 80, strict: false, global: true, mix: false, sum: false, tg: false })
 const SETTINGS = [
-  { k: 'thr', t: 'Порог чекпоинта', x: 'Чекпоинт засчитывается, только если ученик набрал порог; иначе — ещё раз, другим набором. Порог выбираете вы.' },
-  { k: 'strict', t: 'Строгий чекпоинт', x: 'Включено: пока чекпоинт не сдан на порог, следующие главы закрыты. Выключено (мягко): глава открыта, несданный чекпоинт висит «долгом». Работает вместе с порогом.' },
-  { k: 'global', t: 'Повторить сейчас — по всему курсу', x: 'Одна кнопка наверху собирает всё, чему пора, со всех глав — вместо блока после каждой главы.' },
-  { k: 'mix', t: 'Старое в чекпоинте', x: '2–3 самых слабых слова прошлых глав в чекпоинте. В порог не идут — только чтобы не забывалось.' },
-  { k: 'sum', t: 'Итог урока: что вернётся', x: 'После урока ученик видит, какие слова вернутся завтра (ошибки), а какие — позже.' },
-  { k: 'tg', t: 'Напоминание в Telegram', x: 'Раз в день в 19:00 бот пишет ученику, если словам подошёл срок, — с кнопкой «Повторить». Промотайте время и посмотрите.' },
+  { k: 'thr', test: true, t: 'Порог чекпоинта', x: 'Чекпоинт засчитывается, только если ученик набрал порог; иначе — ещё раз, другим набором. Порог выбираете вы.' },
+  { k: 'strict', test: true, t: 'Строгий чекпоинт', x: 'Включено: пока чекпоинт не сдан на порог, следующие главы закрыты. Выключено (мягко): глава открыта, несданный чекпоинт висит «долгом». Работает вместе с порогом.' },
+  { k: 'global', t: 'Повторить сейчас — по всему курсу', x: 'Одна кнопка наверху собирает всё, чему пора, со всех глав — вместо блока после каждой главы. Так уже работает курс.' },
+  { k: 'mix', test: true, t: 'Старое в чекпоинте', x: '2–3 самых слабых слова прошлых глав в чекпоинте. В порог не идут — только чтобы не забывалось.' },
+  { k: 'sum', test: true, t: 'Итог урока: что вернётся', x: 'После урока ученик видит, какие слова вернутся завтра (ошибки), а какие — позже.' },
+  { k: 'tg', test: true, t: 'Напоминание в Telegram', x: 'Раз в день в 19:00 бот пишет ученику, если словам подошёл срок, — с кнопкой «Повторить». Промотайте время и посмотрите.' },
 ]
 const PCTS = [70, 80, 90]
+const info = ref(false)                                     // «?» у настроек — что делает каждая
+const RV_MAX = 10                                            // как в CourseViewer — для правил внизу
 const PACES = [[0, 'всё в 1 день'], [1, 'урок в день'], [2, 'через день']]
 
 // ── курс: пример или ваш (главы → уроки → проверяемые экраны со словами) ──
@@ -237,17 +239,24 @@ onUnmounted(() => clearTimeout(toastT))
   <div class="page sbx">
     <header class="hd">
       <BackButton to="Профиль" @click="router.push({ name: 'profile' })" />
-      <div class="hdt"><h1>Песочница курса</h1><p>Пример или ваш курс целиком: отметьте ответы ученика, листайте дни как в машине времени, сдайте чекпоинт, включите настройки — и смотрите, как меняется курс и что приходит ученику в Telegram.</p></div>
+      <div class="hdt"><h1>Как работает курс</h1><p>Живой пример: отметьте ответы ученика, листайте дни как в машине времени — видно, куда уходят слова (Review, «Повторить сейчас», «Повторить навыки», чекпоинт). Можно взять свой курс целиком. Правила — внизу.</p></div>
     </header>
 
-    <div class="note" role="note">
-      <span class="tst">ТЕСТ</span>
-      <div><b>Это тестовые настройки — в курсе их пока нет</b>
-        <span>Их можно добавить в курс, и тогда они будут управлять тем, как ученик проходит чекпоинты и повторяет слова. Здесь — песочница: включайте и выключайте их и смотрите на примере или на своём курсе, что изменится у ученика. Ваш курс только читается — он, прогресс и Review учеников не меняются; ничего не сохраняется и никуда не отправляется.</span>
-        <small>Какие понравятся — сделаем по-настоящему, и они появятся в настройках курса.</small></div>
+
+    <!-- настройки — компактно, одной строкой плашек; что делает каждая — по «?» (18.11.2026: «Как работает курс» и песочница — одна страница) -->
+    <section class="sets" aria-label="Настройки курса">
+      <span class="sl">Настройки <button class="inf" :aria-expanded="info" title="Что это за настройки" @click="info = !info">?</button></span>
+      <template v-for="s in SETTINGS" :key="s.k">
+        <button class="swb" :class="{ on: cfg[s.k] }" role="switch" :aria-checked="cfg[s.k]" :title="s.x" @click="cfg[s.k] = !cfg[s.k]"><i aria-hidden="true" /><b>{{ s.t }}</b><em v-if="s.test" class="tst">тест</em></button>
+        <span v-if="s.k === 'thr' && cfg.thr" class="seg2 pc"><button v-for="p in PCTS" :key="p" :class="{ sel: cfg.pct === p }" :aria-pressed="cfg.pct === p" @click="cfg.pct = p">{{ p }} %</button></span>
+      </template>
+    </section>
+    <div v-if="info" class="note" role="note">
+      <ul><li v-for="s in SETTINGS" :key="s.k"><b>{{ s.t }}</b><em v-if="s.test" class="tst">тест</em> — {{ s.x }}</li></ul>
+      <small><b>Тест</b> — таких настроек в курсе пока нет: здесь можно включить и посмотреть, что изменится у ученика. Какие понравятся — сделаем по-настоящему. «Повторить сейчас — по всему курсу» уже работает в курсе. Ваш курс здесь только читается: ни он, ни прогресс и Review учеников не меняются.</small>
     </div>
 
-    <section class="pks" aria-label="Курс для песочницы">
+    <section class="pks" aria-label="Курс для примера">
       <b class="h2">Курс</b>
       <div class="grid">
         <button class="cc demo" :class="{ on: want === 'demo' }" :aria-pressed="want === 'demo'" @click="choose('demo')">
@@ -263,17 +272,6 @@ onUnmounted(() => clearTimeout(toastT))
       </div>
     </section>
 
-    <section class="sets" aria-label="Тестовые настройки">
-      <div v-for="s in SETTINGS" :key="s.k" class="set" :class="{ on: cfg[s.k] }">
-        <button class="swb" role="switch" :aria-checked="cfg[s.k]" @click="cfg[s.k] = !cfg[s.k]"><i aria-hidden="true" /><b>{{ s.t }}</b></button>
-        <span class="sx">{{ s.x }}</span>
-        <div v-if="s.k === 'thr'" class="pcts" :class="{ dim: !cfg.thr }">
-          <b>Порог выбираете вы:</b>
-          <span class="seg2"><button v-for="p in PCTS" :key="p" :class="{ sel: cfg.pct === p }" :aria-pressed="cfg.pct === p" @click="cfg.pct = p">{{ p }} %</button></span>
-          <small>{{ cfg.thr ? `сейчас нужно набрать ${cfg.pct} %` : 'заработает, когда включите порог' }}</small>
-        </div>
-      </div>
-    </section>
 
     <div class="two">
       <section class="box" aria-label="Курс ученика">
@@ -387,6 +385,58 @@ onUnmounted(() => clearTimeout(toastT))
         </div>
       </Transition>
     </Teleport>
+    <section class="rules">
+      <h2>Правила</h2>
+      <div class="rgrid">
+        <div class="rc"><b>1 · Слово попадает в Review</b><ul>
+          <li>После любого ответа на экран, где есть слово или фраза.</li>
+          <li>«Выбери ответ», «Пары», «Собери», «Заполни пропуск» — с оценкой: верно = «Хорошо», ошибка = «Снова».</li>
+          <li>«Новое слово» и «Подсказка» — только знакомство: слово «новое», память ещё не считается.</li>
+          <li>«Повтори за диктором» — голос распознаётся: фраза совпала — «Хорошо» (и навыку «Речь»); где распознавания нет (некоторые браузеры) — только знакомство.</li>
+          <li>В «Парах» каждая пара — отдельное слово. Одинаковые слова из разных уроков — одна строка.</li></ul></div>
+        <div class="rc"><b>2 · Как считается процент</b><ul>
+          <li>«Помнит» — вероятность вспомнить слово сейчас (алгоритм FSRS, как в Anki).</li>
+          <li>У слова есть стабильность — через сколько дней процент упадёт до 90 %. После первого верного ответа — около 2 дней.</li>
+          <li>Сразу после ответа — 100 %, дальше тает по кривой. Верный повтор через паузу растит стабильность, ошибка — роняет.</li>
+          <li>Ошибка и исправление в тот же день почти не растят память — поэтому такое слово придёт на повтор раньше.</li></ul></div>
+        <div class="rc"><b>3 · Уровень слова</b>
+          <div class="lvs"><span class="lv weak">Слабое<small>меньше {{ LV_DAYS.medium }} дней</small></span><span class="lv medium">Среднее<small>{{ LV_DAYS.medium }}–{{ LV_DAYS.strong - 1 }} дней</small></span><span class="lv strong">Сильное<small>от {{ LV_DAYS.strong }} дней</small></span></div>
+          <small class="mu">Считается по стабильности, а не по проценту.</small></div>
+        <div class="rc rv"><b>4 · «Повторить сейчас» — одна на весь курс</b><ul>
+          <li>Фиолетовая карточка наверху пути курса (с числом). Собирается сама — со всех глав сразу, в какой бы главе ученик ни был.</li>
+          <li>Берёт слова и упражнения, у которых подошёл срок повтора — память опустилась примерно до {{ pctR }} % (настройка в «Алгоритме повторений»), — и экраны, где ученик ошибся. Сначала ошибки и самое забытое.</li>
+          <li>Слово показывается экраном того урока, где оно было. За раз — до {{ RV_MAX }}, остальное — в следующий раз.</li>
+          <li>Пока всё свежее — «Повторять пока нечего» и когда следующее. В прохождение курса не идёт.</li></ul></div>
+        <div class="rc ck"><b>5 · Попадает в чекпоинт</b><ul>
+          <li>Собирается, когда ученик его открывает. Ваши экраны в чекпоинте (если положили) идут первыми.</li>
+          <li>Дальше — экраны уроков главы, где ученик хоть раз ошибся (даже если потом исправился).</li>
+          <li>Ошибок не было — до {{ CK_MAX }} проверяемых экранов, поровну из каждого урока.</li>
+          <li>Проверять нечего — «Готово — дальше». Пока засчитывается при любом результате; порог 80 % — в планах.</li></ul></div>
+        <div class="rc rv"><b>6 · Пройденный урок: «Повторить навыки» или «Пройти заново»</b><ul>
+          <li><b>«Повторить навыки»</b> (как Review skills в Busuu) — 2–3 минуты, до {{ RV_MAX }} заданий только по этому уроку: сначала экраны, где ошибался или которым пора, потом слова урока «Как это по-английски?» — сначала слабые. Без знакомства и подсказок — только проверка.</li>
+          <li><b>«Пройти заново»</b> — весь урок целиком, все экраны по порядку.</li>
+          <li>Обе кнопки обновляют силу слов. Разница: «Пройти заново» засчитывает урок ещё раз (новая дата — попадает в темп месяца), «Повторить навыки» — нет.</li></ul></div>
+        <div class="rc"><b>7 · Словарь (Review → «Словарь»)</b><ul>
+          <li>Сверху три баночки — слабые / средние / сильные слова (как в Busuu); нажал — список только их. Графики — по «График ▾».</li>
+          <li><b>Избранное:</b> закладка в углу фото на экране «Новое слово» (только когда урок проходят по-настоящему) или звёздочка у слова в словаре. Фильтр «★ Избранное».</li>
+          <li><b>«Повторить эти слова»</b> — тренировка до 10 слов из того, что сейчас в списке (избранное, слабые, все…), сначала слабые. Ответы меняют силу слов; в навыки аналитики не идут.</li>
+          <li>Преподаватель видит словарь ученика (и его звёздочки) в карточке ученика → «Review», только посмотреть.</li></ul></div>
+        <div class="rc"><b>8 · Аналитика прогресса (Review → «Аналитика прогресса»)</b><ul>
+          <li>Только то, что уже есть, — ничего не вводится. Цвета — 4 тега упражнений: Чтение, Слух, Письмо, Речь (тег — по типу упражнения, как в меню редактора).</li>
+          <li><b>Плашки навыков:</b> шанс вспомнить по FSRS, «помнит ~N дн», разница с прошлым месяцем. Нажал — всё ниже только по этому тегу.</li>
+          <li><b>Темп по месяцам:</b> столбик — сколько уроков пройдено за месяц, цвета внутри — доля упражнений каждого тега. Над ним — уроков, разница с прошлым месяцем, время в уроках, % верных ответов.</li>
+          <li><b>По навыкам:</b> круг — сколько упражнений каждого тега было в уроках месяца (видно, чего не хватает).</li>
+          <li><b>Темы грамматики:</b> шанс вспомнить, разница с прошлым месяцем, сначала слабые. Тема урока — из редактора курса или по названию урока.</li>
+          <li>Прошлые месяцы навыков и тем — по снимкам на конец месяца (сервер сохраняет сам с 18.11.2026); темп — по датам пройденных уроков, сразу с историей.</li></ul></div>
+        <div class="rc"><b>9 · Что куда засчитывается</b><ul>
+          <li><b>Прохождение курса и темп:</b> урок (первый раз и «Пройти заново»), чекпоинт.</li>
+          <li><b>Сила слов (Review):</b> любой проверяемый ответ — в уроке, чекпоинте, «Повторить сейчас», «Повторить навыки», «Повторить эти слова».</li>
+          <li><b>Навыки и темы (аналитика):</b> ответы на экраны уроков (в уроке, чекпоинте, «Повторить сейчас», «Повторить навыки») — но не тренировка слов «Как это по-английски?».</li>
+          <li><b>Не засчитывается в прохождение:</b> «Повторить сейчас», «Повторить навыки», «Повторить эти слова».</li></ul></div>
+        <div class="rc cards"><b>Карточки («Слова»)</b>
+          <p>Колоды считаются тем же алгоритмом FSRS, но живут отдельно от курса: в Review, «Повторение» и чекпоинт не попадают. У них своя настройка запоминания и шаги как в Anki (1 мин → 10 мин → дни).</p></div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -394,17 +444,8 @@ onUnmounted(() => clearTimeout(toastT))
 .sbx { max-width: 1080px; gap: 18px }
 .hd { display: flex; align-items: flex-start; gap: 12px } .hdt { flex: 1; min-width: 0 }
 h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; font-size: 14px; font-weight: 600; color: var(--hint) }
-.note { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 16px; background: #fff8e1; border: 1px solid #ffe08a; color: #3c3c3c }
-.note > div { display: grid; gap: 4px; font-size: 14px; font-weight: 600; line-height: 1.5 } .note b { font-size: 15px; font-weight: 900 } .note small { font-size: 13px; color: #6b5a1f }
-.tst { flex: none; padding: 3px 8px; border-radius: 8px; background: #ffc800; color: #4b3a00; font-size: 12px; font-weight: 900 }
-.sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px }
-.set { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--card) }
-.set.on { border-color: #b9e1fb; background: #f2f9ff }
-.swb { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer }
 .swb i { position: relative; flex: none; width: 38px; height: 22px; border-radius: 99px; background: var(--hint-2); transition: background .15s }
 .swb i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s }
-.set.on .swb i { background: var(--blue) } .set.on .swb i::after { transform: translateX(16px) }
-.swb b { font-size: 15px; font-weight: 900 } .sx { font-size: 12.5px; font-weight: 600; line-height: 1.4; color: var(--hint) }
 .pcts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px } .pcts.dim { opacity: .55 } .pcts b { font-size: 12.5px; font-weight: 800 } .pcts small { font-size: 11.5px; font-weight: 600; color: var(--hint) }
 .seg2 { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: var(--card) }
 .seg2 button { border: 0; padding: 6px 10px; background: var(--card); color: var(--hint); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer }
@@ -478,7 +519,7 @@ h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; fon
 .tgp-enter-active, .tgp-leave-active { transition: transform .3s cubic-bezier(.2, .9, .3, 1.2), opacity .25s } .tgp-enter-from, .tgp-leave-to { transform: translateY(-16px); opacity: 0 }
 @media (prefers-reduced-motion: reduce) { .tgp-enter-active, .tgp-leave-active, .swb i, .swb i::after { transition: none } }
 :global(html[data-theme='dark']) .sbx .note { background: #2e2814; border-color: #5c4b16; color: var(--text) } :global(html[data-theme='dark']) .sbx .note small { color: #d9c27a }
-:global(html[data-theme='dark']) .sbx .set.on { background: #16283a; border-color: #24496b }
+:global(html[data-theme='dark']) .sbx .swb.on { background: #16283a; border-color: #24496b }
 :global(html[data-theme='dark']) .sbx .blk.rv { background: #221d33; border-color: #3f3266 } :global(html[data-theme='dark']) .sbx .blk.ckb { background: #2a2216; border-color: #5c4316 }
 :global(html[data-theme='dark']) .sbx .seg2 button.ok, :global(html[data-theme='dark']) .sbx .res.ok { background: #17301f; color: #7fd46a }
 :global(html[data-theme='dark']) .sbx .seg2 button.bad, :global(html[data-theme='dark']) .sbx .res.bad { background: #3a2326; color: #ff8a80 }
@@ -493,4 +534,23 @@ h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; fon
 .tmr::-moz-range-thumb { width: 18px; height: 18px; border: 3px solid #fff; border-radius: 50%; background: #1899d6; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); box-sizing: border-box }
 /* «Повторить навыки» у пройденного урока — что попадёт в короткую тренировку */
 .skr { display: grid; gap: 2px; margin-top: 6px; padding: 7px 10px; border-radius: 10px; background: #eef4ff; font-size: 12px; font-weight: 600; color: var(--hint) } .skr b { font-size: 12px; font-weight: 900; color: #1278b0 }
+/* настройки — плашки в строку (компактно) */
+.sets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.sl { display: flex; align-items: center; gap: 6px; margin-right: 4px; font-size: 14px; font-weight: 900 }
+.inf { width: 22px; height: 22px; padding: 0; border: 1.5px solid var(--hint-2); border-radius: 50%; background: var(--card); color: var(--hint); font: inherit; font-size: 12px; font-weight: 900; cursor: pointer } .inf[aria-expanded='true'] { border-color: var(--blue); color: var(--blue) }
+.swb { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border: 1px solid var(--border); border-radius: 99px; background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer }
+.swb.on { border-color: #b9e1fb; background: #f2f9ff } .swb.on i { background: var(--blue) } .swb.on i::after { transform: translateX(16px) }
+.swb b { font-size: 13.5px; font-weight: 800; white-space: nowrap }
+.tst { flex: none; padding: 1px 6px; border-radius: 6px; background: #ffc800; color: #4b3a00; font-size: 10.5px; font-weight: 900; font-style: normal; text-transform: uppercase; margin-left: 4px }
+.seg2.pc { margin-left: -2px }
+.note { display: grid; gap: 8px; padding: 12px 16px; border-radius: 14px; background: #fff8e1; border: 1px solid #ffe08a; color: #3c3c3c }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; font-weight: 600; line-height: 1.45 } .note li b { font-weight: 900 } .note small { font-size: 12.5px; font-weight: 600; color: #6b5a1f; line-height: 1.45 }
+/* правила внизу (были на «Как работает курс») */
+.rules { display: grid; gap: 12px } .rules h2 { margin: 0; font-size: 22px; font-weight: 900 }
+.rgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px }
+.rc { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--card) }
+.rc > b { font-size: 16px; font-weight: 900 } .rc ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; font-weight: 600; line-height: 1.45 } .rc p { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.45 }
+.rc.rv > b { color: #6d28d9 } .rc.ck > b { color: #b45309 } .rc.cards { border-style: dashed }
+.lvs { display: flex; gap: 6px } .lvs .lv { flex: 1; display: grid; padding: 8px; border-radius: 7px; font-size: 14px; font-weight: 800 } .lvs small { font-size: 12px; font-weight: 600; color: var(--hint) }
+.lv.weak { background: #fff0f0; color: #c62828 } .lv.medium { background: #fff4e0; color: #b45309 } .lv.strong { background: #f2fbe9; color: #2e7d00 }
 </style>

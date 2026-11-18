@@ -50,8 +50,8 @@ export const routes: RouteRecordRaw[] = [
   { path: '/words', name: 'words', component: TeacherWords, meta: { tab: 'words', roles: ['teacher'] } },
   { path: '/cards', name: 'cards', component: StudentCards, meta: { tab: 'cards', roles: ['student'] } },
   { path: '/lessons', name: 'lessons', component: Schedule, meta: { tab: 'lessons', roles: ['student'] } },
-  { path: '/profile/course-sandbox', name: 'course-sandbox', component: () => import('./views/teacher/CourseSandbox.vue'), meta: { tab: 'profile', roles: ['teacher'] } },      // «Песочница курса»: тестовые настройки курса на примере (ничего не сохраняет и не отправляет)
-  { path: '/profile/course-how', name: 'course-how', component: () => import('./views/teacher/CourseHow.vue'), meta: { tab: 'profile', roles: ['teacher'] } },      // «Как работает курс»: живая схема — Review, «Повторение», чекпоинт
+  { path: '/profile/course-sandbox', name: 'course-sandbox', redirect: { name: 'course-how' } },      // 18.11.2026: песочница и «Как работает курс» — одна страница
+  { path: '/profile/course-how', name: 'course-how', component: () => import('./views/teacher/CourseSandbox.vue'), meta: { tab: 'profile', roles: ['teacher'] } },      // «Как работает курс»: живая схема — Review, «Повторение», чекпоинт
   { path: '/profile', name: 'profile', component: byRole({ teacher: TeacherProfile, student: StudentProfile }), meta: { tab: 'profile' } },
   { path: '/:pathMatch(.*)*', name: 'landing', component: Blank, meta: { landing: true } },      // «/» и любой чужой адрес
 ]
