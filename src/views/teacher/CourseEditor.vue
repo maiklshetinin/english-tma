@@ -531,7 +531,7 @@ const XGROUPS_STD = (() => {
     { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip'], cols: 2 },
     { k: 'L', t: 'Слух', d: 'понять на слух', ids: ['choice', 'audiotest', 'fill'], cols: 3 },
     { k: 'R', t: 'Чтение', d: 'понять написанное', ids: ['pairs'], cols: 1 },
-    { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type'], cols: 2 },
+    { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
   const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL])

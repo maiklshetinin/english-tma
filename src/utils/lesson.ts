@@ -159,6 +159,7 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'tip', kind: 'tip', t: 'Подсказка', d: 'Мини-правило и фразы', make: () => fishStep('tip') },
   { id: 'type', kind: 'gap', t: 'Закончи предложение', d: 'Вписать пропущенное слово', make: () => fishStep('gap') },
   { id: 'fill', kind: 'gap', t: 'Заполни пропуск', d: 'Видео — выбрать слово', make: fishFill },
+  { id: 'translate', kind: 'gap', t: 'Переведи фразу', d: 'Звук — вписать всю фразу', make: fishTranslate },          // 18.11.2026: из «Как в учебнике» — в «Как в Busuu» (это макет Насти, не задание из книги)
   { id: 'answer', kind: 'answer', t: 'Ответь на вопрос', d: 'Устно или письменно', make: () => fishStep('answer') },
   // ---- Тест · упражнения Насти по учебнику (18.11.2026): отдельная группа меню, плашка — как задание в учебнике (BOOK) ----
   { id: 'bkword', kind: 'gap', t: 'Впиши слово', d: 'His, men, идиомы, do/does', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkword', head: 'Write the possessive adjectives', phrase: '(He) [His] father is a doctor.', tr: 'Его отец — врач.', opts: [] }) },
@@ -166,7 +167,6 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'bkpick', kind: 'gap', t: 'Выбери в пропуске', d: 'Подчеркни верное слово', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkpick', head: 'Underline the correct word / phrase', phrase: 'Pat usually cooks dinner [in the evening].', tr: 'Пэт обычно готовит ужин вечером.', opts: [{ w: 'now' }, { w: 'in the evening' }] }) },
   { id: 'bkpic', kind: 'gap', t: 'Дополни по картинке', d: 'Фото и банк слов (до 8)', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkpic', head: 'Complete the sentences', image: fish('wave.jpg'), phrase: 'She is [in] the room.', tr: 'Она в комнате.', opts: ['on', 'between', 'in', 'at', 'under', 'next to', 'behind', 'in front of'].map(w => ({ w })) }) },
   { id: 'bkqa', kind: 'gap', t: 'Ответь по картинке', d: 'Фото и короткий ответ', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkqa', head: 'Answer the questions', image: fish('wave.jpg'), phrase: 'Is she a teacher? [Yes, she is/Yes she is].', tr: 'Она учитель? Да.', opts: [] }) },
-  { id: 'translate', kind: 'gap', t: 'Переведи фразу', d: 'Вписать всю фразу', make: () => ({ ...fishTranslate(), head: 'Translate the sentence', bk: 'translate' }) },
   { id: 'bkfree', kind: 'answer', t: 'Свободный ответ', d: 'Про себя, без автопроверки', make: () => ({ id: stepId(), kind: 'answer', bk: 'bkfree', head: 'Answer the questions about you', text: 'Do you like pizza?', note: 'Yes, I do. / No, I don’t.', tr: 'Yes, I do. I love pizza!' }) },
   { id: 'odd', kind: 'odd', t: 'Найди лишнее', d: 'Одно слово не подходит', make: () => ({ id: stepId(), kind: 'odd', bk: 'odd', head: 'Circle the uncountable noun', ans: 2, note: 'Sugar — неисчисляемое, остальное можно посчитать.', opts: [{ w: 'potato', k: 'o' }, { w: 'biscuit', k: 'y' }, { w: 'sugar', k: 'b' }, { w: 'cherry', k: 'p' }] }) },
   { id: 'sort', kind: 'sort', t: 'Распредели по колонкам', d: 'Таблица до 5 колонок, со звуком', make: () => ({ id: stepId(), kind: 'sort', bk: 'sort', head: 'Complete the table', cols: ['-s', '-es', '-ies', '-ves', 'other'].map(t => ({ t })),
@@ -179,7 +179,6 @@ export const BOOK: Record<string, { n: number; en: string; also?: string; pic?: 
   bkpick: { n: 6, en: 'Underline the correct word / phrase.', also: 'Write ’s or ’' },
   bkpic: { n: 4, en: 'Complete the sentences.', also: 'Write This, That, These or Those · предлоги по картинкам: on, between, in…', pic: true },
   bkqa: { n: 7, en: 'Answer the questions.', also: 'Is he a teacher? — Yes, he is.', pic: true },
-  translate: { n: 8, en: 'Translate the sentences.' },
   bkfree: { n: 12, en: 'Answer the questions about you.' },
   odd: { n: 2, en: 'Circle the uncountable noun in each group.' },
   sort: { n: 7, en: 'Complete the table. Listen and check.' },
