@@ -177,7 +177,7 @@ async function recToggle() {
         const loud = (voiced ?? long) >= VOICE_MS
         if (k === 'speak' && !srBroken) {          // распознавание работает — засчитываем, только когда фраза совпала (18.11.2026)
           const ok = !!rec.heard && speechMatch(step.value.phrase, rec.heard).score >= SPEAK_OK
-          if (ok) { st.done = true; rec.err = '' } else { rec.miss = !!rec.heard; rec.err = rec.heard ? '' : 'Не расслышали — скажите ещё раз' }
+          if (ok) { st.done = true; rec.err = ''; if (props.track) emit('answer', { step: step.value, ok: true }) } /* совпала — верный ответ: память «Речи» и темы (аналитика прогресса) */ else { rec.miss = !!rec.heard; rec.err = rec.heard ? '' : 'Не расслышали — скажите ещё раз' }
           return
         }
         if (rec.heard || loud) { st.done = true; rec.err = ''; if (k === 'answer' && rec.heard) st.text = rec.heard }          // сказанное — это и есть ответ

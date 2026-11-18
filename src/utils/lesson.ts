@@ -197,6 +197,8 @@ for (const id of BOOK_TPL) {
 
 // Навыки упражнений (для меню «Exercise» и тегов на ветке урока): Слух, Чтение, Письмо, Речь — по id шаблона
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
+/** Цвета тегов — как плашки в меню упражнений (.chip.L … в CourseEditor / LessonRail) */
+export const SKILL_C: Record<string, string> = { L: '#1cb0f6', R: '#a560e8', W: '#ff9600', S: '#58cc02' }
 export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
 for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]          // «Учебник 1:1» — те же навыки
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */

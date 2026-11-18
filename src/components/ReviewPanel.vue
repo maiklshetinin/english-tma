@@ -19,6 +19,7 @@ const props = defineProps({
   items: { type: Object, default: null },            // словарь ученика (карточка ученика у преподавателя); нет — свой
   readonly: Boolean,                                  // только посмотреть: без «Очистить» и «Повторить сейчас»
   title: { type: String, default: 'Твой словарь' },
+  studentId: { type: [String, Number], default: null },  // карточка ученика: «Аналитика прогресса» — его уроки и снимки
 })
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
@@ -55,8 +56,8 @@ async function reset() {
 
 <template>
   <div class="rv">
-    <div class="secs" role="tablist"><button v-for="[k, t] in [['words', 'Словарь'], ['skills', 'Грамматика и навыки']]" :key="k" role="tab" :aria-selected="sec === k" :class="{ on: sec === k }" @click="sec = k">{{ t }}</button><span class="se"><slot name="end" /></span></div>
-    <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" />
+    <div class="secs" role="tablist"><button v-for="[k, t] in [['words', 'Словарь'], ['skills', 'Аналитика прогресса']]" :key="k" role="tab" :aria-selected="sec === k" :class="{ on: sec === k }" @click="sec = k">{{ t }}</button><span class="se"><slot name="end" /></span></div>
+    <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" :student-id="studentId" />
     <template v-else>
     <div class="rcard flat">
       <!-- шапка как над колодой в «Словах»: одна тонкая строка внутри рамки графика — счётчики (нажал — фильтр списка) · фильтр · вкладки графиков · вид · масштаб.

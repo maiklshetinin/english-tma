@@ -318,6 +318,8 @@ app.get('/review/settings', requireUser, wrap(async (_req, res) => res.json(awai
 app.put('/review/settings', requireUser, requireTeacher, wrap(async (req, res) => res.json(await review.setAlgo(req.body))))      // { retention, maxDays }
 app.get('/review', requireUser, wrap(async (req, res) => res.json(await review.get(req.user, req.query.studentId))))
 app.post('/review', requireUser, wrap(async (req, res) => res.json(await review.save(req.user, req.body))))          // { items: { ключ: запись } } — только изменённые
+// «Аналитика прогресса» (вкладка Review «Грамматика и навыки»): пройденные уроки (темп по месяцам, теги экранов) и снимки навыков и тем по месяцам
+app.get('/progress/stats', requireUser, wrap(async (req, res) => { const sid = req.query.studentId; const [l, mon] = await Promise.all([learn.lessonsDone(req.user, sid), review.months(req.user, sid)]); res.json({ ...l, mon }) }))
 app.post('/review/reset', requireUser, wrap(async (req, res) => { await review.reset(req.user); res.json({ ok: true }) }))
 
 // Аватарка пользователя через Bot API (Mini App отдаёт фото только самого пользователя). Токен бота наружу не уходит.

@@ -1,6 +1,6 @@
 // Запуск: npx tsx review.test.ts — «Твой словарь» (без Firebase — база в памяти)
 import { store, db, FieldValue } from './fake-db.js'
-import { makeReview, cleanReviewItem, cleanAlgo, ALGO_DEFAULT, REVIEW_LIMITS } from './review.js'
+import { makeReview, cleanReviewItem, cleanAlgo, ALGO_DEFAULT, REVIEW_LIMITS, monthOf } from './review.js'
 import type { TokenUser } from './types.js'
 
 const R = makeReview({ db, FieldValue })
@@ -50,6 +50,23 @@ ok('тема с чужим ключом → 400', (await code(R.save(masha, { it
 ok('слово с ключом навыка → 400', (await code(R.save(masha, { items: { a: it('x', { key: 'skill:x' }) } }))) === 400)
 ok('нет items → 400', (await code(R.save(masha, {}))) === 400)
 ok('слишком большая пачка → 413', (await code(R.save(masha, { items: Object.fromEntries(Array.from({ length: REVIEW_LIMITS.batch + 1 }, (_, k) => ['w' + k, it('w' + k)])) }))) === 413)
+
+// --- снимки навыков и тем по месяцам («Аналитика прогресса») ---
+{ const f = { s: 12, d: 5, last: T0, n: 3, l: 0, st: 2 }, sk = (o: object = {}) => ({ key: 'skill:W', kind: 'skill', text: 'Письмо', tr: '', s: 90, due: T0 + 864e6, seen: T0, ok: 3, bad: 0, f, hist: [{ t: T0, ok: true, ex: 'Собери фразу' }], ...o })
+  await R.save(masha, { items: { 'skill:W': sk(), hello: it('Hello') } })
+  const m = store.get('review/s1').mon
+  ok('снимок: навык в месяц ответа (по Москве), слова — нет', Object.keys(m).join() === '2026-11' && m['2026-11']['skill:W'].f.s === 12 && m['2026-11']['skill:W'].ok === true && !m['2026-11'].hello)
+  await R.save(masha, { items: { 'skill:W': sk({ f: { ...f, s: 30 } }) } })
+  ok('в том же месяце снимок обновляется, словарь при этом цел', store.get('review/s1').mon['2026-11']['skill:W'].f.s === 30 && store.get('review/s1').items['see you later'])
+  const dec = T0 + 25 * 864e5
+  await R.save(masha, { items: { 'skill:W': sk({ f: { ...f, s: 45, last: dec }, hist: [{ t: dec, ok: false, ex: 'x' }] }) } })
+  ok('новый месяц — свой снимок, прошлый на месте', Object.keys(store.get('review/s1').mon).sort().join() === '2026-11,2026-12' && store.get('review/s1').mon['2026-12']['skill:W'].ok === false)
+  ok('months — свои; преподаватель — ученика; ученик чужие — 403', Object.keys(await R.months(masha)).length === 2 && Object.keys(await R.months(teacher, 's1')).length === 2 && (await code(R.months(petya, 's1'))) === 403)
+  ok('месяц по Москве: 31.12 22:30 UTC — уже январь', monthOf(Date.parse('2026-12-31T22:30:00Z')) === '2027-01')
+  const mon: Record<string, Record<string, unknown>> = {}; for (let i = 0; i < 30; i++) mon[`2024-${String((i % 12) + 1).padStart(2, '0')}`.replace('2024', String(2024 + Math.floor(i / 12)))] = {}
+  store.set('review/s2', { items: {}, mon }); await R.save(petya, { items: { 'skill:R': sk({ key: 'skill:R', text: 'Чтение' }) } })
+  ok('хранится не больше 24 месяцев — старые убираются', Object.keys(store.get('review/s2').mon).length === 24 && !store.get('review/s2').mon['2024-01'])
+}
 
 // --- очистка ---
 await R.reset(masha)

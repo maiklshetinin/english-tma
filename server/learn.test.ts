@@ -76,6 +76,13 @@ ok('преподаватель: ошибки сохраняются, курс н
 ok('прохождение преподавателя не трогает ученика', store.get('courseProgress/s1')?.c?.k1?.lessons?.a?.miss?.join() !== 's1')
 await L.teacherReset(teacher, 'k1')
 ok('преподаватель: сброс своего прохождения', (await L.teacherRun(teacher, 'k1')).done === 0)
+// --- «Аналитика прогресса»: пройденные уроки с экранами коротко ---
+{ const st = await L.lessonsDone(masha)
+  const a = st.lessons.find((x) => x.id === 'a')
+  ok('пройденные уроки: курс, Chapter, когда, верно / всего, экраны коротко', !!a && a.course === 'k1' && a.unit === 'Chapter 1' && a.at === 1000 && a.steps[0].kind === 'choice' && a.steps[0].o === 2 && !('q' in a.steps[0]))
+  ok('непройденных уроков нет', !st.lessons.some((x) => x.id === 'b'))
+  ok('преподаватель — уроки ученика; ученик чужие — 403', (await L.lessonsDone({ uid: 'tg:1', role: 'teacher' }, 's1')).lessons.length === st.lessons.length && (await code(L.lessonsDone(petya, 's1'))) === 403)
+  ok('преподаватель без ученика — своё прохождение (пусто)', (await L.lessonsDone({ uid: 'tg:1', role: 'teacher' })).lessons.length === 0) }
 await L.reset('s1', { what: 'all' })
 ok('сброс всего: прохождение и словарь ученика удалены', !store.has('courseProgress/s1') && !store.has('review/s1'))
 

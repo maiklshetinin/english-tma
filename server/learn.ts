@@ -14,6 +14,17 @@ import type { Course, CourseItem } from './courses.js'
 
 export interface LessonRun { ok: number; all: number; sec: number; at: number; miss?: string[] }          // miss — экраны урока, где ученик ошибся (из них собирается чекпоинт Chapter)
 export interface CourseRun { done: number; lessons: Record<string, LessonRun> }
+/** Пройденный урок для «Аналитики прогресса» — экраны коротко: только то, по чему сайт узнаёт шаблон и его теги */
+export interface StepBrief { id: string; kind: string; show?: string; bk?: string; bs?: string; phrase?: string; o?: number; tn?: 1; m?: 1 }
+export interface LessonDone { course: string; courseTitle: string; id: string; title: string; unit: string; topic?: string; at: number; ok: number; all: number; sec: number; miss: string[]; steps: StepBrief[] }
+const stepBrief = (s: Record<string, unknown>): StepBrief => {
+  const o: StepBrief = { id: String(s.id ?? ''), kind: String(s.kind ?? '') }
+  for (const k of ['show', 'bk', 'bs', 'phrase'] as const) if (typeof s[k] === 'string' && s[k]) o[k] = (s[k] as string).slice(0, 300)
+  if (Array.isArray(s.opts) && s.opts.length) o.o = s.opts.length
+  if (s.tn) o.tn = 1
+  if (s.audio || s.video) o.m = 1
+  return o
+}
 export interface LearnDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; get: (id: unknown) => Promise<Course & { assigned?: string[] }>; filesOf: (c: Course) => string[]; now?: () => number }
 
 const tasksOf = (c: Pick<Course, 'items'>) => c.items.filter((x) => x.type !== 'unit')
@@ -138,6 +149,25 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
         delete all[cid]; tx.set(ref, { c: all, updatedAt: FieldValue.serverTimestamp() })
       })
       return { ok: true }
+    },
+
+    /** «Аналитика прогресса»: пройденные уроки всех курсов — когда, сколько верно, сколько времени и из каких экранов (по ним сайт
+     *  считает теги: Чтение / Слух / Письмо / Речь, utils/lesson.ts). Свои; преподаватель с studentId — ученика, без — своё прохождение */
+    async lessonsDone(user: TokenUser, studentId?: unknown) {
+      const who = studentId != null && studentId !== '' ? (user.role === 'teacher' ? cleanId(studentId, 'student id') : (() => { throw fail(403, 'forbidden') })())
+        : user.role === 'teacher' ? `teacher_${user.uid}` : await me(user)
+      const runs = await runsOf(who), out: LessonDone[] = []
+      for (const [cid, r] of Object.entries(runs)) {
+        const c = await get(cid).catch(() => null); if (!c) continue          // курс удалили — его уроков в аналитике нет
+        let unit = ''
+        for (const it of (c.items ?? []) as (CourseItem & { steps?: Record<string, unknown>[]; topic?: string; sub?: string })[]) {
+          if (it.type === 'unit') { unit = `${it.title ?? ''} ${it.sub ?? ''}`.trim(); continue }
+          const lr = run(r).lessons[it.id]; if (!lr) continue
+          out.push({ course: c.id, courseTitle: c.title ?? '', id: it.id, title: it.title ?? '', unit, ...(it.topic ? { topic: it.topic } : {}),
+            at: lr.at, ok: lr.ok, all: lr.all, sec: lr.sec, miss: lr.miss ?? [], steps: (it.steps ?? []).map(stepBrief) })
+        }
+      }
+      return { lessons: out.sort((a, b) => a.at - b.at) }
     },
 
     /** Преподаватель: курсы и прохождение ученика (назначенные — с прогрессом, остальные — чтобы назначить) */

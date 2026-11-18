@@ -22,6 +22,23 @@ export interface ReviewMem { s: number; d: number; last: number; n: number; l: n
 export interface ReviewAlgo { retention: number; maxDays: number; deckRetention: number; deckMaxDays: number }      // deck… — для колод
 export const ALGO_DEFAULT: ReviewAlgo = { retention: 0.9, maxDays: 36500, deckRetention: 0.9, deckMaxDays: 36500 }
 export interface ReviewResponse { items: Record<string, ReviewItem> }
+/** Снимок навыка / темы за месяц (для «Аналитики прогресса»): память FSRS после последнего ответа в этом месяце и сам ответ.
+ *  Память меняется только от ответов, поэтому по снимку сайт точно считает, как держалось на конец месяца. mon: { 'ГГГГ-ММ': { ключ: снимок } } */
+export interface ReviewSnap { f: ReviewMem; t: number; ok: boolean | null }
+export type ReviewMonths = Record<string, Record<string, ReviewSnap>>
+export const MONTHS_KEEP = 24
+/** Месяц ответа — по Москве (как расписание и «сегодня» в приложении) */
+export const monthOf = (t: number) => new Date(t + 3 * 3_600_000).toISOString().slice(0, 7)
+/** Записать снимки навыков и тем из изменённых записей (меняет mon на месте; старше MONTHS_KEEP месяцев — убрать) */
+export function snapMonths(mon: ReviewMonths, list: ReviewItem[]): ReviewMonths {
+  for (const x of list) {
+    if ((x.kind !== 'skill' && x.kind !== 'topic') || !x.f) continue
+    const last = x.hist.find((h) => h.ok !== null), t = last?.t ?? x.f.last
+    ;(mon[monthOf(t)] ??= {})[x.key] = { f: x.f, t, ok: last ? last.ok : null }
+  }
+  for (const m of Object.keys(mon).sort().slice(0, -MONTHS_KEEP)) delete mon[m]
+  return mon
+}
 export interface ReviewDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 
 export const REVIEW_LIMITS = { items: 1200, batch: 200, hist: 8 }
@@ -77,6 +94,7 @@ export function makeReview({ db, FieldValue }: ReviewDeps) {
     return sid
   }
   const items = (d: { items?: Record<string, ReviewItem> } | undefined) => d?.items ?? {}
+  const months = (d: { mon?: ReviewMonths } | undefined): ReviewMonths => d?.mon ?? {}
 
   return {
     /** Свой словарь; преподаватель с studentId — словарь ученика */
@@ -97,11 +115,11 @@ export function makeReview({ db, FieldValue }: ReviewDeps) {
       const clean = list.map(cleanReviewItem), docId = await mine(user)
       let count = 0
       await db.runTransaction(async (tx) => {
-        const ref = col().doc(docId), cur = { ...items((await tx.get(ref)).data()) }
+        const ref = col().doc(docId), d = (await tx.get(ref)).data(), cur = { ...items(d) }
         for (const x of clean) cur[x.key] = x
         count = Object.keys(cur).length
         if (count > REVIEW_LIMITS.items) throw fail(413, 'too many words')
-        tx.set(ref, { items: cur, updatedAt: FieldValue.serverTimestamp() })
+        tx.set(ref, { items: cur, mon: snapMonths({ ...months(d) }, clean), updatedAt: FieldValue.serverTimestamp() })          // mon — снимки по месяцам (навыки и темы)
       })
       return { count }
     },
@@ -116,6 +134,15 @@ export function makeReview({ db, FieldValue }: ReviewDeps) {
       const a = cleanAlgo(input)
       await db.collection('config').doc('reviewAlgo').set({ ...a, updatedAt: FieldValue.serverTimestamp() })
       return a
+    },
+
+    /** Снимки навыков и тем по месяцам: свои; преподаватель с studentId — ученика */
+    async months(user: TokenUser, studentId?: unknown): Promise<ReviewMonths> {
+      if (studentId != null && studentId !== '') {
+        if (user.role !== 'teacher') throw fail(403, 'forbidden')
+        return months((await col().doc(id(studentId, 'student id')).get()).data())
+      }
+      return months((await col().doc(await mine(user)).get()).data())
     },
 
     /** «Очистить»: свой словарь целиком */

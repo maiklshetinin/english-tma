@@ -40,7 +40,7 @@ async function reset() {
 <template>
   <p v-if="err" class="hint">Не удалось загрузить словарь ученика {{ err }}</p>
   <p v-else-if="loading" class="hint">Загрузка…</p>
-  <ReviewPanel v-else :resolve="resolve" :items="items" readonly title="Словарь ученика">
+  <ReviewPanel :student-id="studentId" v-else :resolve="resolve" :items="items" readonly title="Словарь ученика">
     <template #actions><button v-if="online" class="rst" title="Сбросить прогресс ученика: словарь и прохождение курсов" @click="reset">Очистить</button></template>
   </ReviewPanel>
 </template>

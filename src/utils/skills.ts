@@ -1,20 +1,15 @@
 // Навыки и темы грамматики (вкладка Review «Грамматика и навыки», как «Твоя грамматика» в Busuu).
 // Память считается так же, как у слов (FSRS, utils/review.ts): каждый проверенный ответ на экран — оценка «Хорошо» / «Снова»
-// для его навыков и темы урока. Записи живут в том же словаре Review: ключ «skill:listening», «topic:present-perfect».
-//  • Навыки — по типу экрана, сами (разметка не нужна): «Выбери ответ» на слух — слушание, переводом — лексика; «Пары» — лексика;
-//    «Собери фразу» и «Заполни пропуск» — грамматика; «Собери слово» (по буквам) — письмо; «Повтори за диктором» — говорение
-//    (не проверяется — только «встречалось»).
+// для его навыков и темы урока. Записи живут в том же словаре Review: ключ «skill:L», «topic:present-perfect».
+//  • Навыки — наши теги экранов (18.11.2026): Чтение R, Слух L, Письмо W, Речь S — те же, что в меню упражнений
+//    (utils/lesson.ts: SKILLS по шаблону). «Повтори за диктором» засчитывается, когда распознанная фраза совпала.
+//    Старые записи «skill:vocab / grammar / listening / writing / speaking» остаются в словаре, но в аналитике не показываются.
 //  • Тема грамматики — у урока (поле в редакторе курса); не задана — угадываем по названию урока / Chapter («Present Perfect» → тема).
-import type { Step } from './lesson'
+import { type Step, SKILL_T, skillsOf as tagsOf } from './lesson'
 
-export const SKILLS = {
-  vocab: 'Лексика',
-  grammar: 'Грамматика',
-  listening: 'Слушание',
-  writing: 'Письмо',
-  speaking: 'Говорение',
-} as const
-export type SkillId = keyof typeof SKILLS
+/** Навыки = теги экранов, в порядке плашек «Аналитики прогресса» */
+export const SKILLS: Record<string, string> = { R: SKILL_T.R, L: SKILL_T.L, W: SKILL_T.W, S: SKILL_T.S }
+export type SkillId = 'R' | 'L' | 'W' | 'S'
 
 export interface Topic { id: string; t: string; lvl: string; re?: RegExp }
 /** Темы грамматики A1–B2 (порядок — как обычно проходят); re — как узнать тему по названию урока */
@@ -61,14 +56,10 @@ export function detectTopic(...titles: (string | undefined)[]): Topic | undefine
   return undefined
 }
 
-/** Навыки экрана по его типу */
+/** Навыки экрана — его теги (знакомство и подсказка не оцениваются) */
 export function skillsOf(s: Step): SkillId[] {
-  if (s.kind === 'choice') return [s.ask === 'tr' ? 'vocab' : 'listening']
-  if (s.kind === 'pairs') return ['vocab']
-  if (s.kind === 'order') return s.by === 'letters' ? ['writing'] : ['grammar']
-  if (s.kind === 'gap') return ['grammar']
-  if (s.kind === 'speak') return ['speaking']
-  return []
+  if (s.kind === 'intro' || s.kind === 'tip') return []
+  return tagsOf(s).filter((k): k is SkillId => k in SKILLS)
 }
 
 export const skillKey = (id: string) => 'skill:' + id
@@ -79,9 +70,9 @@ export const isTag = (x: { kind?: string }) => x.kind === 'skill' || x.kind === 
 /** Ответ на экран → оценки навыкам и теме (ok null — только «встречалось»; знакомство и подсказка тем не оцениваются) */
 export function tagHits(s: Step, res: { ok?: boolean | null }, topic?: Topic) {
   const sk = skillsOf(s); if (!sk.length) return []
-  const ok = s.kind === 'speak' ? null : res.ok ?? null
+  const ok = res.ok ?? null          // «Повтори за диктором»: true — фраза распознана и совпала; null — распознавания нет (только «встречалось»)
   const out: { key: string; kind: 'skill' | 'topic'; text: string; tr: string; ok: boolean | null }[] = sk.map(id => ({ key: skillKey(id), kind: 'skill', text: SKILLS[id], tr: '', ok }))
-  if (topic && s.kind !== 'speak') out.push({ key: topicKey(topic.id), kind: 'topic' as const, text: topic.t, tr: topic.lvl, ok })
+  if (topic && ok !== null) out.push({ key: topicKey(topic.id), kind: 'topic' as const, text: topic.t, tr: topic.lvl, ok })
   return out
 }
 
