@@ -18,6 +18,8 @@ import { useTelegram } from '../composables/useTelegram'
 import BackButton from './BackButton.vue'
 import { review as rvStore, toggleFav } from '../stores/review'
 import { keyOf } from '../utils/review'
+import { exOf } from '../exercises'
+import { providePlay } from '../exercises/ctx'
 import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -32,6 +34,7 @@ const props = defineProps({
   track: Boolean,                                         // ученик проходит урок — ответы уходят в Review (emit 'answer')
   ckLog: { type: Object, default: null },                 // итог: что уйдёт в чекпоинт Chapter — { title, items: [{ ex, w }] } или { none: true }
   review: { type: Array, default: null },                 // итог: слова, которые урок записал в Review, — { text, tr, kind, audio, before, now, lv } (CourseViewer)
+  edit: Boolean,                                          // правка на ветке (LessonRail): тот же экран, поля правятся на месте; подвал — от ветки (slot foot)
 })
 const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer', 'miss', 'step'])
 
@@ -59,7 +62,7 @@ const st = reactive({ wrong: [], picked: null, done: false, left: null, right: n
 function setup() {
   Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null }); Object.assign(mine, { ok: 0, all: 0 })
   recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''; rec.miss = false
-  const s = step.value; if (!s) return
+  const s = step.value; if (!s || props.edit) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
   if (s.kind === 'pairs') {
     const idx = full(s).map((_, k) => k)
@@ -254,6 +257,14 @@ function checkAny() {
   check()
 }
 onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEventListener('keydown', onKey))
+
+// ---- Упражнения-шаблоны (src/exercises): экран рисует шаблон своего типа, плеер даёт ему состояние и действия ----
+const ex = computed(() => (isFinal.value ? null : exOf(step.value)))
+providePlay(reactive({
+  st, src, say, pick, right, later, answer,
+  edit: computed(() => props.edit), single: computed(() => props.single), embedded: computed(() => props.embedded), track: computed(() => props.track),
+  favKey, favOn, favToggle,
+}))
 </script>
 
 <template>
@@ -295,40 +306,8 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       </div>
     </div>
 
-    <!-- Новое слово -->
-    <div v-else-if="step.kind === 'intro'" class="body">
-      <h3 class="hd">{{ step.head || KINDS.intro.head }}</h3>
-      <!-- как в Busuu: фото со звуком поверх, под ним голубой блок со словом — одной карточкой -->
-      <div class="nw">
-        <div v-if="step.video || step.image" class="media">
-          <video v-if="step.video" :src="src(step.video, 'video')" controls playsinline :autoplay="!single" />
-          <img v-else :src="src(step.image, 'image')" alt="" />
-          <AudioPill v-if="step.audio && !step.video" :key="step.audio" :src="src(step.audio, 'audio')" class="over" />
-          <button v-if="favKey" class="bmk" :class="{ on: favOn }" :aria-pressed="favOn" :title="favOn ? 'В избранном — убрать' : 'В избранное: слово будет в словаре в «Избранном»'" @click="favToggle"><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-3.5L7 20z" /></svg></button>
-        </div>
-        <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" />
-        <div v-if="step.word || step.tr" class="word" :class="{ joined: step.video || step.image }"><b>{{ step.word }}</b><span>{{ step.tr }}</span><button v-if="favKey && !step.video && !step.image" class="bmk in" :class="{ on: favOn }" :aria-pressed="favOn" :title="favOn ? 'В избранном — убрать' : 'В избранное'" @click="favToggle"><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-3.5L7 20z" /></svg></button></div>
-      </div>
-      <div v-if="step.ex" class="ex"><small>Пример</small>
-        <p><button v-if="step.exAudio" class="exs" title="Послушать пример" @click="say(step.exAudio)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button>{{ step.ex }}</p><span>{{ step.exTr }}</span></div>
-      <p v-if="!step.word && !step.video && !step.image" class="empty">Добавьте слово, видео или фото — или возьмите карточку</p>
-    </div>
-
-    <!-- Выбери ответ -->
-    <div v-else-if="step.kind === 'choice'" class="body">
-      <h3 class="hd">{{ step.head || KINDS.choice.head }}</h3>
-      <div v-if="step.image" class="nw"><div class="media"><img :src="src(step.image, 'image')" alt="" /><AudioPill v-if="step.ask === 'audio' && qAudio(step)" :key="qAudio(step)" :src="src(qAudio(step), 'audio')" class="over" /></div></div>
-      <template v-if="step.image && step.ask === 'audio'" />
-      <template v-else-if="step.ask === 'audio'"><AudioPill v-if="qAudio(step)" :key="qAudio(step)" :src="src(qAudio(step), 'audio')" class="qa" /><p v-else-if="step.show !== 'text'" class="empty">Нет звука для вопроса</p></template>
-      <div v-else class="q">{{ answer?.t || '…' }}</div>
-      <div v-if="!step.opts?.length" class="empty">Добавьте варианты — из карточек или свои</div>
-      <div v-else :class="step.show === 'pics' ? 'pics' : 'rows'">
-        <button v-for="k in st.order" :key="k" class="op" :class="{ ok: st.done && k === (step.ans ?? 0), no: st.done && k === st.picked && k !== (step.ans ?? 0), dim: st.done && k !== st.picked && k !== (step.ans ?? 0) }" @click="pick(k)">
-          <span v-if="step.show === 'pics'" class="ph"><img v-if="step.opts[k].image" :src="src(step.opts[k].image, 'image')" alt="" /><i v-else>нет фото</i></span>
-          <span class="ow">{{ step.opts[k].w || '…' }}</span>
-        </button>
-      </div>
-    </div>
+    <!-- Упражнения-шаблоны: «Новое слово», «Выбери ответ», «Подсказка» — разметка в src/exercises/<тип>/ (одна и для ученика, и для правки) -->
+    <div v-else-if="ex" class="body" :class="'x-' + step.kind"><component :is="ex.view" :step="step" /></div>
 
     <!-- Пары -->
     <div v-else-if="step.kind === 'pairs'" class="body">
@@ -354,18 +333,6 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
         <div class="built" :class="{ ok: st.done && st.res, no: st.done && !st.res }"><button v-for="k in st.built" :key="'b' + k" class="chip" @click="back(k)">{{ pw[k] }}</button></div>
         <div class="pool"><button v-for="k in st.pool" :key="'p' + k" class="chip" @click="put(k)">{{ pw[k] }}</button></div>
       </template>
-    </div>
-
-    <!-- Подсказка -->
-    <div v-else-if="step.kind === 'tip'" class="body">
-      <h3 class="hd">{{ step.head || KINDS.tip.head }}</h3>
-      <!-- своё упражнение (конструктор): фото / видео / аудио и тут -->
-      <div v-if="step.video || step.image" class="media xm"><video v-if="step.video" :src="src(step.video, 'video')" controls playsinline /><img v-else :src="src(step.image, 'image')" alt="" /></div>
-      <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
-      <p class="tip"><template v-for="(x, k) in tipParts(step.text)" :key="k"><b v-if="x.b">{{ x.x }}</b><template v-else>{{ x.x }}</template></template></p>
-      <div v-if="step.opts?.length" class="tt">
-        <div v-for="(o, k) in step.opts" :key="k" class="tr"><span><button v-if="o.audio" class="exs" title="Послушать" @click="say(o.audio)"><svg viewBox="0 0 24 24"><path d="M5 9.5h3l4-3.5v12l-4-3.5H5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg></button>{{ o.w }}</span><span>{{ o.t }}</span></div>
-      </div>
     </div>
 
     <!-- Повтори за диктором -->
@@ -471,9 +438,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       <p v-if="st.mode === 'say'" class="said" :class="{ live: rec.on, bad: !rec.on && rec.err, ok: st.done && !rec.on }"><small>{{ rec.on ? 'Слушаю…' : rec.err ? rec.err : st.done ? 'Ваш ответ' : 'Нажмите микрофон и говорите' }}</small><span>{{ rec.heard || (rec.on ? '…' : '—') }}</span></p>
     </div>
 
-    <!-- Снизу: результат и «Продолжить» -->
-    <div class="foot" :class="{ good: !isFinal && ((checks && st.done && right) || (step.kind === 'speak' && st.done)), bad: !isFinal && checks && st.done && !right }">
-      <span v-if="!isFinal && step.kind === 'choice' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span v-if="!right">{{ answer?.w }}</span><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
+    <!-- Снизу: результат и «Продолжить»; в правке — подвал ветки (время экрана, кнопки типа, «Сохранить») -->
+    <slot v-if="edit" name="foot" />
+    <div v-else class="foot" :class="{ good: !isFinal && ((checks && st.done && right) || (step.kind === 'speak' && st.done)), bad: !isFinal && checks && st.done && !right }">
+      <span v-if="ex && st.done" class="fb"><component :is="ex.view" :step="step" part="fb" /></span>
       <span v-else-if="!isFinal && step.kind === 'order' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильно так:' }}</b><span class="fs">{{ step.phrase }}</span><small>{{ step.tr }}</small><small v-if="step.note" class="fn">{{ step.note }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gapFull(step.phrase) }}</span><small>{{ step.tr }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'speak' && st.done" class="fb"><b>Верно!</b><small v-if="step.tr">{{ step.tr }}</small></span>
@@ -510,19 +478,9 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .word b { font-size: 16px; font-weight: 800 } .word span { font-size: 12px; color: var(--hint); font-weight: 600 }
 .ex { display: grid; gap: 3px; width: 100%; max-width: 380px; align-self: center; padding: 0 2px; box-sizing: border-box } .ex small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px }
 .ex p { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 15px; font-weight: 600 } .ex span { font-size: 12px; color: var(--hint); font-weight: 600 }
-.exs { flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-top: -1px; border: 0; padding: 0; background: none; color: #1a73e8; cursor: pointer }
-.exs svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .empty { margin: 6px 0; padding: 18px; border: 1px dashed var(--border); border-radius: 12px; text-align: center; color: var(--hint); font-size: 14px; font-weight: 700 }
 .q { padding: 14px; border-radius: 14px; background: #f1f6ff; text-align: center; font-size: 20px; font-weight: 900 }
 /* варианты */
-.pics { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px }
-.rows { display: grid; gap: 8px }
-.op { display: grid; gap: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; color: var(--text); cursor: pointer; overflow: hidden; transition: background .12s, border-color .12s, opacity .12s }
-.op:hover { border-color: #c9c9c9 }
-.ph { display: block; aspect-ratio: 3 / 2; background: var(--surface) } .ph img { display: block; width: 100%; height: 100%; object-fit: cover } .ph i { display: grid; place-items: center; height: 100%; font-size: 12px; color: var(--hint-2); font-style: normal }
-.ow { padding: 9px 10px; font-size: 14px; font-weight: 800; text-align: center }
-.rows .ow { padding: 13px 12px; font-weight: 600 } .op.ok { background: #8ff0c8; border-color: #8ff0c8 } .op.no { background: var(--red-l); border-color: var(--red) } .op.dim { opacity: .55 }
-.op.no { animation: shake .3s }
 @keyframes shake { 25% { transform: translateX(-4px) } 75% { transform: translateX(4px) } }
 /* пары */
 .pairs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px } .col { display: grid; gap: 10px; align-content: start }
@@ -539,10 +497,6 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .slot.in { min-width: 0; border: 0; border-bottom: 2px dotted #1a73e8; background: none; font: inherit; outline: none; border-radius: 0 }
 .slot.ok { color: #128a55; border-bottom-color: #1fbe78 } .slot.no { color: var(--red-d); border-bottom-color: var(--red) }
 /* подсказка */
-.tip { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.5 } .tip b { font-weight: 800 }
-.tt { border: 1px solid var(--border); border-radius: 12px; overflow: hidden }
-.tr { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 11px 12px; font-size: 14px; font-weight: 600 } .tr + .tr { border-top: 1px solid var(--border) }
-.tr span:first-child { display: flex; align-items: center; gap: 6px } .tr span:last-child { color: var(--hint) }
 /* повтори за диктором, ответь на вопрос */
 .cap { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 4px 12px; border-radius: 6px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 15px; font-weight: 700; white-space: nowrap }
 .media video { cursor: pointer }
@@ -586,6 +540,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .foot { display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-top: 1px solid var(--border); background: var(--card); transition: background .15s }
 .foot.good { background: #e3fbef } .foot.bad { background: var(--red-l) }
 .fb { flex: 1; display: grid; font-size: 14px } .foot.good .fb b { color: #128a55 } .foot.bad .fb b { color: var(--red-d) }
+.foot.good .fb :deep(b) { color: #128a55 } .foot.bad .fb :deep(b) { color: var(--red-d) } .fb :deep(small) { color: var(--hint); font-weight: 600; font-size: 12px } .fb :deep(.lt) { color: #ff9600; font-weight: 800 }          /* строка ответа от шаблона упражнения (src/exercises) */
 .go { border: 0; border-radius: 22px; padding: 11px 26px; background: var(--blue); color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
 .go:disabled { background: var(--border); color: var(--hint-2); cursor: not-allowed }
 .single .go { background: var(--surface); color: var(--hint); cursor: default; font-size: 13px; padding: 9px 16px }
@@ -602,18 +557,14 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
   .lp:not(.embedded):not(.single) .media { aspect-ratio: 16 / 9 }
   .lp:not(.embedded):not(.single) .word { padding: 18px } .lp:not(.embedded):not(.single) .word b { font-size: 20px } .lp:not(.embedded):not(.single) .word span { font-size: 15px }
   .lp:not(.embedded):not(.single) .ex small { font-size: 12px } .lp:not(.embedded):not(.single) .ex p { font-size: 19px } .lp:not(.embedded):not(.single) .ex span { font-size: 15px }
-  .lp:not(.embedded):not(.single) .exs { width: 26px; height: 26px } .lp:not(.embedded):not(.single) .exs svg { width: 22px; height: 22px }
   .lp:not(.embedded):not(.single) .qa { max-width: 700px; height: 42px }
   .lp:not(.embedded):not(.single) :deep(.ap) { height: 40px; border-radius: 20px; padding: 0 10px 0 8px; gap: 12px }
   .lp:not(.embedded):not(.single) :deep(.ap .pp) { width: 30px; height: 30px } .lp:not(.embedded):not(.single) :deep(.ap .pp svg) { width: 20px; height: 20px }
   .lp:not(.embedded):not(.single) :deep(.ap .sp) { font-size: 12px }
   .lp:not(.embedded):not(.single) .media .over { left: 9%; right: 9%; bottom: 16px }
-  .lp:not(.embedded):not(.single) .pics { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px }
-  .lp:not(.embedded):not(.single) .ow { font-size: 17px; padding: 12px } .lp:not(.embedded):not(.single) .rows .ow { padding: 18px 16px; font-size: 17px }
   .lp:not(.embedded):not(.single) .q { font-size: 24px; padding: 20px }
   .lp:not(.embedded):not(.single) .pr { min-height: 60px; font-size: 17px }
   .lp:not(.embedded):not(.single) .chip { font-size: 18px; padding: 11px 18px } .lp:not(.embedded):not(.single) .sent { font-size: 22px }
-  .lp:not(.embedded):not(.single) .tip { font-size: 18px } .lp:not(.embedded):not(.single) .tr { font-size: 16px; padding: 14px 16px }
   .lp:not(.embedded):not(.single) .foot { padding: 18px max(24px, calc(50% - 560px)) } .lp:not(.embedded):not(.single) .fb { font-size: 16px }
   .lp:not(.embedded):not(.single) .go { min-width: 200px; padding: 15px 34px; font-size: 17px; border-radius: 26px }
 }
@@ -712,7 +663,5 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .saidv { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--orange-d, #e07a00) } .saidv.ok { color: var(--green-d, #3a9a00) }
 .cap b, .q b { font-weight: inherit; transition: color .15s } .cap b.hit { color: #8ff0c8 } .q b.hit { color: #1fbe78 } .cap b.miss { color: #ffb4b4 } .q b.miss { color: var(--red-d, #c33) }
 /* закладка «в избранное» — как в Busuu: белый кружок с синей рамкой в углу фото; в избранном — синий */
-.bmk { position: absolute; top: 10px; right: 10px; z-index: 2; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 2px solid #1cb0f6; border-radius: 50%; background: #fff; color: #1cb0f6; cursor: pointer }
-.bmk svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round } .bmk.on { background: #1cb0f6; color: #fff } .bmk.on svg { fill: currentColor }
-.word { position: relative } .bmk.in { top: 50%; translate: 0 -50% }
+.word { position: relative }
 </style>

@@ -1,0 +1,24 @@
+{
+  "kind": "intro",
+  "title": "Новое слово",
+  "head": "Смотрите, новое слово!",
+  "templates": ["intro"],
+  "fields": {
+    "head": { "type": "text", "label": "Задание" },
+    "video": { "type": "video", "label": "Видео 16:9" },
+    "image": { "type": "image", "label": "Фото 16:9" },
+    "audio": { "type": "audio", "label": "Звук слова — плашкой поверх фото" },
+    "word": { "type": "text", "label": "Слово" },
+    "tr": { "type": "text", "label": "Перевод" },
+    "ex": { "type": "text", "label": "Пример" },
+    "exTr": { "type": "text", "label": "Перевод примера" },
+    "exAudio": { "type": "audio", "label": "Озвучка примера" }
+  },
+  "check": "none",
+  "next": "сразу «Продолжить» — экран засчитан как встреча со словом (без оценки)",
+  "words": ["word"],
+  "skills": {},
+  "min": 0.5,
+  "shuffle": false,
+  "limits": {}
+}

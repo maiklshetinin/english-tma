@@ -1,0 +1,21 @@
+{
+  "kind": "tip",
+  "title": "Подсказка",
+  "head": "Подсказка!",
+  "templates": ["tip"],
+  "fields": {
+    "head": { "type": "text", "label": "Задание" },
+    "video": { "type": "video", "label": "Видео (свои упражнения)" },
+    "image": { "type": "image", "label": "Фото (свои упражнения)" },
+    "audio": { "type": "audio", "label": "Звук — плашкой под фото" },
+    "text": { "type": "rich", "label": "Правило — **жирный**" },
+    "opts": { "type": "list", "max": 6, "of": { "w": "text", "t": "text", "audio": "audio" }, "label": "Таблица: фраза — перевод — озвучка" }
+  },
+  "check": "none",
+  "next": "сразу «Продолжить» — без оценки",
+  "words": [],
+  "skills": {},
+  "min": 1,
+  "shuffle": false,
+  "limits": { "opts": 6 }
+}

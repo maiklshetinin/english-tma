@@ -1,0 +1,22 @@
+{
+  "kind": "choice",
+  "title": "Выбери ответ",
+  "head": "Выберите правильный вариант",
+  "templates": ["choice", "audiotest"],
+  "fields": {
+    "head": { "type": "text", "label": "Задание" },
+    "show": { "type": "enum", "of": ["pics", "text"], "label": "Варианты: pics — картинками (Выбери ответ), text — строками (Аудиотест)" },
+    "ask": { "type": "enum", "of": ["audio", "tr"], "label": "Вопрос: audio — на слух, tr — переводом (старые экраны)" },
+    "image": { "type": "image", "label": "Фото к вопросу (Аудиотест)" },
+    "audio": { "type": "audio", "label": "Свой звук вопроса — нет: звук верного ответа" },
+    "opts": { "type": "list", "max": 4, "of": { "w": "text", "t": "text", "image": "image", "audio": "audio" }, "label": "Варианты" },
+    "ans": { "type": "index", "of": "opts", "label": "Верный вариант" }
+  },
+  "check": "tap",
+  "next": "тап по варианту — сразу ответ: верно / «Правильный ответ: …»; ошибка — экран в конец урока и в чекпоинт",
+  "words": ["opts[ans]"],
+  "skills": { "choice": ["L"], "audiotest": ["L"] },
+  "min": 0.5,
+  "shuffle": true,
+  "limits": { "opts": 4 }
+}
