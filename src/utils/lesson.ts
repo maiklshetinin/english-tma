@@ -30,12 +30,13 @@ export interface Step {
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
   head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
   tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
+  bk?: string; bn?: number                                           // из какого задания учебника (BOOK) — группа «Тест · упражнения Насти»; bn — свой номер задания, как в книге
   cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean   // «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
 }
 
 /** Задания курса, в которые можно собрать экраны */
 export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test']
-export const STEPS_MAX = 40, OPTS_MAX = 4, PAIRS_MAX = 6, ODD_MAX = 6, SORT_MAX = 12
+export const STEPS_MAX = 40, OPTS_MAX = 4, PAIRS_MAX = 6, ODD_MAX = 6, SORT_MAX = 20, GAP_OPTS_MAX = 8, SORT_COLS_MAX = 5
 /** Сколько места по вертикали занимает горизонтальный рельс урока с карточками экранов (редактор курса раздвигает рельс) */
 export const RAIL_H = 420
 /** На сколько вправо от кружка урока начинается ветка экранов (за плашкой главы с подписями уроков) */
@@ -159,20 +160,39 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'type', kind: 'gap', t: 'Закончи предложение', d: 'Вписать пропущенное слово', make: () => fishStep('gap') },
   { id: 'fill', kind: 'gap', t: 'Заполни пропуск', d: 'Видео — выбрать слово', make: fishFill },
   { id: 'answer', kind: 'answer', t: 'Ответь на вопрос', d: 'Устно или письменно', make: () => fishStep('answer') },
-  { id: 'brackets', kind: 'gap', t: 'Раскрой скобки', d: 'Глагол в скобках в нужной форме', make: fishBrackets },
-  { id: 'translate', kind: 'gap', t: 'Переведи фразу', d: 'Вписать перевод фразы', make: fishTranslate },
-  // книжные (экспериментальные, 17.11.2026) — по упражнениям из учебника; в меню — отдельной группой
-  { id: 'sort', kind: 'sort', t: 'Распредели по колонкам', d: 'Разложить фразы по группам', make: () => fishStep('sort') },
-  { id: 'odd', kind: 'odd', t: 'Найди лишнее', d: 'Выбрать слово, которое не подходит', make: () => fishStep('odd') },
+  // ---- Тест · упражнения Насти по учебнику (18.11.2026): отдельная группа меню, плашка — как задание в учебнике (BOOK) ----
+  { id: 'bkword', kind: 'gap', t: 'Впиши слово', d: 'His, men, идиомы, do/does', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkword', head: 'Write the possessive adjectives', phrase: '(He) [His] father is a doctor.', tr: 'Его отец — врач.', opts: [] }) },
+  { id: 'brackets', kind: 'gap', t: 'Раскрой скобки', d: 'Глагол в нужной форме, общее фото', make: () => ({ id: stepId(), kind: 'gap', bk: 'brackets', head: 'Put the verbs into the present simple or the present continuous', image: fish('wave.jpg'), phrase: 'Tom: What [are you doing] (you/do), Tina?', tr: 'Том: Что ты делаешь, Тина?', opts: [] }) },          // диалог — по реплике на экран, фото одно: копия экрана (⧉) его сохраняет
+  { id: 'bkpick', kind: 'gap', t: 'Выбери в пропуске', d: 'Подчеркни верное слово', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkpick', head: 'Underline the correct word / phrase', phrase: 'Pat usually cooks dinner [in the evening].', tr: 'Пэт обычно готовит ужин вечером.', opts: [{ w: 'now' }, { w: 'in the evening' }] }) },
+  { id: 'bkpic', kind: 'gap', t: 'Дополни по картинке', d: 'Фото и банк слов (до 8)', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkpic', head: 'Complete the sentences', image: fish('wave.jpg'), phrase: 'She is [in] the room.', tr: 'Она в комнате.', opts: ['on', 'between', 'in', 'at', 'under', 'next to', 'behind', 'in front of'].map(w => ({ w })) }) },
+  { id: 'bkqa', kind: 'gap', t: 'Ответь по картинке', d: 'Фото и короткий ответ', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkqa', head: 'Answer the questions', image: fish('wave.jpg'), phrase: 'Is she a teacher? [Yes, she is/Yes she is].', tr: 'Она учитель? Да.', opts: [] }) },
+  { id: 'translate', kind: 'gap', t: 'Переведи фразу', d: 'Вписать всю фразу', make: () => ({ ...fishTranslate(), head: 'Translate the sentence', bk: 'translate' }) },
+  { id: 'bkfree', kind: 'answer', t: 'Свободный ответ', d: 'Про себя, без автопроверки', make: () => ({ id: stepId(), kind: 'answer', bk: 'bkfree', head: 'Answer the questions about you', text: 'Do you like pizza?', note: 'Yes, I do. / No, I don’t.', tr: 'Yes, I do. I love pizza!' }) },
+  { id: 'odd', kind: 'odd', t: 'Найди лишнее', d: 'Одно слово не подходит', make: () => ({ id: stepId(), kind: 'odd', bk: 'odd', head: 'Circle the uncountable noun', ans: 2, note: 'Sugar — неисчисляемое, остальное можно посчитать.', opts: [{ w: 'potato', k: 'o' }, { w: 'biscuit', k: 'y' }, { w: 'sugar', k: 'b' }, { w: 'cherry', k: 'p' }] }) },
+  { id: 'sort', kind: 'sort', t: 'Распредели по колонкам', d: 'Таблица до 5 колонок, со звуком', make: () => ({ id: stepId(), kind: 'sort', bk: 'sort', head: 'Complete the table', cols: ['-s', '-es', '-ies', '-ves', 'other'].map(t => ({ t })),
+    items: [['boy', 0], ['box', 1], ['baby', 2], ['knife', 3], ['man', 4], ['owl', 0], ['tomato', 1], ['cherry', 2], ['leaf', 3], ['foot', 4]].map(([w, c], i) => ({ w: w as string, c: c as number, k: TILE_K[i % 5] })) }) },
 ]
-/** Книжные шаблоны (экспериментальные) — отдельная группа меню */
-export const BOOK_TPL = ['sort', 'odd']
+/** Задания учебника: номер в кружке и задание как в книге — на плашке меню и миниатюре (ExerciseMini); also — какие ещё задания закрывает */
+export const BOOK: Record<string, { n: number; en: string; also?: string; pic?: boolean }> = {
+  bkword: { n: 5, en: 'Write the possessive adjectives.', also: 'Write the plurals · Fill in the correct idiom · Write do, does and short answers' },
+  brackets: { n: 3, en: 'Put the verbs into the present simple or the present continuous.', also: 'Диалог по картинке — по реплике на экран', pic: true },
+  bkpick: { n: 6, en: 'Underline the correct word / phrase.', also: 'Write ’s or ’' },
+  bkpic: { n: 4, en: 'Complete the sentences.', also: 'Write This, That, These or Those · предлоги по картинкам: on, between, in…', pic: true },
+  bkqa: { n: 7, en: 'Answer the questions.', also: 'Is he a teacher? — Yes, he is.', pic: true },
+  translate: { n: 8, en: 'Translate the sentences.' },
+  bkfree: { n: 12, en: 'Answer the questions about you.' },
+  odd: { n: 2, en: 'Circle the uncountable noun in each group.' },
+  sort: { n: 7, en: 'Complete the table. Listen and check.' },
+}
+/** Тест · упражнения Насти — отдельная группа меню */
+export const BOOK_TPL = Object.keys(BOOK)
 
 // Навыки упражнений (для меню «Exercise» и тегов на ветке урока): Слух, Чтение, Письмо, Речь — по id шаблона
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], translate: ['W'], brackets: ['W'], sort: ['R'], odd: ['R'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], translate: ['W'], brackets: ['W'], sort: ['R'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
 export function tplOf(s: Step): string {
+  if (s.bk && BOOK[s.bk]) return s.bk          // экран из группы «Тест · упражнения Насти»
   if (s.kind === 'choice') return s.show === 'text' ? 'audiotest' : 'choice'
   // «Собери слово» (по буквам) и «Повтори за диктором» убраны из меню как дубли (17.11.2026): старые такие экраны работают как раньше,
   // а в меню и на ветке — «Собери фразу» и «Повтори слово»
@@ -332,12 +352,14 @@ function stepFrom(o: any): Step | null {
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
       .map((x: any) => ({ w: x.w.trim(), ...(TILE[x.k] ? { k: x.k } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
-    if (opts.length) s.opts = o.kind === 'tip' ? opts : opts.slice(0, o.kind === 'odd' ? ODD_MAX : OPTS_MAX)
+    if (opts.length) s.opts = o.kind === 'tip' ? opts : opts.slice(0, o.kind === 'odd' ? ODD_MAX : o.kind === 'gap' ? GAP_OPTS_MAX : OPTS_MAX)
     if (s.ans != null && s.opts && s.ans >= s.opts.length) delete s.ans
   }
   if (o.mix === false) s.mix = false
   if (o.hint === false) s.hint = false
-  if (Array.isArray(o.cols)) s.cols = o.cols.map((x: any) => ({ t: String(typeof x === 'string' ? x : x?.t ?? '').trim() })).slice(0, 3)
+  if (Array.isArray(o.cols)) s.cols = o.cols.map((x: any) => ({ t: String(typeof x === 'string' ? x : x?.t ?? '').trim() })).slice(0, SORT_COLS_MAX)
+  if (typeof o.bk === 'string' && BOOK[o.bk]) s.bk = o.bk
+  if (Number.isInteger(o.bn) && o.bn > 0 && o.bn < 100) s.bn = o.bn
   if (Array.isArray(o.items)) s.items = o.items.filter((x: any) => str(x?.w)).map((x: any) => ({ w: x.w.trim(), c: Number.isInteger(x.c) && x.c >= 0 ? Math.min(x.c, (s.cols?.length ?? 2) - 1) : 0, ...(TILE[x.k] ? { k: x.k } : {}) })).slice(0, SORT_MAX)
   if (Array.isArray(o.pairs)) {
     const pairs = o.pairs.map((x: any) => (Array.isArray(x) ? { a: x[0], b: x[1] } : x)).filter((x: any) => str(x?.a) && str(x?.b)).map((x: any) => ({ a: x.a.trim(), b: x.b.trim() }))

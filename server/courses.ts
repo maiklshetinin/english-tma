@@ -39,6 +39,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     const o: Step = { id: String(r.id), kind }
     if (kind === 'intro') { for (const k of ['word', 'tr']) put(o, k, str(r[k], 120)); for (const k of ['ex', 'exTr']) put(o, k, str(r[k], 300)) }
     for (const k of ['image', 'audio', 'video', 'exAudio']) put(o, k, ref(r[k]))
+    if (typeof r.bk === 'string' && /^[a-z]{2,12}$/.test(r.bk)) o.bk = r.bk
+    if (Number.isInteger(r.bn) && (r.bn as number) > 0 && (r.bn as number) < 100) o.bn = r.bn          // номер задания, как в учебнике          // из какого задания учебника (группа «Тест · упражнения Насти»)
     // своё упражнение из конструктора: своё задание вверху экрана, название и описание плитки
     put(o, 'head', str(r.head, 160)); put(o, 'tn', str(r.tn, 60)); put(o, 'td', str(r.td, 120))
     // примерное время экрана (минуты, шаг ½) — своё, если репетитор поставил
@@ -58,7 +60,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     }
     if (kind === 'order') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)); put(o, 'note', str(r.note, 600)); if (r.by === 'letters') o.by = 'letters' }          // «Собери слово» — по буквам
     if (kind === 'speak' || kind === 'gap') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)) }
-    if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 4).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))
+    if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 8)          // до 8 — банк слов из учебника (предлоги).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))
     if (kind === 'answer') { put(o, 'text', str(r.text, 300)); put(o, 'note', str(r.note, 600)); put(o, 'tr', str(r.tr, 300)) }
     // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.
     // k — цвет плитки (o/g/y/p/b), mix — перемешивать у ученика, hint — подсказка «Нажмите фразу, затем колонку»
@@ -69,9 +71,9 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       o.ans = Math.max(0, Math.min((o.opts as unknown[]).length - 1, num(r.ans)))
     }
     if (kind === 'sort') {
-      o.cols = (Array.isArray(r.cols) ? r.cols : []).slice(0, 3).map((x) => ({ t: str(((x ?? {}) as Record<string, unknown>).t, 60) }))
+      o.cols = (Array.isArray(r.cols) ? r.cols : []).slice(0, 5)          // до 5 — таблица -s / -es / -ies / -ves / other.map((x) => ({ t: str(((x ?? {}) as Record<string, unknown>).t, 60) }))
       const n = (o.cols as unknown[]).length
-      o.items = (Array.isArray(r.items) ? r.items : []).slice(0, 12).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120), c: Math.max(0, Math.min(Math.max(0, n - 1), num(q.c))) }; put(out, 'k', kc(q.k)); return out })
+      o.items = (Array.isArray(r.items) ? r.items : []).slice(0, 20).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120), c: Math.max(0, Math.min(Math.max(0, n - 1), num(q.c))) }; put(out, 'k', kc(q.k)); return out })
       if (r.hint === false) o.hint = false
     }
     if (kind === 'pairs') o.pairs = (Array.isArray(r.pairs) ? r.pairs : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>; return { a: str(q.a, 120), b: str(q.b, 120) } })

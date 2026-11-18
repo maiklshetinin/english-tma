@@ -16,7 +16,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
 import { useTelegram } from '../composables/useTelegram'
 import BackButton from './BackButton.vue'
-import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts } from '../utils/lesson'
+import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts, BOOK } from '../utils/lesson'
 
 const props = defineProps({
   steps: { type: Array, required: true },
@@ -194,6 +194,8 @@ watch([i, () => (props.single || props.embedded ? JSON.stringify(step.value) : p
 watch(() => props.start, (v) => { i.value = v })          // ветка в редакторе: экраны добавили / переставили — этот кадр показывает свой экран
 watch(isFinal, (v) => { if (v && !endT.value) { endT.value = Date.now(); emit('done', { ...score }) } }, { immediate: true })
 const onKey = (e) => { if (e.key === 'Enter' && !props.single && !props.embedded && !/INPUT|TEXTAREA/.test(e.target?.tagName)) isFinal.value ? emit('close') : next() }
+// Тест · упражнения Насти: экран в стиле страницы учебника (кремовая бумага, номер в оранжевом кружке, задание по-английски)
+const isBook = computed(() => !isFinal.value && !!step.value?.bk && !!BOOK[step.value.bk])
 const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !step.value.opts?.length) || step.value?.kind === 'odd' || step.value?.kind === 'sort'))
 // ---- книжные (экспериментальные): «Найди лишнее» и «Распредели по колонкам» ----
 const tile = (k, i) => TILE[tileK(k, i)]
@@ -213,12 +215,13 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 </script>
 
 <template>
-  <div class="lp" :class="{ single, embedded }">
+  <div class="lp" :class="{ single, embedded, book: isBook }">
     <div class="top">
       <BackButton v-if="closable && closeText" :to="closeText" @click="emit('close')" />
       <button v-else-if="closable" class="x" title="Закрыть" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
       <div class="pb"><i :style="{ width: (isFinal ? 100 : pct) + '%' }" /></div>
     </div>
+    <div v-if="isBook" class="bkh"><b>{{ step.bn || BOOK[step.bk].n }}</b><span>{{ step.head || BOOK[step.bk].en }}</span></div>
 
     <!-- Итог урока -->
     <div v-if="isFinal" class="body fin">
@@ -371,9 +374,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
     <!-- Распредели по колонкам (книжный, экспериментальный): нажать фразу, потом колонку -->
     <div v-else-if="step.kind === 'sort'" class="body">
       <h3 class="hd">{{ step.head || KINDS.sort.head }}</h3>
+      <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />          <!-- «Listen and check» -->
       <p v-if="step.hint !== false" class="sub">Нажмите фразу, затем колонку</p>
       <div class="spool"><button v-for="k in st.order.filter(k => st.place[k] == null)" :key="k" class="sw" :class="{ sel: st.sel === k }" :style="{ background: tile(step.items[k].k, k).bg, color: tile(step.items[k].k, k).fg }" @click="sortPick(k)">{{ step.items[k].w }}</button></div>
-      <div class="scols" :style="{ gridTemplateColumns: `repeat(${step.cols?.length || 2}, 1fr)` }">
+      <div class="scols" :style="{ gridTemplateColumns: `repeat(${step.cols?.length || 2}, minmax(0, 1fr))` }">
         <div v-for="(c, ci) in step.cols" :key="ci" class="scol">
           <div class="sch">{{ c.t || '…' }}</div>
           <div class="sbox" :class="{ hot: st.sel != null }" @click="sortPut(ci)">
@@ -574,4 +578,24 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .left { color: var(--hint) }
 .brh { color: #1a73e8 }          /* подсказка в скобках — «(lose)», как в учебнике */
 .oddg, .scols { width: 100% }
+.scols .sch { padding: 6px 4px; font-size: 12px } .scols .sw { padding: 6px 8px; font-size: 12px }          /* до 5 колонок — компактнее */
+
+/* ---- Тест · упражнения Насти: как страница учебника ---- */
+.lp.book { background: #fffdf6; font-family: Arial, Helvetica, sans-serif; color: #2c2c2a }
+.lp.book .pb { background: #ece6d6 }
+.bkh { display: flex; align-items: flex-start; gap: 9px; width: 100%; max-width: 520px; margin: 8px auto 0; padding: 0 22px; box-sizing: border-box; font-size: 16px; font-weight: 700; line-height: 1.3 }
+.bkh b { flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin-top: -2px; border-radius: 50%; background: #f0997b; color: #4a1b0c; font-size: 14px }
+.lp.book .body > .hd { display: none }
+.lp.book .sent { text-align: left; font-size: 17px; font-weight: 400; line-height: 2 }
+.lp.book .slot { border-bottom: 1.5px dotted #2c2c2a; background: none; color: #185fa5; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-weight: 400 }
+.lp.book input.slot.in { border-radius: 0; box-shadow: none; outline: 0 } .lp.book input.slot.in::placeholder { color: #b4b2a9; font-family: Arial, sans-serif }
+.lp.book .slot.ok { color: #0f6e56; border-bottom-color: #0f6e56 } .lp.book .slot.no { color: #a32d2d; text-decoration: line-through; border-bottom-color: #a32d2d }
+.lp.book .brh { color: inherit; font-weight: 700 }
+.lp.book .pool { justify-content: flex-start; gap: 4px 16px; padding: 7px 12px; border-radius: 6px; background: #f1efe8 }
+.lp.book .pool .chip { padding: 3px 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: #2c2c2a; font-size: 15px; font-weight: 700 }
+.lp.book .pool .chip:hover { color: #185fa5 } .lp.book .pool .chip.ok { color: #0f6e56; text-decoration: underline 2px } .lp.book .pool .chip.no { color: #a32d2d; text-decoration: line-through }
+.lp.book .media { border-radius: 4px; box-shadow: 0 0 0 1px #d3d1c7 }
+.lp.book .word { background: #f1efe8 }
+.lp.book .foot { background: transparent; border-top-color: #ece6d6 }
+.lp.book .fs { font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; color: #185fa5 }
 </style>

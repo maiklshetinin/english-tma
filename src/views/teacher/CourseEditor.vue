@@ -29,7 +29,7 @@ import { access, accessReady } from '../../composables/useAccess'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, skillsOf, tplOf, BOOK_TPL } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, skillsOf, tplOf, BOOK_TPL, BOOK } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -531,9 +531,9 @@ const XGROUPS_STD = (() => {
     { k: 'intro', t: 'Знакомство', d: 'показать новое — без оценки', ids: ['intro', 'tip'], cols: 2 },
     { k: 'L', t: 'Слух', d: 'понять на слух', ids: ['choice', 'audiotest', 'fill'], cols: 3 },
     { k: 'R', t: 'Чтение', d: 'понять написанное', ids: ['pairs'], cols: 1 },
-    { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'brackets', 'translate'], cols: 2 },
+    { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
-    { k: 'book', t: 'Книжные', d: 'экспериментальные — по учебнику', ids: BOOK_TPL, cols: 2, exp: true },          // 17.11.2026: упражнения Насти по учебнику — пока пробуем
+    { k: 'book', t: 'Тест · упражнения Насти по учебнику', d: 'отдельно, чтобы не путаться: плашка — как задание в учебнике', ids: BOOK_TPL, cols: 3, exp: true },          // 18.11.2026: все Настины типы — здесь, обкатаем — перенесём в обычные группы
   ]
   const used = new Set(gs.flatMap(g => g.ids))
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
@@ -542,7 +542,7 @@ const XGROUPS_STD = (() => {
 // «Мои» — свои упражнения из конструктора (doc.templates): плитка по основе, свои название и описание; первой — «+ Своё упражнение»
 const XGROUPS = computed(() => [...XGROUPS_STD, { k: 'mine', t: 'Мои', d: 'собраны в конструкторе', cols: 3, mine: true,
   items: (doc.templates ?? []).map(x => ({ id: x.id, kind: x.step.kind, base: tplOf(x.step), t: x.t, d: x.d, mine: true, step: x.step, tpl: x })) }])
-const NEW_MINI = ['sort', 'odd', 'translate', 'brackets']          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
+const NEW_MINI = BOOK_TPL          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
 const skillsT = (t) => (t.mine ? skillsOf({ ...t.step, tn: t.t }) : (SKILLS[t.id] ?? []))
 /** Экраны по плитке меню: «Готовый урок», своё упражнение (копия образца) или шаблон */
 function makeTpl(id) {
@@ -1940,7 +1940,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
         <!-- мини-окошки: как выглядит экран -->
-        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="g.k"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">эксперимент</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
+        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="g.k"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
         <!-- «Мои»: первой — собрать своё в конструкторе -->
         <button v-if="g.mine" class="mi madd" title="Собрать своё упражнение из блоков" @click="openBuilder()"><span class="mini plus"><b>+</b></span><small><b>Своё упражнение</b><span>собрать из блоков</span></small></button>
         <button v-for="t in g.items" :key="t.id" class="mi" :title="t.mine ? 'Своё упражнение — тяните на ветку; двойной клик — открыть в конструкторе' : t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)" @dblclick="t.mine && openBuilder(t.tpl)">
@@ -1961,7 +1961,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <template v-else><span class="ms"><i /><i /><i /></span></template>
             <i class="mb" />
           </span>
-          <small :title="t.t + ' — ' + t.d"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
+          <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
           <span v-if="t.mine" class="mact" @pointerdown.stop.prevent><i title="Открыть в конструкторе" @click.stop="openBuilder(t.tpl)">✎</i><i class="del" title="Удалить из меню" @click.stop="delTpl(t.id)">✕</i></span>
         </button>

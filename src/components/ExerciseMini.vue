@@ -1,10 +1,25 @@
 <script setup>
 // Миниатюра экрана — та же, что в меню «Exercise» конструктора (CourseEditor → .mini): по id шаблона (TEMPLATES в utils/lesson.ts).
 // size: 'tray' — как в меню «Exercise»; 'rail' — на ветке урока над экраном (17.11.2026, вместо кружка с номером)
+import { BOOK } from '../utils/lesson'
 defineProps({ id: { type: String, required: true }, size: { type: String, default: 'tray' } })
 </script>
 <template>
-  <span class="mini" :class="[id, size]"><i class="mp" />
+  <!-- Тест · упражнения Насти: миниатюра — как задание в учебнике (номер в оранжевом кружке, задание по-английски, строчки с пунктиром) -->
+  <span v-if="BOOK[id]" class="mini bkm" :class="size">
+    <span class="bh"><b>{{ BOOK[id].n }}</b><em>{{ BOOK[id].en }}</em></span>
+    <span v-if="BOOK[id].pic" class="bpic" />
+    <template v-if="id === 'sort'"><span class="btb"><i v-for="h in ['-s', '-es', '-ies', '-ves', 'other']" :key="h">{{ h }}</i></span><span class="btb e"><i v-for="k in 5" :key="k" /></span></template>
+    <template v-else-if="id === 'odd'"><span class="br">potato / biscuit / <u>sugar</u> / cherry</span><span class="br">coffee / egg / apple / banana</span></template>
+    <template v-else-if="id === 'bkpick'"><span class="br">Pat cooks dinner <b>now</b> / <u>in the evening</u>.</span><span class="br">Alex is wearing <b>today</b> / <b>on</b>…</span></template>
+    <template v-else-if="id === 'bkpic'"><span class="br">on · between · <s>in</s> · at · under</span><span class="br">They’re <i class="dt">in</i> the car.</span></template>
+    <template v-else-if="id === 'bkqa'"><span class="br">Is he a teacher?</span><span class="br"><i class="dt">Yes, he is.</i></span></template>
+    <template v-else-if="id === 'bkword'"><span class="br"><b>(He)</b> <i class="dt">His</i> father is…</span><span class="br"><b>(I)</b> <i class="dt" /> sister is…</span><span class="br"><b>(They)</b> <i class="dt" /> car…</span></template>
+    <template v-else-if="id === 'brackets'"><span class="br">What <i class="dt">are you doing</i> <b>(you/do)</b>?</span><span class="br">I <i class="dt" /> <b>(write)</b> an email…</span></template>
+    <template v-else-if="id === 'translate'"><span class="br">◀) <i class="dt w" /></span><span class="br">◀) <i class="dt w" /></span></template>
+    <template v-else-if="id === 'bkfree'"><span class="br">1 Do you like pizza? <i class="dt" /></span><span class="br">2 Does your dad work…<i class="dt" /></span><span class="br">3 Do your friends go…<i class="dt" /></span></template>
+  </span>
+  <span v-else class="mini" :class="[id, size]"><i class="mp" />
     <template v-if="id === 'intro'"><i class="mh" /><span class="mm"><i class="ma" /></span><i class="mw" /><i class="ml" /></template>
     <template v-else-if="id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
     <template v-else-if="id === 'audiotest'"><i class="mh" /><span class="mm sm"><i class="ma" /></span><span class="mr"><i /><i class="g" /><i /></span></template>
@@ -59,4 +74,14 @@ defineProps({ id: { type: String, required: true }, size: { type: String, defaul
 .mini .mt.q { display: grid; grid-template-columns: 1fr 1fr; gap: 4px } .mini .mt.q i { width: auto; height: 20px; border-radius: 5px } .mini .mt i.s { box-shadow: 0 0 0 1.5px #1fbe78 }
 .mini .mt i.o { background: #fbe1c8 } .mini .mt i.g { background: #cfeccf } .mini .mt i.y { background: #fbedb0 } .mini .mt i.p { background: #f8d3e2 } .mini .mt i.b { background: #cfe6f7 }
 .mini .mcol { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100% } .mini .mcol i { height: 32px; border: 1px dashed #c9dcfb; border-radius: 5px; background: #f6faff }
+/* Тест · упражнения Насти — как страница учебника */
+.mini.bkm { align-items: stretch; gap: 3px; padding: 6px 7px; background: #fffdf6; border-color: #eadfc4; font-family: Arial, Helvetica, sans-serif; color: #2c2c2a; text-align: left }
+.bkm .bh { display: flex; align-items: flex-start; gap: 4px; font-size: 8px; font-weight: 700; line-height: 1.15 }
+.bkm .bh b { flex: none; display: grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; background: #f0997b; color: #4a1b0c; font-size: 7.5px }
+.bkm .bh em { font-style: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.bkm .br { font-size: 7px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .bkm .br b { font-weight: 700 } .bkm .br u { color: #185fa5 } .bkm .br s { color: #185fa5 }
+.bkm i.dt { display: inline-block; min-width: 22px; border-bottom: 1px dotted #2c2c2a; color: #185fa5; font-style: italic; vertical-align: bottom; background: none; border-radius: 0 } .bkm i.dt.w { width: 70% }
+.bkm .bpic { flex: none; height: 22px; border-radius: 3px; background: linear-gradient(135deg, #f6c99a, #8fb8e8 60%, #9fd28a) }
+.bkm .btb { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 6px; text-align: center } .bkm .btb i { background: #378add; color: #fff; font-style: normal; border-radius: 0; padding: 1px 0 }
+.bkm .btb.e i { height: 6px; background: none; border-bottom: .5px solid #85b7eb }
 </style>
