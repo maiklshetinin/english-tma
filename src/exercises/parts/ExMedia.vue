@@ -4,14 +4,18 @@
 //  kinds — что можно положить (video, image); joined — снизу продолжается блоком (слово у «Нового слова») — нижние углы прямые;
 //  xm — отступ снизу (подсказка); ph — надпись пустого окна в правке (нет — пустого окна в правке нет, как у ученика);
 //  audio — звук поверх: { src, auto, add } для ExAudio или true; autoplay — видео само (у ученика).
+//  vpill — у видео без кнопок синяя плашка поверх управляет самим видео («Заполни пропуск»);
 //  controls — кнопки у видео (у «Повтори» их нет: нажал на видео — заново); vref — получить сам <video> (для «Ещё раз»)
 //  slot — своё поверх (закладка «В избранное», подпись-фраза)
-import { computed } from 'vue'
+import { computed, shallowRef } from 'vue'
 import ExAudio from './ExAudio.vue'
+import AudioPill from '../../components/AudioPill.vue'
 import { usePlay, useEdit } from '../ctx'
 const props = defineProps({ step: { type: Object, required: true }, kinds: { type: Array, default: () => ['video', 'image'] }, joined: Boolean, xm: Boolean,
   ph: { type: String, default: '' }, hint: { type: String, default: '16:9, лучше от 1280×720 — нажмите или перетащите' }, audio: { type: [Boolean, Object], default: false }, autoplay: Boolean,
-  controls: { type: Boolean, default: true }, vref: { type: Function, default: null } })
+  controls: { type: Boolean, default: true }, vref: { type: Function, default: null }, vpill: Boolean })
+const vEl = shallowRef(null)
+const setV = (el) => { vEl.value = el; props.vref?.(el) }
 const emit = defineEmits(['vclick'])
 const p = usePlay(), ed = useEdit()
 const video = computed(() => (props.kinds.includes('video') && props.step.video) || '')
@@ -24,13 +28,15 @@ const what = computed(() => (props.kinds.length > 1 ? 'Видео или фот�
 
 <template>
   <div v-if="!p.edit && has" class="media" :class="{ joined, xm }">
-    <video v-if="video" :ref="vref" :src="p.src(video, 'video')" :controls="controls" playsinline :autoplay="autoplay" @click="emit('vclick')" />
+    <video v-if="video" :ref="setV" :src="p.src(video, 'video')" :controls="controls" playsinline :autoplay="autoplay" @click="emit('vclick')" />
+    <AudioPill v-if="video && vpill && vEl" :key="'v' + video" :media="vEl" class="vp" />
     <img v-else :src="p.src(image, 'image')" alt="" />
     <ExAudio v-if="au && !video" :step="step" v-bind="au" at="over" />
     <slot />
   </div>
   <div v-else-if="p.edit && (has || ph)" class="media" :class="{ joined, xm, empty: !has }" @click="!has && ed.pick(step, kinds)" @dragover.prevent.stop @drop.prevent.stop="ed.drop($event, step, kinds)">
-    <video v-if="video" :src="p.src(video, 'video')" controls playsinline preload="metadata" />
+    <video v-if="video" :ref="setV" :src="p.src(video, 'video')" :controls="!vpill" playsinline preload="metadata" />
+    <AudioPill v-if="video && vpill && vEl" :key="'v' + video" :media="vEl" class="vp" @click.stop />
     <img v-else-if="image" :src="p.src(image, 'image')" alt="" draggable="false" />
     <span v-else class="ph" :class="{ pa: au && !video }">＋ {{ ph }}<small>{{ hint }}</small></span>
     <template v-if="has">
@@ -58,5 +64,7 @@ const what = computed(() => (props.kinds.length > 1 ? 'Видео или фот�
 .mx { position: absolute; right: 5px; top: 5px; z-index: 3 }
 .rp { position: absolute; left: 6px; top: 6px; z-index: 3; opacity: 0; transition: opacity .12s } .media:hover .rp { opacity: 1 }
 @media (hover: none) { .rp { opacity: 1 } }
+.vp { position: absolute; left: 8%; right: 8%; bottom: 10px; z-index: 2 }
+@media (min-width: 900px) { .lp:not(.embedded):not(.single) .vp { left: 9%; right: 9%; bottom: 16px } }
 .up { position: absolute; left: 50%; top: 50%; translate: -50% -50%; z-index: 3; padding: 3px 9px; border-radius: 10px; background: rgba(0, 0, 0, .6); color: #fff; font-size: 12px; font-weight: 800; font-style: normal }
 </style>

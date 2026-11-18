@@ -1,0 +1,126 @@
+{
+  "kind": "gap",
+  "title": "Заполни пропуск",
+  "head": "Закончи предложение",
+  "templates": [
+    "type",
+    "fill",
+    "translate",
+    "bkword",
+    "brackets",
+    "bkpick",
+    "bkpic",
+    "bkqa",
+    "pg_bkword",
+    "pg_brackets",
+    "pg_bkpick",
+    "pg_bkpic",
+    "pg_bkqa"
+  ],
+  "fields": {
+    "head": {
+      "type": "text",
+      "label": "Задание (у книжных — по-английски, в шапке учебника)"
+    },
+    "bk": {
+      "type": "enum",
+      "of": [
+        "bkword",
+        "brackets",
+        "bkpick",
+        "bkpic",
+        "bkqa"
+      ],
+      "label": "Вариант из учебника (Настины)"
+    },
+    "bs": {
+      "type": "enum",
+      "of": [
+        "page"
+      ],
+      "label": "page — «Как в учебнике» 1:1"
+    },
+    "bn": {
+      "type": "number",
+      "label": "Номер задания, как в книге"
+    },
+    "video": {
+      "type": "video",
+      "label": "Видео — плашка звука им управляет"
+    },
+    "image": {
+      "type": "image",
+      "label": "Фото 16:9"
+    },
+    "audio": {
+      "type": "audio",
+      "label": "Звук"
+    },
+    "phrase": {
+      "type": "text",
+      "label": "Фраза с [пропуском]: несколько верных — [isn't/is not], подсказка — (make), без вариантов — до 2 пропусков"
+    },
+    "opts": {
+      "type": "list",
+      "max": 8,
+      "of": {
+        "w": "text"
+      },
+      "label": "Банк слов (есть — тап, нет — вписать)"
+    },
+    "tr": {
+      "type": "text",
+      "label": "Перевод — после ответа"
+    }
+  },
+  "check": "button",
+  "next": "с вариантами — тап по слову, сразу ответ; без вариантов — вписать и «Проверить»; ошибка — в конец урока и в чекпоинт",
+  "words": [],
+  "skills": {
+    "type": [
+      "W"
+    ],
+    "fill": [
+      "L"
+    ],
+    "translate": [
+      "W"
+    ],
+    "bkword": [
+      "W"
+    ],
+    "brackets": [
+      "W"
+    ],
+    "bkpick": [
+      "R"
+    ],
+    "bkpic": [
+      "R"
+    ],
+    "bkqa": [
+      "W"
+    ],
+    "pg_bkword": [
+      "W"
+    ],
+    "pg_brackets": [
+      "W"
+    ],
+    "pg_bkpick": [
+      "R"
+    ],
+    "pg_bkpic": [
+      "R"
+    ],
+    "pg_bkqa": [
+      "W"
+    ]
+  },
+  "min": 0.5,
+  "shuffle": true,
+  "limits": {
+    "opts": 8,
+    "gaps": 2
+  }
+}

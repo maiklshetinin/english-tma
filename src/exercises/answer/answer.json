@@ -1,0 +1,68 @@
+{
+  "kind": "answer",
+  "title": "Ответь на вопрос",
+  "head": "Ответь на вопрос",
+  "templates": [
+    "answer",
+    "bkfree",
+    "pg_bkfree"
+  ],
+  "fields": {
+    "head": {
+      "type": "text",
+      "label": "Задание"
+    },
+    "bk": {
+      "type": "enum",
+      "of": [
+        "bkfree"
+      ],
+      "label": "Вариант из учебника"
+    },
+    "bs": {
+      "type": "enum",
+      "of": [
+        "page"
+      ],
+      "label": "page — «Как в учебнике»: сразу пишем"
+    },
+    "video": {
+      "type": "video",
+      "label": "Видео к вопросу"
+    },
+    "image": {
+      "type": "image",
+      "label": "Фото к вопросу"
+    },
+    "text": {
+      "type": "text",
+      "label": "Вопрос"
+    },
+    "note": {
+      "type": "text",
+      "label": "Подсказка — по ссылке «Показать подсказку»"
+    },
+    "tr": {
+      "type": "text",
+      "label": "Пример ответа — после своего"
+    }
+  },
+  "check": "free",
+  "next": "ответ голосом или письменно, без оценки; после — пример ответа",
+  "words": [],
+  "skills": {
+    "answer": [
+      "S",
+      "W"
+    ],
+    "bkfree": [
+      "W"
+    ],
+    "pg_bkfree": [
+      "W"
+    ]
+  },
+  "min": 1.5,
+  "shuffle": false,
+  "limits": {}
+}

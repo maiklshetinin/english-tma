@@ -1,11 +1,12 @@
 <script setup>
 // Кнопка в подвале правки с окошком над подвалом: то, чего у ученика на экране нет (перевод, пояснение после ответа).
 // Окно не растёт — поле всплывает поверх. Заполнено — на кнопке «✓».
-//  label — надпись кнопки, hint — подпись над полем, ph — пример в поле, multi — несколько строк (textarea)
+//  label — надпись кнопки, hint — подпись над полем, ph — пример в поле, multi — несколько строк (textarea);
+//  done — «✓» на кнопке (по умолчанию — поле не пустое); slot — своё над полем («Также засчитывать» у пропуска)
 import { ref } from 'vue'
 import ExTool from './ExTool.vue'
 import { useEdit } from '../ctx'
-defineProps({ modelValue: { type: String, default: '' }, label: { type: String, required: true }, hint: { type: String, default: '' }, ph: { type: String, default: '' }, multi: Boolean })
+defineProps({ modelValue: { type: String, default: '' }, label: { type: String, required: true }, hint: { type: String, default: '' }, ph: { type: String, default: '' }, multi: Boolean, done: { type: Boolean, default: null } })
 const emit = defineEmits(['update:modelValue'])
 const ed = useEdit(), open = ref(false)
 function input(e) { emit('update:modelValue', e.target.value); ed.changed() }
@@ -13,8 +14,9 @@ function input(e) { emit('update:modelValue', e.target.value); ed.changed() }
 
 <template>
   <span class="epw">
-    <ExTool :on="open" @click="open = !open">{{ label }}{{ modelValue?.trim() ? ' ✓' : '' }}</ExTool>
+    <ExTool :on="open" @click="open = !open">{{ label }}{{ (done ?? !!modelValue?.trim()) ? ' ✓' : '' }}</ExTool>
     <span v-if="open" class="ep" @pointerdown.stop>
+      <slot />
       <small>{{ hint }}</small>
       <textarea v-if="multi" class="exf ef" rows="3" :value="modelValue" :placeholder="ph" @input="input" />
       <input v-else class="exf ef" :value="modelValue" :placeholder="ph" @input="input" @keydown.enter="open = false" />

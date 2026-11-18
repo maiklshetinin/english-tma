@@ -1,0 +1,67 @@
+{
+  "kind": "odd",
+  "title": "Найди лишнее",
+  "head": "Найдите лишнее слово",
+  "templates": [
+    "odd",
+    "pg_odd"
+  ],
+  "fields": {
+    "head": {
+      "type": "text",
+      "label": "Задание (у книжных — в шапке учебника)"
+    },
+    "bk": {
+      "type": "enum",
+      "of": [
+        "odd"
+      ],
+      "label": "Книжный"
+    },
+    "bs": {
+      "type": "enum",
+      "of": [
+        "page"
+      ],
+      "label": "page — «Как в учебнике»: строкой, обвести кружком"
+    },
+    "opts": {
+      "type": "list",
+      "max": 6,
+      "of": {
+        "w": "text",
+        "k": "tile"
+      },
+      "label": "Слова; k — цвет плитки"
+    },
+    "ans": {
+      "type": "index",
+      "of": "opts",
+      "label": "Лишнее"
+    },
+    "note": {
+      "type": "text",
+      "label": "Пояснение — после ответа"
+    },
+    "mix": {
+      "type": "bool",
+      "label": "false — не перемешивать"
+    }
+  },
+  "check": "button",
+  "next": "выбрать слово и «Проверить»: «Верно!» / «Лишнее: …» и пояснение",
+  "words": [],
+  "skills": {
+    "odd": [
+      "R"
+    ],
+    "pg_odd": [
+      "R"
+    ]
+  },
+  "min": 0.5,
+  "shuffle": true,
+  "limits": {
+    "opts": 6
+  }
+}

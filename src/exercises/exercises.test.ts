@@ -30,7 +30,7 @@ describe('упражнения-шаблоны: описание (.json) совп
       expect(['none', 'tap', 'button', 'voice', 'free']).toContain(x.check)
     })
   }
-  it('книжные экраны пока рисуются по-старому', () => { expect(exOf({ kind: 'choice', bk: 'bkpick' })).toBeNull(); expect(exOf({ kind: 'gap' })).toBeNull(); expect(exOf({ kind: 'pairs' })).not.toBeNull() })
+  it('все 10 типов — шаблоны, и книжные тоже', () => { for (const k of Object.keys(KINDS)) expect(exOf({ kind: k })).not.toBeNull(); expect(exOf({ kind: 'gap', bk: 'bkpick', bs: 'page' })).not.toBeNull() })
 })
 
 describe('ученик видит экран из шаблона', () => {
@@ -124,5 +124,60 @@ describe('часть 3: Пары, Собери фразу, Повтори', () =
     const w = mount(editHost(step, log))
     await w.find('.media .cap textarea').setValue('Hi!'); expect(step.phrase).toBe('Hi!')
     expect(w.find('.acts').classes()).toContain('ro')
+  })
+})
+
+describe('часть 4: пропуск, ответ, лишнее, распредели и таблица', () => {
+  it('Заполни пропуск с вариантами: тап — ответ сразу, фраза целиком в подвале', async () => {
+    const w = mount(LessonPlayer, { props: { steps: [{ id: 'g', kind: 'gap', phrase: 'And [you]?', opts: [{ w: 'you' }, { w: 'me' }] }], resolve, single: true } })
+    await w.findAll('.pool .chip')[0].trigger('click')
+    expect(w.find('.sent .slot').text()).toBe('you'); expect(w.find('.foot .fb').text()).toContain('And you?')
+  })
+  it('Закончи предложение: вписать, «Проверить»', async () => {
+    const w = mount(LessonPlayer, { props: { steps: [{ id: 'g', kind: 'gap', phrase: 'I [am] fine' }], resolve, embedded: true } })
+    await w.find('input.slot').setValue('am'); await w.find('.foot .go').trigger('click')
+    expect(w.find('.foot').classes()).toContain('good')
+  })
+  it('Underline «Как в учебнике»: варианты в предложении; в правке — куски и варианты полями', async () => {
+    const step: any = reactive({ id: 'u', kind: 'gap', bk: 'bkpick', bs: 'page', phrase: 'Pat [cooks] dinner', opts: [{ w: 'cooks' }, { w: 'cook' }] })
+    const v = mount(LessonPlayer, { props: { steps: [step], resolve, single: true } })
+    expect(v.findAll('.bko .uo').map(b => b.text())).toEqual(['cooks', 'cook']); expect(v.find('.bkh').text()).toContain('Underline')
+    const log: string[] = [], w = mount(editHost(step, log))
+    expect(w.find('.bkh input.bn').exists()).toBe(true)
+    await w.findAll('.vbkp .vpa')[0].setValue('Tom '); expect(step.phrase).toBe('Tom [cooks] dinner')
+    await w.findAll('.vpo .vcr')[1].trigger('click'); expect(step.phrase).toBe('Tom [cook] dinner')
+  })
+  it('Ответь на вопрос: вопрос и подсказка правятся; пример ответа — в подвале', async () => {
+    const step: any = reactive({ id: 'a', kind: 'answer', text: 'What’s your name?', note: 'My name is…' }), log: string[] = []
+    const v = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
+    expect(v.find('.qq').text()).toBe('What’s your name?'); expect(v.findAll('.two .out')).toHaveLength(2)
+    const w = mount(editHost(step, log))
+    await w.find('.vqq').setValue('How old are you?'); expect(step.text).toBe('How old are you?')
+    expect(w.find('.two').classes()).toContain('ro')
+  })
+  it('Найди лишнее: плитки; в правке кружок — лишнее, ✕ — убрать', async () => {
+    const step: any = reactive({ id: 'o', kind: 'odd', bk: 'odd', opts: [{ w: 'tea' }, { w: 'coffee' }, { w: 'bread' }], ans: 2, mix: false })
+    const v = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
+    await v.findAll('.ot')[2].trigger('click'); await v.find('.foot .go').trigger('click'); expect(v.find('.foot').classes()).toContain('good')
+    const log: string[] = [], w = mount(editHost(step, log))
+    await w.findAll('.ot .rad')[0].trigger('click'); expect(step.ans).toBe(0)
+    await w.findAll('.ot .cx')[1].trigger('click'); expect(step.opts.map((o: any) => o.w)).toEqual(['tea', 'bread'])
+  })
+  it('Распредели: фраза в колонку; в правке фразы в своих колонках, «＋ Фраза»', async () => {
+    const step: any = reactive({ id: 's', kind: 'sort', bk: 'sort', cols: [{ t: 'A' }, { t: 'B' }], items: [{ w: 'x', c: 0 }, { w: 'y', c: 1 }], mix: false })
+    const v = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
+    expect(v.find('.foot .fb').text()).toContain('Осталось фраз: 2')
+    await v.findAll('.spool .sw')[0].trigger('click'); await v.findAll('.sbox')[0].trigger('click'); expect(v.find('.foot .fb').text()).toContain('Осталось фраз: 1')
+    const log: string[] = [], w = mount(editHost(step, log))
+    expect(w.findAll('.scols.ed .scol')[1].find('textarea').element.value).toBe('y')
+    await w.findAll('.sadd')[0].trigger('click'); expect(step.items).toHaveLength(3)
+  })
+  it('Заполни таблицу: банк, образцы; в правке клетки и «＋ Строка»', async () => {
+    const step: any = reactive({ id: 't', kind: 'sort', bk: 'sort', bs: 'page', tw: true, cols: [{ t: '-s' }, { t: '-es' }], items: [{ w: 'bag', a: 'bags', c: 0, ex: true }, { w: 'box', a: 'boxes', c: 1 }] })
+    const v = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
+    expect(v.find('.twb .twe').text()).toBe('bag'); expect(v.findAll('.twi')).toHaveLength(1)
+    const log: string[] = [], w = mount(editHost(step, log))
+    expect(w.findAll('.etwc .etwa').map(i => (i.element as HTMLInputElement).value)).toEqual(['bags', 'boxes'])
+    await w.findAll('.etwk button')[0].trigger('click'); expect(step.rows).toBe(2)
   })
 })

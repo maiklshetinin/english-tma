@@ -1,0 +1,100 @@
+{
+  "kind": "sort",
+  "title": "Распредели по колонкам",
+  "head": "Распределите фразы по колонкам",
+  "templates": [
+    "sort",
+    "pg_sort"
+  ],
+  "fields": {
+    "head": {
+      "type": "text",
+      "label": "Задание (у книжных — в шапке учебника)"
+    },
+    "bk": {
+      "type": "enum",
+      "of": [
+        "sort"
+      ],
+      "label": "Книжный"
+    },
+    "bs": {
+      "type": "enum",
+      "of": [
+        "page"
+      ],
+      "label": "page — «Как в учебнике»"
+    },
+    "audio": {
+      "type": "audio",
+      "label": "«Listen and check» (необязательно)"
+    },
+    "cols": {
+      "type": "list",
+      "max": 5,
+      "of": {
+        "t": "text"
+      },
+      "label": "Колонки (2–5)"
+    },
+    "items": {
+      "type": "list",
+      "max": 30,
+      "of": {
+        "w": "text",
+        "c": "index",
+        "k": "tile",
+        "a": "text",
+        "ex": "bool"
+      },
+      "label": "Фразы: c — колонка; у таблицы a — ответ, w — слово для банка, ex — образец"
+    },
+    "tw": {
+      "type": "bool",
+      "label": "«Заполни таблицу» (Настя)"
+    },
+    "rows": {
+      "type": "number",
+      "max": 8,
+      "label": "Строк в таблице"
+    },
+    "noEx": {
+      "type": "bool",
+      "label": "Без образцов"
+    },
+    "cs": {
+      "type": "bool",
+      "label": "Регистр важен"
+    },
+    "hint": {
+      "type": "bool",
+      "label": "false — без подсказки «Нажмите фразу, затем колонку»"
+    },
+    "mix": {
+      "type": "bool",
+      "label": "false — не перемешивать"
+    },
+    "note": {
+      "type": "text",
+      "label": "Пояснение — после ответа"
+    }
+  },
+  "check": "button",
+  "next": "разложить всё и «Проверить»: ошибки красные (у таблицы — «Правильно: …»)",
+  "words": [],
+  "skills": {
+    "sort": [
+      "W"
+    ],
+    "pg_sort": [
+      "W"
+    ]
+  },
+  "min": 1,
+  "shuffle": true,
+  "limits": {
+    "items": 30,
+    "cols": 5,
+    "rows": 8
+  }
+}
