@@ -8,6 +8,7 @@
 // прогресс (pct) и итог (stats) приходят от ветки; на итоге — «Заново» и «Во весь экран».
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTelegram } from '../composables/useTelegram'
+import { sfxResult, sfxTick } from '../composables/useSfx'
 import BackButton from './BackButton.vue'
 import { review as rvStore, toggleFav } from '../stores/review'
 import { keyOf } from '../utils/review'
@@ -97,8 +98,8 @@ function tap(side, k) {
   st[side] = st[side] === k ? null : k
   if (st.left == null || st.right == null) return
   const a = st.left, b = st.right; st.left = st.right = null; score.all++; mine.all++
-  if (a === b) { st.matched.push(a); score.ok++; mine.ok++; if (st.matched.length === full(step.value).length) { st.done = true; hapticResult(true) } else hapticTick() }      // пара сошлась — лёгкий щелчок, все пары — «верно»
-  else { hapticResult(false); st.bad = [a, 'r' + b]; if (!st.wrong.includes(a)) st.wrong.push(a); setTimeout(() => { st.bad = [] }, 550) }
+  if (a === b) { st.matched.push(a); score.ok++; mine.ok++; if (st.matched.length === full(step.value).length) { st.done = true; hapticResult(true) } else { hapticTick(); sfxTick() } }      // пара сошлась — лёгкий щелчок, все пары — «верно»
+  else { hapticResult(false); sfxResult(false); st.bad = [a, 'r' + b]; if (!st.wrong.includes(a)) st.wrong.push(a); setTimeout(() => { st.bad = [] }, 550) }
 }
 
 // ---- проверка ответа (choice / order / gap): верно → зелёный низ, нет → красный и правильный ответ ----
@@ -250,7 +251,10 @@ function checkAny() {
 onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEventListener('keydown', onKey))
 
 // ---- Упражнения-шаблоны (src/exercises): экран рисует шаблон своего типа, плеер даёт ему состояние и действия ----
-const edApi = useEdit()          // в правке на ветке — «изменено» и файлы (от LessonRail)
+const edApi = useEdit()
+// ответ — зелёный или красный подвал и звук (один раз на ответ)
+const fbState = computed(() => (isFinal.value || props.edit ? '' : (checks.value && st.done && right.value) || (step.value?.kind === 'speak' && st.done) ? 'good' : checks.value && st.done && !right.value ? 'bad' : ''))
+watch(fbState, (v) => { if (v) sfxResult(v === 'good') })          // в правке на ветке — «изменено» и файлы (от LessonRail)
 const ex = computed(() => (isFinal.value ? null : exOf(step.value)))
 providePlay(reactive({
   st, src, say, pick, right, later, answer, tap, put, back, rec, said, recToggle, again, setVid: (el) => { vid.value = el },
@@ -306,7 +310,9 @@ providePlay(reactive({
 
     <!-- Снизу: результат и «Продолжить»; в правке — подвал ветки (время экрана, кнопки типа, «Сохранить») -->
     <slot v-if="edit" name="foot" />
-    <div v-else class="foot" :class="{ good: !isFinal && ((checks && st.done && right) || (step.kind === 'speak' && st.done)), bad: !isFinal && checks && st.done && !right }">
+    <div v-else class="foot" :class="fbState">
+      <!-- как в Busuu: подвал выезжает зелёным или красным, значок ✓ / ✕ «выпрыгивает», звук — useSfx (выключается в Профиле) -->
+      <span v-if="fbState" :key="fbState + i" class="mk" aria-hidden="true"><svg v-if="fbState === 'good'" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg><svg v-else viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" /></svg></span>
       <span class="fb"><component :is="ex.view" v-if="ex" :step="step" part="fb" /></span>
       <template v-if="embedded && isFinal"><button class="go ghost" @click="emit('restart')">↺ Заново</button><button class="go" @click="emit('full')">Во весь экран</button></template>
       <button v-else-if="needCheck && !single" class="go" :disabled="!canCheck" @click="checkAny">Проверить</button>
@@ -349,6 +355,18 @@ providePlay(reactive({
 /* низ */
 .foot { display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-top: 1px solid var(--border); background: var(--card); transition: background .15s }
 .foot.good { background: #e3fbef } .foot.bad { background: var(--red-l) }
+/* ответ, как в Busuu: подвал мягко выезжает снизу, значок ✓ / ✕ «выпрыгивает» (✕ — с дрожью) */
+.foot.good, .foot.bad { animation: fup .28s cubic-bezier(.2, .9, .3, 1.2) }
+@keyframes fup { from { transform: translateY(14px); opacity: .4 } to { transform: none; opacity: 1 } }
+.mk { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #1fbe78; color: #fff; animation: mkpop .42s cubic-bezier(.2, .9, .3, 1.4) both }
+.foot.bad .mk { background: var(--red, #ff4b4b); animation: mkpop .42s cubic-bezier(.2, .9, .3, 1.4) both, mkno .32s .3s }
+.mk svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round }
+.foot.good .mk svg path { stroke-dasharray: 22; stroke-dashoffset: 22; animation: mkdraw .3s .12s ease-out forwards }
+@keyframes mkpop { 0% { transform: scale(.3); opacity: 0 } 60% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
+@keyframes mkdraw { to { stroke-dashoffset: 0 } }
+@keyframes mkno { 25% { transform: translateX(-3px) } 75% { transform: translateX(3px) } }
+.lp:not(.embedded):not(.single) .mk { width: 40px; height: 40px } .lp:not(.embedded):not(.single) .mk svg { width: 24px; height: 24px }
+@media (prefers-reduced-motion: reduce) { .foot.good, .foot.bad, .mk, .foot.good .mk svg path, .foot.bad .mk { animation: none; stroke-dashoffset: 0 } }
 .fb { flex: 1; display: grid; font-size: 14px } .foot.good .fb b { color: #128a55 } .foot.bad .fb b { color: var(--red-d) }
 .foot.good .fb :deep(b) { color: #128a55 } .foot.bad .fb :deep(b) { color: var(--red-d) } .fb :deep(small) { color: var(--hint); font-weight: 600; font-size: 12px } .fb :deep(.lt) { color: #ff9600; font-weight: 800 } .fb :deep(.fs) { font-weight: 700 } .fb :deep(.fn) { margin-top: 2px } .fb :deep(.left) { color: var(--hint) } .lp.book .fb :deep(.fs) { font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; color: #185fa5 }          /* строка ответа от шаблона упражнения (src/exercises) */
 .go { border: 0; border-radius: 22px; padding: 11px 26px; background: var(--blue); color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }

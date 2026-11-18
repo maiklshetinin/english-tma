@@ -7,6 +7,7 @@ import AppIcon from '../../components/AppIcon.vue'
 import AppVersion from '../../components/AppVersion.vue'
 import { showToast } from '../../composables/useToast'
 import { hapticOn, setHaptic } from '../../composables/useTelegram'
+import { sfxOn, setSfx, sfxResult } from '../../composables/useSfx'
 import { apiFetch, canLogout } from '../../firebase'
 import { useStudentsStore } from '../../stores/students'
 import { useAuthStore } from '../../stores/auth'
@@ -84,6 +85,11 @@ async function ping() {
     </section>
 
     <section class="grp">
+      <label class="it">
+        <span class="ic"><AppIcon name="headphones" :size="18" /></span>
+        <span class="tx">Звуки ответов<small>«Дзынь», когда верно, и мягкий звук при ошибке — в уроке, песочнице и на ветке</small></span>
+        <input type="checkbox" class="sw" :checked="sfxOn" aria-label="Звуки ответов" @change="setSfx($event.target.checked); $event.target.checked && sfxResult(true)" />
+      </label>
       <label class="it">
         <span class="ic"><AppIcon name="bell" :size="18" /></span>
         <span class="tx">Вибрация<small>Отклик телефона: ответ верно / ошибка, «урок проведён»</small></span>
