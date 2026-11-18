@@ -19,6 +19,7 @@ import { ask } from '../composables/useDialog'
 import { showToast } from '../composables/useToast'
 import BackButton from './BackButton.vue'
 import { INTERACTIVE, stepIssue, lessonMin } from '../utils/lesson'
+import { practiceSteps } from '../utils/practice'
 
 const router = useRouter(), route = useRoute()
 // где ты в курсе — в адресе (#/path?c=курс&l=задание&s=экран): перезагрузил страницу — открыт тот же урок на том же экране.
@@ -162,7 +163,24 @@ function tap(x) {
   peek.value = peek.value === x.id ? null : x.id          // всё остальное — карточкой под заданием, без перехода на отдельную страницу
 }
 function go(x, at = 0) { startAt.value = at; peek.value = null; open.value = x; t0 = Date.now(); misses.clear(); for (const k in snap) delete snap[k]; for (const k in rvLog) delete rvLog[k] }
-// «Повторить навыки» (как Review skills в Busuu): что именно повторять — ещё решаем
+// «Повторить навыки» (как Review skills в Busuu, 18.11.2026) — у пройденного урока: короткая тренировка только по нему, до RV_MAX заданий:
+//  1) экраны урока, где ученик ошибался или которым по алгоритму пора (память экрана), — сначала забытые;
+//  2) слова и фразы урока — «Как это по-английски?» (utils/practice), сначала слабые.
+// Ответы обновляют силу слов и память экранов (как «Повторение»); урок повторно не засчитывается, в прогресс курса не пишется.
+// «Пройти заново» — весь урок целиком, по порядку, и засчитывается ещё раз (новая дата).
+function skillsReview(x) {
+  const now = Date.now(), cfg = { retention: algo.retention, maxDays: algo.maxDays }, miss = new Set(missOf(x.id))
+  const scr = okSteps(x).filter(st => GRADED.includes(st.kind)).map((st) => {
+    const m = cid.value ? review.items[screenKey(cid.value, x.id, st.id)] : null, s = m ? stateOf(m, now, cfg) : null
+    return { st, due: miss.has(st.id) || !!(s && !s.isNew && (s.failed || s.due <= now)), r: s && !s.isNew ? (s.failed ? -1 : s.recall) : -1 }
+  }).filter(o => o.due).sort((a, b) => a.r - b.r).map(o => o.st)
+  const keys = new Set(okSteps(x).flatMap(st => hitsOf(st).map(h => keyOf(h.text))))
+  const rOf = (w) => { const s = stateOf(w, now, cfg); return s.isNew ? -1 : s.failed ? -1 : s.recall }
+  const ws = [...keys].map(k => review.items[k]).filter(w => w && (w.kind === 'word' || w.kind === 'phrase')).sort((a, b) => rOf(a) - rOf(b))
+  const steps = [...scr, ...practiceSteps(ws, Object.values(review.items))].slice(0, RV_MAX)
+  if (!steps.length) return showToast('Повторять пока нечего — в уроке нет слов и проверяемых экранов')
+  go({ id: 'sk-' + x.id, type: 'repeat', title: 'Повторить навыки · ' + (x.title || 'урок'), virtual: true, steps, home: x })
+}
 // Review — слова и фразы из пройденных уроков (как в Busuu); ответы в уроках сразу попадают туда
 // итог урока: какие слова урок записал в Review и как изменилась их память (FSRS) — чтобы сверять с разделом Review строка в строку
 const rvChart = ref((() => { try { return localStorage.getItem('tma.lessonGraphs') === '1' } catch { return false } })())
@@ -197,6 +215,7 @@ const snap = reactive({})                      // ключ слова → ста
 const rvLog = reactive({})                     // ключ слова → журнал: какой экран, как ответили, какая стала память
 const sOf = (k) => { const m = review.items[k] && memOf(review.items[k]); return m ? Math.round(m.s * 10) / 10 : null }
 const onAnswer = (a) => {
+  if (String(a.step.id).startsWith('pr-')) { recordStep(a.step, a, { lesson: open.value?.home?.title, course: course.value?.title, noTags: true }); return }          // «Как это по-английски?» — только слова
   if (a.ok === false) misses.add(a.step.id)
   const hits = hitsOf(a.step, a), was = {}
   for (const h of hits) { const k = keyOf(h.text); was[k] = sOf(k); if (!(k in snap)) snap[k] = was[k] }
@@ -381,7 +400,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <p v-if="x.type === 'checkpoint'" class="cka">{{ ckParts(x).fromErrors ? `Собран сам: ${ckParts(x).auto.length} — где ${student ? 'вы ошибались' : of ? 'ученик ошибался' : 'были ошибки'} в уроках Chapter` : `Собран сам из уроков Chapter: ${ckParts(x).auto.length}` }}{{ ckParts(x).own.length ? ` + ${ckParts(x).own.length} от преподавателя` : '' }}</p>
             <!-- пройденный — как в Busuu: повторить навыки (в разработке) или пройти урок заново -->
             <template v-if="state(x) === 'done'">
-              <button class="pgo" @click="peek = null; router.push({ name: 'review' })">Повторить навыки</button>
+              <button v-if="!of" class="pgo" title="Коротко: до 10 заданий только по этому уроку — где ошибались, что забывается, слабые слова" @click="skillsReview(x)">Повторить навыки</button>
               <button class="pgo ghost" @click="go(x)">Пройти заново</button>
             </template>
             <button v-else-if="!of && state(x) === 'todo'" class="pgo" disabled title="Курс проходится по порядку — и учеником, и преподавателем">Сначала пройдите предыдущие</button>

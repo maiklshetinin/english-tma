@@ -21,8 +21,7 @@ describe('«Песочница курса»', () => {
     const w = mk()
     await sw(w, 'Порог чекпоинта').trigger('click')
     expect(w.find('.debt').text()).toContain('чекпоинт ещё не пройден')
-    await sw(w, 'по всему курсу').trigger('click')
-    await w.find('#sbx-days').setValue('2')
+    await w.find('#sbx-days').setValue('2')          // «по всему курсу» включено по умолчанию — так работает курс (18.11.2026)
     const gl = w.find('.gl').text()
     expect(gl).toContain('гл. 1'); expect(gl).toContain('гл. 2')
     expect(w.findAll('.blk.rv').length).toBe(0)
@@ -35,6 +34,16 @@ describe('«Песочница курса»', () => {
     await w.find('#sbx-days').setValue('2'); await flushPromises()
     expect(w.findAll('.msg').length).toBeGreaterThan(0)
     expect(w.find('.tgt').text()).toContain('Пора повторить')
+    w.unmount()
+  })
+})
+
+describe('«Песочница курса»: «Повторить навыки» у пройденного урока', () => {
+  it('ошибка — экран урока в тренировке; слова урока — сначала слабые; у будущего урока — нет', async () => {
+    const w = mk()
+    const sk = w.findAll('.skr')
+    expect(sk.length).toBeGreaterThan(0)
+    expect(sk[0].text()).toContain('Пары (ошибка)'); expect(sk[0].text()).toContain('Bye')
     w.unmount()
   })
 })

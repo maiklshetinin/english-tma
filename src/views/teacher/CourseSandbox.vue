@@ -194,7 +194,11 @@ const chapters = computed(() => CH.value.map(c => {
     const by = {}
     for (const x of words.value) if (l.screens.includes(x.s)) (by[x.ivl] ??= []).push(x.w)
     const d = dayOf(l)
-    return { ...l, day: d, later: d > days.value, summary: Object.keys(by).sort((a, b) => a - b).map(k => ({ tomorrow: +k === 1, when: +k === 1 ? 'Вернутся завтра' : `Через ${k} ${dayWord(+k)}`, words: by[k].join(', ') })) }
+    // «Повторить навыки» у пройденного урока (как в курсе, CourseViewer skillsReview): экраны с ошибкой или которым пора + слова урока, сначала слабые; до 10
+    const lw = words.value.filter(x => l.screens.includes(x.s)).sort((a, b) => a.r - b.r)
+    const skScr = l.screens.filter(s => ans[s.id] === 'bad' || lw.some(x => x.s === s && x.due)).map(s => s.kind + (ans[s.id] === 'bad' ? ' (ошибка)' : ' (пора)'))
+    const skW = lw.slice(0, Math.max(0, 10 - skScr.length)).map(x => `${x.w} ${x.r} %`)
+    return { ...l, day: d, later: d > days.value, sk: d > days.value ? null : { scr: skScr, w: skW }, summary: Object.keys(by).sort((a, b) => a - b).map(k => ({ tomorrow: +k === 1, when: +k === 1 ? 'Вернутся завтра' : `Через ${k} ${dayWord(+k)}`, words: by[k].join(', ') })) }
   })
   let res
   if (!ckx.items.length) res = ['', 'Проверять нечего —', 'кнопка «Готово — дальше».']
@@ -309,6 +313,8 @@ onUnmounted(() => clearTimeout(toastT))
                   <button :class="{ bad: ans[s.id] === 'bad' }" :aria-pressed="ans[s.id] === 'bad'" @click="setAns(s.id, 'bad')">✕ ошибка</button>
                 </span>
               </div>
+              <div v-if="l.sk && (l.sk.scr.length || l.sk.w.length)" class="skr" title="Кнопка у пройденного урока в курсе: до 10 заданий только по этому уроку. Сила слов обновляется, урок повторно не засчитывается"><b>Повторить навыки</b>
+                <span v-if="l.sk.scr.length">экраны: {{ l.sk.scr.join(', ') }}</span><span v-if="l.sk.w.length">слова: {{ l.sk.w.join(', ') }}</span></div>
               <div v-if="cfg.sum && l.summary.length" class="sum">
                 <b>Итог урока — что вернётся</b>
                 <span v-for="g in l.summary" :key="g.when"><b :class="g.tomorrow ? 'r' : 'g'">{{ g.when }}:</b> {{ g.words }}</span>
@@ -485,4 +491,6 @@ h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; fon
 .tmr::-moz-range-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, #1899d6 calc(9px + (100% - 18px) * var(--p)), var(--border) 0) }
 .tmr::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border: 3px solid #fff; border-radius: 50%; background: #1899d6; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); box-sizing: border-box }
 .tmr::-moz-range-thumb { width: 18px; height: 18px; border: 3px solid #fff; border-radius: 50%; background: #1899d6; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); box-sizing: border-box }
+/* «Повторить навыки» у пройденного урока — что попадёт в короткую тренировку */
+.skr { display: grid; gap: 2px; margin-top: 6px; padding: 7px 10px; border-radius: 10px; background: #eef4ff; font-size: 12px; font-weight: 600; color: var(--hint) } .skr b { font-size: 12px; font-weight: 900; color: #1278b0 }
 </style>
