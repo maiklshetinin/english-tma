@@ -1,0 +1,23 @@
+{
+  "kind": "order",
+  "title": "Собери фразу",
+  "head": "Расставьте слова в правильном порядке",
+  "templates": ["order"],
+  "fields": {
+    "head": { "type": "text", "label": "Задание" },
+    "by": { "type": "enum", "of": ["words", "letters"], "label": "letters — собрать слово по буквам (старые экраны)" },
+    "video": { "type": "video", "label": "Видео над фразой" },
+    "image": { "type": "image", "label": "Фото над фразой" },
+    "audio": { "type": "audio", "label": "Звук фразы" },
+    "phrase": { "type": "text", "label": "Фраза — верный ответ" },
+    "tr": { "type": "text", "label": "Перевод — после ответа" },
+    "note": { "type": "text", "label": "Пояснение — после ответа" }
+  },
+  "check": "tap",
+  "next": "все слова на линии — проверка сразу: «Верно!» / «Правильно так: …», перевод и пояснение",
+  "words": ["phrase"],
+  "skills": { "order": ["W"] },
+  "min": 1,
+  "shuffle": true,
+  "limits": {}
+}

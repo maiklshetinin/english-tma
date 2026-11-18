@@ -1,0 +1,20 @@
+{
+  "kind": "pairs",
+  "title": "Пары",
+  "head": "Соедините пары",
+  "templates": ["pairs"],
+  "fields": {
+    "head": { "type": "text", "label": "Задание" },
+    "video": { "type": "video", "label": "Видео (свои упражнения)" },
+    "image": { "type": "image", "label": "Фото (свои упражнения)" },
+    "audio": { "type": "audio", "label": "Звук — плашкой" },
+    "pairs": { "type": "list", "max": 6, "of": { "a": "text", "b": "text" }, "label": "Пары: слово — перевод" }
+  },
+  "check": "tap",
+  "next": "тап слева, потом справа: сошлось — пара зеленеет, нет — мигает красным; все пары — экран решён (ошибки — в Review)",
+  "words": ["pairs[].a"],
+  "skills": { "pairs": ["R"] },
+  "min": 1,
+  "shuffle": true,
+  "limits": { "pairs": 6 }
+}

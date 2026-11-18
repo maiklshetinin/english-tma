@@ -4,12 +4,15 @@
 //  kinds — что можно положить (video, image); joined — снизу продолжается блоком (слово у «Нового слова») — нижние углы прямые;
 //  xm — отступ снизу (подсказка); ph — надпись пустого окна в правке (нет — пустого окна в правке нет, как у ученика);
 //  audio — звук поверх: { src, auto, add } для ExAudio или true; autoplay — видео само (у ученика).
-//  slot — своё поверх (закладка «В избранное»)
+//  controls — кнопки у видео (у «Повтори» их нет: нажал на видео — заново); vref — получить сам <video> (для «Ещё раз»)
+//  slot — своё поверх (закладка «В избранное», подпись-фраза)
 import { computed } from 'vue'
 import ExAudio from './ExAudio.vue'
 import { usePlay, useEdit } from '../ctx'
 const props = defineProps({ step: { type: Object, required: true }, kinds: { type: Array, default: () => ['video', 'image'] }, joined: Boolean, xm: Boolean,
-  ph: { type: String, default: '' }, hint: { type: String, default: '16:9, лучше от 1280×720 — нажмите или перетащите' }, audio: { type: [Boolean, Object], default: false }, autoplay: Boolean })
+  ph: { type: String, default: '' }, hint: { type: String, default: '16:9, лучше от 1280×720 — нажмите или перетащите' }, audio: { type: [Boolean, Object], default: false }, autoplay: Boolean,
+  controls: { type: Boolean, default: true }, vref: { type: Function, default: null } })
+const emit = defineEmits(['vclick'])
 const p = usePlay(), ed = useEdit()
 const video = computed(() => (props.kinds.includes('video') && props.step.video) || '')
 const image = computed(() => (props.kinds.includes('image') && props.step.image) || '')
@@ -21,7 +24,7 @@ const what = computed(() => (props.kinds.length > 1 ? 'Видео или фот�
 
 <template>
   <div v-if="!p.edit && has" class="media" :class="{ joined, xm }">
-    <video v-if="video" :src="p.src(video, 'video')" controls playsinline :autoplay="autoplay" />
+    <video v-if="video" :ref="vref" :src="p.src(video, 'video')" :controls="controls" playsinline :autoplay="autoplay" @click="emit('vclick')" />
     <img v-else :src="p.src(image, 'image')" alt="" />
     <ExAudio v-if="au && !video" :step="step" v-bind="au" at="over" />
     <slot />

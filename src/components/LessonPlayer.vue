@@ -261,7 +261,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 // ---- Упражнения-шаблоны (src/exercises): экран рисует шаблон своего типа, плеер даёт ему состояние и действия ----
 const ex = computed(() => (isFinal.value ? null : exOf(step.value)))
 providePlay(reactive({
-  st, src, say, pick, right, later, answer,
+  st, src, say, pick, right, later, answer, tap, put, back, rec, said, recToggle, again, setVid: (el) => { vid.value = el },
   edit: computed(() => props.edit), single: computed(() => props.single), embedded: computed(() => props.embedded), track: computed(() => props.track),
   favKey, favOn, favToggle,
 }))
@@ -306,57 +306,8 @@ providePlay(reactive({
       </div>
     </div>
 
-    <!-- Упражнения-шаблоны: «Новое слово», «Выбери ответ», «Подсказка» — разметка в src/exercises/<тип>/ (одна и для ученика, и для правки) -->
+    <!-- Упражнения-шаблоны: «Новое слово», «Выбери ответ», «Подсказка», «Пары», «Собери фразу», «Повтори» — разметка в src/exercises/<тип>/ (одна и для ученика, и для правки) -->
     <div v-else-if="ex" class="body" :class="'x-' + step.kind"><component :is="ex.view" :step="step" /></div>
-
-    <!-- Пары -->
-    <div v-else-if="step.kind === 'pairs'" class="body">
-      <h3 class="hd">{{ step.head || KINDS.pairs.head }}</h3>
-      <!-- своё упражнение (конструктор): фото / видео / аудио и тут -->
-      <div v-if="step.video || step.image" class="media xm"><video v-if="step.video" :src="src(step.video, 'video')" controls playsinline /><img v-else :src="src(step.image, 'image')" alt="" /></div>
-      <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
-      <div v-if="full(step).length < 2" class="empty">Нужно хотя бы 2 пары</div>
-      <div v-else class="pairs">
-        <div class="col"><button v-for="k in st.L" :key="'l' + k" class="pr" :class="{ sel: st.left === k, ok: st.matched.includes(k), no: st.bad[0] === k }" :disabled="st.matched.includes(k)" @click="tap('left', k)">{{ full(step)[k].a }}</button></div>
-        <div class="col"><button v-for="k in st.R" :key="'r' + k" class="pr" :class="{ sel: st.right === k, ok: st.matched.includes(k), no: st.bad[1] === 'r' + k }" :disabled="st.matched.includes(k)" @click="tap('right', k)">{{ full(step)[k].b }}</button></div>
-      </div>
-    </div>
-
-    <!-- Собери фразу -->
-    <div v-else-if="step.kind === 'order'" class="body">
-      <h3 class="hd">{{ step.head || (step.by === 'letters' ? 'Соберите слово по буквам' : KINDS.order.head) }}</h3>
-      <!-- своё упражнение (конструктор): фото / видео над фразой -->
-      <div v-if="step.video || step.image" class="media xm"><video v-if="step.video" :src="src(step.video, 'video')" controls playsinline /><img v-else :src="src(step.image, 'image')" alt="" /></div>
-      <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
-      <div v-if="pw.length < 2" class="empty">{{ step.by === 'letters' ? 'Впишите слово хотя бы из 2 букв' : 'Впишите фразу хотя бы из 2 слов' }}</div>
-      <template v-else>
-        <div class="built" :class="{ ok: st.done && st.res, no: st.done && !st.res }"><button v-for="k in st.built" :key="'b' + k" class="chip" @click="back(k)">{{ pw[k] }}</button></div>
-        <div class="pool"><button v-for="k in st.pool" :key="'p' + k" class="chip" @click="put(k)">{{ pw[k] }}</button></div>
-      </template>
-    </div>
-
-    <!-- Повтори за диктором -->
-    <div v-else-if="step.kind === 'speak'" class="body">
-      <h3 class="hd">{{ step.head || KINDS.speak.head }}</h3>
-      <div class="nw">
-        <div v-if="step.video || step.image" class="media">
-          <video v-if="step.video" ref="vid" :src="src(step.video, 'video')" playsinline :autoplay="!single && !embedded" @click="again" />
-          <img v-else :src="src(step.image, 'image')" alt="" />
-          <span v-if="step.phrase" class="cap" :class="{ up: !step.video && step.audio }"><template v-if="said"><template v-for="(x, k) in said.words" :key="k"><b :class="{ hit: x.ok, miss: st.done && !rec.on && !x.ok }">{{ x.w }}</b>{{ ' ' }}</template></template><template v-else>{{ step.phrase }}</template></span>
-          <AudioPill v-if="!step.video && step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="over" />
-        </div>
-        <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" />
-        <p v-if="!step.video && !step.image && step.phrase" class="q"><template v-if="said"><template v-for="(x, k) in said.words" :key="k"><b :class="{ hit: x.ok, miss: st.done && !rec.on && !x.ok }">{{ x.w }}</b>{{ ' ' }}</template></template><template v-else>{{ step.phrase }}</template></p>
-      </div>
-      <p v-if="st.showTr && step.tr" class="trl">{{ step.tr }}</p>
-      <div class="acts">
-        <button class="act" @click="again"><i><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4" /></svg></i>Ещё раз</button>
-        <button class="act big" :class="{ on: rec.on }" @click="recToggle"><i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></i>{{ rec.on ? 'Стоп' : 'Нажми и повтори' }}</button>
-        <button class="act" :disabled="!step.tr" @click="st.showTr = !st.showTr"><i><svg viewBox="0 0 24 24"><path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5M6 10c1 2 3 3.5 5 4.5M13 20l4-9 4 9M14.5 17h5" /></svg></i>Перевести</button>
-      </div>
-      <!-- что услышали — всегда одна строка одной высоты: окно не растёт (18.11.2026); запись себя не показываем -->
-      <p class="said" :class="{ live: rec.on, bad: !rec.on && (rec.miss || rec.err), ok: st.done && !rec.on }"><small>{{ rec.on ? 'Слушаю…' : rec.err ? rec.err : rec.miss ? 'Не совпало — послушайте и скажите ещё раз' : st.done ? 'Вы сказали' : 'Нажмите микрофон и повторите' }}</small><span>{{ rec.heard || (rec.on ? '…' : '—') }}</span></p>
-    </div>
 
     <!-- Заполни пропуск / Закончи предложение -->
     <div v-else-if="step.kind === 'gap'" class="body">
@@ -442,9 +393,7 @@ providePlay(reactive({
     <slot v-if="edit" name="foot" />
     <div v-else class="foot" :class="{ good: !isFinal && ((checks && st.done && right) || (step.kind === 'speak' && st.done)), bad: !isFinal && checks && st.done && !right }">
       <span v-if="ex && st.done" class="fb"><component :is="ex.view" :step="step" part="fb" /></span>
-      <span v-else-if="!isFinal && step.kind === 'order' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильно так:' }}</b><span class="fs">{{ step.phrase }}</span><small>{{ step.tr }}</small><small v-if="step.note" class="fn">{{ step.note }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gapFull(step.phrase) }}</span><small>{{ step.tr }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
-      <span v-else-if="!isFinal && step.kind === 'speak' && st.done" class="fb"><b>Верно!</b><small v-if="step.tr">{{ step.tr }}</small></span>
       <span v-else-if="!isFinal && step.kind === 'answer' && st.done && step.tr" class="fb"><small>Пример ответа</small><span class="fs">{{ step.tr }}</span></span>
       <span v-else-if="!isFinal && step.kind === 'odd' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Лишнее:' }}</b><span v-if="!right" class="fs">{{ step.opts?.[step.ans ?? 0]?.w }}</span><small v-if="step.note">{{ step.note }}</small></span>
       <span v-else-if="!isFinal && step.kind === 'sort' && st.done" class="fb"><b>{{ right ? 'Верно!' : step.tw ? 'Правильно:' : 'Есть ошибки — они красные' }}</b><span v-if="step.tw && !right && st.twr?.miss.length" class="fs">{{ st.twr.miss.join(', ') }}</span><small v-if="step.note">{{ step.note }}</small></span>
@@ -479,28 +428,20 @@ providePlay(reactive({
 .ex { display: grid; gap: 3px; width: 100%; max-width: 380px; align-self: center; padding: 0 2px; box-sizing: border-box } .ex small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px }
 .ex p { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 15px; font-weight: 600 } .ex span { font-size: 12px; color: var(--hint); font-weight: 600 }
 .empty { margin: 6px 0; padding: 18px; border: 1px dashed var(--border); border-radius: 12px; text-align: center; color: var(--hint); font-size: 14px; font-weight: 700 }
-.q { padding: 14px; border-radius: 14px; background: #f1f6ff; text-align: center; font-size: 20px; font-weight: 900 }
 /* варианты */
 @keyframes shake { 25% { transform: translateX(-4px) } 75% { transform: translateX(4px) } }
 /* пары */
-.pairs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px } .col { display: grid; gap: 10px; align-content: start }
-.pr { min-height: 48px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); font: inherit; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer }
-.pr.sel { border-color: var(--blue); background: var(--blue-l) } .pr.ok { background: #8ff0c8; border-color: #8ff0c8; cursor: default } .pr.no { background: var(--red-l); border-color: var(--red); animation: shake .3s }
 /* собери фразу, пропуск */
-.built { min-height: 50px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 8px; padding: 10px; border-bottom: 2px solid var(--border) }
 .pool { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-top: 4px }
 .chip { padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font: inherit; font-size: 15px; font-weight: 600; color: var(--text); cursor: pointer }
 .chip:hover { border-color: #1a73e8 } .chip.ok { background: #8ff0c8; border-color: #8ff0c8 } .chip.no { background: var(--red-l); border-color: var(--red); animation: shake .3s }
-.built.ok .chip { background: #e3fbef; border-color: #8ff0c8 } .built.no .chip { background: var(--red-l); border-color: var(--red-l) }
 .sent { margin: 6px 0; text-align: center; font-size: 18px; font-weight: 600; line-height: 1.6 }
 .slot { display: inline-block; min-width: 80px; margin: 0 3px; padding: 0 4px; border-bottom: 2px dotted #1a73e8; color: #1a73e8; text-align: center }
 .slot.in { min-width: 0; border: 0; border-bottom: 2px dotted #1a73e8; background: none; font: inherit; outline: none; border-radius: 0 }
 .slot.ok { color: #128a55; border-bottom-color: #1fbe78 } .slot.no { color: var(--red-d); border-bottom-color: var(--red) }
 /* подсказка */
 /* повтори за диктором, ответь на вопрос */
-.cap { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 4px 12px; border-radius: 6px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 15px; font-weight: 700; white-space: nowrap }
 .media video { cursor: pointer }
-.trl { margin: 0; text-align: center; color: var(--hint); font-size: 14px; font-weight: 600 }
 .acts { display: flex; justify-content: center; align-items: flex-start; gap: 22px; margin-top: 4px }
 .act { display: grid; grid-template-rows: auto 30px; align-content: start; justify-items: center; gap: 6px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 700; color: #1a73e8; cursor: pointer; padding: 0; width: 84px }
 .act i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #c9dcfb; background: var(--card) }
@@ -540,7 +481,7 @@ providePlay(reactive({
 .foot { display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-top: 1px solid var(--border); background: var(--card); transition: background .15s }
 .foot.good { background: #e3fbef } .foot.bad { background: var(--red-l) }
 .fb { flex: 1; display: grid; font-size: 14px } .foot.good .fb b { color: #128a55 } .foot.bad .fb b { color: var(--red-d) }
-.foot.good .fb :deep(b) { color: #128a55 } .foot.bad .fb :deep(b) { color: var(--red-d) } .fb :deep(small) { color: var(--hint); font-weight: 600; font-size: 12px } .fb :deep(.lt) { color: #ff9600; font-weight: 800 }          /* строка ответа от шаблона упражнения (src/exercises) */
+.foot.good .fb :deep(b) { color: #128a55 } .foot.bad .fb :deep(b) { color: var(--red-d) } .fb :deep(small) { color: var(--hint); font-weight: 600; font-size: 12px } .fb :deep(.lt) { color: #ff9600; font-weight: 800 } .fb :deep(.fs) { font-weight: 700 } .fb :deep(.fn) { margin-top: 2px }          /* строка ответа от шаблона упражнения (src/exercises) */
 .go { border: 0; border-radius: 22px; padding: 11px 26px; background: var(--blue); color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer }
 .go:disabled { background: var(--border); color: var(--hint-2); cursor: not-allowed }
 .single .go { background: var(--surface); color: var(--hint); cursor: default; font-size: 13px; padding: 9px 16px }
@@ -562,8 +503,6 @@ providePlay(reactive({
   .lp:not(.embedded):not(.single) :deep(.ap .pp) { width: 30px; height: 30px } .lp:not(.embedded):not(.single) :deep(.ap .pp svg) { width: 20px; height: 20px }
   .lp:not(.embedded):not(.single) :deep(.ap .sp) { font-size: 12px }
   .lp:not(.embedded):not(.single) .media .over { left: 9%; right: 9%; bottom: 16px }
-  .lp:not(.embedded):not(.single) .q { font-size: 24px; padding: 20px }
-  .lp:not(.embedded):not(.single) .pr { min-height: 60px; font-size: 17px }
   .lp:not(.embedded):not(.single) .chip { font-size: 18px; padding: 11px 18px } .lp:not(.embedded):not(.single) .sent { font-size: 22px }
   .lp:not(.embedded):not(.single) .foot { padding: 18px max(24px, calc(50% - 560px)) } .lp:not(.embedded):not(.single) .fb { font-size: 16px }
   .lp:not(.embedded):not(.single) .go { min-width: 200px; padding: 15px 34px; font-size: 17px; border-radius: 26px }
@@ -571,7 +510,6 @@ providePlay(reactive({
 .embedded { height: auto; border-radius: inherit } .embedded .body { flex: none; overflow: visible; padding: 10px 40px 20px } .embedded .top { padding: 16px 110px 4px } .embedded .foot { padding: 10px 14px }
 .embedded .go { padding: 9px 22px; font-size: 14px } .go.ghost { background: var(--surface); color: var(--text); margin-right: auto }
 .embedded .pb i { transition: width .5s ease }
-.cap.up { bottom: 52px }          /* подпись над синей плашкой звука, а не под ней (раньше плашка её закрывала) */
 
 /* книжные: Найди лишнее / Распредели по колонкам */
 .oddg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
@@ -661,7 +599,6 @@ providePlay(reactive({
 .said span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis } .said.bad { background: #fdecec } .said.bad small { color: var(--red-d, #c33) } .said.ok { background: #e3f8ee } .said.ok small { color: var(--green-d, #3a9a00) }
 .said small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px } .said.live small { color: #1a73e8 }
 .saidv { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--orange-d, #e07a00) } .saidv.ok { color: var(--green-d, #3a9a00) }
-.cap b, .q b { font-weight: inherit; transition: color .15s } .cap b.hit { color: #8ff0c8 } .q b.hit { color: #1fbe78 } .cap b.miss { color: #ffb4b4 } .q b.miss { color: var(--red-d, #c33) }
 /* закладка «в избранное» — как в Busuu: белый кружок с синей рамкой в углу фото; в избранном — синий */
 .word { position: relative }
 </style>

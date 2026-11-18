@@ -30,7 +30,7 @@ describe('упражнения-шаблоны: описание (.json) совп
       expect(['none', 'tap', 'button', 'voice', 'free']).toContain(x.check)
     })
   }
-  it('книжные экраны пока рисуются по-старому', () => { expect(exOf({ kind: 'choice', bk: 'bkpick' })).toBeNull(); expect(exOf({ kind: 'pairs' })).toBeNull(); expect(exOf({ kind: 'tip' })).not.toBeNull() })
+  it('книжные экраны пока рисуются по-старому', () => { expect(exOf({ kind: 'choice', bk: 'bkpick' })).toBeNull(); expect(exOf({ kind: 'gap' })).toBeNull(); expect(exOf({ kind: 'pairs' })).not.toBeNull() })
 })
 
 describe('ученик видит экран из шаблона', () => {
@@ -87,5 +87,42 @@ describe('правка — тот же шаблон: поля на месте т
     await w.find('.tr textarea').setValue('Hello!'); expect(step.opts[0].w).toBe('Hello!')
     await w.find('.cf button').trigger('click'); expect(step.opts).toHaveLength(2)
     await nextTick(); await w.findAll('.tr .rx')[1].trigger('click'); expect(step.opts).toHaveLength(1)
+  })
+})
+
+describe('часть 3: Пары, Собери фразу, Повтори', () => {
+  it('Пары у ученика: слово, потом перевод — пара зеленеет', async () => {
+    const w = mount(LessonPlayer, { props: { steps: [{ id: 'p', kind: 'pairs', pairs: [{ a: 'cat', b: 'кошка' }, { a: 'dog', b: 'собака' }] }], resolve, single: true } })
+    const L = w.findAll('.col')[0].findAll('.pr'), R = w.findAll('.col')[1].findAll('.pr')
+    expect(L.map(b => b.text())).toEqual(['cat', 'dog'])
+    await L[0].trigger('click'); await R.find(b => b.text() === 'кошка')!.trigger('click')
+    expect(w.findAll('.col')[0].findAll('.pr')[0].classes()).toContain('ok')
+  })
+  it('Пары в правке: плашки правятся, ✕ убирает пару, «＋» добавляет', async () => {
+    const step: any = reactive({ id: 'p', kind: 'pairs', pairs: [{ a: 'cat', b: 'кошка' }, { a: 'dog', b: 'собака' }] }), log: string[] = []
+    const w = mount(editHost(step, log))
+    await w.findAll('.col')[1].find('textarea').setValue('кот'); expect(step.pairs[0].b).toBe('кот')
+    await w.find('.pr .px').trigger('click'); expect(step.pairs).toHaveLength(1)
+    await w.find('.cf button').trigger('click'); expect(step.pairs).toHaveLength(2)
+  })
+  it('Собери фразу: все слова на линии — «Верно!», фраза и перевод в подвале', async () => {
+    const w = mount(LessonPlayer, { props: { steps: [{ id: 'o', kind: 'order', phrase: 'see you', tr: 'увидимся' }], resolve, embedded: true } })
+    for (const want of ['see', 'you']) await w.findAll('.pool .chip').find(b => b.text() === want)!.trigger('click')
+    expect(w.find('.foot .fb').text()).toContain('Верно!'); expect(w.find('.foot .fb').text()).toContain('увидимся')
+  })
+  it('Собери фразу в правке: фраза на линии, плашки под ней; перевод — окошком из подвала', async () => {
+    const step: any = reactive({ id: 'o', kind: 'order', phrase: 'see you later' }), log: string[] = []
+    const w = mount(editHost(step, log))
+    expect(w.findAll('.pool .chip').map(c => c.text())).toEqual(['see', 'you', 'later'])
+    await w.find('.built textarea').setValue('see you'); expect(w.findAll('.pool .chip')).toHaveLength(2)
+    await w.find('.cf button').trigger('click'); await w.find('.cf input').setValue('увидимся'); expect(step.tr).toBe('увидимся')
+  })
+  it('Повтори: фраза подписью, кнопки ученика; в правке подпись правится, кнопки бледные', async () => {
+    const v = mount(LessonPlayer, { props: { steps: [{ id: 's', kind: 'speak', phrase: 'Hello!', image: 'i.jpg', tr: 'Привет' }], resolve, embedded: true } })
+    expect(v.find('.media .cap').text()).toBe('Hello!'); expect(v.findAll('.act')).toHaveLength(3); expect(v.find('.said').text()).toContain('Нажмите микрофон')
+    const step: any = reactive({ id: 's', kind: 'speak', phrase: 'Hello!', image: 'i.jpg' }), log: string[] = []
+    const w = mount(editHost(step, log))
+    await w.find('.media .cap textarea').setValue('Hi!'); expect(step.phrase).toBe('Hi!')
+    expect(w.find('.acts').classes()).toContain('ro')
   })
 })

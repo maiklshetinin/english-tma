@@ -1,0 +1,21 @@
+{
+  "kind": "speak",
+  "title": "Повтори за диктором",
+  "head": "Повтори за диктором",
+  "templates": ["sayword"],
+  "fields": {
+    "head": { "type": "text", "label": "Задание" },
+    "video": { "type": "video", "label": "Видео с фразой" },
+    "image": { "type": "image", "label": "Фото" },
+    "audio": { "type": "audio", "label": "Звук фразы (у фото)" },
+    "phrase": { "type": "text", "label": "Фраза — подписью на фото" },
+    "tr": { "type": "text", "label": "Перевод — по кнопке «Перевести»" }
+  },
+  "check": "voice",
+  "next": "микрофон: сказанное видно строкой, слова фразы зеленеют; совпало ≥ 80% — «Верно!», запись сама останавливается",
+  "words": ["phrase"],
+  "skills": { "sayword": ["S"] },
+  "min": 1,
+  "shuffle": false,
+  "limits": {}
+}

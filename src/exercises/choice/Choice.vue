@@ -77,7 +77,7 @@ function delOpt(k) {
 .ow { padding: 9px 10px; font-size: 14px; font-weight: 800; text-align: center }
 .rows .ow { padding: 13px 12px; font-weight: 600 }
 .op.ok { background: #8ff0c8; border-color: #8ff0c8 } .op.no { background: var(--red-l); border-color: var(--red); animation: shake .3s } .op.dim { opacity: .55 }
-@keyframes shake { 0%, 100% { translate: 0 } 25% { translate: -5px } 75% { translate: 5px } }
+@keyframes shake { 25% { transform: translateX(-4px) } 75% { transform: translateX(4px) } }
 /* правка: кружок — верный ответ, ✕ — убрать, фото — нажать или перетащить */
 div.op { cursor: default }
 .op.right { border: 2px solid #1fbe78; margin: -1px }

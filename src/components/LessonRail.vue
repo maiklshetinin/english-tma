@@ -16,7 +16,7 @@ import { provideEdit } from '../exercises/ctx'
 import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
 import { stepJson, tplOf, tplTitle, tplDesc, SKILLS, SKILL_T, skillsOf, BOOK } from '../utils/lesson'
-import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, orderParts, gapParts, gapList, gapAlts, gapOk as gapRight, GAPS_MAX, TILE, TILE_K, tileK, ODD_MAX, SORT_MAX, GAP_OPTS_MAX, SORT_COLS_MAX, TW_ROWS_MAX, hintParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
+import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, phraseWords, gapParts, gapList, gapAlts, gapOk as gapRight, GAPS_MAX, TILE, TILE_K, tileK, ODD_MAX, SORT_MAX, GAP_OPTS_MAX, SORT_COLS_MAX, TW_ROWS_MAX, hintParts, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -145,7 +145,6 @@ function markGap(s, el) {
   if (b <= a) return say('Выделите слово в фразе', { text: 'Выделенное станет пропуском — его ученик впишет или выберет.' })
   s.phrase = p.slice(0, a) + '[' + p.slice(a, b).trim() + ']' + p.slice(b); changed()
 }
-const addPair = (s) => { if ((s.pairs ??= []).length < PAIRS_MAX) { s.pairs.push({ a: '', b: '' }); changed() } }
 // правка в шаблонах упражнений (src/exercises): файлы, «изменено», карточки из колод — отсюда
 provideEdit({
   pick: (s, kinds, opt = null, as = null) => pick(s, kinds, opt, as),
@@ -406,39 +405,6 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         </div>
       </div>
 
-      <!-- Повтори за диктором — 1:1 с живым экраном (17.11.2026): фраза — подписью на фото (правится на месте), звук — синяя плашка,
-           кнопки ученика — те же, бледно (в правке не нажимаются); перевод — кнопкой в подвале -->
-      <div v-else-if="s.kind === 'speak'" class="cb vs">
-        <input v-model="s.head" class="hd vf" :placeholder="KINDS.speak.head" @input="changed" />
-        <div class="nw">
-          <div v-if="s.video || s.image" class="media" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['video', 'image'])">
-            <video v-if="s.video" :ref="(el) => setVid(s, el)" :src="resolve(s.video, 'video')" playsinline preload="metadata" />
-            <img v-else :src="resolve(s.image, 'image')" alt="" draggable="false" />
-            <button class="x" title="Убрать" @click.stop="clear(s, s.video ? 'video' : 'image')">✕</button>
-            <button class="chip rp" @click.stop="pick(s, ['video', 'image'])">Заменить {{ s.video ? 'видео' : 'фото' }}{{ pct(s, 'video') != null || pct(s, 'image') != null ? ' ' + (pct(s, 'video') ?? pct(s, 'image')) + '%' : '' }}</button>
-            <input v-model="s.phrase" class="vcap vf" :class="{ up: !s.video }" :size="Math.max(6, (s.phrase || '').length)" placeholder="Hello!" title="Фраза — ученик видит её подписью и повторяет" @input="changed" @pointerdown.stop />
-            <div v-if="s.video ? vids[s.id] : true" class="qpw ov" @click.stop @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
-              <AudioPill v-if="s.video" :key="'v' + s.video" :media="vids[s.id]" class="qp" />
-              <template v-else-if="s.audio"><AudioPill :key="s.audio" :src="resolve(s.audio, 'audio')" class="qp" /><span class="qch"><button class="chip" @click="pick(s, ['audio'])">Заменить</button><button class="chip" title="Убрать звук" @click="clear(s, 'audio')">✕</button></span></template>
-              <button v-else class="qe" @click="pick(s, ['audio'])">＋ Аудио{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button>
-            </div>
-          </div>
-          <template v-else>
-            <div class="qpw nm" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio', 'video', 'image'])">
-              <template v-if="s.audio"><AudioPill :key="s.audio" :src="resolve(s.audio, 'audio')" class="qp" /><span class="qch"><button class="chip" @click="pick(s, ['video', 'image'])">＋ Фото</button><button class="chip" @click="pick(s, ['audio'])">Заменить</button><button class="chip" title="Убрать звук" @click="clear(s, 'audio')">✕</button></span></template>
-              <span v-else class="vadd"><button class="chip" @click="pick(s, ['video', 'image'])">＋ Видео или фото</button><button class="chip" @click="pick(s, ['audio'])">＋ Аудио</button></span>
-            </div>
-            <input v-model="s.phrase" class="vq vf" placeholder="Hello!" @input="changed" />
-          </template>
-        </div>
-        <div class="acts vacts" title="Так кнопки увидит ученик — в правке они не нажимаются">
-          <span class="act"><i><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4" /></svg></i>Ещё раз</span>
-          <span class="act big"><i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></i>Нажми и повтори</span>
-          <span class="act"><i><svg viewBox="0 0 24 24"><path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5M6 10c1 2 3 3.5 5 4.5M13 20l4-9 4 9M14.5 17h5" /></svg></i>Перевести</span>
-        </div>
-        <p class="vsaid" title="Тут ученик увидит, что сказал; засчитывается, когда фраза совпала"><small>Нажмите микрофон и повторите</small><span>—</span></p>
-      </div>
-
       <!-- Ответь на вопрос — 1:1 с живым экраном (17.11.2026): вопрос и подсказка — в голубой карточке под фото (правятся на месте),
            кнопки «Говорить / Письменно» — те же, бледно; пример ответа — кнопкой в подвале -->
       <div v-else-if="s.kind === 'answer'" class="cb va">
@@ -524,20 +490,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         </div>
       </div>
 
-      <!-- Собери фразу — 1:1 с живым экраном (17.11.2026): звук — синяя плашка; на линии, где ученик собирает, — сама фраза (правится);
-           под линией — те же плашки слов (их ученик увидит вразброс); перевод и пояснение — в подвале -->
-      <div v-else-if="s.kind === 'order'" class="cb vo">
-        <input v-model="s.head" class="hd vf" :placeholder="s.by === 'letters' ? 'Соберите слово по буквам' : KINDS.order.head" @input="changed" />
-        <div v-if="s.video || s.image" class="media xm"><video v-if="s.video" :src="resolve(s.video, 'video')" controls playsinline preload="metadata" /><img v-else :src="resolve(s.image, 'image')" alt="" draggable="false" /><button class="x" title="Убрать" @click.stop="clear(s, s.video ? 'video' : 'image')">✕</button></div>
-        <div class="qpw" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])">
-          <template v-if="s.audio"><AudioPill :key="s.audio" :src="resolve(s.audio, 'audio')" class="qp" /><span class="qch"><button class="chip" @click="pick(s, ['audio'])">Заменить{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button class="chip" title="Убрать звук" @click="clear(s, 'audio')">✕</button></span></template>
-          <button v-else class="qe" @click="pick(s, ['audio'])">＋ Аудио — нажмите или перетащите{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button>
-        </div>
-        <div class="vbuilt"><textarea v-model="s.phrase" class="vf" rows="1" :placeholder="s.by === 'letters' ? 'bye' : 'See you later!'" title="Верный ответ — ученик собирает его на этой линии" @input="changed" /></div>
-        <div class="vpool"><span v-for="(w, k) in orderParts(s)" :key="k" class="vchip ro">{{ w }}</span></div>
-      </div>
-
-      <!-- Собери фразу, Подсказка, Повтори за диктором, Заполни пропуск, Ответь на вопрос -->
+      <!-- Заполни пропуск, Ответь на вопрос (старая форма) -->
       <div v-else-if="s.kind !== 'pairs'" class="cb">
         <div class="hd">{{ KINDS[s.kind].head }}</div>
         <!-- видео / фото -->
@@ -557,18 +510,6 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
           <button v-if="s.audio" class="x in" title="Убрать звук" @click="clear(s, 'audio')">✕</button>
           <em v-if="pct(s, 'audio') != null" class="up">{{ pct(s, 'audio') }}%</em>
         </div>
-        <!-- собери фразу -->
-        <template v-if="s.kind === 'order'">
-          <input v-model="s.phrase" class="big" :placeholder="s.by === 'letters' ? 'bye' : 'See you later!'" @input="changed" />
-          <div class="chips"><span v-for="(w, k) in orderParts(s)" :key="k">{{ w }}</span><small v-if="orderParts(s).length">← ученик увидит вразброс{{ s.by === 'letters' ? ' (по буквам)' : '' }}</small></div>
-          <input v-model="s.tr" class="tr" :placeholder="s.by === 'letters' ? 'перевод слова' : 'перевод фразы'" @input="changed" />
-          <textarea v-model="s.note" class="ex tr" rows="2" placeholder="Пояснение после ответа (необязательно)" @input="changed" />
-        </template>
-        <!-- повтори за диктором -->
-        <template v-if="s.kind === 'speak'">
-          <input v-model="s.phrase" class="big" placeholder="Hello!" @input="changed" />
-          <input v-model="s.tr" class="tr" placeholder="перевод (по кнопке «Перевести»)" @input="changed" />
-        </template>
         <!-- заполни пропуск -->
         <template v-if="s.kind === 'gap'">
           <textarea :ref="(el) => (gapEl[s.id] = el)" v-model="s.phrase" class="ex big" rows="1" placeholder="And [you]? — пропуск в [скобках]" @input="changed" />
@@ -588,13 +529,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         </template>
       </div>
 
-      <!-- Пары -->
-      <div v-else class="cb">
-        <input v-model="s.head" class="hd vf" :placeholder="KINDS.pairs.head" @input="changed" />
-        <div class="prs"><div v-for="(p, k) in s.pairs" :key="k" class="pr"><input v-model="p.a" placeholder="I approve" @input="changed" /><input v-model="p.b" placeholder="одобряю" @input="changed" /><button class="x" title="Убрать пару" @click="s.pairs.splice(k, 1); changed()">✕</button></div></div>
-      </div>
-
-      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'pairs'" class="fdk"><button v-if="(s.pairs?.length ?? 0) < PAIRS_MAX" class="add sm" title="Добавить пару" @click="addPair(s)">＋</button><button class="add sm deck" @click="openPk(s, 'pairs')">Из карточек</button></span><span v-else-if="s.kind === 'odd'" class="fdk"><button v-if="(s.opts?.length ?? 0) < ODD_MAX" class="add sm" title="Добавить слово" @click="(s.opts ??= []).push({ w: '', k: TILE_K[s.opts.length % 5] }); changed()">＋</button><button class="add sm" :class="{ on: trOpen === s.id }" @click="trOpen = trOpen === s.id ? null : s.id">Пояснение{{ s.note ? ' ✓' : '' }}</button><button class="add sm tg" :class="{ on: s.mix !== false }" :title="s.mix !== false ? 'Слова перемешиваются у ученика — нажмите, чтобы не мешать' : 'Слова в этом порядке — нажмите, чтобы перемешивать'" @click="flip(s, 'mix')">⤮</button><span v-if="trOpen === s.id" class="trpop"><small>Пояснение после ответа (необязательно)</small><textarea v-model="s.note" class="vf" rows="2" placeholder="Coffee — напиток, остальное — еда." @input="changed" /></span></span><span v-else-if="s.kind === 'sort' && s.tw" class="fdk"><button v-if="!s.audio" class="add sm" title="Звук «Listen and check» (необязательно)" @click="pick(s, ['audio'])">＋ Звук{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button class="add sm tg" :class="{ on: !s.noEx }" :title="s.noEx ? 'Без образцов — ученик вписывает всё' : 'Образцы (зачёркнутые слова) уже вписаны — нажмите слово в банке, чтобы сделать образцом'" @click="twFlag(s, 'noEx')">Образец</button><button class="add sm tg" :class="{ on: !s.cs }" :title="s.cs ? 'Регистр важен: Bags ≠ bags' : 'Без учёта регистра: Bags = bags'" @click="twFlag(s, 'cs')">a = A</button></span><span v-else-if="s.kind === 'sort'" class="fdk"><button v-if="!s.audio" class="add sm" title="Звук «Listen and check» (необязательно)" @click="pick(s, ['audio'])">＋ Звук{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button class="add sm" title="Сколько колонок — от 2 до 5 (нажимайте по кругу)" @click="setCols(s, (s.cols?.length || 2) >= SORT_COLS_MAX ? 2 : (s.cols?.length || 2) + 1)">{{ s.cols?.length || 2 }} кол.</button><button class="add sm tg" :class="{ on: s.hint !== false }" :title="s.hint !== false ? 'Подсказка «Нажмите фразу, затем колонку» — есть' : 'Подсказки нет'" @click="flip(s, 'hint')">?</button><button class="add sm tg" :class="{ on: s.mix !== false }" :title="s.mix !== false ? 'Фразы перемешиваются у ученика' : 'Фразы в этом порядке'" @click="flip(s, 'mix')">⤮</button></span><span v-else-if="s.kind === 'answer'" class="fdk"><button v-if="!s.video && !s.image" class="add sm" title="Видео или фото к вопросу" @click="pick(s, ['video', 'image'])">＋ Фото{{ pct(s, 'video') != null || pct(s, 'image') != null ? ' ' + (pct(s, 'video') ?? pct(s, 'image')) + '%' : '' }}</button><button class="add sm" :class="{ on: trOpen === s.id }" @click="trOpen = trOpen === s.id ? null : s.id">Пример ответа{{ s.tr ? ' ✓' : '' }}</button><span v-if="trOpen === s.id" class="trpop"><small>Пример ответа — ученик увидит после своего</small><textarea v-model="s.tr" class="vf" rows="2" placeholder="My name’s Anna." @input="changed" /></span></span><span v-else-if="s.kind === 'speak'" class="fdk"><button class="add sm" :class="{ on: trOpen === s.id }" @click="trOpen = trOpen === s.id ? null : s.id">Перевод{{ s.tr ? ' ✓' : '' }}</button><span v-if="trOpen === s.id" class="trpop"><small>Перевод — ученик увидит по кнопке «Перевести»</small><input v-model="s.tr" class="vf" placeholder="Привет!" @input="changed" @keydown.enter="trOpen = null" /></span></span><span v-else-if="s.kind === 'order'" class="fdk"><button class="add sm" :class="{ on: trOpen === s.id }" @click="trOpen = trOpen === s.id ? null : s.id">Перевод{{ s.tr ? ' ✓' : '' }}</button><button class="add sm" :class="{ on: trOpen === s.id + ':n' }" @click="trOpen = trOpen === s.id + ':n' ? null : s.id + ':n'">Пояснение{{ s.note ? ' ✓' : '' }}</button><span v-if="trOpen === s.id" class="trpop"><small>{{ s.by === 'letters' ? 'Перевод слова' : 'Перевод фразы' }} — ученик увидит после ответа</small><input v-model="s.tr" class="vf" placeholder="Увидимся!" @input="changed" @keydown.enter="trOpen = null" /></span><span v-if="trOpen === s.id + ':n'" class="trpop"><small>Пояснение после ответа (необязательно)</small><textarea v-model="s.note" class="vf" rows="3" placeholder="«See you» — ждём новой встречи…" @input="changed" /></span></span><span v-else-if="s.kind === 'gap'" class="fdk"><button v-if="s.bk && s.bk !== 'bkpick' && s.bk !== 'bkpic'" class="add sm tg on" :title="s.opts?.length ? 'Сейчас — тап: ученик выбирает из банка слов. Нажмите — будет вписывать' : 'Сейчас — письмо: ученик вписывает. Нажмите — будет выбирать тапом из банка слов'" @click="s.opts = s.opts?.length ? [] : [{ w: gapAlts(gapParts(s.phrase).gap)[0] || '' }, { w: '' }]; changed()">{{ s.opts?.length ? 'Тап' : 'Письмо' }}</button><button v-if="!s.video && !s.image" class="add sm" :title="s.audio ? 'Видео или фото к вопросу (16:9)' : 'Фото, видео или звук'" @click="pick(s, s.audio ? ['video', 'image'] : ['video', 'image', 'audio'])">＋{{ s.bk ? '' : s.audio ? ' Фото' : ' Медиа' }}{{ pct(s, 'video') != null || pct(s, 'image') != null || pct(s, 'audio') != null ? ' ' + (pct(s, 'video') ?? pct(s, 'image') ?? pct(s, 'audio')) + '%' : '' }}</button><button class="add sm" :class="{ on: trOpen === s.id }" :title="s.opts?.length ? 'Перевод фразы' : 'Также засчитывать (другие верные ответы) и перевод фразы'" @click="trOpen = trOpen === s.id ? null : s.id">{{ s.opts?.length ? 'Перевод' : 'Ответы' }}{{ s.tr || gapAltRows(s).some(r => r.rest.length) ? ' ✓' : '' }}</button><span v-if="trOpen === s.id" class="trpop"><template v-if="!s.opts?.length && gapAltRows(s).length">
+      <div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span v-if="s.kind === 'odd'" class="fdk"><button v-if="(s.opts?.length ?? 0) < ODD_MAX" class="add sm" title="Добавить слово" @click="(s.opts ??= []).push({ w: '', k: TILE_K[s.opts.length % 5] }); changed()">＋</button><button class="add sm" :class="{ on: trOpen === s.id }" @click="trOpen = trOpen === s.id ? null : s.id">Пояснение{{ s.note ? ' ✓' : '' }}</button><button class="add sm tg" :class="{ on: s.mix !== false }" :title="s.mix !== false ? 'Слова перемешиваются у ученика — нажмите, чтобы не мешать' : 'Слова в этом порядке — нажмите, чтобы перемешивать'" @click="flip(s, 'mix')">⤮</button><span v-if="trOpen === s.id" class="trpop"><small>Пояснение после ответа (необязательно)</small><textarea v-model="s.note" class="vf" rows="2" placeholder="Coffee — напиток, остальное — еда." @input="changed" /></span></span><span v-else-if="s.kind === 'sort' && s.tw" class="fdk"><button v-if="!s.audio" class="add sm" title="Звук «Listen and check» (необязательно)" @click="pick(s, ['audio'])">＋ Звук{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button class="add sm tg" :class="{ on: !s.noEx }" :title="s.noEx ? 'Без образцов — ученик вписывает всё' : 'Образцы (зачёркнутые слова) уже вписаны — нажмите слово в банке, чтобы сделать образцом'" @click="twFlag(s, 'noEx')">Образец</button><button class="add sm tg" :class="{ on: !s.cs }" :title="s.cs ? 'Регистр важен: Bags ≠ bags' : 'Без учёта регистра: Bags = bags'" @click="twFlag(s, 'cs')">a = A</button></span><span v-else-if="s.kind === 'sort'" class="fdk"><button v-if="!s.audio" class="add sm" title="Звук «Listen and check» (необязательно)" @click="pick(s, ['audio'])">＋ Звук{{ pct(s, 'audio') != null ? ' ' + pct(s, 'audio') + '%' : '' }}</button><button class="add sm" title="Сколько колонок — от 2 до 5 (нажимайте по кругу)" @click="setCols(s, (s.cols?.length || 2) >= SORT_COLS_MAX ? 2 : (s.cols?.length || 2) + 1)">{{ s.cols?.length || 2 }} кол.</button><button class="add sm tg" :class="{ on: s.hint !== false }" :title="s.hint !== false ? 'Подсказка «Нажмите фразу, затем колонку» — есть' : 'Подсказки нет'" @click="flip(s, 'hint')">?</button><button class="add sm tg" :class="{ on: s.mix !== false }" :title="s.mix !== false ? 'Фразы перемешиваются у ученика' : 'Фразы в этом порядке'" @click="flip(s, 'mix')">⤮</button></span><span v-else-if="s.kind === 'answer'" class="fdk"><button v-if="!s.video && !s.image" class="add sm" title="Видео или фото к вопросу" @click="pick(s, ['video', 'image'])">＋ Фото{{ pct(s, 'video') != null || pct(s, 'image') != null ? ' ' + (pct(s, 'video') ?? pct(s, 'image')) + '%' : '' }}</button><button class="add sm" :class="{ on: trOpen === s.id }" @click="trOpen = trOpen === s.id ? null : s.id">Пример ответа{{ s.tr ? ' ✓' : '' }}</button><span v-if="trOpen === s.id" class="trpop"><small>Пример ответа — ученик увидит после своего</small><textarea v-model="s.tr" class="vf" rows="2" placeholder="My name’s Anna." @input="changed" /></span></span><span v-else-if="s.kind === 'gap'" class="fdk"><button v-if="s.bk && s.bk !== 'bkpick' && s.bk !== 'bkpic'" class="add sm tg on" :title="s.opts?.length ? 'Сейчас — тап: ученик выбирает из банка слов. Нажмите — будет вписывать' : 'Сейчас — письмо: ученик вписывает. Нажмите — будет выбирать тапом из банка слов'" @click="s.opts = s.opts?.length ? [] : [{ w: gapAlts(gapParts(s.phrase).gap)[0] || '' }, { w: '' }]; changed()">{{ s.opts?.length ? 'Тап' : 'Письмо' }}</button><button v-if="!s.video && !s.image" class="add sm" :title="s.audio ? 'Видео или фото к вопросу (16:9)' : 'Фото, видео или звук'" @click="pick(s, s.audio ? ['video', 'image'] : ['video', 'image', 'audio'])">＋{{ s.bk ? '' : s.audio ? ' Фото' : ' Медиа' }}{{ pct(s, 'video') != null || pct(s, 'image') != null || pct(s, 'audio') != null ? ' ' + (pct(s, 'video') ?? pct(s, 'image') ?? pct(s, 'audio')) + '%' : '' }}</button><button class="add sm" :class="{ on: trOpen === s.id }" :title="s.opts?.length ? 'Перевод фразы' : 'Также засчитывать (другие верные ответы) и перевод фразы'" @click="trOpen = trOpen === s.id ? null : s.id">{{ s.opts?.length ? 'Перевод' : 'Ответы' }}{{ s.tr || gapAltRows(s).some(r => r.rest.length) ? ' ✓' : '' }}</button><span v-if="trOpen === s.id" class="trpop"><template v-if="!s.opts?.length && gapAltRows(s).length">
           <div v-for="r in gapAltRows(s)" :key="r.i" class="valr"><small>Также засчитывать<template v-if="gapAltRows(s).length > 1"> ({{ r.first || '…' }})</template>:</small>
             <span v-for="(a, k) in r.rest" :key="k" class="valc">{{ a }}<button title="Убрать вариант" @click="setAlts(s, r.i, [r.first, ...r.rest.filter((_, j) => j !== k)])">✕</button></span>
             <input v-model="altNew[s.id + ':' + r.i]" class="valn" placeholder="＋ Добавить вариант" @keydown.enter.prevent="addAlt(s, r)" @blur="addAlt(s, r)" />
@@ -786,8 +721,7 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .aud { position: relative; display: flex; align-items: center; gap: 6px; min-height: 30px } .aud > :first-child:not(button) { flex: 1; min-width: 0 }
 .add { border: 1px solid transparent; border-radius: 9px; padding: 6px 10px; background: rgba(13, 153, 255, .07); font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-d); cursor: pointer; flex: 1 } .add:hover { background: var(--blue-l) }
 .add.sm { flex: none; padding: 4px 8px; font-size: 11px }
-.dk { display: flex; gap: 6px; margin-top: auto } .dk .add.deck { flex: 1; margin-top: 0 }
-.add.deck { flex: none; margin-top: auto; border-style: solid; border-color: var(--blue-l); background: var(--blue-l) }
+.dk { display: flex; gap: 6px; margin-top: auto }
 .word { display: grid; gap: 0; padding: 6px; border-radius: 10px; background: #f1f6ff; text-align: center }
 .word input { text-align: center; font-size: 17px; font-weight: 900 } .word input.tr { font-size: 12px; font-weight: 700; color: var(--hint) }
 .ex { font-size: 15px; font-weight: 500; line-height: 1.5 } .ex.tr { font-size: 13px; font-weight: 600; color: var(--hint) }      /* как текст на живом экране */
@@ -813,9 +747,6 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .gp { display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 12px; color: var(--hint); font-weight: 600 } .gp b { color: #1a73e8 }
 .trw { display: grid; grid-template-columns: auto 1fr 1fr auto; align-items: center; gap: 4px; padding: 3px 0; border-bottom: 1px solid #efefef } .trw input { font-size: 14px; font-weight: 600 } .trw input.tr { color: var(--hint) }
 .sn { border: 0; background: none; cursor: pointer; font-size: 13px; opacity: .35; padding: 2px } .sn.on { opacity: 1 }
-.pr { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center }
-.pr input { height: 44px; border: 1px solid #dcdcdc; border-radius: 9px; background: var(--card); text-align: center; font-size: 14px; font-weight: 600 }
-.pr .x { right: -26px; top: 12px; background: none; color: var(--hint-2); opacity: 0 } .pr:hover .x { opacity: 1 }
 /* «+» на рельсе урока */
 .plus-card { position: absolute; z-index: 3; width: 56px; height: 56px; border: 3px dashed #c9c9c9; border-radius: 50%; background: var(--card); color: var(--hint); font-size: 26px; font-weight: 700; cursor: pointer }
 .plus-card:hover:not(:disabled) { border-color: var(--blue); color: var(--blue) }
@@ -839,11 +770,8 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .rad { position: absolute; left: 6px; top: 6px; width: 18px; height: 18px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: rgba(0, 0, 0, .25); box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); cursor: pointer }
 .cx { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; font-size: 10px; cursor: pointer; opacity: 0 }
 .cfoot { display: flex; align-items: center; gap: 8px; width: 100% } .cfoot small { flex: 1; font-size: 11px; color: var(--hint); font-weight: 600 }
-.cfoot .add.deck { flex: none; margin-top: 0 }
 @media (hover: none) { .cx, .cph .rep { opacity: 1 } }
-.fdk { display: flex; gap: 6px; margin-right: auto; margin-left: 10px } .fdk .add.deck { margin-top: 0 }          /* «Взять из карточек» у «Нового слова» — в подвале правки, чтобы окно было не выше живого */
-.prs { display: grid; gap: 10px; width: 100%; margin-top: 6px }          /* пары — с теми же отступами, что у ученика (.pairs gap 10) */
-.pr input { height: 46px }
+.fdk { display: flex; gap: 6px; margin-right: auto; margin-left: 10px }          /* «Взять из карточек» у «Нового слова» — в подвале правки, чтобы окно было не выше живого */
 
 /* Новое слово — правка 1:1 с живым экраном (LessonPlayer .embedded): те же размеры; поля — без своих отступов, пунктир — outline (не занимает места) */
 .vf { display: block; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 5px; background: rgba(13, 153, 255, .07); box-shadow: 0 0 0 2px rgba(13, 153, 255, .07); font: inherit; color: inherit; text-align: inherit; outline: 0; resize: none; field-sizing: content; min-height: 0; box-sizing: border-box; transition: background .12s, box-shadow .12s }          /* правится — лёгкая подсветка (не пунктир), места не занимает */
@@ -866,14 +794,12 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .qe { width: 100%; height: 100%; border: 0; border-radius: 17px; background: rgba(13, 153, 255, .1); color: var(--blue-d); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer } .qe:hover { background: rgba(13, 153, 255, .1) }
 .fdk .add.sm { padding: 4px 9px; font-size: 11px; flex: none }
 .cf { height: 55px; padding: 0 14px; align-items: center; box-sizing: border-box }          /* подвал правки — ровно как у ученика (.foot 55px) */
-.pr input { height: 48px; box-sizing: border-box; margin: 0 }          /* без общего margin-bottom у input (theme.css) — иначе пары реже, чем у ученика */
 .cb > .hd.vf { margin: 8px 0 4px; font-size: 15px; font-weight: 800; text-align: center; line-height: normal }
 .cb { gap: 14px }
 
 /* Заполни пропуск / Закончи предложение — 1:1 с LessonPlayer (.sent 18/600/1.6, .slot, .pool/.chip 15/600) */
 .vg .media { border-radius: 12px }
 .vg .media video { pointer-events: none }
-.vadd { display: flex; justify-content: center; gap: 6px } .vadd .chip { background: rgba(13, 153, 255, .07); border-color: transparent }
 .vsw { position: relative }
 .vsent { margin: 6px 0; text-align: center; font-size: 18px; font-weight: 600; line-height: 1.6; white-space: pre-wrap; cursor: text; user-select: text; -webkit-user-select: text }
 .vsent:empty::before { content: attr(data-ph); color: var(--hint-2) }
@@ -891,27 +817,12 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 @media (hover: none) { .vchip .xx { opacity: 1 } }
 
 /* Собери фразу — 1:1 с LessonPlayer (.built 50px, линия 2px; .pool/.chip) */
-.vbuilt { min-height: 50px; display: flex; align-items: center; padding: 10px; border-bottom: 2px solid var(--border); box-sizing: border-box }
-.vbuilt textarea { font-size: 15px; font-weight: 600; line-height: 1.4; padding: 6px 8px }
 .vchip.ro { color: var(--text); cursor: default }
 .trpop textarea { padding: 6px 8px; font-size: 13px; font-weight: 600; line-height: 1.4 }
 .cb > .hd.vf::placeholder { color: var(--text); opacity: 1 }          /* заголовок по умолчанию — как у ученика, не серым */
-.pr .x { right: -22px }
 .cf .go { padding-left: 20px; padding-right: 20px; flex: none } .fdk { margin-left: 6px; gap: 4px } .fdk .add.sm { padding: 4px 8px } .cf .mn { flex: none }          /* подвал: кнопки не налезают на «Сохранить» (высота — как у «Продолжить») */
 
 /* Повтори за диктором — 1:1 с LessonPlayer (.cap, .q, .acts/.act) */
-.vs .media { border-radius: 12px } .vs .media video { pointer-events: none }
-.vcap { position: absolute; left: 50%; bottom: 12px; z-index: 3; translate: -50% 0; width: auto; max-width: 90%; padding: 4px 12px; border-radius: 6px; background: rgba(0, 0, 0, .55); box-shadow: none; color: #fff; font-size: 15px; font-weight: 700; text-align: center }
-.vcap.up { bottom: 52px } .vcap:hover { background: rgba(0, 0, 0, .7); box-shadow: 0 0 0 2px rgba(13, 153, 255, .5) } .vcap:focus { background: rgba(0, 0, 0, .75); box-shadow: 0 0 0 2px #0d99ff }
-.vcap::placeholder { color: rgba(255, 255, 255, .6) }
-.qpw.nm { margin: 0 0 8px } .qpw.nm .vadd { display: flex; justify-content: center; align-items: center; height: 100%; gap: 6px }
-.vq { padding: 14px; border-radius: 14px; background: #f1f6ff; box-shadow: none; text-align: center; font-size: 20px; font-weight: 900 } .vq:hover { background: #e6f0ff } .vq:focus { background: #fff; box-shadow: 0 0 0 2px #0d99ff }
-.acts { display: flex; justify-content: center; align-items: flex-start; gap: 22px; margin-top: 4px }
-.act { display: grid; grid-template-rows: auto 30px; align-content: start; justify-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #1a73e8; width: 84px; text-align: center }
-.act i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #c9dcfb; background: var(--card) }
-.act svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.act.big i { width: 60px; height: 60px; background: #1a73e8; border-color: #1a73e8; color: #fff } .act.big svg { width: 26px; height: 26px }
-.vacts { opacity: .45; pointer-events: none }
 
 /* Ответь на вопрос — 1:1 с LessonPlayer (.word + .qq 15/600, .lnk 12px, .how 13px, .two/.out) */
 .va .media { border-radius: 12px 12px 0 0 } .va .media:only-child { border-radius: 12px }
@@ -1027,8 +938,6 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .etw .etwk { display: flex; gap: 6px; justify-content: center }
 @media (hover: none) { .etw .etwd { opacity: 1 } }
 .card.book.bkpg .etw .etwt { border-radius: 0; border-width: 1.5px }
-.vsaid { display: grid; gap: 2px; width: 100%; max-width: 380px; height: 54px; align-self: center; align-content: center; margin: 0; padding: 0 12px; box-sizing: border-box; border-radius: 12px; background: #eef4ff; color: #1f3f86; font-size: 15px; font-weight: 700; text-align: center; opacity: .6 }
-.vsaid small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px }
 /* 18.11.2026: «Как в учебнике» — правка 1:1 с видом (те же отступы, шрифт, строки) */
 .card.book.bkpg .vbko { margin: 6px 0; font-size: 17px; line-height: 2.1 }
 .card.book.bkpg .vco { padding: 1px 7px } .card.book.bkpg .vco input { field-sizing: content; width: auto; min-width: 2ch; padding: 0; line-height: normal; border-radius: 4px }
