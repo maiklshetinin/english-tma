@@ -181,3 +181,17 @@ describe('часть 4: пропуск, ответ, лишнее, распред
     await w.findAll('.etwk button')[0].trigger('click'); expect(step.rows).toBe(2)
   })
 })
+
+describe('часть 5: миниатюра — уменьшенный шаблон экрана', () => {
+  it('у каждого шаблона меню — свой экран с «рыбой», нажатия выключены; «Готовый урок» — стопка', async () => {
+    const { default: ExerciseMini } = await import('../components/ExerciseMini.vue')
+    for (const t of TEMPLATES) {
+      const w = mount(ExerciseMini, { props: { id: t.id, size: 'tray' } })
+      expect(w.find('.mini.xmt .body').classes()).toContain('x-' + t.kind)
+      expect(w.find('.mini').attributes('inert')).toBeDefined()
+    }
+    const pg = mount(ExerciseMini, { props: { id: 'pg_odd', size: 'rail' } })
+    expect(pg.find('.lp').classes()).toEqual(expect.arrayContaining(['book', 'bkpg'])); expect(pg.find('.bkh').text()).toContain('Circle')
+    expect(mount(ExerciseMini, { props: { id: 'lesson' } }).find('.ms').exists()).toBe(true)
+  })
+})
