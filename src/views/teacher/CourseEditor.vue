@@ -533,15 +533,24 @@ const XGROUPS_STD = (() => {
     { k: 'R', t: 'Чтение', d: 'понять написанное', ids: ['pairs'], cols: 1 },
     { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
-    { k: 'book', t: 'Тест · упражнения Насти по учебнику', d: 'отдельно, чтобы не путаться: плашка — как задание в учебнике', ids: BOOK_TPL, cols: 3, exp: true },          // 18.11.2026: все Настины типы — здесь, обкатаем — перенесём в обычные группы
   ]
-  const used = new Set(gs.flatMap(g => g.ids))
+  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL])
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
 // «Мои» — свои упражнения из конструктора (doc.templates): плитка по основе, свои название и описание; первой — «+ Своё упражнение»
-const XGROUPS = computed(() => [...XGROUPS_STD, { k: 'mine', t: 'Мои', d: 'собраны в конструкторе', cols: 3, mine: true,
-  items: (doc.templates ?? []).map(x => ({ id: x.id, kind: x.step.kind, base: tplOf(x.step), t: x.t, d: x.d, mine: true, step: x.step, tpl: x })) }])
+// Меню Exercise — вкладками (18.11.2026): «Как в Busuu» / «Как в учебнике» / «Мои»; на вкладке — один ряд, внутри группы по навыкам. Вкладка запоминается
+const XGROUPS_BOOK = [
+  { k: 'W', t: 'Письмо', d: 'вписать, раскрыть скобки, ответить', ids: BOOK_TPL.filter(id => (SKILLS[id] ?? [])[0] === 'W') },
+  { k: 'R', t: 'Чтение', d: 'выбрать, найти, распределить', ids: BOOK_TPL.filter(id => (SKILLS[id] ?? [])[0] !== 'W') },
+].map(g => ({ ...g, book: true, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
+const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Как в учебнике', exp: true }, { k: 'mine', t: 'Мои' }]
+const trayTab = ref((() => { try { return localStorage.getItem('ce.trayTab') || 'app' } catch { return 'app' } })())
+watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })
+const mineItems = computed(() => (doc.templates ?? []).map(x => ({ id: x.id, kind: x.step.kind, base: tplOf(x.step), t: x.t, d: x.d, mine: true, step: x.step, tpl: x })))
+const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'mine'
+  ? [{ k: 'mine', t: 'Мои', d: 'собраны в конструкторе', mine: true, items: mineItems.value }] : XGROUPS_STD)
+  .map(g => ({ ...g, cols: g.items.length + (g.mine ? 1 : 0) })))          // все плашки группы — в один ряд
 const NEW_MINI = BOOK_TPL          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
 const skillsT = (t) => (t.mine ? skillsOf({ ...t.step, tn: t.t }) : (SKILLS[t.id] ?? []))
 /** Экраны по плитке меню: «Готовый урок», своё упражнение (копия образца) или шаблон */
@@ -1271,7 +1280,7 @@ function aim(e) {
 }
 const overToolbar = (cy) => cy > H.value - (phone.value ? 92 : 104)
 // колесо над меню — листает его вбок (группы в один ряд), а не двигает доску
-function trayWheel(e) { const el = e.currentTarget; if (el.scrollWidth > el.clientWidth + 1) { e.preventDefault(); el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY } }
+function trayWheel(e) { const el = e.currentTarget.querySelector('.xrow') ?? e.currentTarget; if (el.scrollWidth > el.clientWidth + 1) { e.preventDefault(); el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY } }
 // над открытым меню (оно бывает высоким — «Мои», «Фразы и контекст») экран не превращается в окно: там плитка остаётся плиткой
 const overMenu = (e) => document.elementsFromPoint(e.clientX, e.clientY).some(el => el.closest?.('.fl.tray'))
 function startDrag(e, src) {
@@ -1939,8 +1948,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <small><b>{{ T[k].t }}</b>{{ TASK_D[k] }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
+        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" title="Упражнения Насти по учебнику — пробуем, могут поменяться">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i></button></div>
         <!-- мини-окошки: как выглядит экран -->
-        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="g.k"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
+        <div class="xrow">
+        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
         <!-- «Мои»: первой — собрать своё в конструкторе -->
         <button v-if="g.mine" class="mi madd" title="Собрать своё упражнение из блоков" @click="openBuilder()"><span class="mini plus"><b>+</b></span><small><b>Своё упражнение</b><span>собрать из блоков</span></small></button>
         <button v-for="t in g.items" :key="t.id" class="mi" :title="t.mine ? 'Своё упражнение — тяните на ветку; двойной клик — открыть в конструкторе' : t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)" @dblclick="t.mine && openBuilder(t.tpl)">
@@ -1966,6 +1977,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <span v-if="t.mine" class="mact" @pointerdown.stop.prevent><i title="Открыть в конструкторе" @click.stop="openBuilder(t.tpl)">✎</i><i class="del" title="Удалить из меню" @click.stop="delTpl(t.id)">✕</i></span>
         </button>
         </div></div>
+        </div>
       </template>
       <template v-else-if="tray === 'pen'"><button v-for="c in INK_COLORS" :key="c" class="sw pen" :class="{ on: inkColor === c }" :style="{ background: c }" title="Цвет маркера" @click="inkColor = c" /></template>
       <template v-else-if="tray === 'note'"><button v-for="c in NOTE_COLORS" :key="c" class="sw" :class="{ on: noteColor === c }" :style="{ background: c }" title="Цвет стикера — потом нажмите на холст" @click="noteColor = c; noteTool = true" /></template>
@@ -2395,4 +2407,15 @@ async function reset() { if (!(await ask('Вернуть пример курса
 @media (hover: none) { .mact { opacity: 1 } }
 .fl.tray, .fl.tools { z-index: 21 }          /* меню и нижняя панель — поверх рамки выделения (.selbox 19), иначе рамка экрана залезала на меню */
 .xexp { margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #ffe7a8; color: #8a5a00; font-size: 10px; font-style: normal; font-weight: 800; vertical-align: 1px }
+
+/* меню Exercise — вкладки по стилю, под ними один ряд групп (18.11.2026) */
+.tray.inter { flex-direction: column; align-items: stretch; overflow: visible }
+.xtabs { display: flex; gap: 4px; padding: 0 2px 2px }
+.xtab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--hint); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
+.xtab:hover { color: var(--text) } .xtab.on { border-color: #b5d4f4; background: #e6f1fb; color: #185fa5 }
+.xtab i { min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--surface); color: var(--hint); font-size: 11px; font-style: normal; line-height: 18px; text-align: center }
+.xtab .xexp { margin: 0 }
+.xrow { display: flex; gap: 8px; align-items: stretch; overflow-x: auto; overflow-y: visible; padding-bottom: 2px }
+.xrow .xg { flex: none }
+.xg.bk { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }
 </style>
