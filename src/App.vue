@@ -15,7 +15,6 @@ import BlockGate from './components/BlockGate.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
 import DevTools from './components/DevTools.vue'
 import { access, loadAccess } from './composables/useAccess'
-import './composables/useNetLog'      // запросы к серверу — для вкладки «Сеть» панели разработчика (пишутся с самого старта)
 import './composables/useUpdate'      // «Обновить у всех» от разработчика
 import { useTabBadge } from './composables/useTabBadge'
 import { startLive, stopLive, setWhere, onLive, liveSend } from './composables/useLive'
