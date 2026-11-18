@@ -28,6 +28,7 @@ const props = defineProps({
   track: Boolean,                                         // ученик проходит урок — ответы уходят в Review (emit 'answer')
   ckLog: { type: Object, default: null },                 // итог: что уйдёт в чекпоинт Chapter — { title, items: [{ ex, w }] } или { none: true }
   review: { type: Array, default: null },                 // итог: слова, которые урок записал в Review, — { text, tr, kind, audio, before, now, lv } (CourseViewer)
+  mini: Boolean,                                          // миниатюра экрана (ExerciseMini): всё по порядку, без случайностей и клавиш — тот же экран, только уменьшенный
   edit: Boolean,                                          // правка на ветке (LessonRail): тот же экран, поля правятся на месте; подвал — от ветки (slot foot)
 })
 const emit = defineEmits(['close', 'done', 'next', 'restart', 'full', 'answer', 'miss', 'step'])
@@ -57,13 +58,13 @@ function setup() {
   Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null }); Object.assign(mine, { ok: 0, all: 0 })
   recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''; rec.miss = false
   const s = step.value; if (!s || props.edit) return
-  if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
+  if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single || props.mini ? idx : shuffle(idx) }
   if (s.kind === 'pairs') {
     const idx = full(s).map((_, k) => k)
-    st.L = props.single ? idx : shuffle(idx); st.R = props.single ? idx.slice().reverse() : shuffle(idx)
+    st.L = props.single || props.mini ? idx : shuffle(idx); st.R = props.single || props.mini ? idx.slice().reverse() : shuffle(idx)
   }
-  if (s.kind === 'order') { const idx = orderParts(s).map((_, k) => k); let o = shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
-  const keep = props.single || (props.embedded && s.bk)          // в редакторе книжные — в том же порядке, что в правке (18.11.2026: окно «менялось»)
+  if (s.kind === 'order') { const idx = orderParts(s).map((_, k) => k); let o = props.mini ? idx.slice().reverse() : shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
+  const keep = props.single || props.mini || (props.embedded && s.bk)          // в редакторе книжные — в том же порядке, что в правке (18.11.2026: окно «менялось»)
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = keep ? idx : shuffle(idx) }
   if (s.kind === 'sort' && s.tw) st.tw = twLayout(s).cols.map(c => Array(c.need).fill(''))          // «Заполни таблицу»: что ученик вписал, по колонкам
   if (s.kind === 'odd' || s.kind === 'sort') { const idx = (s.kind === 'odd' ? s.opts : s.items ?? []).map((_, k) => k); st.order = keep || s.mix === false ? idx : shuffle(idx) }
@@ -248,7 +249,7 @@ function checkAny() {
   if (s.kind === 'sort') return verdict((s.items ?? []).every((_, k) => sortOkAt(k)))
   check()
 }
-onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEventListener('keydown', onKey))
+onMounted(() => { if (!props.mini) addEventListener('keydown', onKey) }); onUnmounted(() => removeEventListener('keydown', onKey))
 
 // ---- Упражнения-шаблоны (src/exercises): экран рисует шаблон своего типа, плеер даёт ему состояние и действия ----
 const edApi = useEdit()
