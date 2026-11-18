@@ -16,7 +16,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
 import { useTelegram } from '../composables/useTelegram'
 import BackButton from './BackButton.vue'
-import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts, BOOK, twLayout, twCheck } from '../utils/lesson'
+import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
   steps: { type: Array, required: true },
@@ -56,7 +56,7 @@ const { hapticResult, hapticTick } = useTelegram()      // виброоткли�
 const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null })
 function setup() {
   Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null }); Object.assign(mine, { ok: 0, all: 0 })
-  recStop(true); rec.url = ''; rec.err = ''
+  recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''
   const s = step.value; if (!s) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
   if (s.kind === 'pairs') {
@@ -121,7 +121,22 @@ function check() { if (st.done || !typedAll.value) return; st.typed = st.tys.joi
 const gapOkAt = (x) => gapOk(st.tys[x.i], x.g)
 
 // ---- запись голоса («Повтори за диктором», «Ответь на вопрос» устно) ----
-const rec = reactive({ on: false, url: '', err: '' }); let mr = null, chunks = []
+const rec = reactive({ on: false, url: '', err: '', heard: '' }); let mr = null, chunks = []
+// Распознавание речи (18.11.2026): пока ученик говорит, слова появляются на экране; «Повтори» — слова фразы зеленеют, «Ответь устно» — сказанное становится ответом.
+// Web Speech API (Chrome, Android, Safari); где его нет — как раньше: только запись и проверка, что голос был
+const SR = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
+let sr = null, srWait = null
+function srStart() {
+  if (!SR) return
+  try {
+    const r = new SR(); r.lang = 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1
+    r.onresult = (e) => { let s = ''; for (const x of e.results) s += x[0].transcript + ' '; rec.heard = s.replace(/\s+/g, ' ').trim() }
+    r.onerror = () => {}          // нет сети / нет доступа — остаётся запись
+    r.onend = () => { if (sr === r) sr = null; const f = srWait; srWait = null; f?.() }
+    r.start(); sr = r
+  } catch { sr = null }
+}
+const said = computed(() => (step.value?.kind === 'speak' && rec.heard ? speechMatch(step.value.phrase, rec.heard) : null))
 // Слышно ли голос: пока пишем, меряем громкость (Web Audio). Набралось меньше ~0,4 с речи — запись не засчитываем
 const VOICE_MS = 400, VOICE_RMS = 0.025
 let vad = null
@@ -151,15 +166,18 @@ async function recToggle() {
       const voiced = vadStop(), long = performance.now() - t0
       if (!chunks.length) return
       if (rec.url) URL.revokeObjectURL(rec.url); rec.url = URL.createObjectURL(new Blob(chunks, { type: mr?.mimeType || chunks[0]?.type || 'audio/webm' }))
-      const k = step.value?.kind
-      if (k !== 'speak' && k !== 'answer') return
-      if ((voiced ?? long) >= VOICE_MS) { st.done = true; rec.err = '' }
-      else rec.err = 'Не слышно — скажите вслух и запишите ещё раз'
+      const decide = () => {          // ждём последние слова от распознавания (оно заканчивает чуть позже записи)
+        const k = step.value?.kind
+        if (k !== 'speak' && k !== 'answer') return
+        if (rec.heard || (voiced ?? long) >= VOICE_MS) { st.done = true; rec.err = ''; if (k === 'answer' && rec.heard) st.text = rec.heard }          // сказанное — это и есть ответ
+        else rec.err = 'Не слышно — скажите вслух и запишите ещё раз'
+      }
+      if (sr) { srWait = decide; setTimeout(() => { if (srWait === decide) { srWait = null; decide() } }, 1500); try { sr.stop() } catch { decide() } } else decide()
     }
-    mr.start(); rec.on = true
+    rec.heard = ''; mr.start(); rec.on = true; srStart()
   } catch { rec.err = 'Нет доступа к микрофону' }
 }
-function recStop(drop) { if (!mr) return; if (drop) { chunks = []; vadStop() } if (mr.state !== 'inactive') mr.stop(); mr = null; rec.on = false }
+function recStop(drop) { if (drop && sr) { srWait = null; try { sr.abort() } catch {} sr = null } if (!mr) return; if (drop) { chunks = []; vadStop() } if (mr.state !== 'inactive') mr.stop(); mr = null; rec.on = false }
 onUnmounted(() => recStop(true))
 const vid = ref(null)
 function again() { const v = vid.value; if (v) { v.currentTime = 0; v.play().catch(() => {}) } else if (step.value?.audio) say(step.value.audio) }
@@ -339,11 +357,11 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
         <div v-if="step.video || step.image" class="media">
           <video v-if="step.video" ref="vid" :src="src(step.video, 'video')" playsinline :autoplay="!single && !embedded" @click="again" />
           <img v-else :src="src(step.image, 'image')" alt="" />
-          <span v-if="step.phrase" class="cap" :class="{ up: !step.video && step.audio }">{{ step.phrase }}</span>
+          <span v-if="step.phrase" class="cap" :class="{ up: !step.video && step.audio }"><template v-if="said"><template v-for="(x, k) in said.words" :key="k"><b :class="{ hit: x.ok, miss: st.done && !rec.on && !x.ok }">{{ x.w }}</b>{{ ' ' }}</template></template><template v-else>{{ step.phrase }}</template></span>
           <AudioPill v-if="!step.video && step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="over" />
         </div>
         <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" />
-        <p v-if="!step.video && !step.image && step.phrase" class="q">{{ step.phrase }}</p>
+        <p v-if="!step.video && !step.image && step.phrase" class="q"><template v-if="said"><template v-for="(x, k) in said.words" :key="k"><b :class="{ hit: x.ok, miss: st.done && !rec.on && !x.ok }">{{ x.w }}</b>{{ ' ' }}</template></template><template v-else>{{ step.phrase }}</template></p>
       </div>
       <p v-if="st.showTr && step.tr" class="trl">{{ step.tr }}</p>
       <div class="acts">
@@ -351,6 +369,8 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
         <button class="act big" :class="{ on: rec.on }" @click="recToggle"><i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></i>{{ rec.on ? 'Стоп' : 'Нажми и повтори' }}</button>
         <button class="act" :disabled="!step.tr" @click="st.showTr = !st.showTr"><i><svg viewBox="0 0 24 24"><path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5M6 10c1 2 3 3.5 5 4.5M13 20l4-9 4 9M14.5 17h5" /></svg></i>Перевести</button>
       </div>
+      <p v-if="rec.heard || rec.on" class="said" :class="{ live: rec.on }"><small>{{ rec.on ? 'Слушаю…' : 'Вы сказали' }}</small>{{ rec.heard || '…' }}</p>
+      <p v-if="said && st.done && !rec.on" class="saidv" :class="{ ok: said.score >= .8 }">{{ said.score >= .8 ? 'Отлично, всё понятно!' : said.score >= .5 ? 'Почти! Зелёные слова — услышали, послушайте и скажите ещё раз' : 'Не разобрали — послушайте ещё раз и повторите' }}</p>
       <AudioPill v-if="rec.url" :key="rec.url" :src="rec.url" class="qa mine" />
       <p v-if="rec.err" class="err">{{ rec.err }}</p>
     </div>
@@ -432,6 +452,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
         <button class="act big" :class="{ on: rec.on }" @click="recToggle"><i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></i>{{ rec.on ? 'Стоп' : 'Нажми и говори' }}</button>
       </div>
       <div v-else class="wr2"><textarea v-model="st.text" rows="3" placeholder="Напиши ответ по-английски" :readonly="st.done" /><button v-if="!st.done" class="out" :disabled="!st.text.trim()" @click="sendText">Отправить</button></div>
+      <p v-if="st.mode === 'say' && (rec.heard || rec.on)" class="said" :class="{ live: rec.on }"><small>{{ rec.on ? 'Слушаю…' : 'Ваш ответ' }}</small>{{ rec.heard || '…' }}</p>
       <AudioPill v-if="rec.url" :key="rec.url" :src="rec.url" class="qa mine" />
       <p v-if="rec.err" class="err">{{ rec.err }}</p>
     </div>
@@ -669,4 +690,9 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .tw .twi { width: 100%; height: 100%; min-width: 0; margin: 0; padding: 0 4px; box-sizing: border-box; border: 0; border-radius: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; text-align: center; color: #1f3f86; outline: none }
 .tw .twi:focus { background: #eef3fd } .tw .twi.ok { background: #d7f7e8; color: #0b7a4b } .tw .twi.no { background: var(--red-l, #fde2e2); color: var(--red, #d33) }
 .lp.book.page .tw .twt { border-radius: 0; border-width: 1.5px } .lp.book.page .tw .twb { padding: 7px 12px; background: #f4f4f2; color: #231f20; box-sizing: border-box }
+/* Распознанная речь: что услышали — под кнопками; слова фразы — зелёные, когда сказаны */
+.said { display: grid; gap: 2px; width: 100%; max-width: 380px; align-self: center; margin: 0; padding: 8px 12px; box-sizing: border-box; border-radius: 12px; background: #eef4ff; color: #1f3f86; font-size: 15px; font-weight: 700; text-align: center }
+.said small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px } .said.live small { color: #1a73e8 }
+.saidv { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--orange-d, #e07a00) } .saidv.ok { color: var(--green-d, #3a9a00) }
+.cap b, .q b { font-weight: inherit; transition: color .15s } .cap b.hit { color: #8ff0c8 } .q b.hit { color: #1fbe78 } .cap b.miss { color: #ffb4b4 } .q b.miss { color: var(--red-d, #c33) }
 </style>

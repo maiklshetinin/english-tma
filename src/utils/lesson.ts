@@ -268,6 +268,19 @@ export function stepIssue(s: Step): string {
   }
   return (s.pairs?.filter(p => p.a.trim() && p.b.trim()).length ?? 0) >= 2 ? '' : 'Нужно хотя бы 2 пары'
 }
+/** «Повтори за диктором» голосом: какие слова фразы распознались (порядок не важен, повторы считаются), score — доля угаданных.
+ *  Сокращения сравниваем как полные формы: «I'm» = «I am» (распознавание пишет и так, и так). */
+const SR_FULL: Record<string, string> = { "i'm": 'i am', "you're": 'you are', "we're": 'we are', "they're": 'they are', "he's": 'he is', "she's": 'she is', "it's": 'it is', "that's": 'that is', "what's": 'what is', "there's": 'there is',
+  "don't": 'do not', "doesn't": 'does not', "didn't": 'did not', "can't": 'can not', "cannot": 'can not', "won't": 'will not', "isn't": 'is not', "aren't": 'are not', "i'll": 'i will', "you'll": 'you will', "i've": 'i have', "let's": 'let us', "i'd": 'i would' }
+const srWords = (s?: string) => (s ?? '').toLowerCase().replace(/[’‘`]/g, "'").replace(/[^\p{L}\p{N}' ]+/gu, ' ').split(/\s+/).filter(Boolean).flatMap(w => (SR_FULL[w] ?? w.replace(/^'+|'+$/g, '')).split(' '))
+export function speechMatch(phrase?: string, heard?: string) {
+  const left = srWords(heard), words = (phrase ?? '').split(/\s+/).filter(Boolean).map(w => {
+    const need = srWords(w), ok = need.length > 0 && need.every(x => { const k = left.indexOf(x); if (k < 0) return false; left.splice(k, 1); return true })
+    return { w, ok }
+  })
+  const n = words.filter(x => srWords(x.w).length).length
+  return { words, score: n ? words.filter(x => x.ok).length / n : 0 }
+}
 /** «Заполни таблицу»: колонки → образцы (вписаны заранее) и сколько клеток вписывать; строк — не меньше rows */
 export function twLayout(s: Step) {
   const it = (s.items ?? []).filter(x => x.w?.trim() || x.a?.trim()), cols = (s.cols ?? []).map((_, ci) => {

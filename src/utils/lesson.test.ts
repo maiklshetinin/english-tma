@@ -95,3 +95,15 @@ describe('«Заполни таблицу»', () => {
     expect(twCheck({ ...s, cs: true }, typed).ok[0][0]).toBe(false)
   })
 })
+
+import { speechMatch } from './lesson'
+describe('«Повтори за диктором» — распознанные слова', () => {
+  it('слова фразы подсвечиваются, знаки и регистр не мешают', () => {
+    const r = speechMatch('Go ahead!', 'go ahead')
+    expect(r.words.map(x => x.ok)).toEqual([true, true]); expect(r.score).toBe(1)
+  })
+  it('сокращения = полные формы, недосказанное — не засчитано', () => {
+    expect(speechMatch("I'm fine, thanks.", 'I am fine').words.map(x => x.ok)).toEqual([true, true, false])
+    expect(speechMatch('See you later', '').score).toBe(0)
+  })
+})
