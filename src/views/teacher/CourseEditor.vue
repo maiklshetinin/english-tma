@@ -1955,23 +1955,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- «Мои»: первой — собрать своё в конструкторе -->
         <button v-if="g.mine" class="mi madd" title="Собрать своё упражнение из блоков" @click="openBuilder()"><span class="mini plus"><b>+</b></span><small><b>Своё упражнение</b><span>собрать из блоков</span></small></button>
         <button v-for="t in g.items" :key="t.id" class="mi" :title="t.mine ? 'Своё упражнение — тяните на ветку; двойной клик — открыть в конструкторе' : t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)" @dblclick="t.mine && openBuilder(t.tpl)">
-          <ExerciseMini v-if="t.mine || NEW_MINI.includes(t.id)" :id="t.base || t.id" size="rail" />
-          <span v-else class="mini" :class="t.id"><i class="mp" />
-            <template v-if="t.id === 'intro'"><i class="mh" /><span class="mm"><i class="ma" /></span><i class="mw" /><i class="ml" /></template>
-            <template v-else-if="t.id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
-            <template v-else-if="t.id === 'audiotest'"><i class="mh" /><span class="mm sm"><i class="ma" /></span><span class="mr"><i /><i class="g" /><i /></span></template>
-            <template v-else-if="t.id === 'pairs'"><i class="mh" /><span class="mq"><i class="g" /><i class="g" /><i /><i /><i /><i /></span></template>
-            <template v-else-if="t.id === 'spell'"><i class="mh" /><i class="ma" /><span class="mc ln"><i class="l" /><i class="l" /><i class="l" /></span><span class="mc"><i class="l" /><i class="l" /><i class="l" /></span></template>
-            <template v-else-if="t.id === 'sayword'"><i class="mh" /><span class="mm"><i class="ma" /></span><span class="mk"><i /><i class="b" /><i /></span></template>
-            <template v-else-if="t.id === 'order'"><i class="mh" /><i class="ma" /><span class="mc ln"><i /><i /></span><span class="mc"><i /><i /><i /></span></template>
-            <template v-else-if="t.id === 'tip'"><i class="mh" /><i class="ml" /><i class="ml s" /><span class="mq t"><i /><i /><i /><i /></span></template>
-            <template v-else-if="t.id === 'speak'"><i class="mh" /><span class="mm"><b class="cp" /></span><span class="mk"><i /><i class="b" /><i /></span></template>
-            <template v-else-if="t.id === 'type'"><i class="mh" /><i class="ma" /><span class="mg"><i /><i class="d" /></span></template>
-            <template v-else-if="t.id === 'fill'"><i class="mh" /><span class="mm sm" /><span class="mg"><i class="d" /></span><span class="mc"><i /><i class="o" /></span></template>
-            <template v-else-if="t.id === 'answer'"><i class="mh" /><span class="mm sm" /><i class="mw" /><span class="mn"><i /><i /></span></template>
-            <template v-else><span class="ms"><i /><i /><i /></span></template>
-            <i class="mb" />
-          </span>
+          <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
           <span v-if="t.mine" class="mact" @pointerdown.stop.prevent><i title="Открыть в конструкторе" @click.stop="openBuilder(t.tpl)">✎</i><i class="del" title="Удалить из меню" @click.stop="delTpl(t.id)">✕</i></span>

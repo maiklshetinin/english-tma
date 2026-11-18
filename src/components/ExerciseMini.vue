@@ -19,25 +19,19 @@ defineProps({ id: { type: String, required: true }, size: { type: String, defaul
     <template v-else-if="id === 'translate'"><span class="br">◀) <i class="dt w" /></span><span class="br">◀) <i class="dt w" /></span></template>
     <template v-else-if="id === 'bkfree'"><span class="br">1 Do you like pizza? <i class="dt" /></span><span class="br">2 Does your dad work…<i class="dt" /></span><span class="br">3 Do your friends go…<i class="dt" /></span></template>
   </span>
-  <span v-else class="mini" :class="[id, size]"><i class="mp" />
-    <template v-if="id === 'intro'"><i class="mh" /><span class="mm"><i class="ma" /></span><i class="mw" /><i class="ml" /></template>
-    <template v-else-if="id === 'choice'"><i class="mh" /><i class="ma" /><span class="mo"><i /><i class="g" /><i /></span></template>
-    <template v-else-if="id === 'audiotest'"><i class="mh" /><span class="mm sm"><i class="ma" /></span><span class="mr"><i /><i class="g" /><i /></span></template>
-    <template v-else-if="id === 'pairs'"><i class="mh" /><span class="mq"><i class="g" /><i class="g" /><i /><i /><i /><i /></span></template>
-    <template v-else-if="id === 'spell'"><i class="mh" /><i class="ma" /><span class="mc ln"><i class="l" /><i class="l" /><i class="l" /></span><span class="mc"><i class="l" /><i class="l" /><i class="l" /></span></template>
-    <template v-else-if="id === 'sayword'"><i class="mh" /><span class="mm"><i class="ma" /></span><span class="mk"><i /><i class="b" /><i /></span></template>
-    <template v-else-if="id === 'order'"><i class="mh" /><i class="ma" /><span class="mc ln"><i /><i /></span><span class="mc"><i /><i /><i /></span></template>
-    <template v-else-if="id === 'tip'"><i class="mh" /><i class="ml" /><i class="ml s" /><span class="mq t"><i /><i /><i /><i /></span></template>
-    <template v-else-if="id === 'speak'"><i class="mh" /><span class="mm"><b class="cp" /></span><span class="mk"><i /><i class="b" /><i /></span></template>
-    <template v-else-if="id === 'type'"><i class="mh" /><i class="ma" /><span class="mg"><i /><i class="d" /></span></template>
-    <template v-else-if="id === 'fill'"><i class="mh" /><span class="mm sm" /><span class="mg"><i class="d" /></span><span class="mc"><i /><i class="o" /></span></template>
-    <template v-else-if="id === 'answer'"><i class="mh" /><span class="mm sm" /><i class="mw" /><span class="mn"><i /><i /></span></template>
-    <template v-else-if="id === 'translate'"><i class="mh" /><i class="ma" /><span class="mg"><i class="d w" /></span></template>
-    <template v-else-if="id === 'brackets'"><span class="mg"><i /><i class="bx" /><i class="bh" /></span><i class="ml" /></template>
-    <template v-else-if="id === 'sort'"><span class="mt"><i class="o" /><i class="g" /><i class="y" /><i class="p" /></span><span class="mcol"><i /><i /></span></template>
-    <template v-else-if="id === 'odd'"><span class="mt q"><i class="y" /><i class="b s" /><i class="g" /><i class="o" /></span></template>
+  <!-- Как в Busuu (18.11.2026): миниатюра — настоящий экран в миниатюре, с живыми словами (вариант А) -->
+  <span v-else class="mini xm2" :class="[id, size]">
+    <template v-if="id === 'intro'"><b class="h">Смотрите, новое слово!</b><span class="ph" style="height: 30px"><span class="pl ov"><b /><i /></span></span><span class="wc">Hello<small>Привет</small></span></template>
+    <template v-else-if="id === 'tip'"><b class="h">Подсказка!</b><span class="tx">Скажи <b>see you</b>, если увидитесь</span><span class="tbl"><span><b>Hello</b>привет</span><span><b>Hi</b>дружеский</span><span><b>Hey</b>совсем просто</span></span></template>
+    <template v-else-if="id === 'choice'"><b class="h">Выберите вариант</b><span class="pl"><b /><i /></span><span class="ops"><span class="op"><i class="a1" />good</span><span class="op ok"><i class="a2" />night</span><span class="op"><i class="a3" />hello</span></span></template>
+    <template v-else-if="id === 'audiotest'"><b class="h">Выберите вариант</b><span class="ph" style="height: 22px"><span class="pl ov"><b /><i /></span></span><span class="rw"><span class="r">How are you?</span><span class="r ok">See you later!</span></span></template>
+    <template v-else-if="id === 'fill'"><b class="h">Заполни пропуск</b><span class="ph" style="height: 24px" /><span class="s">And <span class="gp">you</span>?</span><span class="cs"><span class="ch">you</span><span class="ch">me</span></span></template>
+    <template v-else-if="id === 'pairs'"><b class="h">Соедините пары</b><span class="pr"><span class="ok">hello</span><span class="ok">привет</span><span>bye</span><span>спасибо</span><span>thanks</span><span>пока</span></span></template>
+    <template v-else-if="id === 'order' || id === 'spell'"><b class="h">Расставьте слова</b><span class="pl"><b /><i /></span><span class="ln"><span class="ch">See</span><span class="ch">you</span></span><span class="cs"><span class="ch">later!</span></span></template>
+    <template v-else-if="id === 'type'"><b class="h">Закончи предложение</b><span class="pl"><b /><i /></span><span class="s" style="margin-top: 4px">I’m fine. And <span class="gp e">&nbsp;</span>?</span></template>
+    <template v-else-if="id === 'sayword' || id === 'speak'"><b class="h">Повторите за диктором</b><span class="ph" style="height: 30px"><span class="cc">go ahead</span></span><span class="mic"><i /><b /><i /></span></template>
+    <template v-else-if="id === 'answer'"><b class="h">Ответь на вопрос</b><span class="ph" style="height: 24px" /><span class="wc q">What’s your name?</span><span class="two"><span>Сказать</span><span>Написать</span></span></template>
     <template v-else><span class="ms"><i /><i /><i /></span></template>
-    <i class="mb" />
   </span>
 </template>
 <style scoped>
@@ -84,4 +78,29 @@ defineProps({ id: { type: String, required: true }, size: { type: String, defaul
 .bkm .bpic { flex: none; height: 22px; border-radius: 3px; background: linear-gradient(135deg, #f6c99a, #8fb8e8 60%, #9fd28a) }
 .bkm .btb { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 6px; text-align: center } .bkm .btb i { background: #378add; color: #fff; font-style: normal; border-radius: 0; padding: 1px 0 }
 .bkm .btb.e i { height: 6px; background: none; border-bottom: .5px solid #85b7eb }
+
+/* ---- Как в Busuu: мини-скриншот (вариант А, 18.11.2026) ---- */
+.mini.xm2 { align-items: center; gap: 4px; padding: 6px 7px; font-family: var(--font); color: var(--text); text-align: center }
+.mini.xm2.tray, .mini.xm2.rail { padding: 6px 7px }
+.xm2 .h { font-size: 7.5px; font-weight: 800; white-space: nowrap; color: var(--text) }
+.xm2 .ph { position: relative; flex: none; display: block; width: 100%; border-radius: 4px; background: linear-gradient(135deg, #f6c99a, #e4a77a 45%, #8fb8e8) }
+.xm2 .ph::after { content: ''; position: absolute; left: 42%; top: 20%; width: 16%; height: 42%; border-radius: 50% 50% 40% 40%; background: #5f5e5a; opacity: .5 }
+.xm2 .pl { flex: none; display: flex; align-items: center; gap: 3px; width: 100%; height: 9px; padding: 0 3px; border-radius: 5px; background: #1a73e8; box-sizing: border-box }
+.xm2 .pl.ov { position: absolute; left: 8%; right: 8%; bottom: 3px; width: auto; z-index: 1 }
+.xm2 .pl b { width: 0; height: 0; border-left: 4px solid #fff; border-top: 2.5px solid transparent; border-bottom: 2.5px solid transparent; background: none } .xm2 .pl i { flex: 1; height: 1.5px; border-radius: 1px; background: rgba(255, 255, 255, .6) }
+.xm2 .wc { display: block; width: 100%; padding: 1px 0; border-radius: 0 0 4px 4px; background: #e6f1fb; color: #0c447c; font-size: 8px; font-weight: 800; line-height: 1.3 } .xm2 .wc small { display: block; font-size: 6px; font-weight: 600; color: #185fa5 }
+.xm2 .wc.q { border-radius: 3px; font-size: 7px }
+.xm2 .tx { font-size: 6.5px; line-height: 1.3; text-align: left; width: 100% } .xm2 .tx b { font-weight: 800 }
+.xm2 .tbl { display: grid; width: 100%; border: .5px solid #d3d1c7; border-radius: 3px; font-size: 6px } .xm2 .tbl span { display: grid; grid-template-columns: auto 1fr; gap: 3px; padding: 1px 3px; text-align: left } .xm2 .tbl span + span { border-top: .5px solid #e9e9e9 } .xm2 .tbl b { font-weight: 800 }
+.xm2 .ops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; width: 100% } .xm2 .op { overflow: hidden; border: .5px solid #d3d1c7; border-radius: 3px; background: var(--card); font-size: 5.5px; font-weight: 700 } .xm2 .op i { display: block; height: 16px; border-radius: 0 } .xm2 .op.ok { border-color: #1fbe78; box-shadow: 0 0 0 1px #1fbe78 }
+.xm2 .a1 { background: #f6c99a } .xm2 .a2 { background: #9fd28a } .xm2 .a3 { background: #8fb8e8 }
+.xm2 .rw { display: grid; gap: 2px; width: 100% } .xm2 .r { padding: 2px 0; border: .5px solid #d3d1c7; border-radius: 3px; font-size: 6.5px; font-weight: 700 } .xm2 .r.ok { background: #e1f5ee; border-color: #5dcaa5; color: #085041 }
+.xm2 .pr { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 100% } .xm2 .pr span { padding: 3px 0; border: .5px solid #d3d1c7; border-radius: 3px; font-size: 6.5px; font-weight: 700 } .xm2 .pr .ok { background: #e1f5ee; border-color: #5dcaa5; color: #085041 }
+.xm2 .ln { display: flex; gap: 2px; width: 100%; min-height: 12px; padding-bottom: 2px; border-bottom: 1px solid #d3d1c7 }
+.xm2 .ch { padding: 1px 3px; border: .5px solid #d3d1c7; border-radius: 3px; background: var(--card); font-size: 6.5px; font-weight: 700 }
+.xm2 .cs { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px }
+.xm2 .s { font-size: 8px; font-weight: 700 } .xm2 .gp { display: inline-block; min-width: 20px; border-bottom: 1px dotted #1a73e8; color: #1a73e8; font-size: 7px; text-align: center } .xm2 .gp.e { min-width: 24px }
+.xm2 .mic { display: flex; align-items: center; gap: 6px } .xm2 .mic i { width: 9px; height: 9px; border: .5px solid #85b7eb; border-radius: 50%; background: var(--card) } .xm2 .mic b { display: grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: #1a73e8 } .xm2 .mic b::after { content: ''; width: 3px; height: 6px; border-radius: 2px; background: #fff }
+.xm2 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 100% } .xm2 .two span { padding: 2px 0; border: .5px solid #1a73e8; border-radius: 6px; color: #185fa5; font-size: 6px; font-weight: 700 }
+.xm2 .cc { position: absolute; left: 50%; bottom: 3px; z-index: 1; padding: 0 3px; border-radius: 2px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 5.5px; white-space: nowrap; transform: translateX(-50%) }
 </style>
