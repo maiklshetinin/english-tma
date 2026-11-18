@@ -57,11 +57,11 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     }
     if (kind === 'tip') {
       put(o, 'text', str(r.text, 1500))
-      o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120) }; put(out, 't', str(q.t, 120)); put(out, 'audio', ref(q.audio)); return out })
+      o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120) }; put(out, 't', str(q.t, 600)); put(out, 'audio', ref(q.audio)); return out })          // пояснение в строке подсказки — до 600 знаков (18.11.2026: резалось на 120 — «…но для с»)
     }
     if (kind === 'order') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)); put(o, 'note', str(r.note, 600)); if (r.by === 'letters') o.by = 'letters' }          // «Собери слово» — по буквам
     if (kind === 'speak' || kind === 'gap') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)) }
-    if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 8)          // до 8 — банк слов из учебника (предлоги).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))
+    if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 8).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))          // до 8 — банк слов из учебника (предлоги)
     if (kind === 'answer') { put(o, 'text', str(r.text, 300)); put(o, 'note', str(r.note, 600)); put(o, 'tr', str(r.tr, 300)) }
     // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.
     // k — цвет плитки (o/g/y/p/b), mix — перемешивать у ученика, hint — подсказка «Нажмите фразу, затем колонку»

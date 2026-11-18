@@ -70,6 +70,12 @@ await C.put(me, 'k10', { ...course, items: [{ id: 'L', type: 'lesson', title: ''
   { id: 't1', kind: 'sort', bk: 'sort', tw: true, rows: 40, cs: true, noEx: 'x', cols: [{ t: '-s', z: 1 }, { t: 'other' }], items: [{ w: 'bag', a: 'bags', c: 0, ex: true }, { w: 'man', a: 'men', c: 1, ex: 'y' }] }] }] })
 { const s = ((await C.get('k10')) as any).items[0].steps[0]
   ok('заполни таблицу: a/ex/tw/rows/cs, мусор срезан', s.tw === true && s.rows === 8 && s.cs === true && !('noEx' in s) && s.items[0].a === 'bags' && s.items[0].ex === true && !('ex' in s.items[1]) && s.cols[0].t === '-s' && !('z' in s.cols[0])) }
+// подсказка: длинное пояснение в строке не режется на 120; банк пропуска чистится
+await C.put(me, 'k11', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [
+  { id: 't1', kind: 'tip', text: 'x', opts: [{ w: 'Hi', t: 'я'.repeat(300), z: 1 }] },
+  { id: 'g1', kind: 'gap', phrase: 'I [am].', opts: [{ w: 'am', junk: 1 }, { w: 'is' }] }] }] })
+{ const st = ((await C.get('k11')) as any).items[0].steps
+  ok('подсказка: пояснение 300 знаков целиком, мусор срезан; банк пропуска чистый', st[0].opts[0].t.length === 300 && !('z' in st[0].opts[0]) && st[1].opts.length === 2 && !('junk' in st[1].opts[0])) }
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)
 await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
 const nt = store.get('courses/k4').notes[0]
