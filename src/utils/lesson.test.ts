@@ -77,3 +77,21 @@ describe('время урока', () => {
     expect([fmtMin(0.5), fmtMin(1.5), fmtMin(2)]).toEqual(['½', '1½', '2'])
   })
 })
+
+import { twLayout, twCheck } from './lesson'
+describe('«Заполни таблицу»', () => {
+  const s = TEMPLATES.find(t => t.id === 'sort')!.make()
+  it('образцы вписаны, строк хватает на все ответы', () => {
+    const L = twLayout(s)
+    expect(L.cols[0].ex.map(x => x.a)).toEqual(['bags'])
+    expect(L.cols.map(c => c.need)).toEqual([2, 3, 3, 3, 2])
+    expect(L.rows).toBe(4); expect(L.bank.length).toBe(15)
+  })
+  it('порядок в колонке не важен, регистр — по настройке', () => {
+    const typed = [['Owls', 'boys'], ['boxes', 'watches', 'tomatos'], ['babies', 'cherries', 'strawberries'], ['knives', 'leaves', 'wolves'], ['men', 'feet']]
+    const r = twCheck(s, typed)
+    expect(r.ok[0]).toEqual([true, true]); expect(r.ok[1][2]).toBe(false); expect(r.miss).toEqual(['tomatoes']); expect(r.all).toBe(false)
+    typed[1][2] = 'tomatoes'; expect(twCheck(s, typed).all).toBe(true)
+    expect(twCheck({ ...s, cs: true }, typed).ok[0][0]).toBe(false)
+  })
+})

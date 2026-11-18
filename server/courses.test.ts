@@ -60,11 +60,16 @@ const k9 = store.get('courses/k19').loose
 ok('глава на доске: урок помнит главу (grp), плохой grp выкинут', k9[1].grp === 'gu' && !('grp' in k9[2]))
 // книжные экраны: «Найди лишнее» и «Распредели по колонкам» — сохраняются, лишнее срезается
 await C.put(me, 'k8', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [
-  { id: 'o1', kind: 'odd', ans: 7, note: 'x', mix: false, opts: [{ w: 'egg', k: 'y' }, { w: 'coffee', k: 'zzz' }] },
-  { id: 'o2', kind: 'sort', bk: 'sort', bn: 7, cols: [{ t: 'A' }, { t: 'B' }, { t: 'C' }, { t: 'D' }, { t: 'E' }, { t: 'F' }], items: [{ w: 'p', c: 1, k: 'g' }, { w: 'q', c: 9 }], hint: false }] }] })
+  { id: 'o1', kind: 'odd', bs: 'boom', ans: 7, note: 'x', mix: false, opts: [{ w: 'egg', k: 'y' }, { w: 'coffee', k: 'zzz' }] },
+  { id: 'o2', kind: 'sort', bk: 'sort', bn: 7, bs: 'page', cols: [{ t: 'A' }, { t: 'B' }, { t: 'C' }, { t: 'D' }, { t: 'E' }, { t: 'F' }], items: [{ w: 'p', c: 1, k: 'g' }, { w: 'q', c: 9 }], hint: false }] }] })
 { const s = ((await C.get('k8')) as any).items[0].steps
   ok('найди лишнее: опции, цвет, ответ в пределах', s[0].opts.length === 2 && s[0].opts[0].k === 'y' && !s[0].opts[1].k && s[0].ans === 1 && s[0].mix === false && s[0].note === 'x')
-  ok('распредели: до 5 колонок, метка задания учебника, колонка фразы в пределах', s[1].cols.length === 5 && s[1].items[0].c === 1 && s[1].items[1].c === 4 && s[1].hint === false && s[1].bk === 'sort' && s[1].bn === 7) }
+  ok('распредели: до 5 колонок, метка задания учебника, колонка фразы в пределах', s[1].cols.length === 5 && s[1].items[0].c === 1 && s[1].items[1].c === 4 && s[1].hint === false && s[1].bk === 'sort' && s[1].bn === 7 && s[1].bs === 'page' && !('bs' in s[0])) }
+// «Заполни таблицу»: ответ и образец в клетке, строки, регистр — сохраняются; колонки чистятся
+await C.put(me, 'k10', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [
+  { id: 't1', kind: 'sort', bk: 'sort', tw: true, rows: 40, cs: true, noEx: 'x', cols: [{ t: '-s', z: 1 }, { t: 'other' }], items: [{ w: 'bag', a: 'bags', c: 0, ex: true }, { w: 'man', a: 'men', c: 1, ex: 'y' }] }] }] })
+{ const s = ((await C.get('k10')) as any).items[0].steps[0]
+  ok('заполни таблицу: a/ex/tw/rows/cs, мусор срезан', s.tw === true && s.rows === 8 && s.cs === true && !('noEx' in s) && s.items[0].a === 'bags' && s.items[0].ex === true && !('ex' in s.items[1]) && s.cols[0].t === '-s' && !('z' in s.cols[0])) }
 ok('неизвестный экран — 400', await code(C.put(me, 'k3', { items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 's', kind: 'boom' }] }] })) === 400)
 await C.put(me, 'k4', { ...course, notes: [{ id: 'n1', x: 1.4, y: 2, text: 'я'.repeat(2000), color: 'red', junk: 1 }] })
 const nt = store.get('courses/k4').notes[0]

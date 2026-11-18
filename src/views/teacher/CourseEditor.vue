@@ -29,7 +29,7 @@ import { access, accessReady } from '../../composables/useAccess'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, skillsOf, tplOf, BOOK_TPL, BOOK } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, skillsOf, tplOf, BOOK_TPL, PAGE_TPL, BOOK } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -534,7 +534,7 @@ const XGROUPS_STD = (() => {
     { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
-  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL])
+  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL])
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
@@ -544,14 +544,16 @@ const XGROUPS_BOOK = [
   { k: 'W', t: 'Письмо', d: 'вписать, раскрыть скобки, ответить', ids: BOOK_TPL.filter(id => (SKILLS[id] ?? [])[0] === 'W') },
   { k: 'R', t: 'Чтение', d: 'выбрать, найти, распределить', ids: BOOK_TPL.filter(id => (SKILLS[id] ?? [])[0] !== 'W') },
 ].map(g => ({ ...g, book: true, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
-const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Как в учебнике', exp: true }, { k: 'mine', t: 'Мои' }]
+// «Как в учебнике» (18.11.2026) — те же 8 типов, но вид максимально как страница учебника (bs: 'page'); Настины остаются отдельной вкладкой
+const XGROUPS_PAGE = XGROUPS_BOOK.map(g => ({ ...g, k: 'p' + g.k, items: g.ids.map(id => TPL.find(v => v.id === 'pg_' + id)).filter(Boolean) }))
+const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'mine', t: 'Мои' }]
 const trayTab = ref((() => { try { return localStorage.getItem('ce.trayTab') || 'app' } catch { return 'app' } })())
 watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })
 const mineItems = computed(() => (doc.templates ?? []).map(x => ({ id: x.id, kind: x.step.kind, base: tplOf(x.step), t: x.t, d: x.d, mine: true, step: x.step, tpl: x })))
-const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'mine'
+const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : trayTab.value === 'mine'
   ? [{ k: 'mine', t: 'Мои', d: 'собраны в конструкторе', mine: true, items: mineItems.value }] : XGROUPS_STD)
   .map(g => ({ ...g, cols: g.items.length + (g.mine ? 1 : 0) })))          // все плашки группы — в один ряд
-const NEW_MINI = BOOK_TPL          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
+const NEW_MINI = [...BOOK_TPL, ...PAGE_TPL]          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
 const skillsT = (t) => (t.mine ? skillsOf({ ...t.step, tn: t.t }) : (SKILLS[t.id] ?? []))
 /** Экраны по плитке меню: «Готовый урок», своё упражнение (копия образца) или шаблон */
 function makeTpl(id) {
@@ -1949,7 +1951,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <small><b>{{ T[k].t }}</b>{{ TASK_D[k] }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
-        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" title="Упражнения Насти по учебнику — пробуем, могут поменяться">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i></button></div>
+        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i></button></div>
         <!-- мини-окошки: как выглядит экран -->
         <div class="xrow">
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">

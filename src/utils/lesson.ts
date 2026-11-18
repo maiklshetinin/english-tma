@@ -16,7 +16,7 @@
 
 export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd'
 export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
-export interface SortItem { w: string; c: number; k?: string }
+export interface SortItem { w: string; c: number; k?: string; a?: string; ex?: boolean }          // «Заполни таблицу» (tw): a — что вписать (bag → bags, варианты через /), ex — образец (зачёркнут в банке, вписан в таблицу)
 export interface Pair { a: string; b: string }
 export interface Step {
   id: string; kind: StepKind
@@ -30,13 +30,13 @@ export interface Step {
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
   head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
   tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
-  bk?: string; bn?: number                                           // из какого задания учебника (BOOK) — группа «Тест · упражнения Насти»; bn — свой номер задания, как в книге
-  cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean   // «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
+  bk?: string; bn?: number; bs?: 'page'                                           // из какого задания учебника (BOOK) — группа «Тест · упражнения Насти»; bn — свой номер задания, как в книге
+  cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean; tw?: boolean; rows?: number; cs?: boolean; noEx?: boolean   // tw — «Заполни таблицу» (Настя, 18.11.2026): rows — строк, cs — с учётом регистра, noEx — без образцов; «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
 }
 
 /** Задания курса, в которые можно собрать экраны */
 export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test']
-export const STEPS_MAX = 40, OPTS_MAX = 4, PAIRS_MAX = 6, ODD_MAX = 6, SORT_MAX = 20, GAP_OPTS_MAX = 8, SORT_COLS_MAX = 5
+export const STEPS_MAX = 40, OPTS_MAX = 4, PAIRS_MAX = 6, ODD_MAX = 6, SORT_MAX = 30, TW_ROWS_MAX = 8, GAP_OPTS_MAX = 8, SORT_COLS_MAX = 5
 /** Сколько места по вертикали занимает горизонтальный рельс урока с карточками экранов (редактор курса раздвигает рельс) */
 export const RAIL_H = 420
 /** На сколько вправо от кружка урока начинается ветка экранов (за плашкой главы с подписями уроков) */
@@ -169,8 +169,11 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'bkqa', kind: 'gap', t: 'Ответь по картинке', d: 'Фото и короткий ответ', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkqa', head: 'Answer the questions', image: fish('wave.jpg'), phrase: 'Is she a teacher? [Yes, she is./Yes, she is/Yes she is]', tr: 'Она учитель? Да.', opts: [] }) },
   { id: 'bkfree', kind: 'answer', t: 'Свободный ответ', d: 'Про себя, без автопроверки', make: () => ({ id: stepId(), kind: 'answer', bk: 'bkfree', head: 'Answer the questions about you', text: 'Do you like pizza?', note: 'Yes, I do. / No, I don’t.', tr: 'Yes, I do. I love pizza!' }) },
   { id: 'odd', kind: 'odd', t: 'Найди лишнее', d: 'Одно слово не подходит', make: () => ({ id: stepId(), kind: 'odd', bk: 'odd', head: 'Circle the uncountable noun', ans: 2, note: 'Sugar — неисчисляемое, остальное можно посчитать.', opts: [{ w: 'potato', k: 'o' }, { w: 'biscuit', k: 'y' }, { w: 'sugar', k: 'b' }, { w: 'cherry', k: 'p' }] }) },
-  { id: 'sort', kind: 'sort', t: 'Распредели по колонкам', d: 'Таблица до 5 колонок, со звуком', make: () => ({ id: stepId(), kind: 'sort', bk: 'sort', head: 'Complete the table', cols: ['-s', '-es', '-ies', '-ves', 'other'].map(t => ({ t })),
-    items: [['boy', 0], ['box', 1], ['baby', 2], ['knife', 3], ['man', 4], ['owl', 0], ['tomato', 1], ['cherry', 2], ['leaf', 3], ['foot', 4]].map(([w, c], i) => ({ w: w as string, c: c as number, k: TILE_K[i % 5] })) }) },
+  // «Заполни таблицу» — как нарисовала Настя (18.11.2026): банк слов сверху (образцы зачёркнуты), ученик вписывает форму в нужную колонку
+  { id: 'sort', kind: 'sort', t: 'Заполни таблицу', d: 'Распредели слова по колонкам', make: () => ({ id: stepId(), kind: 'sort', bk: 'sort', tw: true, head: 'Complete the table', cols: ['-s', '-es', '-ies', '-ves', 'other'].map(t => ({ t })), rows: 4,
+    items: ([['bag', 'bags', 0, 1], ['child', 'children', 4, 1], ['boy', 'boys', 0], ['box', 'boxes', 1], ['baby', 'babies', 2], ['knife', 'knives', 3], ['man', 'men', 4], ['tomato', 'tomatoes', 1], ['leaf', 'leaves', 3],
+      ['cherry', 'cherries', 2], ['owl', 'owls', 0], ['foot', 'feet', 4], ['wolf', 'wolves', 3], ['strawberry', 'strawberries', 2], ['watch', 'watches', 1]] as [string, string, number, number?][])
+      .map(([w, a, c, ex]) => ({ w, a, c, ...(ex ? { ex: true } : {}) })) }) },
 ]
 /** Задания учебника: номер в кружке и задание как в книге — на плашке меню и миниатюре (ExerciseMini); also — какие ещё задания закрывает */
 export const BOOK: Record<string, { n: number; en: string; also?: string; pic?: boolean }> = {
@@ -185,13 +188,20 @@ export const BOOK: Record<string, { n: number; en: string; also?: string; pic?: 
 }
 /** Тест · упражнения Насти — отдельная группа меню */
 export const BOOK_TPL = Object.keys(BOOK)
+// «Учебник 1:1» (18.11.2026): те же 8 типов, но оформление точно как в книге — отдельная вкладка меню; у экрана bs: 'page'
+export const PAGE_TPL = BOOK_TPL.map(id => 'pg_' + id)
+for (const id of BOOK_TPL) {
+  const b = TEMPLATES.find(x => x.id === id)!
+  TEMPLATES.push({ ...b, id: 'pg_' + id, make: () => ({ ...b.make(), bs: 'page' }) })
+}
 
 // Навыки упражнений (для меню «Exercise» и тегов на ветке урока): Слух, Чтение, Письмо, Речь — по id шаблона
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], translate: ['W'], brackets: ['W'], sort: ['R'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
+for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]          // «Учебник 1:1» — те же навыки
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
 export function tplOf(s: Step): string {
-  if (s.bk && BOOK[s.bk]) return s.bk          // экран из группы «Тест · упражнения Насти»
+  if (s.bk && BOOK[s.bk]) return (s.bs === 'page' ? 'pg_' : '') + s.bk          // экран из группы «Тест · упражнения Насти» / «Учебник 1:1»
   if (s.kind === 'choice') return s.show === 'text' ? 'audiotest' : 'choice'
   // «Собери слово» (по буквам) и «Повтори за диктором» убраны из меню как дубли (17.11.2026): старые такие экраны работают как раньше,
   // а в меню и на ветке — «Собери фразу» и «Повтори слово»
@@ -253,9 +263,31 @@ export function stepIssue(s: Step): string {
   if (s.kind === 'sort') {
     const c = s.cols ?? [], it = (s.items ?? []).filter(x => x.w?.trim())
     if (c.length < 2 || c.some(x => !x.t?.trim())) return 'Подпишите колонки'
+    if (s.tw) { const f = (s.items ?? []).filter(x => x.a?.trim()); return f.some(x => !x.w?.trim()) ? 'У каждого ответа — слово для банка' : f.filter(x => !x.ex || s.noEx).length < 1 ? 'Нужен хотя бы один ответ' : '' }
     return it.length < 2 ? 'Нужно хотя бы 2 фразы' : ''
   }
   return (s.pairs?.filter(p => p.a.trim() && p.b.trim()).length ?? 0) >= 2 ? '' : 'Нужно хотя бы 2 пары'
+}
+/** «Заполни таблицу»: колонки → образцы (вписаны заранее) и сколько клеток вписывать; строк — не меньше rows */
+export function twLayout(s: Step) {
+  const it = (s.items ?? []).filter(x => x.w?.trim() || x.a?.trim()), cols = (s.cols ?? []).map((_, ci) => {
+    const all = it.filter(x => x.c === ci && x.a?.trim()), ex = s.noEx ? [] : all.filter(x => x.ex)
+    return { ex, need: all.length - ex.length }
+  })
+  const rows = Math.max(s.rows ?? 0, ...cols.map(c => c.ex.length + c.need), 1)
+  return { cols, rows, bank: it.filter(x => x.w?.trim()) }
+}
+/** Проверка таблицы: в колонке порядок не важен — каждое вписанное слово ищем среди ещё не найденных ответов колонки (a: «leaves/leafs») */
+export function twCheck(s: Step, typed: string[][]) {
+  const n = (v?: string) => { const x = (v ?? '').replace(/[’‘`]/g, "'").replace(/\s+/g, ' ').trim(); return s.cs ? x : x.toLowerCase() }
+  const miss: string[] = []
+  const ok = (s.cols ?? []).map((_, ci) => {
+    const left = (s.items ?? []).filter(x => x.c === ci && x.a?.trim() && (s.noEx || !x.ex)).map(x => ({ w: x.a!.split('/')[0].trim(), a: x.a!.split('/').map(n).filter(Boolean) }))
+    const res = (typed[ci] ?? []).map(v => { if (!n(v)) return null; const k = left.findIndex(a => a.a.includes(n(v))); if (k < 0) return false; left.splice(k, 1); return true })
+    miss.push(...left.map(a => a.w))
+    return res
+  })
+  return { ok, miss, all: !miss.length && ok.every(c => c.every(v => v !== false)) }
 }
 /** Текст подсказки → кусочки: обычные и **жирные** */
 export const tipParts = (t?: string) => (t ?? '').split(/\*\*(.+?)\*\*/g).map((x, i) => ({ x, b: i % 2 === 1 })).filter(p => p.x)
@@ -359,7 +391,12 @@ function stepFrom(o: any): Step | null {
   if (Array.isArray(o.cols)) s.cols = o.cols.map((x: any) => ({ t: String(typeof x === 'string' ? x : x?.t ?? '').trim() })).slice(0, SORT_COLS_MAX)
   if (typeof o.bk === 'string' && BOOK[o.bk]) s.bk = o.bk
   if (Number.isInteger(o.bn) && o.bn > 0 && o.bn < 100) s.bn = o.bn
-  if (Array.isArray(o.items)) s.items = o.items.filter((x: any) => str(x?.w)).map((x: any) => ({ w: x.w.trim(), c: Number.isInteger(x.c) && x.c >= 0 ? Math.min(x.c, (s.cols?.length ?? 2) - 1) : 0, ...(TILE[x.k] ? { k: x.k } : {}) })).slice(0, SORT_MAX)
+  if (o.bs === 'page') s.bs = 'page'
+  if (o.tw === true) s.tw = true
+  if (o.cs === true) s.cs = true
+  if (o.noEx === true) s.noEx = true
+  if (Number.isInteger(o.rows) && o.rows > 0) s.rows = Math.min(o.rows, TW_ROWS_MAX)
+  if (Array.isArray(o.items)) s.items = o.items.filter((x: any) => str(x?.w)).map((x: any) => ({ w: x.w.trim(), c: Number.isInteger(x.c) && x.c >= 0 ? Math.min(x.c, (s.cols?.length ?? 2) - 1) : 0, ...(TILE[x.k] ? { k: x.k } : {}), ...(str(x.a) ? { a: x.a.trim() } : {}), ...(x.ex === true ? { ex: true } : {}) })).slice(0, SORT_MAX)
   if (Array.isArray(o.pairs)) {
     const pairs = o.pairs.map((x: any) => (Array.isArray(x) ? { a: x[0], b: x[1] } : x)).filter((x: any) => str(x?.a) && str(x?.b)).map((x: any) => ({ a: x.a.trim(), b: x.b.trim() }))
     if (pairs.length) s.pairs = pairs.slice(0, PAIRS_MAX)

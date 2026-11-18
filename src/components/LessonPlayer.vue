@@ -16,7 +16,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import AudioPill from './AudioPill.vue'
 import { useTelegram } from '../composables/useTelegram'
 import BackButton from './BackButton.vue'
-import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts, BOOK } from '../utils/lesson'
+import { KINDS, shuffle, orderParts, tipParts, gapParts, gapOk, gapList, gapFull, gapAlts, TILE, tileK, hintParts, BOOK, twLayout, twCheck } from '../utils/lesson'
 
 const props = defineProps({
   steps: { type: Array, required: true },
@@ -53,9 +53,9 @@ const src = (v, k) => (v ? props.resolve(v, k) : '')
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
 const { hapticResult, hapticTick } = useTelegram()      // виброотклик на ответы (в Профиле можно выключить)
-const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null })
+const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null })
 function setup() {
-  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null }); Object.assign(mine, { ok: 0, all: 0 })
+  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null }); Object.assign(mine, { ok: 0, all: 0 })
   recStop(true); rec.url = ''; rec.err = ''
   const s = step.value; if (!s) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
@@ -65,9 +65,10 @@ function setup() {
   }
   if (s.kind === 'order') { const idx = orderParts(s).map((_, k) => k); let o = shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
+  if (s.kind === 'sort' && s.tw) st.tw = twLayout(s).cols.map(c => Array(c.need).fill(''))          // «Заполни таблицу»: что ученик вписал, по колонкам
   if (s.kind === 'odd' || s.kind === 'sort') { const idx = (s.kind === 'odd' ? s.opts : s.items ?? []).map((_, k) => k); st.order = props.single || s.mix === false ? idx : shuffle(idx) }
   if (s.kind === 'intro' || s.kind === 'tip') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
-  if (s.kind === 'answer' && s.bk) st.mode = 'write'          // Т4 «Answer the questions about you» — сразу пишем, как в книге
+  if (s.kind === 'answer' && s.bk && s.bs === 'page') st.mode = 'write'          // Т4 «Answer the questions about you» — сразу пишем, как в книге
   if (s.kind === 'speak' && props.track) emit('answer', { step: s, ok: null })          // «Повтори» — без оценки, но «Продолжить» — только когда ученик правда что-то сказал (17.11.2026: молчание засчитывалось)          // без оценки — только «встречалось»
   if (!props.single && !props.embedded) autoplay()
 }
@@ -197,11 +198,15 @@ watch(isFinal, (v) => { if (v && !endT.value) { endT.value = Date.now(); emit('d
 const onKey = (e) => { if (e.key === 'Enter' && !props.single && !props.embedded && !/INPUT|TEXTAREA/.test(e.target?.tagName)) isFinal.value ? emit('close') : next() }
 // Тест · упражнения Насти: экран в стиле страницы учебника (кремовая бумага, номер в оранжевом кружке, задание по-английски)
 const isBook = computed(() => !isFinal.value && !!step.value?.bk && !!BOOK[step.value.bk])
+// «Учебник 1:1» (18.11.2026) — отдельная вкладка: оформление точно как в книге (bs: 'page'); без bs — Настин вид
+const isPage = computed(() => isBook.value && step.value?.bs === 'page')
 const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !step.value.opts?.length) || step.value?.kind === 'odd' || step.value?.kind === 'sort'))
 // ---- книжные (экспериментальные): «Найди лишнее» и «Распредели по колонкам» ----
 const tile = (k, i) => TILE[tileK(k, i)]
-const sortLeft = computed(() => (step.value?.kind === 'sort' ? st.order.filter(k => st.place[k] == null).length : 0))
-const canCheck = computed(() => { const k = step.value?.kind; return k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.items?.length ?? 0) > 0 && sortLeft.value === 0 : typedAll.value })
+const sortLeft = computed(() => (step.value?.kind !== 'sort' ? 0 : step.value.tw ? st.tw.flat().filter(v => !v.trim()).length : st.order.filter(k => st.place[k] == null).length))
+// «Заполни таблицу» (Настя, 18.11.2026): банк слов, образцы зачёркнуты; ученик вписывает форму в колонку — порядок в колонке не важен
+const twL = computed(() => (step.value?.kind === 'sort' && step.value.tw ? twLayout(step.value) : null))
+const canCheck = computed(() => { const k = step.value?.kind; return k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
 function sortPick(k) { if (!st.done) st.sel = st.sel === k ? null : k }
 function sortPut(c) { if (st.done || st.sel == null) return; st.place = { ...st.place, [st.sel]: c }; st.sel = null; hapticTick?.() }
 function sortBack(k) { if (st.done) return; const p = { ...st.place }; delete p[k]; st.place = p }
@@ -209,6 +214,7 @@ const sortOkAt = (k) => st.place[k] === step.value.items[k].c
 function checkAny() {
   const s = step.value; if (st.done || !canCheck.value) return
   if (s.kind === 'odd') return verdict(st.picked === (s.ans ?? 0))
+  if (s.kind === 'sort' && s.tw) { st.twr = twCheck(s, st.tw); return verdict(st.twr.all) }
   if (s.kind === 'sort') return verdict((s.items ?? []).every((_, k) => sortOkAt(k)))
   check()
 }
@@ -216,7 +222,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 </script>
 
 <template>
-  <div class="lp" :class="{ single, embedded, book: isBook, qa: isBook && step?.bk === 'bkqa' }">
+  <div class="lp" :class="{ single, embedded, book: isBook, page: isPage, qa: isPage && step?.bk === 'bkqa' }">
     <div class="top">
       <BackButton v-if="closable && closeText" :to="closeText" @click="emit('close')" />
       <button v-else-if="closable" class="x" title="Закрыть" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -360,10 +366,10 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
       <div v-if="!gp.gap" class="empty">Отметьте пропуск: слово в [квадратных скобках]</div>
       <!-- Т5 «Underline the correct word»: варианты прямо в предложении, тап — подчёркивает, как ручкой -->
-      <p v-else-if="isBook && step.bk === 'bkpick' && step.opts?.length" class="sent bko">{{ gp.a }}<template v-for="(o, k) in step.opts" :key="k"><b class="uo" :class="{ on: st.picked === k, ok: st.done && gapOk(o.w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ o.w }}</b><template v-if="k < step.opts.length - 1"> / </template></template>{{ gp.b }}</p>
+      <p v-else-if="isPage && step.bk === 'bkpick' && step.opts?.length" class="sent bko">{{ gp.a }}<template v-for="(o, k) in step.opts" :key="k"><b class="uo" :class="{ on: st.picked === k, ok: st.done && gapOk(o.w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ o.w }}</b><template v-if="k < step.opts.length - 1"> / </template></template>{{ gp.b }}</p>
       <p v-else-if="step.opts?.length" class="sent">{{ gp.a }}<span class="slot" :style="{ minWidth: Math.min(30, Math.max(...step.opts.map(o => (o.w || '').length), 3) + 3) + 'ch' }" :class="{ ok: st.done && st.res, no: st.done && !st.res }">{{ st.typed || '\u00a0' }}</span>{{ gp.b }}</p>
       <p v-else class="sent"><template v-for="(x, n) in gl" :key="n"><template v-if="x.g == null"><template v-for="(h, j) in hintParts(x.t)" :key="j"><span v-if="h.h" class="brh">{{ h.x }}</span><template v-else>{{ h.x }}</template></template></template><input v-else v-model="st.tys[x.i]" class="slot in" :style="{ width: Math.min(30, Math.max(...gapAlts(x.g).map(a => a.length)) + 3) + 'ch' }" :placeholder="gl.length === 1 ? 'Напечатай здесь' : ''" :class="{ ok: st.done && gapOkAt(x), no: st.done && !gapOkAt(x) }" :readonly="st.done" autocomplete="off" autocapitalize="off" spellcheck="false" @keydown.enter.stop="check" /></template></p>
-      <div v-if="step.opts?.length && !(isBook && step.bk === 'bkpick')" class="pool">
+      <div v-if="step.opts?.length && !(isPage && step.bk === 'bkpick')" class="pool">
         <button v-for="k in st.order" :key="k" class="chip" :class="{ ok: st.done && gapOk(step.opts[k].w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ step.opts[k].w }}</button>
       </div>
     </div>
@@ -372,8 +378,24 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
     <div v-else-if="step.kind === 'odd'" class="body">
       <h3 class="hd">{{ step.head || KINDS.odd.head }}</h3>
       <!-- Т7 «Circle the …»: группа слов строкой, тап — обводит кружком -->
-      <p v-if="isBook" class="sent bko"><template v-for="(k, n) in st.order" :key="k"><b class="co" :class="{ on: st.picked === k && !st.done, ok: st.done && k === (step.ans ?? 0), no: st.done && k === st.picked && k !== (step.ans ?? 0) }" @click="!st.done && (st.picked = k)">{{ step.opts[k].w }}</b><template v-if="n < st.order.length - 1"> / </template></template></p>
+      <p v-if="isPage" class="sent bko"><template v-for="(k, n) in st.order" :key="k"><b class="co" :class="{ on: st.picked === k && !st.done, ok: st.done && k === (step.ans ?? 0), no: st.done && k === st.picked && k !== (step.ans ?? 0) }" @click="!st.done && (st.picked = k)">{{ step.opts[k].w }}</b><template v-if="n < st.order.length - 1"> / </template></template></p>
       <div v-else class="oddg"><button v-for="k in st.order" :key="k" class="ot" :class="{ sel: st.picked === k && !st.done, ok: st.done && k === (step.ans ?? 0), no: st.done && k === st.picked && k !== (step.ans ?? 0) }" :style="{ background: tile(step.opts[k].k, k).bg, color: tile(step.opts[k].k, k).fg }" @click="!st.done && (st.picked = k)">{{ step.opts[k].w }}</button></div>
+    </div>
+
+    <!-- Заполни таблицу (Настя, 18.11.2026): слова сверху, образцы зачёркнуты и уже вписаны; ученик вписывает форму в колонку -->
+    <div v-else-if="step.kind === 'sort' && twL" class="body tw">
+      <h3 class="hd">{{ step.head || 'Complete the table' }}</h3>
+      <AudioPill v-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
+      <div class="twb"><span v-for="(x, k) in twL.bank" :key="k" :class="{ twe: x.ex && !step.noEx }">{{ x.w }}</span></div>
+      <div class="twt" :style="{ gridTemplateColumns: `repeat(${step.cols?.length || 2}, minmax(0, 1fr))` }">
+        <b v-for="(c, ci) in step.cols" :key="'h' + ci" class="twh">{{ c.t }}</b>
+        <template v-for="r in twL.rows" :key="'r' + r">
+          <span v-for="(c, ci) in twL.cols" :key="ci" class="twc">
+            <i v-if="r - 1 < c.ex.length" class="twx">{{ c.ex[r - 1].a.split('/')[0] }}</i>
+            <input v-else-if="r - 1 - c.ex.length < c.need" v-model="st.tw[ci][r - 1 - c.ex.length]" class="twi" :class="{ ok: st.done && st.twr?.ok[ci]?.[r - 1 - c.ex.length] === true, no: st.done && st.twr?.ok[ci]?.[r - 1 - c.ex.length] !== true }" :readonly="st.done" autocomplete="off" autocapitalize="off" spellcheck="false" />
+          </span>
+        </template>
+      </div>
     </div>
 
     <!-- Распредели по колонкам (книжный, экспериментальный): нажать фразу, потом колонку -->
@@ -421,8 +443,8 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gapFull(step.phrase) }}</span><small>{{ step.tr }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'answer' && st.done && step.tr" class="fb"><small>Пример ответа</small><span class="fs">{{ step.tr }}</span></span>
       <span v-else-if="!isFinal && step.kind === 'odd' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Лишнее:' }}</b><span v-if="!right" class="fs">{{ step.opts?.[step.ans ?? 0]?.w }}</span><small v-if="step.note">{{ step.note }}</small></span>
-      <span v-else-if="!isFinal && step.kind === 'sort' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Есть ошибки — они красные' }}</b><small v-if="step.note">{{ step.note }}</small></span>
-      <span v-else-if="!isFinal && step.kind === 'sort'" class="fb"><small class="left">Осталось фраз: {{ sortLeft }}</small></span>
+      <span v-else-if="!isFinal && step.kind === 'sort' && st.done" class="fb"><b>{{ right ? 'Верно!' : step.tw ? 'Правильно:' : 'Есть ошибки — они красные' }}</b><span v-if="step.tw && !right && st.twr?.miss.length" class="fs">{{ st.twr.miss.join(', ') }}</span><small v-if="step.note">{{ step.note }}</small></span>
+      <span v-else-if="!isFinal && step.kind === 'sort'" class="fb"><small class="left">{{ step.tw ? 'Осталось клеток' : 'Осталось фраз' }}: {{ sortLeft }}</small></span>
       <span v-else class="fb" />
       <template v-if="embedded && isFinal"><button class="go ghost" @click="emit('restart')">↺ Заново</button><button class="go" @click="emit('full')">Во весь экран</button></template>
       <button v-else-if="needCheck && !single" class="go" :disabled="!canCheck" @click="checkAny">Проверить</button>
@@ -608,33 +630,43 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .lp.book .foot, .lp.book .foot button { font-family: var(--font) }
 
 /* ---- Как в учебнике, вид 2 (18.11.2026): белая страница, всё — как в книге; по одному пункту на экран ---- */
-.lp.book { background: #fff; color: #231f20 }
-.bkh b { border: 1.5px solid #d85a30; background: #f0997b; color: #231f20 }
-.lp.book .sent { line-height: 2.1 }
-.bko b { font-weight: 700; cursor: pointer; border-radius: 12px; transition: background .12s }
-.bko b:hover { background: #eef4ff }
-.bko .uo.on { text-decoration: underline 2px #1f5fbf; text-underline-offset: 4px; color: #1f5fbf }
-.bko .uo.ok { text-decoration: underline 2px #0f6e56; text-underline-offset: 4px; color: #0f6e56 } .bko .uo.no { text-decoration: line-through 2px #a32d2d; color: #a32d2d }
-.bko .co { padding: 1px 7px; border: 2px solid transparent; border-radius: 50% } .bko .co.on { border-color: #1f5fbf; color: #1f5fbf } .bko .co.ok { border-color: #0f6e56; color: #0f6e56 } .bko .co.no { border-color: #a32d2d; color: #a32d2d; text-decoration: line-through }
+.lp.book.page { background: #fff; color: #231f20 }
+.lp.book.page .bkh b { border: 1.5px solid #d85a30; background: #f0997b; color: #231f20 }
+.lp.book.page .sent { line-height: 2.1 }
+.lp.book.page .bko b { font-weight: 700; cursor: pointer; border-radius: 12px; transition: background .12s }
+.lp.book.page .bko b:hover { background: #eef4ff }
+.lp.book.page .bko .uo.on { text-decoration: underline 2px #1f5fbf; text-underline-offset: 4px; color: #1f5fbf }
+.lp.book.page .bko .uo.ok { text-decoration: underline 2px #0f6e56; text-underline-offset: 4px; color: #0f6e56 } .bko .uo.no { text-decoration: line-through 2px #a32d2d; color: #a32d2d }
+.lp.book.page .bko .co { padding: 1px 7px; border: 2px solid transparent; border-radius: 50% } .bko .co.on { border-color: #1f5fbf; color: #1f5fbf } .bko .co.ok { border-color: #0f6e56; color: #0f6e56 } .bko .co.no { border-color: #a32d2d; color: #a32d2d; text-decoration: line-through }
 /* Т3: ответ — строкой под вопросом */
-.lp.book.qa .sent input.slot.in { display: block; width: 100% !important; margin: 4px 0 0; text-align: left }
+.lp.book.page.qa .sent input.slot.in { display: block; width: 100% !important; margin: 4px 0 0; text-align: left }
 /* Т4: вопрос и пунктир под ответ */
-.lp.book .word { padding: 0; background: none; text-align: left } .lp.book .word .qq { font-weight: 400; font-size: 17px }
-.lp.book .wr2 textarea { border: 0; border-bottom: 1.5px dotted #231f20; border-radius: 0; background: none; box-shadow: none; padding: 4px 0; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 16px; color: #1f5fbf; resize: none; line-height: 1.8 }
-.lp.book .wr2 textarea::placeholder { font-family: Arial, sans-serif; font-size: 13px; color: #b4b2a9 }
+.lp.book.page .word { padding: 0; background: none; text-align: left } .lp.book.page .word .qq { font-weight: 400; font-size: 17px }
+.lp.book.page .wr2 textarea { border: 0; border-bottom: 1.5px dotted #231f20; border-radius: 0; background: none; box-shadow: none; padding: 4px 0; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 16px; color: #1f5fbf; resize: none; line-height: 1.8 }
+.lp.book.page .wr2 textarea::placeholder { font-family: Arial, sans-serif; font-size: 13px; color: #b4b2a9 }
 /* Т6: банк слов — серой полосой (уже), картинка — в рамке */
-.lp.book .media { border-radius: 2px; box-shadow: 0 0 0 1px #c9c9c9 }
+.lp.book.page .media { border-radius: 2px; box-shadow: 0 0 0 1px #c9c9c9 }
 /* Т8: таблица как в книге — синяя шапка, линии */
-.lp.book .spool { justify-content: flex-start; gap: 4px 14px; padding: 7px 12px; background: #f4f4f2; border-radius: 0 }
-.lp.book .spool .sw { padding: 2px 0; border: 0; border-radius: 0; background: none !important; color: #231f20 !important; font-size: 14px; font-weight: 700 } .lp.book .spool .sw.sel { color: #1f5fbf !important; text-decoration: underline 2px; box-shadow: none }
-.lp.book .scols { gap: 0; border-bottom: 1.5px solid #2d5bb8 }
-.lp.book .scol { gap: 0; border-right: 1px solid #2d5bb8 } .lp.book .scol:last-child { border-right: 0 }
-.lp.book .scol .sch { border: 0; border-radius: 0; background: #2d5bb8; color: #fff; padding: 6px 2px; font-size: 13px; font-weight: 700 }
-.lp.book .sbox { min-height: 96px; border: 0; border-radius: 0; background: repeating-linear-gradient(transparent 0 23px, #9db6e6 23px 24px); padding: 0 4px; gap: 0 }
-.lp.book .sbox.hot { background-color: #eef4ff }
-.lp.book .sbox .sw.in { padding: 0 2px; height: 24px; border: 0; border-radius: 0; background: none !important; color: #1f5fbf !important; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 13px; font-weight: 400 }
-.lp.book .sbox .sw.ok { color: #0f6e56 !important } .lp.book .sbox .sw.no { color: #a32d2d !important; text-decoration: line-through }
-.lp.book .sadd { border: 0; padding: 0 2px; height: 24px; line-height: 24px; text-align: left; font-size: 10.5px; color: #1f5fbf; background: none }
-.lp.book .sub { color: #888 }
-.lp.book .word { justify-items: start } .lp.book .wr2 .out { align-self: flex-start }
+.lp.book.page .spool { justify-content: flex-start; gap: 4px 14px; padding: 7px 12px; background: #f4f4f2; border-radius: 0 }
+.lp.book.page .spool .sw { padding: 2px 0; border: 0; border-radius: 0; background: none !important; color: #231f20 !important; font-size: 14px; font-weight: 700 } .lp.book.page .spool .sw.sel { color: #1f5fbf !important; text-decoration: underline 2px; box-shadow: none }
+.lp.book.page .scols { gap: 0; border-bottom: 1.5px solid #2d5bb8 }
+.lp.book.page .scol { gap: 0; border-right: 1px solid #2d5bb8 } .lp.book.page .scol:last-child { border-right: 0 }
+.lp.book.page .scol .sch { border: 0; border-radius: 0; background: #2d5bb8; color: #fff; padding: 6px 2px; font-size: 13px; font-weight: 700 }
+.lp.book.page .sbox { min-height: 96px; border: 0; border-radius: 0; background: repeating-linear-gradient(transparent 0 23px, #9db6e6 23px 24px); padding: 0 4px; gap: 0 }
+.lp.book.page .sbox.hot { background-color: #eef4ff }
+.lp.book.page .sbox .sw.in { padding: 0 2px; height: 24px; border: 0; border-radius: 0; background: none !important; color: #1f5fbf !important; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 13px; font-weight: 400 }
+.lp.book.page .sbox .sw.ok { color: #0f6e56 !important } .lp.book.page .sbox .sw.no { color: #a32d2d !important; text-decoration: line-through }
+.lp.book.page .sadd { border: 0; padding: 0 2px; height: 24px; line-height: 24px; text-align: left; font-size: 10.5px; color: #1f5fbf; background: none }
+.lp.book.page .sub { color: #888 }
+.lp.book.page .word { justify-items: start } .lp.book.page .wr2 .out { align-self: flex-start }
+/* «Заполни таблицу» — как на макете Насти: банк слов строками, таблица с синей шапкой, образцы курсивом */
+.tw .twb { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; width: 100%; max-width: 420px; align-self: center; font-size: 13px; font-weight: 600; color: var(--text) }
+.tw .twb .twe { text-decoration: line-through; color: var(--hint) }
+.tw .twt { display: grid; width: 100%; max-width: 420px; align-self: center; border: 1px solid #2d5bb8; border-radius: 8px; overflow: hidden; background: #fff }
+.tw .twh { min-width: 0; padding: 6px 2px; background: #2d5bb8; color: #fff; font-size: 12px; font-weight: 700; text-align: center; border-right: 1px solid rgba(255, 255, 255, .35) }
+.tw .twc { display: flex; align-items: center; justify-content: center; min-width: 0; height: 30px; border-right: 1px solid #c9d6ef; border-top: 1px solid #c9d6ef }
+.tw .twx { font-family: 'Comic Sans MS', 'Segoe Print', cursive; font-size: 13px; color: #3d6fd1 }
+.tw .twi { width: 100%; height: 100%; min-width: 0; margin: 0; padding: 0 4px; box-sizing: border-box; border: 0; border-radius: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; text-align: center; color: #1f3f86; outline: none }
+.tw .twi:focus { background: #eef3fd } .tw .twi.ok { background: #d7f7e8; color: #0b7a4b } .tw .twi.no { background: var(--red-l, #fde2e2); color: var(--red, #d33) }
+.lp.book.page .tw .twt { border-radius: 0; border-width: 1.5px } .lp.book.page .tw .twb { padding: 7px 12px; background: #f4f4f2; color: #231f20; box-sizing: border-box }
 </style>
