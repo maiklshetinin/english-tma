@@ -970,7 +970,7 @@ const dots = computed(() => { let s = 20 * view.z; while (s < 10) s *= 4; return
 
 // ---------- Раскладка рельса (в координатах холста; центр линии — x = 0) ----------
 const G = { step: 116, unitGap: 160 }
-const MINI_UP = 174          // над линией урока — плитки экранов (LessonRail → .rmi), им нужно место под экранами урока выше          // рельс всегда прямой («Волну» убрали)
+const MINI_UP = 180          // над линией урока — плитки экранов (LessonRail → .rmi), им нужно место под экранами урока выше          // рельс всегда прямой («Волну» убрали)
 // за курсором мимо рельса: элементы структуры и где они лягут (в координатах холста)
 const flyTree = computed(() => {
   if (!drag.on || (drag.over && drag.item?.type !== 'unit') || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
@@ -2323,7 +2323,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .xgc { display: grid; gap: 2px 4px }
 .skl { display: flex; gap: 3px; justify-content: center } .chip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }          /* навык → аналитика */
 .chip.L { background: #1cb0f6 } .chip.R { background: #a560e8 } .chip.W { background: #ff9600 } .chip.S { background: #58cc02 }
-.tray.inter .mini { width: 124px; height: 150px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 132px; gap: 5px; padding: 6px 4px 4px; align-self: start }
+.tray.inter .mini { width: 124px; height: 156px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 132px; gap: 5px; padding: 6px 4px 4px; align-self: start }
 .tray.inter .mini .mb { right: 6px; bottom: 5px; width: 26px; height: 7px } .tray.inter .mini.lesson { overflow: visible } .tray.inter .mini .ms { transform: scale(.82); transform-origin: top center }
 .tray.inter .mi small { font-size: 10.5px; line-height: 1.2 } .tray.inter .mi small b { font-size: 12.5px }
 /* плитки меню — одной высоты: название в строку («…», целиком — в подсказке), описание — ровно 2 строки места; миниатюры и навыки — ровными рядами */

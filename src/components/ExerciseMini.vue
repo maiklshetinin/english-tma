@@ -1,7 +1,7 @@
 <script setup>
 // Миниатюра экрана (меню «Exercise», плитки на ветке урока, конструктор): тот же шаблон экрана, что у ученика (src/exercises),
 // с «рыбой» шаблона (TEMPLATES в utils/lesson.ts) — уменьшенная копия окна. Поменяли шаблон — поменялась и миниатюра (18.11.2026).
-// Нажатия выключены, звук и видео не грузятся. size: 'tray' / 'rail' — 124×150 (18.11.2026: экран виден целиком, фото 16:9 как у ученика).
+// Нажатия выключены, звук и видео не грузятся. size: 'tray' / 'rail' — 124×156 (18.11.2026: экран виден целиком, с полоской прогресса, фото 16:9 как у ученика).
 // Не шаблон экрана (например, «Готовый урок») — стопка карточек, как раньше.
 import { computed, reactive } from 'vue'
 import { EX } from '../exercises'
@@ -13,6 +13,9 @@ const bid = computed(() => { const b = props.id.replace(/^pg_/, ''); return ALIA
 const page = computed(() => props.id.startsWith('pg_'))
 const step = computed(() => { const t = TEMPLATES.find(x => x.id === bid.value); if (!t) return null; const s = t.make(); if (page.value) s.bs = 'page'; return s })
 const ex = computed(() => (step.value ? EX[step.value.kind] : null))
+// кнопка внизу — как в начале экрана у ученика: «Новое слово» и «Подсказка» — сразу «Продолжить» (синяя), где ответ проверяют кнопкой — «Проверить», остальные — серая «Продолжить»
+const goOn = computed(() => ['intro', 'tip'].includes(step.value?.kind))
+const goT = computed(() => { const s = step.value; return s && ((s.kind === 'gap' && !s.opts?.length) || s.kind === 'odd' || s.kind === 'sort') ? 'Проверить' : 'Продолжить' })
 const book = computed(() => !!step.value?.bk && !!BOOK[step.value.bk])
 // состояние экрана «как в начале»: всё по порядку, ничего не отвечено
 const idx = (a) => (a ?? []).map((_, k) => k)
@@ -36,10 +39,13 @@ providePlay(reactive({
   <span v-if="ex" class="mini xmt" :class="size" inert aria-hidden="true">
     <span class="sc">
       <span class="lp embedded single" :class="{ book, bkpg: book && page, bkqa: book && page && step.bk === 'bkqa' }">
+        <span class="top"><span class="pb"><i /></span></span>          <!-- полоска прогресса — как у ученика, будто идут первые экраны урока -->
         <span v-if="book" class="bkh"><b>{{ step.bn || BOOK[step.bk].n }}</b><span>{{ step.head || BOOK[step.bk].en }}</span></span>
         <span class="body" :class="['x-' + step.kind, { tw: step.kind === 'sort' && step.tw }]"><component :is="ex.view" :step="step" /></span>
       </span>
     </span>
+    <!-- подвал с кнопкой — прижат к низу, как у ученика на телефоне (экран выше значка уходит под него) -->
+    <span class="ft" :style="{ '--k': size === 'tray' || size === 'rail' ? 122 / 400 : 148 / 400 }"><b class="go" :class="{ on: goOn }">{{ goT }}</b></span>
   </span>
   <span v-else class="mini" :class="[id, size]"><span class="ms"><i /><i /><i /></span></span>
 </template>
@@ -47,16 +53,23 @@ providePlay(reactive({
 <style scoped>
 .mini { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 150px; height: 104px; box-sizing: border-box; padding: 8px 12px; border: 1px solid #e3e3e3; border-radius: 10px; background: var(--card); transition: transform .15s, box-shadow .15s }
 /* размер «как в меню Exercise» (CourseEditor → .tray.inter .mini) */
-.mini.tray, .mini.rail { width: 124px; height: 150px; padding: 6px 9px 16px; gap: 4px; overflow: hidden }
+.mini.tray, .mini.rail { width: 124px; height: 156px; padding: 6px 9px 16px; gap: 4px; overflow: hidden }
 /* уменьшенная копия экрана: экран шириной 400 px целиком, в тех же пропорциях, что у ученика */
 .mini.xmt { display: block; padding: 0 !important; overflow: hidden; pointer-events: none; user-select: none }
 .sc { position: absolute; left: 0; top: 0; width: 400px; transform: scale(calc(122 / 400)); transform-origin: 0 0 }
 .mini.xmt:not(.tray):not(.rail) .sc { transform: scale(calc(148 / 400)) }
 .lp { display: flex; flex-direction: column; width: 400px; background: var(--card); color: var(--text); font-family: var(--font); text-align: left }
-.body { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px 16px; box-sizing: border-box }
+.body { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 8px 14px 16px; box-sizing: border-box }
 .lp.book { background: #fffdf6; font-family: Arial, Helvetica, sans-serif; color: #2c2c2a } .mini.xmt:has(.lp.book) { background: #fffdf6; border-color: #eadfc4 }
 .lp.book.bkpg { background: #fff; color: #231f20 } .mini.xmt:has(.lp.bkpg) { background: #fff; border-color: #d3d1c7 }
-.bkh { display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px 0; font-size: 16px; font-weight: 700; line-height: 1.3 }
+.ft { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; justify-content: flex-end; align-items: center; height: calc(58px * var(--k)); padding: 0 calc(14px * var(--k)); border-top: 1px solid var(--border); background: var(--card); box-sizing: border-box }
+.mini.xmt:has(.lp.book) .ft { background: #fffdf6 } .mini.xmt:has(.lp.bkpg) .ft { background: #fff }
+.ft .go { padding: calc(9px * var(--k)) calc(22px * var(--k)); border-radius: 99px; background: var(--border); color: var(--hint-2); font: 800 calc(14px * var(--k)) / 1.2 var(--font) }
+.ft .go.on { background: var(--blue); color: #fff }
+.top { display: block; padding: 14px 95px 2px }
+.pb { display: block; height: 10px; border-radius: 6px; background: #e8e8e8; overflow: hidden } .pb i { display: block; width: 30%; height: 100%; border-radius: 6px; background: #1fbe78 }
+.lp.book .pb { background: #ece6d6 }
+.bkh { display: flex; align-items: flex-start; gap: 9px; padding: 8px 14px 0; font-size: 16px; font-weight: 700; line-height: 1.3 }
 .bkh b { flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin-top: -2px; border-radius: 50%; background: #f0997b; color: #4a1b0c; font-size: 14px }
 .lp.bkpg .bkh b { border: 1.5px solid #d85a30; color: #231f20 }
 .lp.book .body { padding-top: 10px }
