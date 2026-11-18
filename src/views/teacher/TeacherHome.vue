@@ -341,6 +341,25 @@ const openStudent = (id) => { sheet.value = null; router.push({ name: 'home', pa
 const loadAll = () => { ready.value = false; loadMonthPast().catch(() => {}); return Promise.all([scheduleStore.load(), loadAhead()]).then(() => { ready.value = true; runAuto() }).catch(() => {}) }
 onMounted(() => { setDropHandler(onDrop); loadAll() })      // при открытии вкладки перечитываем расписание
 onUnmounted(() => setDropHandler(null))
+// Шапка недели на компьютере (18.11.2026): сама меряет, влезает ли в строку, и сжимается по шагам — без угадывания ширин.
+// 0 — всё как есть; 1 — без подписей «авто» и «Статус»; 2 — деньги коротко (без «из …» и потерь, они в подсказке); 3 — деньги второй строкой, обе рядом
+const whEl = ref(null), whLv = ref(0)
+let whRaf = 0, whRo = null, whMo = null
+function fitWh() {
+  whRaf = 0; const el = whEl.value; if (!el) return
+  if (innerWidth < 1024) { whLv.value = 0; delete el.dataset.lv; return }
+  let lv = 0
+  for (; lv < 3; lv++) { if (lv) el.dataset.lv = lv; else delete el.dataset.lv; if (el.scrollWidth <= el.clientWidth + 1) break }
+  el.dataset.lv = lv; whLv.value = lv
+}
+const refitWh = () => { if (!whRaf) whRaf = requestAnimationFrame(fitWh) }
+onMounted(() => {
+  if (!whEl.value) return
+  whRo = new ResizeObserver(refitWh); whRo.observe(whEl.value)
+  whMo = new MutationObserver(refitWh); whMo.observe(whEl.value, { childList: true, subtree: true, characterData: true })          // появились «Как на этой неделе», привидение, «Статус»
+  refitWh()
+})
+onUnmounted(() => { whRo?.disconnect(); whMo?.disconnect(); cancelAnimationFrame(whRaf) })
 watch(week, (w, was) => { if (was < 0) loadMonthPast().catch(() => {}) })                 // вернулись из прошлых недель — там могли править уроки месяца
 watch(() => w1.value[0] + monthEnd.value, loadAll)                                      // новая неделя или новый месяц — перечитать и подставить                    // наступила новая неделя: «следующая» стала «текущей», подгружаем новую «следующую»
 </script>
@@ -352,7 +371,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
     <section class="main">
       <div class="weeks">
         <div class="wcol">
-          <div class="wh">
+          <div ref="whEl" class="wh" :data-lv="whLv || null">
             <BackButton class="wk-back" to="Предыдущая неделя" @click="week--" />
             <button class="wk-now" :class="{ on: week === 0, open: !!picker }" :aria-expanded="!!picker" title="Календарь: выбрать неделю, заработок за месяц" @click="togglePicker"><b>{{ weekName }}</b><small>{{ weekRange(dates) }}</small></button>
             <MonthPicker v-if="picker" :selected="dates[0]" :this-week="w1[0]" :max-monday="shift(w1[0], 7 * maxWeek)" :today="today" @pick="pickWeek" @close="picker = false" />
@@ -367,6 +386,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
               :title="hiddenGhosts.length ? `Вернуть подсказки (${hiddenGhosts.length}) — бледные уроки «как на этой неделе»` : `Скрыть подсказки (${allGhosts.length})`" :aria-label="hiddenGhosts.length ? `Вернуть подсказки: ${hiddenGhosts.length}` : `Скрыть подсказки: ${allGhosts.length}`" @click="toggleGhosts">
               <GhostIcon :variant="ghostIcon" :size="28" /><i>{{ hiddenGhosts.length || allGhosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i><span class="askt">Статус · </span>{{ noStatus.length }}</button>
+            <i class="whbr" aria-hidden="true" />
             <WeekMoney class="money" :m="money" />
             <WeekMoney class="money" :m="monthMoney" :label="monthName" />
           </div>
@@ -405,10 +425,15 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 .trial-pad { position: relative; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none }
 .trial-pad i { position: absolute; top: 7px; width: 12px; height: 25px; border-radius: 2px 2px 3px 3px; background: var(--bg); box-shadow: inset 0 6px 0 var(--c), 0 1px 3px rgba(0, 0, 0, .2); transform-origin: 50% 100% }
 .trial-pad:hover { border-color: var(--hint-2) } .trial-pad.held { opacity: .55 }
-@media (min-width: 1024px) { .wh { flex-wrap: wrap; gap: 8px } .wh > * { flex: none } .wh .wk-now { flex: 0 1 116px; min-width: 96px } .af-sw small { display: none } }      /* на компьютере шапка всегда в одну строку: если тесно, сжимается плашка недели */
+@media (min-width: 1024px) { .wh { flex-wrap: nowrap; gap: 8px } .wh > * { flex: none } .wh .wk-now { flex: 0 1 116px; min-width: 96px } .af-sw small { display: none } }      /* на компьютере шапка всегда в одну строку: если тесно, сжимается плашка недели */
 /* 18.11.2026: с «Как на этой неделе», привидением и «Статус» шапка не влезала и уезжала под учеников. Тесно — прячем подписи «авто» и «Статус» (остаются выключатель и «?1»); совсем тесно — деньги переходят на вторую строку, а не наезжают */
-@media (min-width: 1024px) { .wcol { container: wcol / inline-size } }
-@container wcol (max-width: 880px) { .wh .askt, .wh .af-sw span { display: none } .wh .af-sw { padding: 0 7px } }
+.wh .whbr { display: none }
+@media (min-width: 1024px) {
+  .wh[data-lv] .askt, .wh[data-lv] .af-sw span { display: none } .wh[data-lv] .af-sw { padding: 0 7px }
+  .wh[data-lv="2"] .money :deep(small), .wh[data-lv="2"] .money :deep(.lost), .wh[data-lv="3"] .money :deep(.lost) { display: none }
+  .wh[data-lv="3"] { flex-wrap: wrap; row-gap: 8px } .wh[data-lv="3"] .whbr { display: block; flex: 0 0 100%; height: 0 }
+  .wh[data-lv="3"] .money { flex: 1 1 0; min-width: 0; margin-left: 0 }          /* вторая строка — обе суммы рядом, поровну */
+}
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
 .gall { position: relative; border-color: var(--border); color: var(--blue) }
 /* Кнопка-привидение (подсказки следующей недели): тёмная простыня со светлыми глазами; подсказки видны — голубая подложка; часть убрана — серый счётчик */

@@ -3,7 +3,7 @@
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { undo, redo, undoN, redoN, ctrlKey } from '../composables/useScheduleUndo'
 import { HOURS, DAYS, hh, slotKey, nowTick, nowIn, tz, setTz, tzShort, TIMEZONES, slotPast } from '../store/app'
-import { dnd, pressStart, outOfTable } from '../composables/useDnd'
+import { dnd, pressStart } from '../composables/useDnd'
 import { gridStyle, gridFrame, lessonStyle, pastShade } from '../utils/gridStyle'
 import TrialSticker from './TrialSticker.vue'
 import Avatar from './Avatar.vue'
@@ -184,7 +184,8 @@ function maskDown(e) {
   const cells = [...wk.value.querySelectorAll('[data-drop="cell"]')].map(el => ({ b: el.getBoundingClientRect(), date: el.dataset.date, hour: +el.dataset.hour }))
   const hit = (x, y) => cells.find(c => x >= c.b.left && x < c.b.right && y >= c.b.top && y < c.b.bottom) ?? null
   const p = picked()
-  gs = { x: e.clientX, y: e.clientY, hit, c: hit(e.clientX, e.clientY), on: false, plan: null, out: false, ls: p.lessons, gh: p.ghosts, ids: new Set(p.lessons.map(l => l.id)), key: '' }
+  const tb = wk.value.getBoundingClientRect()          // край таблицы меряем один раз — при движении ничего не меряем (18.11.2026: за доской тормозило)
+  gs = { x: e.clientX, y: e.clientY, tb, hit, c: hit(e.clientX, e.clientY), on: false, plan: null, out: false, ls: p.lessons, gh: p.ghosts, ids: new Set(p.lessons.map(l => l.id)), key: '' }
   addEventListener('pointermove', maskMove); addEventListener('pointerup', maskUp, { once: true })
 }
 function planMove(c) {
@@ -197,7 +198,7 @@ function planMove(c) {
   moves.sort((a, b) => (di * 100 + hi > 0 ? k(b) - k(a) : k(a) - k(b)))      // по порядку, чтобы урок не вставал на место, которое ещё не освободилось
   return { moves, ghosts, ok }
 }
-// Над клетками уроки и рамка едут вместе, по клеткам — видно, куда встанут; над шапкой / за таблицей — плавно за курсором
+// Уроки и рамка едут вместе, плавно за курсором (без подтягивания к клеткам — 18.11.2026: «прыгали»); встают в клетки, когда отпустили
 function setG(dx, dy, st, tx = dx, ty = dy) {
   const el = wk.value; if (!el) return
   el.style.setProperty('--gdx', dx + 'px'); el.style.setProperty('--gdy', dy + 'px')
@@ -214,14 +215,14 @@ function maskMove(e) {
 function frame() {
   graf = 0; if (!gs) return
   const x = gs.ex, y = gs.ey, fx = x - gs.x, fy = y - gs.y
-  if (outOfTable(x, y)) { gs.plan = null; gs.out = true; gs.key = ''; return setG(fx, fy, 'out') }      // за таблицей — отпустить = удалить
+  const T = gs.tb, P = 28          // как OUT_PAD в useDnd: запас вокруг таблицы, чтобы не удалить случайно
+  if (x < T.left - P || x > T.right + P || y < T.top - P || y > T.bottom + P) { gs.plan = null; gs.out = true; gs.key = ''; return setG(fx, fy, 'out') }      // за таблицей — отпустить = удалить
   gs.out = false
   const c = gs.c && gs.hit(x, y)
   if (!c) { gs.plan = null; gs.key = ''; return setG(fx, fy, 'bad') }      // над шапкой / часами — едут за курсором, сюда нельзя
   const key = c.date + '|' + c.hour
   if (key !== gs.key) { gs.key = key; gs.plan = planMove(c) }      // план пересчитываем только при смене клетки
-  const tx = c.b.left - gs.c.b.left, ty = c.b.top - gs.c.b.top
-  setG(tx, ty, c === gs.c || gs.plan.ok ? '' : 'bad')          // над клетками уроки едут вместе с рамкой, по клеткам (18.11.2026: уроки «уходили» из рамки)
+  setG(fx, fy, c === gs.c || gs.plan.ok ? '' : 'bad')
 }
 function maskUp(e) {
   removeEventListener('pointermove', maskMove); cancelAnimationFrame(graf); graf = 0
@@ -466,7 +467,7 @@ html[data-theme='dark'] .dsum.shine::after { background: linear-gradient(100deg,
 .mq { position: absolute; z-index: 8; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }      /* как в конструкторе курсов */
 .selbox { position: absolute; z-index: 7; border: 3px solid #0d99ff; pointer-events: none }      /* линия потолще, чем в конструкторе: таблица мельче холста */
 .selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .06); touch-action: none } .selmask:active { cursor: grabbing }      /* лёгкая голубая маска: за неё тянется всё выделенное */
-.wk.gdrag .chip.sel { transform: translate(var(--gdx, 0), var(--gdy, 0)); will-change: transform } .wk.gdrag .selbox { transform: translate(var(--gtx, 0), var(--gty, 0)); transition: transform .08s ease-out; will-change: transform } .wk.gdrag .chip.sel { z-index: 6; opacity: .85; transition: transform .08s ease-out }      /* уроки (и призраки) плавно едут за курсором, рамка — по клеткам: куда встанут */
+.wk.gdrag .chip.sel { transform: translate(var(--gdx, 0), var(--gdy, 0)); will-change: transform } .wk.gdrag .selbox { transform: translate(var(--gtx, 0), var(--gty, 0)); transition: none; will-change: transform } .wk.gdrag .chip.sel { z-index: 6; opacity: .85; transition: none }      /* уроки и рамка едут вместе за курсором, без задержки */
 .wk.gdrag .cell.free:hover { background: var(--card) }      /* пока тянем — клетки под курсором не мигают */
 .wk.gdrag { overflow: visible }      /* пока тянем — уроки не обрезаются краем таблицы */
 .seldel { position: absolute; left: 50%; top: -30px; translate: -50% 0; padding: 3px 10px; border-radius: 99px; background: var(--red); color: #fff; font-style: normal; font-size: 12px; font-weight: 800; white-space: nowrap }
