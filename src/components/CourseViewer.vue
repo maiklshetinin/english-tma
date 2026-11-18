@@ -237,6 +237,17 @@ function repeatOf(u) {
 }
 const repeats = computed(() => Object.fromEntries(units.value.map(u => [u.id, repeatOf(u)])))
 const relDay = (t) => { if (!t) return ''; const d = Math.round((new Date(t).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86_400_000); return d <= 0 ? 'сегодня' : d === 1 ? 'завтра' : `через ${d} дн` }
+// «Повторить сейчас» — по всему курсу (18.11.2026, как в песочнице «по всему курсу»): одна карточка наверху пути собирает всё,
+// чему пора, со всех глав — вместо блока «Повторяй изученный материал» после каждой главы. Сначала ошибки и самое забытое.
+const repeatAll = computed(() => {
+  const rs = units.value.map(u => repeats.value[u.id]).filter(Boolean), seen = new Set()
+  const list = rs.flatMap(r => r.list).filter(o => (seen.has(o.st.id) ? false : (seen.add(o.st.id), true)))
+    .sort((a, b) => (a.pct ?? -1) - (b.pct ?? -1))
+  const nexts = rs.map(r => r.next).filter(Boolean)
+  return { id: 'rv-all', type: 'repeat', title: 'Повторение', virtual: true, list, steps: list.slice(0, RV_MAX).map(o => o.st), started: rs.some(r => r.started),
+    words: rs.reduce((a, r) => a + (r.words || 0), 0), screens: list.filter(o => o.kind === 'screen').length, next: nexts.length ? Math.min(...nexts) : null }
+})
+const unitOfTask = (id) => units.value.find(u => u.tasks.some(t => t.id === id))
 function goRepeat(rv) { if (rv.steps.length) go({ ...rv, steps: rv.steps.slice() }) }
 
 // вкладка «Путь → чекпоинты» панели «Графики»: тот же путь курса, справа от узлов — что куда попадает (в реальном времени)
@@ -324,6 +335,23 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
       <div class="cpill"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg><b>{{ done }} из {{ total }}</b><span>·</span><b>{{ total ? Math.round(done / total * 100) : 0 }}%</b></div>
       </template>
       <!-- «что попадёт в чекпоинты» — только в панели «Графики» урока (вкладка «Экраны → чекпоинты»), над путём курса не показываем -->
+      <!-- «Повторить сейчас» (как в Busuu «Повторяй изученный материал», но одна на весь курс): всё, чему пора, со всех глав -->
+      <div v-if="repeatAll.started" class="rpt all" :class="{ due: repeatAll.steps.length, on: peek === 'rv-all' }" role="button" tabindex="0" @click="peek = peek === 'rv-all' ? null : 'rv-all'" @keydown.enter="peek = peek === 'rv-all' ? null : 'rv-all'">
+        <span class="rpi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /><path d="M9 12.5l2 2 4-4.5" /></svg></span>
+        <div class="rpt-t">
+          <b>Повторить сейчас</b>
+          <p v-if="repeatAll.steps.length">Со всего курса — в какой бы главе ни был: {{ repeatAll.words ? repeatAll.words + ' ' + plural(repeatAll.words, 'слово', 'слова', 'слов') : '' }}{{ repeatAll.words && repeatAll.screens ? ' и ' : '' }}{{ repeatAll.screens ? repeatAll.screens + ' ' + plural(repeatAll.screens, 'упражнение', 'упражнения', 'упражнений') : '' }}</p>
+          <p v-else>Повторять пока нечего — всё свежее{{ repeatAll.next ? `, следующее ${relDay(repeatAll.next)}` : '' }}.</p>
+        </div>
+        <span v-if="repeatAll.steps.length" class="rpn">{{ repeatAll.list.length }}</span>
+      </div>
+      <div v-if="peek === 'rv-all'" class="pv rpv" style="--c: #9747ff; --d: #6b3fd1" @click.stop>
+        <div class="pth"><small>Повторение · весь курс</small><small v-if="repeatAll.steps.length">≈ {{ lessonMin(repeatAll.steps) }} мин</small></div>
+        <ul v-if="repeatAll.list.length" class="rpl"><li v-for="o in repeatAll.list.slice(0, RV_MAX)" :key="o.st.id"><i :class="o.kind" /><b>{{ o.w || '—' }}</b><span>{{ exName(o.st) }} · {{ o.t.title }}<template v-if="unitOfTask(o.t.id)?.title"> · {{ unitOfTask(o.t.id).title }}</template></span><em>{{ o.pct == null ? 'ошибка' : o.pct + '%' }}</em></li></ul>
+        <p v-if="repeatAll.list.length > RV_MAX" class="psub">и ещё {{ repeatAll.list.length - RV_MAX }} — в следующий раз</p>
+        <button v-if="repeatAll.steps.length && !of" class="pgo" @click="goRepeat(repeatAll)">Повторить</button>
+        <p v-else-if="!repeatAll.steps.length" class="psub">Слова и упражнения вернутся сюда сами, когда начнут забываться.</p>
+      </div>
       <template v-for="u in units" :key="u.id">
       <section class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
         <template v-if="u.title">
@@ -369,23 +397,6 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           </div>
         </div>
       </section>
-      <!-- «Повторяй изученный материал» (как в Busuu): слова и упражнения Chapter, которым пора, — проходится как урок -->
-      <div v-if="repeats[u.id]?.started" class="rpt" :class="{ due: repeats[u.id].steps.length, on: peek === 'rv-' + u.id }" role="button" tabindex="0" @click="peek = peek === 'rv-' + u.id ? null : 'rv-' + u.id" @keydown.enter="peek = peek === 'rv-' + u.id ? null : 'rv-' + u.id">
-        <span class="rpi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /><path d="M9 12.5l2 2 4-4.5" /></svg></span>
-        <div class="rpt-t">
-          <span v-if="repeats[u.id].steps.length" class="rec">★ Рекомендовано</span>
-          <b>Повторяй изученный материал</b>
-          <p v-if="repeats[u.id].steps.length">Пора повторить: {{ repeats[u.id].words ? repeats[u.id].words + ' ' + plural(repeats[u.id].words, 'слово', 'слова', 'слов') : '' }}{{ repeats[u.id].words && repeats[u.id].screens ? ' и ' : '' }}{{ repeats[u.id].screens ? repeats[u.id].screens + ' ' + plural(repeats[u.id].screens, 'упражнение', 'упражнения', 'упражнений') : '' }}. Интервальное повторение (FSRS) возвращает то, что начинает забываться.</p>
-          <p v-else>Повторять пока нечего — всё свежее{{ repeats[u.id].next ? `, следующее ${relDay(repeats[u.id].next)}` : '' }}.</p>
-        </div>
-      </div>
-      <div v-if="peek === 'rv-' + u.id" class="pv rpv" style="--c: #9747ff; --d: #6b3fd1" @click.stop>
-        <div class="pth"><small>Повторение · {{ u.title || 'Chapter' }}</small><small v-if="repeats[u.id].steps.length">≈ {{ lessonMin(repeats[u.id].steps) }} мин</small></div>
-        <ul v-if="repeats[u.id].list.length" class="rpl"><li v-for="o in repeats[u.id].list.slice(0, RV_MAX)" :key="o.st.id"><i :class="o.kind" /><b>{{ o.w || '—' }}</b><span>{{ exName(o.st) }} · {{ o.t.title }}</span><em>{{ o.pct == null ? 'ошибка' : o.pct + '%' }}</em></li></ul>
-        <p v-if="repeats[u.id].list.length > RV_MAX" class="psub">и ещё {{ repeats[u.id].list.length - RV_MAX }} — в следующий раз</p>
-        <button v-if="repeats[u.id].steps.length && !of" class="pgo" @click="goRepeat(repeats[u.id])">Повторить</button>
-        <p v-else-if="!repeats[u.id].steps.length" class="psub">Слова и упражнения вернутся сюда сами, когда начнут забываться.</p>
-      </div>
       </template>
       <p v-if="!units.length" class="hint none">В курсе пока нет заданий</p>
     </div>
@@ -627,4 +638,8 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 <!-- не scoped: меню приложения (BottomNav) — вне этого компонента; в «телефонной» ширине урока его нет, как на телефоне -->
 <style>
 html.sim-mobile nav.nav { display: none }
+/* «Повторить сейчас» по всему курсу — наверху пути: пора — заливка фиолетовым, как в песочнице */
+.rpt.all.due { background: #7b4df0; box-shadow: none; color: #fff } .rpt.all.due:hover, .rpt.all.due.on { background: #6c3fe0 }
+.rpt.all.due .rpt-t p { color: rgba(255, 255, 255, .85) } .rpt.all.due .rpi { background: rgba(255, 255, 255, .18); box-shadow: none } .rpt.all.due .rpi svg { stroke: #fff }
+.rpn { margin-left: auto; flex: none; display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; box-sizing: border-box; border-radius: 99px; background: #fff; color: #6c3fe0; font-size: 14px; font-weight: 900 }
 </style>

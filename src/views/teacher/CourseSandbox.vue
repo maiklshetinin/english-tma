@@ -17,7 +17,7 @@ const cfgA = computed(() => ({ retention: algo.retention, maxDays: algo.maxDays 
 const pctR = computed(() => Math.round(algo.retention * 100))
 
 // ── тестовые настройки ──
-const cfg = reactive({ thr: false, pct: 80, strict: false, global: false, mix: false, sum: false, tg: false })
+const cfg = reactive({ thr: false, pct: 80, strict: false, global: true, mix: false, sum: false, tg: false })
 const SETTINGS = [
   { k: 'thr', t: 'Порог чекпоинта', x: 'Чекпоинт засчитывается, только если ученик набрал порог; иначе — ещё раз, другим набором. Порог выбираете вы.' },
   { k: 'strict', t: 'Строгий чекпоинт', x: 'Включено: пока чекпоинт не сдан на порог, следующие главы закрыты. Выключено (мягко): глава открыта, несданный чекпоинт висит «долгом». Работает вместе с порогом.' },
@@ -334,12 +334,8 @@ onUnmounted(() => clearTimeout(toastT))
       <section class="box" aria-label="Время и память слов">
         <b class="h2">Review ученика <small>· {{ title }}</small></b>
         <div class="tl">
-          <label for="sbx-days"><span>Машина времени · уроков пройдено {{ taken }} из {{ lessonsN }}</span><b>день {{ num(days) }}</b></label>
-          <div class="tm">
-            <button class="qb xs" aria-label="На день назад" @click="step(-1)">‹ день</button>
-            <input id="sbx-days" v-model.number="days" type="range" min="0" :max="DAYS_MAX" step="0.25">
-            <button class="qb xs" aria-label="На день вперёд" @click="step(1)">день ›</button>
-          </div>
+          <div class="tlh"><label for="sbx-days">Машина времени · уроков пройдено {{ taken }} из {{ lessonsN }}</label>
+            <span class="tm"><button class="qb xs" aria-label="На день назад" @click="step(-1)">‹</button><b>день {{ num(days) }}</b><button class="qb xs" aria-label="На день вперёд" @click="step(1)">›</button></span></div>
           <svg :viewBox="`0 0 ${GW} ${GH}`" role="img" aria-label="Память слов по дням: каждая линия — группа слов, вертикаль — сейчас, пунктир — порог повторения">
             <line x1="0" :x2="GW" :y1="Y(algo.retention)" :y2="Y(algo.retention)" class="thr" />
             <text :x="GW - 4" :y="Y(algo.retention) - 4" class="thr-t" text-anchor="end">≈{{ pctR }} % — пора повторить</text>
@@ -351,6 +347,8 @@ onUnmounted(() => clearTimeout(toastT))
             <text x="2" :y="GH - 1" class="ax">день 0</text>
             <text :x="GW - 2" :y="GH - 1" class="ax" text-anchor="end">день {{ DAYS_MAX }}</text>
           </svg>
+          <!-- ползунок — ровно под графиком и в его масштабе (18.11.2026): кружок стоит там же, где линия «сейчас» -->
+          <input id="sbx-days" v-model.number="days" class="tmr" type="range" min="0" :max="DAYS_MAX" step="0.25" :style="{ '--p': days / DAYS_MAX }">
           <Transition name="pop"><p v-if="arrived.length" class="arr" role="status">↗ В «Повторение»: <b>{{ arrived.join(', ') }}</b> — подошёл срок</p></Transition>
         </div>
         <p v-if="!labels" class="mu">Синие линии — слова, отвеченные верно, красные — с ошибкой; наведите на линию — какие слова.</p>
@@ -442,7 +440,7 @@ h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; fon
 .res { padding: 7px 10px; border-radius: 9px; background: var(--surface); font-size: 13px } .res.ok { background: #e9f9df; color: #2e7d00 } .res.bad { background: #ffe5e5; color: #c62828 }
 .h2 { font-size: 17px; font-weight: 900 }
 .tl { display: grid; gap: 6px; padding: 10px 12px; border-radius: 14px; background: var(--surface) }
-.tl label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 700 } .tl label b { font-size: 16px; font-weight: 900; color: var(--blue) } .tl input { width: 100%; accent-color: #1899d6 }
+.tl label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 700 } .tl label b { font-size: 16px; font-weight: 900; color: var(--blue) } 
 .th, .tr { display: grid; grid-template-columns: minmax(0, 1fr) 54px 104px; gap: 6px; align-items: center; padding: 7px 2px }
 .th { padding-top: 0; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--hint) } .tr { border-top: 1px solid var(--border); font-size: 13.5px }
 .th > :last-child, .tr > :last-child { text-align: right; white-space: nowrap } .w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .w small { color: var(--hint) }
@@ -479,4 +477,12 @@ h1 { margin: 0; font-size: 26px; font-weight: 900 } .hd p { margin: 2px 0 0; fon
 :global(html[data-theme='dark']) .sbx .seg2 button.ok, :global(html[data-theme='dark']) .sbx .res.ok { background: #17301f; color: #7fd46a }
 :global(html[data-theme='dark']) .sbx .seg2 button.bad, :global(html[data-theme='dark']) .sbx .res.bad { background: #3a2326; color: #ff8a80 }
 :global(html[data-theme='dark']) .sbx .chat { background: #1e2a36 } :global(html[data-theme='dark']) .sbx .chh b { color: var(--text) }
+/* машина времени: день и стрелки — в строке заголовка; ползунок — под графиком, кружок по краям ровно на день 0 / последний день */
+.tlh { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 700 }
+.tlh .tm { display: flex; align-items: center; gap: 6px } .tlh .tm b { min-width: 74px; text-align: center; font-size: 16px; font-weight: 900; color: var(--blue) }
+.tmr { -webkit-appearance: none; appearance: none; display: block; width: calc(100% + 18px); height: 22px; margin: -2px -9px 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: none; cursor: pointer }
+.tmr::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, #1899d6 calc(9px + (100% - 18px) * var(--p)), var(--border) 0) }
+.tmr::-moz-range-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, #1899d6 calc(9px + (100% - 18px) * var(--p)), var(--border) 0) }
+.tmr::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border: 3px solid #fff; border-radius: 50%; background: #1899d6; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); box-sizing: border-box }
+.tmr::-moz-range-thumb { width: 18px; height: 18px; border: 3px solid #fff; border-radius: 50%; background: #1899d6; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); box-sizing: border-box }
 </style>
