@@ -56,7 +56,7 @@ const { hapticResult, hapticTick } = useTelegram()      // виброоткли�
 const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null })
 function setup() {
   Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null }); Object.assign(mine, { ok: 0, all: 0 })
-  recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''
+  recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''; rec.miss = false
   const s = step.value; if (!s) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
   if (s.kind === 'pairs') {
@@ -64,9 +64,10 @@ function setup() {
     st.L = props.single ? idx : shuffle(idx); st.R = props.single ? idx.slice().reverse() : shuffle(idx)
   }
   if (s.kind === 'order') { const idx = orderParts(s).map((_, k) => k); let o = shuffle(idx); if (idx.length > 1 && o.every((v, k) => v === k)) o = idx.slice(1).concat(0); st.pool = o }
-  if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = props.single ? idx : shuffle(idx) }
+  const keep = props.single || (props.embedded && s.bk)          // в редакторе книжные — в том же порядке, что в правке (18.11.2026: окно «менялось»)
+  if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = keep ? idx : shuffle(idx) }
   if (s.kind === 'sort' && s.tw) st.tw = twLayout(s).cols.map(c => Array(c.need).fill(''))          // «Заполни таблицу»: что ученик вписал, по колонкам
-  if (s.kind === 'odd' || s.kind === 'sort') { const idx = (s.kind === 'odd' ? s.opts : s.items ?? []).map((_, k) => k); st.order = props.single || s.mix === false ? idx : shuffle(idx) }
+  if (s.kind === 'odd' || s.kind === 'sort') { const idx = (s.kind === 'odd' ? s.opts : s.items ?? []).map((_, k) => k); st.order = keep || s.mix === false ? idx : shuffle(idx) }
   if (s.kind === 'intro' || s.kind === 'tip') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
   if (s.kind === 'answer' && s.bk && s.bs === 'page') st.mode = 'write'          // Т4 «Answer the questions about you» — сразу пишем, как в книге
   if (s.kind === 'speak' && props.track) emit('answer', { step: s, ok: null })          // «Повтори» — без оценки, но «Продолжить» — только когда ученик правда что-то сказал (17.11.2026: молчание засчитывалось)          // без оценки — только «встречалось»
@@ -121,17 +122,21 @@ function check() { if (st.done || !typedAll.value) return; st.typed = st.tys.joi
 const gapOkAt = (x) => gapOk(st.tys[x.i], x.g)
 
 // ---- запись голоса («Повтори за диктором», «Ответь на вопрос» устно) ----
-const rec = reactive({ on: false, url: '', err: '', heard: '' }); let mr = null, chunks = []
+const rec = reactive({ on: false, url: '', err: '', heard: '', miss: false }); let mr = null, chunks = []
 // Распознавание речи (18.11.2026): пока ученик говорит, слова появляются на экране; «Повтори» — слова фразы зеленеют, «Ответь устно» — сказанное становится ответом.
 // Web Speech API (Chrome, Android, Safari); где его нет — как раньше: только запись и проверка, что голос был
 const SR = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
-let sr = null, srWait = null
+let sr = null, srWait = null, srBroken = false
+const SPEAK_OK = 0.8          // «Повтори»: засчитываем, когда сказано ≥ 80% слов фразы (у коротких фраз — все)
 function srStart() {
-  if (!SR) return
+  srBroken = !SR; if (!SR) return
   try {
     const r = new SR(); r.lang = 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1
-    r.onresult = (e) => { let s = ''; for (const x of e.results) s += x[0].transcript + ' '; rec.heard = s.replace(/\s+/g, ' ').trim() }
-    r.onerror = () => {}          // нет сети / нет доступа — остаётся запись
+    r.onresult = (e) => {
+      let s = ''; for (const x of e.results) s += x[0].transcript + ' '; rec.heard = s.replace(/\s+/g, ' ').trim(); rec.miss = false
+      if (step.value?.kind === 'speak' && rec.on && speechMatch(step.value.phrase, rec.heard).score >= SPEAK_OK) recStop()          // сказал фразу — сами останавливаем
+    }
+    r.onerror = (e) => { if (e?.error !== 'no-speech' && e?.error !== 'aborted') srBroken = true }          // нет сети / доступа / не поддерживается — проверяем только, что голос был
     r.onend = () => { if (sr === r) sr = null; const f = srWait; srWait = null; f?.() }
     r.start(); sr = r
   } catch { sr = null }
@@ -169,12 +174,18 @@ async function recToggle() {
       const decide = () => {          // ждём последние слова от распознавания (оно заканчивает чуть позже записи)
         const k = step.value?.kind
         if (k !== 'speak' && k !== 'answer') return
-        if (rec.heard || (voiced ?? long) >= VOICE_MS) { st.done = true; rec.err = ''; if (k === 'answer' && rec.heard) st.text = rec.heard }          // сказанное — это и есть ответ
+        const loud = (voiced ?? long) >= VOICE_MS
+        if (k === 'speak' && !srBroken) {          // распознавание работает — засчитываем, только когда фраза совпала (18.11.2026)
+          const ok = !!rec.heard && speechMatch(step.value.phrase, rec.heard).score >= SPEAK_OK
+          if (ok) { st.done = true; rec.err = '' } else { rec.miss = !!rec.heard; rec.err = rec.heard ? '' : 'Не расслышали — скажите ещё раз' }
+          return
+        }
+        if (rec.heard || loud) { st.done = true; rec.err = ''; if (k === 'answer' && rec.heard) st.text = rec.heard }          // сказанное — это и есть ответ
         else rec.err = 'Не слышно — скажите вслух и запишите ещё раз'
       }
       if (sr) { srWait = decide; setTimeout(() => { if (srWait === decide) { srWait = null; decide() } }, 1500); try { sr.stop() } catch { decide() } } else decide()
     }
-    rec.heard = ''; mr.start(); rec.on = true; srStart()
+    rec.heard = ''; rec.miss = false; mr.start(); rec.on = true; srStart()
   } catch { rec.err = 'Нет доступа к микрофону' }
 }
 function recStop(drop) { if (drop && sr) { srWait = null; try { sr.abort() } catch {} sr = null } if (!mr) return; if (drop) { chunks = []; vadStop() } if (mr.state !== 'inactive') mr.stop(); mr = null; rec.on = false }
@@ -240,7 +251,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 </script>
 
 <template>
-  <div class="lp" :class="{ single, embedded, book: isBook, page: isPage, qa: isPage && step?.bk === 'bkqa' }">
+  <div class="lp" :class="{ single, embedded, book: isBook, bkpg: isPage, bkqa: isPage && step?.bk === 'bkqa' }">
     <div class="top">
       <BackButton v-if="closable && closeText" :to="closeText" @click="emit('close')" />
       <button v-else-if="closable" class="x" title="Закрыть" @click="emit('close')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -369,10 +380,8 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
         <button class="act big" :class="{ on: rec.on }" @click="recToggle"><i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></i>{{ rec.on ? 'Стоп' : 'Нажми и повтори' }}</button>
         <button class="act" :disabled="!step.tr" @click="st.showTr = !st.showTr"><i><svg viewBox="0 0 24 24"><path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5M6 10c1 2 3 3.5 5 4.5M13 20l4-9 4 9M14.5 17h5" /></svg></i>Перевести</button>
       </div>
-      <p v-if="rec.heard || rec.on" class="said" :class="{ live: rec.on }"><small>{{ rec.on ? 'Слушаю…' : 'Вы сказали' }}</small>{{ rec.heard || '…' }}</p>
-      <p v-if="said && st.done && !rec.on" class="saidv" :class="{ ok: said.score >= .8 }">{{ said.score >= .8 ? 'Отлично, всё понятно!' : said.score >= .5 ? 'Почти! Зелёные слова — услышали, послушайте и скажите ещё раз' : 'Не разобрали — послушайте ещё раз и повторите' }}</p>
-      <AudioPill v-if="rec.url" :key="rec.url" :src="rec.url" class="qa mine" />
-      <p v-if="rec.err" class="err">{{ rec.err }}</p>
+      <!-- что услышали — всегда одна строка одной высоты: окно не растёт (18.11.2026); запись себя не показываем -->
+      <p class="said" :class="{ live: rec.on, bad: !rec.on && (rec.miss || rec.err), ok: st.done && !rec.on }"><small>{{ rec.on ? 'Слушаю…' : rec.err ? rec.err : rec.miss ? 'Не совпало — послушайте и скажите ещё раз' : st.done ? 'Вы сказали' : 'Нажмите микрофон и повторите' }}</small><span>{{ rec.heard || (rec.on ? '…' : '—') }}</span></p>
     </div>
 
     <!-- Заполни пропуск / Закончи предложение -->
@@ -452,16 +461,15 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
         <button class="act big" :class="{ on: rec.on }" @click="recToggle"><i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></i>{{ rec.on ? 'Стоп' : 'Нажми и говори' }}</button>
       </div>
       <div v-else class="wr2"><textarea v-model="st.text" rows="3" placeholder="Напиши ответ по-английски" :readonly="st.done" /><button v-if="!st.done" class="out" :disabled="!st.text.trim()" @click="sendText">Отправить</button></div>
-      <p v-if="st.mode === 'say' && (rec.heard || rec.on)" class="said" :class="{ live: rec.on }"><small>{{ rec.on ? 'Слушаю…' : 'Ваш ответ' }}</small>{{ rec.heard || '…' }}</p>
-      <AudioPill v-if="rec.url" :key="rec.url" :src="rec.url" class="qa mine" />
-      <p v-if="rec.err" class="err">{{ rec.err }}</p>
+      <p v-if="st.mode === 'say'" class="said" :class="{ live: rec.on, bad: !rec.on && rec.err, ok: st.done && !rec.on }"><small>{{ rec.on ? 'Слушаю…' : rec.err ? rec.err : st.done ? 'Ваш ответ' : 'Нажмите микрофон и говорите' }}</small><span>{{ rec.heard || (rec.on ? '…' : '—') }}</span></p>
     </div>
 
     <!-- Снизу: результат и «Продолжить» -->
-    <div class="foot" :class="{ good: !isFinal && checks && st.done && right, bad: !isFinal && checks && st.done && !right }">
+    <div class="foot" :class="{ good: !isFinal && ((checks && st.done && right) || (step.kind === 'speak' && st.done)), bad: !isFinal && checks && st.done && !right }">
       <span v-if="!isFinal && step.kind === 'choice' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span v-if="!right">{{ answer?.w }}</span><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'order' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильно так:' }}</b><span class="fs">{{ step.phrase }}</span><small>{{ step.tr }}</small><small v-if="step.note" class="fn">{{ step.note }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
       <span v-else-if="!isFinal && step.kind === 'gap' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Правильный ответ:' }}</b><span class="fs">{{ gapFull(step.phrase) }}</span><small>{{ step.tr }}</small><small v-if="later" class="lt">Вернёмся к этому в конце урока</small></span>
+      <span v-else-if="!isFinal && step.kind === 'speak' && st.done" class="fb"><b>Верно!</b><small v-if="step.tr">{{ step.tr }}</small></span>
       <span v-else-if="!isFinal && step.kind === 'answer' && st.done && step.tr" class="fb"><small>Пример ответа</small><span class="fs">{{ step.tr }}</span></span>
       <span v-else-if="!isFinal && step.kind === 'odd' && st.done" class="fb"><b>{{ right ? 'Верно!' : 'Лишнее:' }}</b><span v-if="!right" class="fs">{{ step.opts?.[step.ans ?? 0]?.w }}</span><small v-if="step.note">{{ step.note }}</small></span>
       <span v-else-if="!isFinal && step.kind === 'sort' && st.done" class="fb"><b>{{ right ? 'Верно!' : step.tw ? 'Правильно:' : 'Есть ошибки — они красные' }}</b><span v-if="step.tw && !right && st.twr?.miss.length" class="fs">{{ st.twr.miss.join(', ') }}</span><small v-if="step.note">{{ step.note }}</small></span>
@@ -533,7 +541,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .media video { cursor: pointer }
 .trl { margin: 0; text-align: center; color: var(--hint); font-size: 14px; font-weight: 600 }
 .acts { display: flex; justify-content: center; align-items: flex-start; gap: 22px; margin-top: 4px }
-.act { display: grid; justify-items: center; gap: 6px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 700; color: #1a73e8; cursor: pointer; padding: 0; width: 84px }
+.act { display: grid; grid-template-rows: auto 30px; align-content: start; justify-items: center; gap: 6px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 700; color: #1a73e8; cursor: pointer; padding: 0; width: 84px }
 .act i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #c9dcfb; background: var(--card) }
 .act svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .act.big i { width: 60px; height: 60px; background: #1a73e8; border-color: #1a73e8; color: #fff } .act.big svg { width: 26px; height: 26px }
@@ -651,47 +659,48 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .lp.book .foot, .lp.book .foot button { font-family: var(--font) }
 
 /* ---- Как в учебнике, вид 2 (18.11.2026): белая страница, всё — как в книге; по одному пункту на экран ---- */
-.lp.book.page { background: #fff; color: #231f20 }
-.lp.book.page .bkh b { border: 1.5px solid #d85a30; background: #f0997b; color: #231f20 }
-.lp.book.page .sent { line-height: 2.1 }
-.lp.book.page .bko b { font-weight: 700; cursor: pointer; border-radius: 12px; transition: background .12s }
-.lp.book.page .bko b:hover { background: #eef4ff }
-.lp.book.page .bko .uo.on { text-decoration: underline 2px #1f5fbf; text-underline-offset: 4px; color: #1f5fbf }
-.lp.book.page .bko .uo.ok { text-decoration: underline 2px #0f6e56; text-underline-offset: 4px; color: #0f6e56 } .bko .uo.no { text-decoration: line-through 2px #a32d2d; color: #a32d2d }
-.lp.book.page .bko .co { padding: 1px 7px; border: 2px solid transparent; border-radius: 50% } .bko .co.on { border-color: #1f5fbf; color: #1f5fbf } .bko .co.ok { border-color: #0f6e56; color: #0f6e56 } .bko .co.no { border-color: #a32d2d; color: #a32d2d; text-decoration: line-through }
+.lp.book.bkpg { background: #fff; color: #231f20 }
+.lp.book.bkpg .bkh b { border: 1.5px solid #d85a30; background: #f0997b; color: #231f20 }
+.lp.book.bkpg .sent { line-height: 2.1 }
+.lp.book.bkpg .bko b { font-weight: 700; cursor: pointer; border-radius: 12px; transition: background .12s }
+.lp.book.bkpg .bko b:hover { background: #eef4ff }
+.lp.book.bkpg .bko .uo.on { text-decoration: underline 2px #1f5fbf; text-underline-offset: 4px; color: #1f5fbf }
+.lp.book.bkpg .bko .uo.ok { text-decoration: underline 2px #0f6e56; text-underline-offset: 4px; color: #0f6e56 } .bko .uo.no { text-decoration: line-through 2px #a32d2d; color: #a32d2d }
+.lp.book.bkpg .bko .co { padding: 1px 7px; border: 2px solid transparent; border-radius: 50% } .bko .co.on { border-color: #1f5fbf; color: #1f5fbf } .bko .co.ok { border-color: #0f6e56; color: #0f6e56 } .bko .co.no { border-color: #a32d2d; color: #a32d2d; text-decoration: line-through }
 /* Т3: ответ — строкой под вопросом */
-.lp.book.page.qa .sent input.slot.in { display: block; width: 100% !important; margin: 4px 0 0; text-align: left }
+.lp.book.bkpg.bkqa .sent input.slot.in { display: block; width: 100% !important; margin: 4px 0 0; text-align: left }
 /* Т4: вопрос и пунктир под ответ */
-.lp.book.page .word { padding: 0; background: none; text-align: left } .lp.book.page .word .qq { font-weight: 400; font-size: 17px }
-.lp.book.page .wr2 textarea { border: 0; border-bottom: 1.5px dotted #231f20; border-radius: 0; background: none; box-shadow: none; padding: 4px 0; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 16px; color: #1f5fbf; resize: none; line-height: 1.8 }
-.lp.book.page .wr2 textarea::placeholder { font-family: Arial, sans-serif; font-size: 13px; color: #b4b2a9 }
+.lp.book.bkpg .word { padding: 0; background: none; text-align: left } .lp.book.bkpg .word .qq { font-weight: 400; font-size: 17px }
+.lp.book.bkpg .wr2 textarea { border: 0; border-bottom: 1.5px dotted #231f20; border-radius: 0; background: none; box-shadow: none; padding: 4px 0; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 16px; color: #1f5fbf; resize: none; line-height: 1.8 }
+.lp.book.bkpg .wr2 textarea::placeholder { font-family: Arial, sans-serif; font-size: 13px; color: #b4b2a9 }
 /* Т6: банк слов — серой полосой (уже), картинка — в рамке */
-.lp.book.page .media { border-radius: 2px; box-shadow: 0 0 0 1px #c9c9c9 }
+.lp.book.bkpg .media { border-radius: 2px; box-shadow: 0 0 0 1px #c9c9c9 }
 /* Т8: таблица как в книге — синяя шапка, линии */
-.lp.book.page .spool { justify-content: flex-start; gap: 4px 14px; padding: 7px 12px; background: #f4f4f2; border-radius: 0 }
-.lp.book.page .spool .sw { padding: 2px 0; border: 0; border-radius: 0; background: none !important; color: #231f20 !important; font-size: 14px; font-weight: 700 } .lp.book.page .spool .sw.sel { color: #1f5fbf !important; text-decoration: underline 2px; box-shadow: none }
-.lp.book.page .scols { gap: 0; border-bottom: 1.5px solid #2d5bb8 }
-.lp.book.page .scol { gap: 0; border-right: 1px solid #2d5bb8 } .lp.book.page .scol:last-child { border-right: 0 }
-.lp.book.page .scol .sch { border: 0; border-radius: 0; background: #2d5bb8; color: #fff; padding: 6px 2px; font-size: 13px; font-weight: 700 }
-.lp.book.page .sbox { min-height: 96px; border: 0; border-radius: 0; background: repeating-linear-gradient(transparent 0 23px, #9db6e6 23px 24px); padding: 0 4px; gap: 0 }
-.lp.book.page .sbox.hot { background-color: #eef4ff }
-.lp.book.page .sbox .sw.in { padding: 0 2px; height: 24px; border: 0; border-radius: 0; background: none !important; color: #1f5fbf !important; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 13px; font-weight: 400 }
-.lp.book.page .sbox .sw.ok { color: #0f6e56 !important } .lp.book.page .sbox .sw.no { color: #a32d2d !important; text-decoration: line-through }
-.lp.book.page .sadd { border: 0; padding: 0 2px; height: 24px; line-height: 24px; text-align: left; font-size: 10.5px; color: #1f5fbf; background: none }
-.lp.book.page .sub { color: #888 }
-.lp.book.page .word { justify-items: start } .lp.book.page .wr2 .out { align-self: flex-start }
+.lp.book.bkpg .spool { justify-content: flex-start; gap: 4px 14px; padding: 7px 12px; background: #f4f4f2; border-radius: 0 }
+.lp.book.bkpg .spool .sw { padding: 2px 0; border: 0; border-radius: 0; background: none !important; color: #231f20 !important; font-size: 14px; font-weight: 700 } .lp.book.bkpg .spool .sw.sel { color: #1f5fbf !important; text-decoration: underline 2px; box-shadow: none }
+.lp.book.bkpg .scols { gap: 0; border-bottom: 1.5px solid #2d5bb8 }
+.lp.book.bkpg .scol { gap: 0; border-right: 1px solid #2d5bb8 } .lp.book.bkpg .scol:last-child { border-right: 0 }
+.lp.book.bkpg .scol .sch { border: 0; border-radius: 0; background: #2d5bb8; color: #fff; padding: 6px 2px; font-size: 13px; font-weight: 700 }
+.lp.book.bkpg .sbox { min-height: 96px; border: 0; border-radius: 0; background: repeating-linear-gradient(transparent 0 23px, #9db6e6 23px 24px); padding: 0 4px; gap: 0 }
+.lp.book.bkpg .sbox.hot { background-color: #eef4ff }
+.lp.book.bkpg .sbox .sw.in { padding: 0 2px; height: 24px; border: 0; border-radius: 0; background: none !important; color: #1f5fbf !important; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 13px; font-weight: 400 }
+.lp.book.bkpg .sbox .sw.ok { color: #0f6e56 !important } .lp.book.bkpg .sbox .sw.no { color: #a32d2d !important; text-decoration: line-through }
+.lp.book.bkpg .sadd { border: 0; padding: 0 2px; height: 24px; line-height: 24px; text-align: left; font-size: 10.5px; color: #1f5fbf; background: none }
+.lp.book.bkpg .sub { color: #888 }
+.lp.book.bkpg .word { justify-items: start } .lp.book.bkpg .wr2 .out { align-self: flex-start }
 /* «Заполни таблицу» — как на макете Насти: банк слов строками, таблица с синей шапкой, образцы курсивом */
 .tw .twb { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; width: 100%; max-width: 420px; align-self: center; font-size: 13px; font-weight: 600; color: var(--text) }
 .tw .twb .twe { text-decoration: line-through; color: var(--hint) }
 .tw .twt { display: grid; width: 100%; max-width: 420px; align-self: center; border: 1px solid #2d5bb8; border-radius: 8px; overflow: hidden; background: #fff }
-.tw .twh { min-width: 0; padding: 6px 2px; background: #2d5bb8; color: #fff; font-size: 12px; font-weight: 700; text-align: center; border-right: 1px solid rgba(255, 255, 255, .35) }
-.tw .twc { display: flex; align-items: center; justify-content: center; min-width: 0; height: 30px; border-right: 1px solid #c9d6ef; border-top: 1px solid #c9d6ef }
+.tw .twh { display: flex; align-items: center; justify-content: center; height: 30px; box-sizing: border-box; min-width: 0; padding: 0 2px; background: #2d5bb8; color: #fff; font-size: 12px; font-weight: 700; text-align: center; border-right: 1px solid rgba(255, 255, 255, .35) }
+.tw .twc { display: flex; align-items: center; justify-content: center; min-width: 0; height: 44px; box-sizing: border-box; border-right: 1px solid #c9d6ef; border-top: 1px solid #c9d6ef }
 .tw .twx { font-family: 'Comic Sans MS', 'Segoe Print', cursive; font-size: 13px; color: #3d6fd1 }
 .tw .twi { width: 100%; height: 100%; min-width: 0; margin: 0; padding: 0 4px; box-sizing: border-box; border: 0; border-radius: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; text-align: center; color: #1f3f86; outline: none }
 .tw .twi:focus { background: #eef3fd } .tw .twi.ok { background: #d7f7e8; color: #0b7a4b } .tw .twi.no { background: var(--red-l, #fde2e2); color: var(--red, #d33) }
-.lp.book.page .tw .twt { border-radius: 0; border-width: 1.5px } .lp.book.page .tw .twb { padding: 7px 12px; background: #f4f4f2; color: #231f20; box-sizing: border-box }
+.lp.book.bkpg .tw .twt { border-radius: 0; border-width: 1.5px } .lp.book.bkpg .tw .twb { padding: 7px 12px; background: #f4f4f2; color: #231f20; box-sizing: border-box }
 /* Распознанная речь: что услышали — под кнопками; слова фразы — зелёные, когда сказаны */
-.said { display: grid; gap: 2px; width: 100%; max-width: 380px; align-self: center; margin: 0; padding: 8px 12px; box-sizing: border-box; border-radius: 12px; background: #eef4ff; color: #1f3f86; font-size: 15px; font-weight: 700; text-align: center }
+.said { display: grid; gap: 2px; width: 100%; max-width: 380px; height: 54px; align-self: center; align-content: center; margin: 0; padding: 0 12px; box-sizing: border-box; border-radius: 12px; background: #eef4ff; color: #1f3f86; font-size: 15px; font-weight: 700; text-align: center }
+.said span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis } .said.bad { background: #fdecec } .said.bad small { color: var(--red-d, #c33) } .said.ok { background: #e3f8ee } .said.ok small { color: var(--green-d, #3a9a00) }
 .said small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px } .said.live small { color: #1a73e8 }
 .saidv { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--orange-d, #e07a00) } .saidv.ok { color: var(--green-d, #3a9a00) }
 .cap b, .q b { font-weight: inherit; transition: color .15s } .cap b.hit { color: #8ff0c8 } .q b.hit { color: #1fbe78 } .cap b.miss { color: #ffb4b4 } .q b.miss { color: var(--red-d, #c33) }

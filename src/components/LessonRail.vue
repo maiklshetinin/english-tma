@@ -301,6 +301,9 @@ const twAddRow = (s) => { s.rows = Math.min(TW_ROWS_MAX, twRows(s) + 1); changed
 const twAddCol = (s) => { if ((s.cols?.length ?? 0) < SORT_COLS_MAX) { s.cols.push({ t: '' }); changed() } }
 const twDelCol = (s, ci) => { s.cols.splice(ci, 1); s.items = (s.items ?? []).filter(x => x.c !== ci).map(x => (x.c > ci ? { ...x, c: x.c - 1 } : x)); changed() }
 const twFlag = (s, k) => { if (s[k]) delete s[k]; else s[k] = true; changed() }
+// «Как в учебнике» Underline: фраза = до + [верный] + после; правим кусками, как видит ученик
+function pkSet(s, part, v) { const g = gapParts(s.phrase); g[part] = v; s.phrase = `${g.a}[${g.gap}]${g.b}`; changed() }
+function pkOpt(s, k, v) { const was = s.opts[k].w; s.opts[k].w = v; if (was && was === gapParts(s.phrase).gap) pkSet(s, 'gap', v); else changed() }
 const flip = (s, k) => { if (s[k] === false) delete s[k]; else s[k] = false; changed() }
 const gapOk = (s, o) => !!o.w && gapRight(o.w, gapParts(s.phrase).gap)
 
@@ -352,7 +355,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <button class="ib rs" :style="isEdit(s) ? { visibility: 'hidden' } : null" title="Сбросить экран — пройти заново" @pointerdown.stop @click="resetStep(s)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></svg></button>
         <button v-if="!readonly" class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
-      <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), page: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', qa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: jsonOn[s.id] || isEdit(s) }]" :data-id="s.id" :data-view="jsonOn[s.id] || isEdit(s) ? 0 : 1" :data-edit="!jsonOn[s.id] && isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
+      <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: jsonOn[s.id] || isEdit(s) }]" :data-id="s.id" :data-view="jsonOn[s.id] || isEdit(s) ? 0 : 1" :data-edit="!jsonOn[s.id] && isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
       <!-- JSON экрана (кнопка «{ }») — вместо живого экрана, в той же карточке -->
       <div v-if="jsonOn[s.id]" class="jv" :class="jsonTheme" @pointerdown.stop>
@@ -467,11 +470,13 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         </div></div>
         <div v-else-if="s.audio" class="qpw" @dragover.prevent.stop @drop.prevent.stop="onDrop($event, s, ['audio'])"><AudioPill :key="s.audio" :src="resolve(s.audio, 'audio')" class="qp" /><span class="qch"><button class="chip" @click="pick(s, ['video', 'image'])">＋ Фото</button><button class="chip" @click="pick(s, ['audio'])">Заменить</button><button class="chip" title="Убрать звук" @click="clear(s, 'audio')">✕</button></span></div>
         <!-- нет ни фото, ни звука: кнопки «＋ Фото» / «＋ Аудио» — в подвале (18.11.2026), чтобы фраза не съезжала относительно просмотра -->
-        <div class="vsw">
+        <!-- «Как в учебнике» Underline: как у ученика — варианты прямо в предложении; точка над словом — верный вариант (18.11.2026: окно не меняется) -->
+        <p v-if="s.bk === 'bkpick' && s.bs === 'page'" class="vbko vbkp"><input class="vf vpa" :value="gapParts(s.phrase).a" placeholder="Pat usually cooks dinner" @input="pkSet(s, 'a', $event.target.value)" /><template v-for="(o, k) in s.opts" :key="k"><span class="vpo" :class="{ on: !!o.w && o.w === gapParts(s.phrase).gap }"><button class="vcr" :title="o.w === gapParts(s.phrase).gap ? 'Верный вариант' : 'Сделать верным'" @click="pkSet(s, 'gap', o.w)" /><input class="vf" :value="o.w" placeholder="вариант" @input="pkOpt(s, k, $event.target.value)" /><button v-if="s.opts.length > 2" class="cx" title="Убрать вариант" @click="delOpt(s, k)">✕</button></span><template v-if="k < s.opts.length - 1"> / </template></template><input class="vf vpa" :value="gapParts(s.phrase).b" placeholder="." @input="pkSet(s, 'b', $event.target.value)" /></p>
+        <div v-else class="vsw">
           <p :ref="(el) => bindSent(el, s)" class="vsent vf" :data-id="s.id" contenteditable="true" spellcheck="false" data-ph="And [you]? — выделите слово → пропуск" title="Выделите слово — «→ пропуск». Несколько верных — через /: [isn't/is not]. Подсказка — просто в скобках: (make). Без вариантов — до 2 пропусков" @input="sentInput($event, s)" @paste="rulePaste" @keydown.enter.prevent @pointerdown.stop />
           <div v-if="gapBar === s.id" class="bbar"><button title="Выделенное станет пропуском" @mousedown.prevent="makeGap(s)">→ пропуск</button></div>
         </div>
-        <div v-if="s.opts?.length || tplOf(s) === 'fill'" class="vpool">
+        <div v-if="(s.opts?.length || tplOf(s) === 'fill') && !(s.bk === 'bkpick' && s.bs === 'page')" class="vpool">
           <span v-for="(o, k) in s.opts" :key="k" class="vchip" :class="{ vok: gapOk(s, o) }"><input v-model="o.w" class="vf" :size="Math.max(3, (o.w || '').length)" placeholder="слово" @input="changed" /><button class="xx" title="Убрать" @click="s.opts.splice(k, 1); changed()">✕</button></span>
           <button v-if="(s.opts?.length ?? 0) < GAP_OPTS_MAX" class="vchip vplus" title="Добавить вариант" @click="(s.opts ??= []).push({ w: '' }); changed()">＋</button>
         </div>
@@ -507,6 +512,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
           <span class="act big"><i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></i>Нажми и повтори</span>
           <span class="act"><i><svg viewBox="0 0 24 24"><path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5M6 10c1 2 3 3.5 5 4.5M13 20l4-9 4 9M14.5 17h5" /></svg></i>Перевести</span>
         </div>
+        <p class="vsaid" title="Тут ученик увидит, что сказал; засчитывается, когда фраза совпала"><small>Нажмите микрофон и повторите</small><span>—</span></p>
       </div>
 
       <!-- Ответь на вопрос — 1:1 с живым экраном (17.11.2026): вопрос и подсказка — в голубой карточке под фото (правятся на месте),
@@ -527,6 +533,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
           </div>
         </div>
         <div v-if="s.bk && s.bs === 'page'" class="vwr" title="Тут ученик пишет ответ — как в книге, на пунктире">Напиши ответ по-английски</div>
+        <span v-if="s.bk && s.bs === 'page'" class="vsend" title="Так кнопку увидит ученик">Отправить</span>
         <p v-if="!(s.bk && s.bs === 'page')" class="vhow">Как ты хочешь выполнить это упражнение?</p>
         <div v-if="!(s.bk && s.bs === 'page')" class="vtwo" title="Так кнопки увидит ученик — в правке они не нажимаются"><span class="vout"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>Говорить</span><span class="vout"><svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z" /></svg>Письменно</span></div>
       </div>
@@ -563,8 +570,8 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
               <button v-else-if="(s.items?.length ?? 0) < SORT_MAX" class="etwn" title="Добавить ответ в эту колонку" @click="twNew(s, ci)">＋</button>
             </span>
           </template>
+          <span class="etwk" title="Добавить строку или колонку таблицы"><button class="add sm" :disabled="twRows(s) >= TW_ROWS_MAX" @click="twAddRow(s)">＋ Строка</button><button class="add sm" :disabled="(s.cols?.length ?? 0) >= SORT_COLS_MAX" @click="twAddCol(s)">＋ Колонка</button></span>
         </div>
-        <span class="etwk"><button class="add sm" :disabled="twRows(s) >= TW_ROWS_MAX" @click="twAddRow(s)">＋ Строка</button><button class="add sm" :disabled="(s.cols?.length ?? 0) >= SORT_COLS_MAX" @click="twAddCol(s)">＋ Колонка</button></span>
       </div>
       <div v-else-if="s.kind === 'sort'" class="cb vso">
         <input v-model="s.head" class="hd vf" :placeholder="KINDS.sort.head" @input="changed" />
@@ -1046,7 +1053,7 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .qpw.nm { margin: 0 0 8px } .qpw.nm .vadd { display: flex; justify-content: center; align-items: center; height: 100%; gap: 6px }
 .vq { padding: 14px; border-radius: 14px; background: #f1f6ff; box-shadow: none; text-align: center; font-size: 20px; font-weight: 900 } .vq:hover { background: #e6f0ff } .vq:focus { background: #fff; box-shadow: 0 0 0 2px #0d99ff }
 .acts { display: flex; justify-content: center; align-items: flex-start; gap: 22px; margin-top: 4px }
-.act { display: grid; justify-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #1a73e8; width: 84px; text-align: center }
+.act { display: grid; grid-template-rows: auto 30px; align-content: start; justify-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #1a73e8; width: 84px; text-align: center }
 .act i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #c9dcfb; background: var(--card) }
 .act svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .act.big i { width: 60px; height: 60px; background: #1a73e8; border-color: #1a73e8; color: #fff } .act.big svg { width: 26px; height: 26px }
@@ -1133,23 +1140,23 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .trpop { width: 280px } .trpop .valr { margin-bottom: 6px }
 
 /* ---- Как в учебнике, вид 2: правка (как LessonPlayer .lp.book) ---- */
-.card.book.page, .card.book.page.editing { background: #fff }
-.card.book.page .bkh .bn { border: 1.5px solid #d85a30; color: #231f20 }
-.card.book.page .vsent { line-height: 2.1 }
+.card.book.bkpg, .card.book.bkpg.editing { background: #fff }
+.card.book.bkpg .bkh .bn { border: 1.5px solid #d85a30; color: #231f20 }
+.card.book.bkpg .vsent { line-height: 2.1 }
 .vbko { margin: 0; font-size: 17px; line-height: 2.2; text-align: left }
 .vco { position: relative; display: inline-flex; align-items: center; padding: 0 6px; border: 2px solid transparent; border-radius: 50% } .vco.on { border-color: #1f5fbf }
 .vco input { width: auto; min-width: 2ch; background: rgba(13, 153, 255, .07); box-shadow: none; text-align: center; font-weight: 700; font-size: 17px; line-height: 1.3 }
 .vcr { position: absolute; left: 50%; top: -6px; translate: -50% 0; width: 10px; height: 10px; padding: 0; border: 1.5px solid #9db6e6; border-radius: 50%; background: #fff; cursor: pointer; opacity: 0 } .vco:hover .vcr { opacity: 1 } .vco.on .vcr { background: #1f5fbf; border-color: #1f5fbf; opacity: 1 }
 .vco .cx { top: -8px; right: -8px } .vco:hover .cx { opacity: 1 }
-.card.book.page .scols { gap: 0; border-bottom: 1.5px solid #2d5bb8 } .card.book.page .scol { gap: 0; border-right: 1px solid #2d5bb8 } .card.book.page .scol:last-child { border-right: 0 }
-.card.book.page .scol .sch { border: 0; border-radius: 0; background: #2d5bb8; color: #fff; padding: 6px 2px; font-size: 13px; font-weight: 700 } .card.book.page .scol .sch::placeholder { color: rgba(255, 255, 255, .7) }
-.card.book.page .sbox { min-height: 96px; border: 0; border-radius: 0; background: repeating-linear-gradient(transparent 0 23px, #9db6e6 23px 24px); padding: 0 4px; gap: 0 }
-.card.book.page .sbox .sw { padding: 0 20px 0 2px; min-height: 24px; border-radius: 0; background: none !important; color: #1f5fbf !important; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-weight: 400 }
-.card.book.page .sbox .sw textarea { font-family: inherit; color: inherit; font-weight: 400; line-height: 24px }
-.card.book.page .sadd { height: 24px; padding: 0 2px; border-radius: 0; background: none; text-align: left; font-size: 10.5px }
-.card.book.page.qa .vsent :deep(.slot) { display: block; width: 100%; margin: 4px 0 0; text-align: left }
+.card.book.bkpg .scols { gap: 0; border-bottom: 1.5px solid #2d5bb8 } .card.book.bkpg .scol { gap: 0; border-right: 1px solid #2d5bb8 } .card.book.bkpg .scol:last-child { border-right: 0 }
+.card.book.bkpg .scol .sch { border: 0; border-radius: 0; background: #2d5bb8; color: #fff; padding: 6px 2px; font-size: 13px; font-weight: 700 } .card.book.bkpg .scol .sch::placeholder { color: rgba(255, 255, 255, .7) }
+.card.book.bkpg .sbox { min-height: 96px; border: 0; border-radius: 0; background: repeating-linear-gradient(transparent 0 23px, #9db6e6 23px 24px); padding: 0 4px; gap: 0 }
+.card.book.bkpg .sbox .sw { padding: 0 20px 0 2px; min-height: 24px; border-radius: 0; background: none !important; color: #1f5fbf !important; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-weight: 400 }
+.card.book.bkpg .sbox .sw textarea { font-family: inherit; color: inherit; font-weight: 400; line-height: 24px }
+.card.book.bkpg .sadd { height: 24px; padding: 0 2px; border-radius: 0; background: none; text-align: left; font-size: 10.5px }
+.card.book.bkpg.bkqa .vsent :deep(.slot) { display: block; width: 100%; margin: 4px 0 0; text-align: left }
 .vwr { padding: 4px 0; border-bottom: 1.5px dotted #231f20; color: #b4b2a9; font-size: 13px; text-align: left }
-.card.book.page .va .word { justify-items: start; padding: 0; background: none; text-align: left } .card.book.page .va .word .vqq { text-align: left; font-weight: 400; font-size: 17px }
+.card.book.bkpg .va .word { justify-items: start; padding: 0; background: none; text-align: left } .card.book.bkpg .va .word .vqq { text-align: left; font-weight: 400; font-size: 17px }
 /* «Заполни таблицу» — правка: та же таблица, в клетке ответ и слово для банка */
 .etw .etwb { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px; width: 100%; max-width: 420px; align-self: center }
 .etw .etwb button { padding: 1px 2px; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; border-radius: 4px } .etw .etwb button:hover { background: #eef3fd }
@@ -1157,7 +1164,7 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .etw .etwt { display: grid; width: 100%; max-width: 420px; align-self: center; border: 1px solid #2d5bb8; border-radius: 8px; overflow: hidden; background: #fff }
 .etw .etwh { position: relative; min-width: 0; background: #2d5bb8; border-right: 1px solid rgba(255, 255, 255, .35) }
 .etw .etwh input { width: calc(100% - 8px); margin: 4px; padding: 2px; box-sizing: border-box; border: 0; background: rgba(255, 255, 255, .16); box-shadow: 0 0 0 2px rgba(255, 255, 255, .16); color: #fff; font: inherit; font-size: 12px !important; font-weight: 700; text-align: center } .etw .etwh input:hover { background: rgba(255, 255, 255, .26) } .etw .etwh input:focus { background: #fff; color: #2d5bb8 } .etw .etwh input::placeholder { color: rgba(255, 255, 255, .6) }
-.etw .etwc { position: relative; display: grid; align-content: center; min-width: 0; min-height: 44px; border-right: 1px solid #c9d6ef; border-top: 1px solid #c9d6ef }
+.etw .etwc { position: relative; display: grid; align-content: center; min-width: 0; height: 44px; box-sizing: border-box; border-right: 1px solid #c9d6ef; border-top: 1px solid #c9d6ef }
 .etw .etwc input { width: calc(100% - 8px); min-width: 0; margin: 2px 4px; padding: 1px 3px; box-sizing: border-box; border: 0; text-align: center; font: inherit }          /* подложка — общая голубая .vf, без пунктира */
 .etw .etwc .etwa { font-size: 13px; font-weight: 600; color: #1f3f86 } .etw .etwc .etwa.ex { font-style: italic; font-family: 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 400; color: #3d6fd1 }
 .etw .etwc .etww { font-size: 11px; color: var(--hint) }
@@ -1165,5 +1172,26 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .etw .etwn { width: 100%; height: 100%; min-height: 40px; border: 0; background: none; color: #b8c6e3; font-size: 14px; cursor: pointer } .etw .etwn:hover { background: #eef3fd; color: #2d5bb8 }
 .etw .etwk { display: flex; gap: 6px; justify-content: center }
 @media (hover: none) { .etw .etwd { opacity: 1 } }
-.card.book.page .etw .etwt { border-radius: 0; border-width: 1.5px }
+.card.book.bkpg .etw .etwt { border-radius: 0; border-width: 1.5px }
+.vsaid { display: grid; gap: 2px; width: 100%; max-width: 380px; height: 54px; align-self: center; align-content: center; margin: 0; padding: 0 12px; box-sizing: border-box; border-radius: 12px; background: #eef4ff; color: #1f3f86; font-size: 15px; font-weight: 700; text-align: center; opacity: .6 }
+.vsaid small { font-size: 10px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .4px }
+/* 18.11.2026: «Как в учебнике» — правка 1:1 с видом (те же отступы, шрифт, строки) */
+.card.book.bkpg .vbko { margin: 6px 0; font-size: 17px; line-height: 2.1 }
+.card.book.bkpg .vco { padding: 1px 7px } .card.book.bkpg .vco input { field-sizing: content; width: auto; min-width: 2ch; padding: 0; line-height: normal; border-radius: 4px }
+.vbkp .vf { display: inline-block; width: auto; min-width: 1ch; field-sizing: content; font-size: 17px; line-height: normal; vertical-align: baseline; border-radius: 4px }
+.vbkp .vpa { font-weight: 400; text-align: left } .vbkp .vpa:first-child { margin-right: .28em } .vbkp .vpa:last-child { margin-left: .1em } .vpo { position: relative; display: inline-block } .vpo .vf { font-weight: 700; text-align: center }
+.vpo.on .vf { text-decoration: underline 2px #1f5fbf; text-underline-offset: 4px; color: #1f5fbf }
+.vpo .vcr { position: absolute; left: 50%; top: -6px; translate: -50% 0; width: 10px; height: 10px; padding: 0; border: 1.5px solid #9db6e6; border-radius: 50%; background: #fff; cursor: pointer; opacity: 0 } .vpo:hover .vcr { opacity: 1 } .vpo.on .vcr { background: #1f5fbf; border-color: #1f5fbf; opacity: 1 }
+.vpo .cx { top: -8px; right: -10px } .vpo:hover .cx { opacity: 1 }
+.card.book.bkpg .va .word .vqq { font-size: 15px; font-weight: 600 } .card.book.bkpg .va .word .vhn { width: 100%; text-align: left }
+.card.book.bkpg .vwr { height: 95px; box-sizing: border-box; margin-bottom: 4px }
+.vsend { align-self: flex-end; display: grid; place-items: center; width: 101px; height: 40px; box-sizing: border-box; border: 1.5px solid #c9dcfb; border-radius: 99px; color: #1a73e8; font-size: 14px; font-weight: 800; opacity: .45 }
+/* таблица: шапка и строки той же высоты, что у ученика; «＋ Строка / ＋ Колонка» — под таблицей, без лишней высоты */
+.etw .etwh { display: flex; align-items: center; height: 30px } .etw .etwh input { margin: 0 4px; padding: 2px }
+.etw .etwt { position: relative; overflow: visible } .etw .etwt > :first-child { border-top-left-radius: 7px } 
+.etw .etwk { position: absolute; left: 0; right: 0; top: 100%; display: flex; justify-content: center; gap: 6px; margin-top: 3px; z-index: 2 } .etw .etwk .add.sm { height: 20px; padding: 0 8px; font-size: 10.5px }
+.etw .etwb { gap: 4px 14px; box-sizing: border-box } .etw .etwb button { padding: 0 2px; margin: 0 -2px; line-height: inherit }
+.card.book.bkpg .etw .etwb { padding: 7px 12px; background: #f4f4f2 }
+.card.book .vpool { padding: 7px 12px; gap: 4px 16px } .card.book .vpool .vchip { height: 27px; box-sizing: border-box; padding: 3px 4px; margin: 0 -4px }          /* и у Настиных — как у ученика */
+.card.book .va .word { gap: 4px } .card.book .va .word .vqq { line-height: 21px } .card.book .va .word .vhn { line-height: 17px; padding: 0 }
 </style>

@@ -9,7 +9,7 @@ const page = computed(() => props.id.startsWith('pg_'))
 </script>
 <template>
   <!-- Тест · упражнения Насти: миниатюра — как задание в учебнике (номер в оранжевом кружке, задание по-английски, строчки с пунктиром) -->
-  <span v-if="BOOK[bid]" class="mini bkm" :class="[size, { page }]">
+  <span v-if="BOOK[bid]" class="mini bkm" :class="[size, { bkpg: page }]">
     <span class="bh"><b>{{ BOOK[bid].n }}</b><em>{{ BOOK[bid].en }}</em></span>
     <span v-if="BOOK[bid].pic" class="bpic" />
     <template v-if="bid === 'sort'"><span class="btb"><i v-for="h in ['-s', '-es', '-ies', '-ves', 'other']" :key="h">{{ h }}</i></span><span class="btb e"><i v-for="k in 5" :key="k" /></span></template>
@@ -108,5 +108,5 @@ const page = computed(() => props.id.startsWith('pg_'))
 .xm2 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 100% } .xm2 .two span { padding: 2px 0; border: .5px solid #1a73e8; border-radius: 6px; color: #185fa5; font-size: 6px; font-weight: 700 }
 .xm2 .cc { position: absolute; left: 50%; bottom: 3px; z-index: 1; padding: 0 3px; border-radius: 2px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 5.5px; white-space: nowrap; transform: translateX(-50%) }
 .bkm > * { flex: none } .bkm .bpic { height: 16px } .bkm .br { line-height: 1.4; min-height: 10px }          /* строчки не сжимаются и не обрезаются по высоте */
-.mini.bkm.page { background: #fff; border-color: #d3d1c7 } .bkm.page .bh b { border: 1px solid #d85a30 }          /* «Учебник 1:1» — белая страница */
+.mini.bkm.bkpg { background: #fff; border-color: #d3d1c7 } .bkm.bkpg .bh b { border: 1px solid #d85a30 }          /* «Учебник 1:1» — белая страница */
 </style>
