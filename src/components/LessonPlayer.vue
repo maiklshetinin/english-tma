@@ -358,7 +358,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
       </div></div>
       <AudioPill v-else-if="step.audio" :key="step.audio" :src="src(step.audio, 'audio')" class="qa" />
       <div v-if="!gp.gap" class="empty">Отметьте пропуск: слово в [квадратных скобках]</div>
-      <p v-else-if="step.opts?.length" class="sent">{{ gp.a }}<span class="slot" :class="{ ok: st.done && st.res, no: st.done && !st.res }">{{ st.typed || '\u00a0' }}</span>{{ gp.b }}</p>
+      <p v-else-if="step.opts?.length" class="sent">{{ gp.a }}<span class="slot" :style="{ minWidth: Math.min(30, Math.max(...step.opts.map(o => (o.w || '').length), 3) + 3) + 'ch' }" :class="{ ok: st.done && st.res, no: st.done && !st.res }">{{ st.typed || '\u00a0' }}</span>{{ gp.b }}</p>
       <p v-else class="sent"><template v-for="(x, n) in gl" :key="n"><template v-if="x.g == null"><template v-for="(h, j) in hintParts(x.t)" :key="j"><span v-if="h.h" class="brh">{{ h.x }}</span><template v-else>{{ h.x }}</template></template></template><input v-else v-model="st.tys[x.i]" class="slot in" :style="{ width: Math.min(30, Math.max(...gapAlts(x.g).map(a => a.length)) + 3) + 'ch' }" :placeholder="gl.length === 1 ? 'Напечатай здесь' : ''" :class="{ ok: st.done && gapOkAt(x), no: st.done && !gapOkAt(x) }" :readonly="st.done" autocomplete="off" autocapitalize="off" spellcheck="false" @keydown.enter.stop="check" /></template></p>
       <div v-if="step.opts?.length" class="pool">
         <button v-for="k in st.order" :key="k" class="chip" :class="{ ok: st.done && gapOk(step.opts[k].w, gp.gap), no: st.done && k === st.picked && !st.res }" @click="fill(k)">{{ step.opts[k].w }}</button>
@@ -598,4 +598,7 @@ onMounted(() => addEventListener('keydown', onKey)); onUnmounted(() => removeEve
 .lp.book .word { background: #f1efe8 }
 .lp.book .foot { background: transparent; border-top-color: #ece6d6 }
 .lp.book .fs { font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; color: #185fa5 }
+.embedded .bkh { padding: 0 40px }          /* шапка учебника — по краю текста, как в правке (LessonRail .card.book .bkh) */
+.lp.book .foot { font-family: var(--font) }          /* кнопки — как во всём приложении */
+.lp.book .foot, .lp.book .foot button { font-family: var(--font) }
 </style>
