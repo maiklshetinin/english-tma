@@ -24,12 +24,11 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import ExerciseMini from '../../components/ExerciseMini.vue'
-import ExerciseBuilder from '../../components/ExerciseBuilder.vue'
 import { access, accessReady } from '../../composables/useAccess'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, skillsOf, tplOf, BOOK_TPL, PAGE_TPL, BOOK } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, BOOK_TPL, PAGE_TPL, BOOK } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 
 const router = useRouter(), route = useRoute()
@@ -538,42 +537,25 @@ const XGROUPS_STD = (() => {
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
-// «Мои» — свои упражнения из конструктора (doc.templates): плитка по основе, свои название и описание; первой — «+ Своё упражнение»
-// Меню Exercise — вкладками (18.11.2026): «Как в Busuu» / «Как в учебнике» / «Мои»; на вкладке — один ряд, внутри группы по навыкам. Вкладка запоминается
+// Конструктор своих упражнений и вкладка «Мои» убраны (18.11.2026): новый тип — шаблон в src/exercises. Сохранённые раньше (doc.templates) не трогаем — лежат в курсе как были.
+// Меню Exercise — вкладками (18.11.2026): «Как в Busuu» / «Настины» / «Как в учебнике»; на вкладке — один ряд, внутри группы по навыкам. Вкладка запоминается
 const XGROUPS_BOOK = [
   { k: 'W', t: 'Письмо', d: 'вписать, раскрыть скобки, ответить', ids: BOOK_TPL.filter(id => (SKILLS[id] ?? [])[0] === 'W') },
   { k: 'R', t: 'Чтение', d: 'выбрать, найти, распределить', ids: BOOK_TPL.filter(id => (SKILLS[id] ?? [])[0] !== 'W') },
 ].map(g => ({ ...g, book: true, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 // «Как в учебнике» (18.11.2026) — те же 8 типов, но вид максимально как страница учебника (bs: 'page'); Настины остаются отдельной вкладкой
 const XGROUPS_PAGE = XGROUPS_BOOK.map(g => ({ ...g, k: 'p' + g.k, items: g.ids.map(id => TPL.find(v => v.id === 'pg_' + id)).filter(Boolean) }))
-const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'mine', t: 'Мои' }]
-const trayTab = ref((() => { try { return localStorage.getItem('ce.trayTab') || 'app' } catch { return 'app' } })())
+const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }]
+const trayTab = ref((() => { try { const v = localStorage.getItem('ce.trayTab'); return TRAY_TABS.some(b => b.k === v) ? v : 'app' } catch { return 'app' } })())          // была вкладка «Мои» (конструктор убран 18.11.2026) — откроется «Как в Busuu»
 watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })
-const mineItems = computed(() => (doc.templates ?? []).map(x => ({ id: x.id, kind: x.step.kind, base: tplOf(x.step), t: x.t, d: x.d, mine: true, step: x.step, tpl: x })))
-const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : trayTab.value === 'mine'
-  ? [{ k: 'mine', t: 'Мои', d: 'собраны в конструкторе', mine: true, items: mineItems.value }] : XGROUPS_STD)
-  .map(g => ({ ...g, cols: g.items.length + (g.mine ? 1 : 0) })))          // все плашки группы — в один ряд
+const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : XGROUPS_STD)
+  .map(g => ({ ...g, cols: g.items.length })))          // все плашки группы — в один ряд
 const NEW_MINI = [...BOOK_TPL, ...PAGE_TPL]          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
-const skillsT = (t) => (t.mine ? skillsOf({ ...t.step, tn: t.t }) : (SKILLS[t.id] ?? []))
-/** Экраны по плитке меню: «Готовый урок», своё упражнение (копия образца) или шаблон */
+const skillsT = (t) => SKILLS[t.id] ?? []
+/** Экраны по плитке меню: «Готовый урок» или шаблон */
 function makeTpl(id) {
   if (id === 'lesson') return fishLesson()
-  const m = (doc.templates ?? []).find(t => t.id === id)
-  if (m) return [{ ...JSON.parse(JSON.stringify(m.step)), id: stepId(), tn: m.t, td: m.d }]
   return [TEMPLATES.find(t => t.id === id).make()]
-}
-// Конструктор упражнений (ExerciseBuilder.vue): открыть пустым («+ Своё упражнение») или своё — двойным кликом по плитке
-const xb = ref(null)
-const openBuilder = (tpl = null) => { tray.value = null; xb.value = { tpl } }
-function saveTpl({ id, t, d, step: st }) {
-  if (!Array.isArray(doc.templates)) doc.templates = []
-  const x = doc.templates.find(v => v.id === id)
-  if (x) Object.assign(x, { t, d, step: st }); else doc.templates.push({ id: stepId(), t, d, step: st })
-  xb.value = null; save(); showToast(x ? 'Упражнение сохранено' : 'Готово — оно в меню «Exercise» → «Мои»')
-}
-async function delTpl(id) {
-  if (!(await ask('Удалить своё упражнение из меню?', { text: 'Экраны, уже поставленные на ветки, останутся.', ok: 'Удалить', danger: true }))) return
-  doc.templates = (doc.templates ?? []).filter(v => v.id !== id); xb.value = null; save()
 }
 function addScreen(id) {
   let L = activeLesson.value ? findAny(activeLesson.value) : null
@@ -1928,7 +1910,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <small><b>{{ tileItem.t }}</b><span>{{ tileItem.d }}</span></small>
       <span v-if="skillsT(tileItem).length" class="skl"><i v-for="k in skillsT(tileItem)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
     </div>
-    <ExerciseBuilder v-if="xb" :tpl="xb.tpl" :resolve="resolveRef" @save="saveTpl" @del="delTpl" @close="xb = null" />
     <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop @wheel.stop="trayWheel">
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
@@ -1955,13 +1936,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- мини-окошки: как выглядит экран -->
         <div class="xrow">
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
-        <!-- «Мои»: первой — собрать своё в конструкторе -->
-        <button v-if="g.mine" class="mi madd" title="Собрать своё упражнение из блоков" @click="openBuilder()"><span class="mini plus"><b>+</b></span><small><b>Своё упражнение</b><span>собрать из блоков</span></small></button>
-        <button v-for="t in g.items" :key="t.id" class="mi" :title="t.mine ? 'Своё упражнение — тяните на ветку; двойной клик — открыть в конструкторе' : t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)" @dblclick="t.mine && openBuilder(t.tpl)">
+        <button v-for="t in g.items" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
-          <span v-if="t.mine" class="mact" @pointerdown.stop.prevent><i title="Открыть в конструкторе" @click.stop="openBuilder(t.tpl)">✎</i><i class="del" title="Удалить из меню" @click.stop="delTpl(t.id)">✕</i></span>
         </button>
         </div></div>
         </div>
@@ -2245,7 +2223,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .pgo:active { transform: translateY(2px); box-shadow: none }
 .sdmark { position: absolute; z-index: 10020; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
 .sdbead { position: absolute; z-index: 10020; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
-.tray.inter .mini.plus { display: grid; place-items: center; border: 2px dashed #9ec0ef; background: color-mix(in srgb, #1cb0f6 6%, var(--card)) } .tray.inter .mini.plus b { font-size: 34px; font-weight: 400; color: #1cb0f6 }
 .mig { position: fixed; z-index: 10060; display: grid; justify-items: center; gap: 5px; width: 124px; box-sizing: border-box; padding: 6px 4px 4px; pointer-events: none; animation: mig .12s ease-out }
 .mig :deep(.mini) { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(0, 0, 0, .2) }
 .mig small { display: grid; gap: 1px; font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--hint); text-align: center } .mig small b { font-size: 12.5px; font-weight: 800; color: #2c2c2c }
@@ -2385,13 +2362,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 }
 .rin { pointer-events: auto; width: 100%; margin: 0; padding: 2px 6px; border: 2px solid #0d99ff; border-radius: 6px; background: var(--card); font: inherit; font-size: 15px; font-weight: 800; color: var(--text); outline: none; user-select: text }
 .uh.ren { display: grid; gap: 4px } .rin.big { font-size: 20px; font-weight: 900 }
-/* «Мои»: при наведении — открыть в конструкторе / удалить */
 .tray.inter .mi { position: relative }
-.mact { position: absolute; top: 2px; right: 2px; display: flex; gap: 3px; opacity: 0; transition: opacity .12s }
-.mi:hover .mact { opacity: 1 }
-.mact i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--card); color: var(--hint); font-size: 11px; font-style: normal; font-weight: 800; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); cursor: pointer }
-.mact i:hover { color: var(--blue-d) } .mact i.del:hover { background: #ffe9e9; color: #d32f2f }
-@media (hover: none) { .mact { opacity: 1 } }
 .fl.tray, .fl.tools { z-index: 21 }          /* меню и нижняя панель — поверх рамки выделения (.selbox 19), иначе рамка экрана залезала на меню */
 .xexp { margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #ffe7a8; color: #8a5a00; font-size: 10px; font-style: normal; font-weight: 800; vertical-align: 1px }
 

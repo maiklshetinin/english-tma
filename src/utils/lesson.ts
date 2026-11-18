@@ -220,8 +220,6 @@ export function skillsOf(s: Step): string[] {
   if (s.tn && (s.audio || s.video) && !k.includes('L') && s.kind !== 'intro' && s.kind !== 'tip') k.unshift('L')
   return k
 }
-/** Образцы файлов для конструктора: добавил блок «Фото» / «Аудио» / «Видео» — сразу виден пример (потом меняется карандашом) */
-export const sampleMedia = () => ({ image: fish('wave.jpg'), audio: fish('see-you-later.mp3'), video: fish('hello.mp4') })
 /** Подпись экрана на рельсе: само слово, если оно уже есть */
 export function stepTitle(s: Step): string {
   if (s.kind === 'intro') return s.word?.trim() || KINDS.intro.t
