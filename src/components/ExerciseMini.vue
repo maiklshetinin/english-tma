@@ -1,7 +1,7 @@
 <script setup>
 // Миниатюра экрана (меню «Exercise», плитки на ветке урока, конструктор): тот же шаблон экрана, что у ученика (src/exercises),
 // с «рыбой» шаблона (TEMPLATES в utils/lesson.ts) — уменьшенная копия окна. Поменяли шаблон — поменялась и миниатюра (18.11.2026).
-// Нажатия выключены, звук и видео не грузятся. size: 'tray' / 'rail' — 112×86, как в меню «Exercise».
+// Нажатия выключены, звук и видео не грузятся. size: 'tray' / 'rail' — 124×150 (18.11.2026: экран виден целиком, фото 16:9 как у ученика).
 // Не шаблон экрана (например, «Готовый урок») — стопка карточек, как раньше.
 import { computed, reactive } from 'vue'
 import { EX } from '../exercises'
@@ -47,13 +47,12 @@ providePlay(reactive({
 <style scoped>
 .mini { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 150px; height: 104px; box-sizing: border-box; padding: 8px 12px; border: 1px solid #e3e3e3; border-radius: 10px; background: var(--card); transition: transform .15s, box-shadow .15s }
 /* размер «как в меню Exercise» (CourseEditor → .tray.inter .mini) */
-.mini.tray, .mini.rail { width: 112px; height: 86px; padding: 6px 9px 16px; gap: 4px; overflow: hidden }
-/* уменьшенная копия экрана: экран шириной 280 px, в окошке — его верх; фото ниже обычного — чтобы было видно и слова */
+.mini.tray, .mini.rail { width: 124px; height: 150px; padding: 6px 9px 16px; gap: 4px; overflow: hidden }
+/* уменьшенная копия экрана: экран шириной 400 px целиком, в тех же пропорциях, что у ученика */
 .mini.xmt { display: block; padding: 0 !important; overflow: hidden; pointer-events: none; user-select: none }
-.sc { position: absolute; left: 0; top: 0; width: 280px; transform: scale(calc(110 / 280)); transform-origin: 0 0 }
-.mini.xmt:not(.tray):not(.rail) .sc { transform: scale(calc(148 / 280)) }
-.sc :deep(.media) { aspect-ratio: auto !important; height: 70px }
-.lp { display: flex; flex-direction: column; width: 280px; background: var(--card); color: var(--text); font-family: var(--font); text-align: left }
+.sc { position: absolute; left: 0; top: 0; width: 400px; transform: scale(calc(122 / 400)); transform-origin: 0 0 }
+.mini.xmt:not(.tray):not(.rail) .sc { transform: scale(calc(148 / 400)) }
+.lp { display: flex; flex-direction: column; width: 400px; background: var(--card); color: var(--text); font-family: var(--font); text-align: left }
 .body { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px 16px; box-sizing: border-box }
 .lp.book { background: #fffdf6; font-family: Arial, Helvetica, sans-serif; color: #2c2c2a } .mini.xmt:has(.lp.book) { background: #fffdf6; border-color: #eadfc4 }
 .lp.book.bkpg { background: #fff; color: #231f20 } .mini.xmt:has(.lp.bkpg) { background: #fff; border-color: #d3d1c7 }

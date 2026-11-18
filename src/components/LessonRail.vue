@@ -381,7 +381,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .node { position: absolute; left: 50%; top: -54px; width: 34px; height: 34px; margin-left: -17px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px color-mix(in srgb, var(--c) 45%, transparent); cursor: grab; touch-action: none; user-select: none; z-index: 2 }
 .node:hover { transform: scale(1.08) } .frame.lift .node { cursor: grabbing; transform: scale(1.12) }
 /* плитка — точь-в-точь как в меню «Exercise» (CourseEditor .tray.inter .mi): без своей подложки; низ (ряд навыков) — по центру линии: линия на 40px выше рамки, ряд 16px */
-.rmi { position: absolute; left: 50%; top: -32px; translate: -50% -100%; z-index: 2; display: grid; justify-items: center; align-content: start; gap: 5px; width: 124px; box-sizing: border-box; padding: 6px 4px 0; border-radius: 14px; cursor: grab; touch-action: none; user-select: none }
+.rmi { position: absolute; left: 50%; top: -32px; translate: -50% -100%; z-index: 2; display: grid; justify-items: center; align-content: start; gap: 5px; width: 132px; box-sizing: border-box; padding: 6px 4px 0; border-radius: 14px; cursor: grab; touch-action: none; user-select: none }
 .rmi:hover { background: var(--surface) }
 .rmi:hover :deep(.mini) { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0, 0, 0, .12) } .frame.lift .rmi { cursor: grabbing }
 /* текст плитки — одной высоты у всех (название 1 строка, описание ровно 2 строки места): миниатюры и навыки стоят на одной высоте */

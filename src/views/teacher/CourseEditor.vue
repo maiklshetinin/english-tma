@@ -688,7 +688,7 @@ async function sdUp(e) {
 let placing = false
 function placeStart(id, e) {
   const w = toWorld(e.clientX, e.clientY)
-  Object.assign(sd, { on: true, rail: null, tileOff: { dx: 62, dy: 50 }, asTile: true, cx: e.clientX, cy: e.clientY, tray: id, preview: makeTpl(id), list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
+  Object.assign(sd, { on: true, rail: null, tileOff: { dx: 66, dy: 80 }, asTile: true, cx: e.clientX, cy: e.clientY, tray: id, preview: makeTpl(id), list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
   placing = true          // меню не закрываем: над ним плитка остаётся плиткой, закроется, когда экран поставят
   addEventListener('pointermove', sdMove); addEventListener('pointerdown', placeDown, true)
 }
@@ -970,7 +970,7 @@ const dots = computed(() => { let s = 20 * view.z; while (s < 10) s *= 4; return
 
 // ---------- Раскладка рельса (в координатах холста; центр линии — x = 0) ----------
 const G = { step: 116, unitGap: 160 }
-const MINI_UP = 110          // над линией урока — плитки экранов (LessonRail → .rmi), им нужно место под экранами урока выше          // рельс всегда прямой («Волну» убрали)
+const MINI_UP = 174          // над линией урока — плитки экранов (LessonRail → .rmi), им нужно место под экранами урока выше          // рельс всегда прямой («Волну» убрали)
 // за курсором мимо рельса: элементы структуры и где они лягут (в координатах холста)
 const flyTree = computed(() => {
   if (!drag.on || (drag.over && drag.item?.type !== 'unit') || !drag.item || !['unit', ...BRANCH].includes(drag.item.type)) return null
@@ -1905,7 +1905,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 
     <!-- Снизу: панель как в FigJam — группа, над ней ряд элементов -->
     <!-- плитка из меню, пока её тянут не над местом, куда можно поставить: того же размера, с того же места под курсором -->
-    <div v-if="sd.on && sd.asTile && tileItem" class="mig" :style="{ left: sd.cx - (sd.tileOff?.dx ?? 62) + 'px', top: sd.cy - (sd.tileOff?.dy ?? 50) + 'px' }">
+    <div v-if="sd.on && sd.asTile && tileItem" class="mig" :style="{ left: sd.cx - (sd.tileOff?.dx ?? 66) + 'px', top: sd.cy - (sd.tileOff?.dy ?? 80) + 'px' }">
       <ExerciseMini :id="tileItem.base || tileItem.id" size="rail" />          <!-- не "tray": класс .tray здесь — сама панель меню (fixed внизу экрана), плитка уезжала бы туда -->
       <small><b>{{ tileItem.t }}</b><span>{{ tileItem.d }}</span></small>
       <span v-if="skillsT(tileItem).length" class="skl"><i v-for="k in skillsT(tileItem)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
@@ -1935,7 +1935,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i></button></div>
         <!-- мини-окошки: как выглядит экран -->
         <div class="xrow">
-        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 124px)` }">
+        <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">
         <button v-for="t in g.items" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
@@ -2223,7 +2223,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .pgo:active { transform: translateY(2px); box-shadow: none }
 .sdmark { position: absolute; z-index: 10020; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--blue, #2aabee); box-shadow: 0 0 0 3px rgba(42, 171, 238, .25); pointer-events: none }
 .sdbead { position: absolute; z-index: 10020; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 4px dashed var(--blue, #2aabee); pointer-events: none }
-.mig { position: fixed; z-index: 10060; display: grid; justify-items: center; gap: 5px; width: 124px; box-sizing: border-box; padding: 6px 4px 4px; pointer-events: none; animation: mig .12s ease-out }
+.mig { position: fixed; z-index: 10060; display: grid; justify-items: center; gap: 5px; width: 132px; box-sizing: border-box; padding: 6px 4px 4px; pointer-events: none; animation: mig .12s ease-out }
 .mig :deep(.mini) { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(0, 0, 0, .2) }
 .mig small { display: grid; gap: 1px; font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--hint); text-align: center } .mig small b { font-size: 12.5px; font-weight: 800; color: #2c2c2c }
 @keyframes mig { from { transform: scale(1.06); opacity: .6 } }
@@ -2323,7 +2323,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .xgc { display: grid; gap: 2px 4px }
 .skl { display: flex; gap: 3px; justify-content: center } .chip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }          /* навык → аналитика */
 .chip.L { background: #1cb0f6 } .chip.R { background: #a560e8 } .chip.W { background: #ff9600 } .chip.S { background: #58cc02 }
-.tray.inter .mini { width: 112px; height: 86px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 124px; gap: 5px; padding: 6px 4px 4px; align-self: start }
+.tray.inter .mini { width: 124px; height: 150px; padding: 6px 9px 16px; gap: 4px; overflow: hidden } .tray.inter .mi { width: 132px; gap: 5px; padding: 6px 4px 4px; align-self: start }
 .tray.inter .mini .mb { right: 6px; bottom: 5px; width: 26px; height: 7px } .tray.inter .mini.lesson { overflow: visible } .tray.inter .mini .ms { transform: scale(.82); transform-origin: top center }
 .tray.inter .mi small { font-size: 10.5px; line-height: 1.2 } .tray.inter .mi small b { font-size: 12.5px }
 /* плитки меню — одной высоты: название в строку («…», целиком — в подсказке), описание — ровно 2 строки места; миниатюры и навыки — ровными рядами */
