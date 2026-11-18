@@ -104,4 +104,5 @@ defineProps({ id: { type: String, required: true }, size: { type: String, defaul
 .xm2 .mic { display: flex; align-items: center; gap: 6px } .xm2 .mic i { width: 9px; height: 9px; border: .5px solid #85b7eb; border-radius: 50%; background: var(--card) } .xm2 .mic b { display: grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: #1a73e8 } .xm2 .mic b::after { content: ''; width: 3px; height: 6px; border-radius: 2px; background: #fff }
 .xm2 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 100% } .xm2 .two span { padding: 2px 0; border: .5px solid #1a73e8; border-radius: 6px; color: #185fa5; font-size: 6px; font-weight: 700 }
 .xm2 .cc { position: absolute; left: 50%; bottom: 3px; z-index: 1; padding: 0 3px; border-radius: 2px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 5.5px; white-space: nowrap; transform: translateX(-50%) }
+.bkm > * { flex: none } .bkm .bpic { height: 16px } .bkm .br { line-height: 1.4; min-height: 10px }          /* строчки не сжимаются и не обрезаются по высоте */
 </style>

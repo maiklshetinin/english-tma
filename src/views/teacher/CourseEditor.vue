@@ -1280,7 +1280,8 @@ function aim(e) {
 }
 const overToolbar = (cy) => cy > H.value - (phone.value ? 92 : 104)
 // колесо над меню — листает его вбок (группы в один ряд), а не двигает доску
-function trayWheel(e) { const el = e.currentTarget.querySelector('.xrow') ?? e.currentTarget; if (el.scrollWidth > el.clientWidth + 1) { e.preventDefault(); el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY } }
+function trayWheel(e) { if (e.ctrlKey || e.metaKey) { e.preventDefault(); onWheel(e); return }          // Ctrl+колесо над меню — масштаб доски, а не страницы браузера (как над остальными панелями: onWinWheel; тут @wheel.stop его глушил)
+  const el = e.currentTarget.querySelector('.xrow') ?? e.currentTarget; if (el.scrollWidth > el.clientWidth + 1) { e.preventDefault(); el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY } }
 // над открытым меню (оно бывает высоким — «Мои», «Фразы и контекст») экран не превращается в окно: там плитка остаётся плиткой
 const overMenu = (e) => document.elementsFromPoint(e.clientX, e.clientY).some(el => el.closest?.('.fl.tray'))
 function startDrag(e, src) {
