@@ -986,7 +986,8 @@ input::placeholder, textarea::placeholder { color: var(--hint-2); font-weight: 6
 .bbar button { border: 0; border-radius: 5px; padding: 3px 9px; background: none; color: #fff; font: inherit; font-size: 12px; cursor: pointer } .bbar button:hover { background: #444 }
 .vtt { border: 1px solid var(--border); border-radius: 12px }
 .vtr { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 11px 12px; font-size: 14px; font-weight: 600 } .vtr + .vtr { border-top: 1px solid var(--border) }
-.vtr span { display: flex; align-items: center; gap: 6px } .vtr .vt2 { color: var(--hint) } .vtr textarea { line-height: 1.35 }
+.vtr span { display: flex; align-items: center; gap: 6px } .vtr .vt2 { color: var(--hint) } .vtr, .vtr textarea { line-height: 1.4 }
+.vtr .vsn:not(.on) { position: absolute; left: -30px; top: 50%; translate: 0 -50% }          /* без озвучки — значок за краем таблицы: слово стоит там же, где у ученика (18.11.2026: таблица «прыгала» при правке) */
 .vsn { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border: 0; padding: 0; background: none; color: #c4c4c4; cursor: pointer } .vsn.on { color: #1a73e8 } .vsn:hover { color: #1a73e8 }
 .vsn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .rx { position: absolute; right: -9px; top: 50%; translate: 0 -50%; width: 18px; height: 18px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--hint); font-size: 9px; cursor: pointer; opacity: 0 } .vtr:hover .rx { opacity: 1 }

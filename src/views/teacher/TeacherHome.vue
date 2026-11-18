@@ -366,7 +366,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <button v-if="allGhosts.length" class="icon-btn gall gback" :class="{ on: !hiddenGhosts.length }" :aria-pressed="!hiddenGhosts.length"
               :title="hiddenGhosts.length ? `Вернуть подсказки (${hiddenGhosts.length}) — бледные уроки «как на этой неделе»` : `Скрыть подсказки (${allGhosts.length})`" :aria-label="hiddenGhosts.length ? `Вернуть подсказки: ${hiddenGhosts.length}` : `Скрыть подсказки: ${allGhosts.length}`" @click="toggleGhosts">
               <GhostIcon :variant="ghostIcon" :size="28" /><i>{{ hiddenGhosts.length || allGhosts.length }}</i></button>
-            <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i>Статус · {{ noStatus.length }}</button>
+            <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i><span class="askt">Статус · </span>{{ noStatus.length }}</button>
             <WeekMoney class="money" :m="money" />
             <WeekMoney class="money" :m="monthMoney" :label="monthName" />
           </div>
@@ -405,7 +405,10 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 .trial-pad { position: relative; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none }
 .trial-pad i { position: absolute; top: 7px; width: 12px; height: 25px; border-radius: 2px 2px 3px 3px; background: var(--bg); box-shadow: inset 0 6px 0 var(--c), 0 1px 3px rgba(0, 0, 0, .2); transform-origin: 50% 100% }
 .trial-pad:hover { border-color: var(--hint-2) } .trial-pad.held { opacity: .55 }
-@media (min-width: 1024px) { .wh { flex-wrap: nowrap; gap: 8px } .wh > * { flex: none } .wh .wk-now { flex: 0 1 116px; min-width: 96px } .af-sw small { display: none } }      /* на компьютере шапка всегда в одну строку: если тесно, сжимается плашка недели */
+@media (min-width: 1024px) { .wh { flex-wrap: wrap; gap: 8px } .wh > * { flex: none } .wh .wk-now { flex: 0 1 116px; min-width: 96px } .af-sw small { display: none } }      /* на компьютере шапка всегда в одну строку: если тесно, сжимается плашка недели */
+/* 18.11.2026: с «Как на этой неделе», привидением и «Статус» шапка не влезала и уезжала под учеников. Тесно — прячем подписи «авто» и «Статус» (остаются выключатель и «?1»); совсем тесно — деньги переходят на вторую строку, а не наезжают */
+@media (min-width: 1024px) { .wcol { container: wcol / inline-size } }
+@container wcol (max-width: 880px) { .wh .askt, .wh .af-sw span { display: none } .wh .af-sw { padding: 0 7px } }
 /* «Как на этой неделе» — маленькая кнопка со значком копирования, число призраков — в уголке */
 .gall { position: relative; border-color: var(--border); color: var(--blue) }
 /* Кнопка-привидение (подсказки следующей недели): тёмная простыня со светлыми глазами; подсказки видны — голубая подложка; часть убрана — серый счётчик */

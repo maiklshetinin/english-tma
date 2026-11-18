@@ -197,7 +197,7 @@ function planMove(c) {
   moves.sort((a, b) => (di * 100 + hi > 0 ? k(b) - k(a) : k(a) - k(b)))      // по порядку, чтобы урок не вставал на место, которое ещё не освободилось
   return { moves, ghosts, ok }
 }
-// Уроки едут за курсором плавно (--gdx/--gdy), а рамка выделения прыгает по клеткам — показывает, куда встанут (--gtx/--gty)
+// Над клетками уроки и рамка едут вместе, по клеткам — видно, куда встанут; над шапкой / за таблицей — плавно за курсором
 function setG(dx, dy, st, tx = dx, ty = dy) {
   const el = wk.value; if (!el) return
   el.style.setProperty('--gdx', dx + 'px'); el.style.setProperty('--gdy', dy + 'px')
@@ -220,7 +220,8 @@ function frame() {
   if (!c) { gs.plan = null; gs.key = ''; return setG(fx, fy, 'bad') }      // над шапкой / часами — едут за курсором, сюда нельзя
   const key = c.date + '|' + c.hour
   if (key !== gs.key) { gs.key = key; gs.plan = planMove(c) }      // план пересчитываем только при смене клетки
-  setG(fx, fy, c === gs.c || gs.plan.ok ? '' : 'bad', c.b.left - gs.c.b.left, c.b.top - gs.c.b.top)
+  const tx = c.b.left - gs.c.b.left, ty = c.b.top - gs.c.b.top
+  setG(tx, ty, c === gs.c || gs.plan.ok ? '' : 'bad')          // над клетками уроки едут вместе с рамкой, по клеткам (18.11.2026: уроки «уходили» из рамки)
 }
 function maskUp(e) {
   removeEventListener('pointermove', maskMove); cancelAnimationFrame(graf); graf = 0
@@ -465,7 +466,7 @@ html[data-theme='dark'] .dsum.shine::after { background: linear-gradient(100deg,
 .mq { position: absolute; z-index: 8; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }      /* как в конструкторе курсов */
 .selbox { position: absolute; z-index: 7; border: 3px solid #0d99ff; pointer-events: none }      /* линия потолще, чем в конструкторе: таблица мельче холста */
 .selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .06); touch-action: none } .selmask:active { cursor: grabbing }      /* лёгкая голубая маска: за неё тянется всё выделенное */
-.wk.gdrag .chip.sel { transform: translate(var(--gdx, 0), var(--gdy, 0)); will-change: transform } .wk.gdrag .selbox { transform: translate(var(--gtx, 0), var(--gty, 0)); transition: transform .08s ease-out; will-change: transform } .wk.gdrag .chip.sel { z-index: 6; opacity: .85; transition: none }      /* уроки (и призраки) плавно едут за курсором, рамка — по клеткам: куда встанут */
+.wk.gdrag .chip.sel { transform: translate(var(--gdx, 0), var(--gdy, 0)); will-change: transform } .wk.gdrag .selbox { transform: translate(var(--gtx, 0), var(--gty, 0)); transition: transform .08s ease-out; will-change: transform } .wk.gdrag .chip.sel { z-index: 6; opacity: .85; transition: transform .08s ease-out }      /* уроки (и призраки) плавно едут за курсором, рамка — по клеткам: куда встанут */
 .wk.gdrag .cell.free:hover { background: var(--card) }      /* пока тянем — клетки под курсором не мигают */
 .wk.gdrag { overflow: visible }      /* пока тянем — уроки не обрезаются краем таблицы */
 .seldel { position: absolute; left: 50%; top: -30px; translate: -50% 0; padding: 3px 10px; border-radius: 99px; background: var(--red); color: #fff; font-style: normal; font-size: 12px; font-weight: 800; white-space: nowrap }
