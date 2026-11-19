@@ -12,11 +12,12 @@ import { pushUndo, undo } from '../../composables/useScheduleUndo'
 import { useTelegram } from '../../composables/useTelegram'
 import GridStyleButton from '../../components/GridStyleButton.vue'
 import GhostIcon from '../../components/GhostIcon.vue'
-import { ghostIcon } from '../../utils/gridStyle'
+import { ghostIcon, moneyStyle } from '../../utils/gridStyle'
 import WeekGrid from '../../components/WeekGrid.vue'
 import StudentsPanel from '../../components/StudentsPanel.vue'
 import LessonSheet from '../../components/LessonSheet.vue'
 import WeekMoney from '../../components/WeekMoney.vue'
+import WeekMoneyPair from '../../components/WeekMoneyPair.vue'
 import MonthPicker from '../../components/MonthPicker.vue'
 import WeekLoad from '../../components/WeekLoad.vue'
 import { sumMoney, fmtMoney } from '../../utils/price'
@@ -386,8 +387,8 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
               <GhostIcon :variant="ghostIcon" :size="28" /><i>{{ hiddenGhosts.length || allGhosts.length }}</i></button>
             <button v-if="noStatus.length" class="btn sm ask" title="Эти уроки уже прошли — отметьте: проведён или отменён" @click="askStatus"><i>?</i><span class="askt">Статус · </span>{{ noStatus.length }}</button>
             <i class="whbr" aria-hidden="true" />
-            <WeekMoney class="money" :m="money" />
-            <WeekMoney class="money" :m="monthMoney" :label="monthName" />
+            <WeekMoneyPair v-if="moneyStyle === 'one'" class="money" :week="money" :month="monthMoney" :month-label="monthName" />      <!-- «Вид сетки» → «Деньги»: одна плашка -->
+            <template v-else><WeekMoney class="money" :m="money" /><WeekMoney class="money" :m="monthMoney" :label="monthName" /></template>
           </div>
           <WeekGrid class="wgrid" :dates="dates" :ghosts="ghosts" @cell="sheet = { slot: $event }" @lesson="sheet = { lesson: $event }" @ghost="confirmGhost" @ghost-skip="skipGhost" @remove-many="removeMany" @move-many="moveMany"
             :fresh-trial="freshTrial" @trial-edited="freshTrial = null" @trial-save="saveTrial" @trial-remove="removeTrial" />

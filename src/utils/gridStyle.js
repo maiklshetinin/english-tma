@@ -30,6 +30,16 @@ const GI = 'tma.ghostIcon'
 export const ghostIcon = ref((() => { try { const v = localStorage.getItem(GI); return GHOST_ICONS.some(g => g.id === v) ? v : 'silhouette' } catch { return 'silhouette' } })())
 export function setGhostIcon(id) { ghostIcon.value = id; try { localStorage.setItem(GI, id) } catch { /* приватный режим */ } }
 
+// Деньги над таблицей (19.11.2026): две плашки (неделя и месяц, как было) или одна плашка в две строки — уже, шапка влезает в строку.
+// Выбор в меню «Вид сетки» → «Деньги». Одна плашка — components/WeekMoneyPair.vue
+export const MONEY_STYLES = [
+  { id: 'two', title: 'Две плашки' },
+  { id: 'one', title: 'Одна плашка' },
+]
+const MS = 'tma.moneyStyle'
+export const moneyStyle = ref((() => { try { return localStorage.getItem(MS) === 'one' ? 'one' : 'two' } catch { return 'two' } })())
+export function setMoneyStyle(id) { moneyStyle.value = id; try { localStorage.setItem(MS, id) } catch { /* приватный режим */ } }
+
 // Закрашивать прошедшее время: прошлые часы серые, текущий час заполняется по минутам (в реальном времени)
 const PAST = 'tma.pastShade'
 export const pastShade = ref((() => { try { return localStorage.getItem(PAST) === '1' } catch { return false } })())
