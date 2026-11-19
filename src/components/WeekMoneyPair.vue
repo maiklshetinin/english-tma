@@ -29,8 +29,8 @@ watch(() => props.week.real + props.month.real, (to, from) => { if (to > from &&
 <style scoped>
 /* Цвета — как у WeekMoney: зелёный #009300, в тёмной теме светлее */
 .wmp { --mg: #009300; flex: none; display: grid; grid-template-columns: auto auto; align-content: center; align-items: center; column-gap: 5px; row-gap: 2px; box-sizing: border-box; height: 54px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.05; white-space: nowrap }
-.per { display: grid; justify-items: start; gap: 1px } .per > span { font-size: 10px; font-weight: 800; color: var(--hint); letter-spacing: -.2px }
-.off { font-style: normal; font-size: 9px; font-weight: 700; color: var(--red-d); opacity: .75; font-variant-numeric: tabular-nums; letter-spacing: -.2px }
+.per { display: grid; justify-items: start; gap: 1px; line-height: 1 } .per > span { font-size: 11px; font-weight: 800; color: var(--hint) }          /* подписи — как у двух плашек WeekMoney (11px) */
+.off { font-style: normal; font-size: 11px; font-weight: 800; color: var(--red-d); font-variant-numeric: tabular-nums }
 .sum { display: grid; gap: 2px } .am { display: flex; align-items: baseline; justify-content: flex-end; gap: 2px }
 .bar { height: 2px; border-radius: 1px; background: var(--border); overflow: hidden } .bar i { display: block; height: 100%; background: var(--mg); transition: width .9s cubic-bezier(.22, 1, .36, 1) }
 b { font-size: 18px; font-weight: 900; color: var(--mg); letter-spacing: -.3px; font-variant-numeric: tabular-nums }
