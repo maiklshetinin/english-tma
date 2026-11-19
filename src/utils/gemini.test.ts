@@ -22,7 +22,7 @@ describe('Gemini: ключи и проверка ответа', () => {
     expect(retryMs('"retryDelay": "38s"')).toBe(38000)
     expect(errText(429, 'quota')).toBe('Квота закончилась')
     expect(errText(400, 'API key not valid. Please pass a valid API key.')).toMatch(/Ключ не принят/)
-    expect(errText(404, 'models/xxx is not found')).toMatch(/модели/)
+    expect(errText(404, 'models/xxx is not found')).toContain('недоступна этому ключу: models/xxx is not found')
   })
   it('нет ключей — ошибка nokey', async () => {
     await expect(checkAnswer(q, async () => good({}) as any)).rejects.toMatchObject({ nokey: true })
@@ -86,7 +86,10 @@ describe('Gemini: модель подбирается сама', () => {
   it('из списка моделей ключа — свежая текстовая Flash', async () => {
     const { bestModel } = await import('./gemini')
     expect(bestModel(['gemini-2.5-flash-preview-tts', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash-preview', 'gemini-3.1-flash-image'])).toBe('gemini-3.6-flash')
-    expect(bestModel(['gemini-3.6-flash', 'gemini-flash-latest'])).toBe('gemini-flash-latest')
+    // список моделей ключа автора (19.11.2026): стабильная с самым новым номером
+    const author = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3-flash-preview', 'gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-3.8-flash-tts', 'gemini-omni-1.2-flash', 'gemini-3.1-flash-image']
+    expect(bestModel(author)).toBe('gemini-3.8-flash')
+    expect(bestModel(author, ['gemini-3.8-flash'])).toBe('gemini-3.7-flash')
     expect(bestModel(['gemini-2.5-flash-preview-tts'])).toBe('')
   })
   it('404 «нет такой модели» → список моделей ключа → другая модель, повтор', async () => {

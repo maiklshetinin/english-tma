@@ -5,7 +5,7 @@
 import { reactive } from 'vue'
 
 const KEYS = 'tma.ai.keys.v1', MODEL = 'tma.ai.model'
-export const MODEL_DEFAULT = 'gemini-flash-latest'          // псевдоним Google: всегда свежая Flash-модель (gemini-2.5-flash новым проектам уже не выдают — 404)
+export const MODEL_DEFAULT = 'gemini-3.8-flash'          // свежая стабильная Flash из списка моделей ключа автора (19.11.2026); не ответит — подберётся сама
 export const PASS = 60                                    // зачёт — от 60 % (рекомендация курса: 60–70 % «идеального» ответа — уже хорошо)
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'          // тот же адрес и заголовок x-goog-api-key, что у рабочей озвучки (gemini-2.5-flash-preview-tts)
 
@@ -14,7 +14,7 @@ const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } cat
 const today = () => new Date().toISOString().slice(0, 10)
 
 /** Ключи: { key, ok: true|false|null (ещё не пробовали), err, until (мс — квота до), day, n (запросов за day) } */
-const OLD = ['gemini-2.5-flash']                                    // было по умолчанию до 19.11.2026 — переводим на псевдоним
+const OLD = ['gemini-2.5-flash', 'gemini-flash-latest']                                    // было по умолчанию раньше — переводим на новую
 export const ai = reactive({ keys: read(KEYS, []), model: ((m) => (OLD.includes(m) ? MODEL_DEFAULT : m))(read(MODEL, MODEL_DEFAULT)) })
 const save = () => { write(KEYS, ai.keys); write(MODEL, ai.model) }
 
@@ -44,7 +44,7 @@ export function errText(status, msg) {
   if (status === 429 || /quota|rate limit|RESOURCE_EXHAUSTED/i.test(m)) return 'Квота закончилась'
   if (/API key not valid|API_KEY_INVALID/i.test(m)) return 'Ключ не принят Google — скопируйте целиком'
   if (status === 403) return 'Нет доступа к Gemini API у этого ключа'
-  if (status === 404) return 'Нет такой модели — проверьте название'
+  if (status === 404) return `Модель «${ai.model}» недоступна этому ключу` + (m ? ': ' + m.slice(0, 140) : '')          // текст Google — чтобы было видно причину
   if (status >= 500) return 'Google не ответил — попробуйте позже'
   return m ? m.slice(0, 160) : 'Ошибка ' + status
 }
@@ -69,11 +69,12 @@ async function call(key, prompt, json, fetcher = fetch, system = SYSTEM) {
 }
 /** Какие текстовые модели видит ключ (Google: GET …/v1beta/models) → самая свежая Flash: сначала псевдоним gemini-flash-latest,
  *  потом стабильная (без preview), потом версия новее; Lite — в последнюю очередь. Озвучка, картинки, Live и т.п. не подходят. */
-export function bestModel(names) {
-  const ok = names.filter(n => /flash/i.test(n) && !/(tts|image|live|audio|embed|vision|native|computer|robotics|exp)/i.test(n))
-  if (ok.includes('gemini-flash-latest')) return 'gemini-flash-latest'
+export function bestModel(names, skip = []) {
+  const ok = names.filter(n => /^gemini-/.test(n) && /flash/i.test(n) && !skip.includes(n) && !/(tts|image|live|audio|embed|vision|native|computer|robotics|exp|omni|transcribe)/i.test(n))
+  // 19.11.2026: у ключа автора в списке есть и gemini-2.5-flash, и gemini-flash-latest, но 2.5 Google новым проектам не отдаёт (404) —
+  // поэтому сначала стабильная модель с самым новым номером (gemini-3.8-flash), псевдоним latest и preview — потом
   const ver = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) ?? [])[1] ?? '0')
-  const rank = (n) => [/lite/i.test(n) ? 1 : 0, /preview|latest/i.test(n) ? 1 : 0, -ver(n), n.length]
+  const rank = (n) => [/lite/i.test(n) ? 1 : 0, /latest/i.test(n) ? 1 : 0, /preview/i.test(n) ? 1 : 0, -ver(n), n.length]
   return ok.sort((a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1; return 0 })[0] ?? ''
 }
 export async function listModels(key, fetcher = fetch) {
@@ -84,7 +85,7 @@ export async function listModels(key, fetcher = fetch) {
 }
 /** «Нет такой модели» (404) — спросить у Google, какие модели видит ключ, взять свежую текстовую Flash. true — модель сменилась */
 async function fixModel(key, fetcher) {
-  const m = bestModel(await listModels(key, fetcher).catch(() => []))
+  const m = bestModel(await listModels(key, fetcher).catch(() => []), [ai.model])          // кроме той, что не ответила
   if (!m || m === ai.model) return false
   setModel(m); return true
 }
