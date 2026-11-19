@@ -27,6 +27,7 @@ const dayTitle = (d) => (d === today ? 'Сегодня' : d === shift(today, -1)
 
 // подписи и цвета вкладок
 const EXTRA = { courses: 'Редактор курсов', other: 'Другое' }
+const ROLE = { teacher: 'преподаватель', student: 'ученик', dev: 'разработчик' }
 const label = (role, t) => TABS[role]?.find((x) => x.id === t)?.label ?? TABS.teacher.find((x) => x.id === t)?.label ?? TABS.student.find((x) => x.id === t)?.label ?? EXTRA[t] ?? t
 const PAL = ['#4285f4', '#34a853', '#fa7b17', '#a142f4', '#e8453c', '#12b5cb', '#f9ab00', '#e52592', '#5f6368']
 const ORDER = ['home', 'path', 'courses', 'students', 'review', 'words', 'info', 'profile', 'lessons', 'cards', 'other']
@@ -87,7 +88,7 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
     <template v-if="view === 'day' && data">
       <p v-if="!people.length" class="nt">За этот день ничего нет.</p>
       <article v-for="p in people" :key="p.uid" class="pc">
-        <header class="ph"><b>{{ p.name || p.uid }}</b><span class="rl" :class="p.role">{{ p.role === 'teacher' ? 'преподаватель' : 'ученик' }}</span></header>
+        <header class="ph"><b>{{ p.name || p.uid }}</b><span class="rl" :class="p.role">{{ ROLE[p.role] ?? p.role }}</span></header>
         <div class="cs">
           <span><b>{{ p.visits }}</b>заходов</span>
           <span class="cg"><b>{{ dur(p.act) }}</b>активен</span>
@@ -129,7 +130,7 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
           <thead><tr><th>Кто</th><th v-for="d in week" :key="d">{{ new Date(d + 'T12:00:00').toLocaleDateString('ru', { weekday: 'short' }) }}<small>{{ d.slice(8) }}.{{ d.slice(5, 7) }}</small></th><th>Всего</th></tr></thead>
           <tbody>
             <tr v-for="r in weekRows" :key="r.uid">
-              <td class="wn">{{ r.name || r.uid }}<small>{{ r.role === 'teacher' ? 'преподаватель' : 'ученик' }}</small></td>
+              <td class="wn">{{ r.name || r.uid }}<small>{{ ROLE[r.role] ?? r.role }}</small></td>
               <td v-for="d in week" :key="d" class="wc" :class="{ has: r.days[d] }" :title="r.days[d] ? `активен ${dur(r.days[d].act)}, открыто ${dur(r.days[d].open)}, заходов ${r.days[d].visits}` : ''" @click="r.days[d] && ((day = d), (view = 'day'))">
                 <template v-if="r.days[d]"><b>{{ short(r.days[d].act) }}</b><small>{{ r.days[d].visits }}×</small></template><span v-else>—</span>
               </td>
@@ -157,7 +158,7 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
 /* карточка человека */
 .pc { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card) }
 .ph { display: flex; align-items: center; gap: 8px } .ph b { font-size: 15px; font-weight: 700 }
-.rl { padding: 2px 7px; border-radius: 7px; background: color-mix(in srgb, #4285f4 14%, transparent); color: #1a73e8; font-size: 11px; font-weight: 700 } .rl.student { background: color-mix(in srgb, #34a853 14%, transparent); color: #188038 }
+.rl { padding: 2px 7px; border-radius: 7px; background: color-mix(in srgb, #4285f4 14%, transparent); color: #1a73e8; font-size: 11px; font-weight: 700 } .rl.student { background: color-mix(in srgb, #34a853 14%, transparent); color: #188038 } .rl.dev { background: color-mix(in srgb, #a142f4 14%, transparent); color: #8430ce }
 .cs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px } .cs span { display: grid; gap: 1px; padding: 6px 8px; border-radius: 10px; background: var(--surface); font-size: 11px; font-weight: 600; color: var(--hint) } .cs b { font-size: 15px; font-weight: 800; color: var(--text); white-space: nowrap }
 .cs .cg { background: color-mix(in srgb, #34a853 14%, transparent) } .cs .cg b { color: #188038 }
 .tl { display: grid; gap: 2px }

@@ -3,7 +3,7 @@
 // Считает само приложение (src/composables/useActivity.js): каждые 15 с — какая вкладка на экране и было ли за это время действие
 // (мышь, нажатие, касание, клавиатура, прокрутка). «Открыто» — вкладка на экране, «Активен» — из этого времени с действиями.
 // Шлёт раз в 5 минут и при сворачивании; здесь — один документ на человека в день: activity/<uid>_<день>
-//   { uid, name, role, day, visits, open, act, first, last, tabs: { <вкладка>: { open, act } }, spans: [{ tab, a, b, act }] }
+//   { uid, name, role (teacher | student | dev), day, visits, open, act, first, last, tabs: { <вкладка>: { open, act } }, spans: [{ tab, a, b, act }] }
 // open / act — секунды; spans — лента: кусок времени на одной вкладке (a, b — мс), соседние куски одной вкладки склеиваются.
 // Запись — транзакция (1 чтение + 1 запись) раз в 5 минут на активного человека: на лимитах Spark это незаметно.
 import type { Firestore } from 'firebase-admin/firestore'
@@ -79,12 +79,12 @@ export function makeActivity({ db }: { db: Firestore }) {
       return { ...settings }
     },
     /** Кусок от приложения. Учёт для этой роли выключен — ничего не пишем, приложение остановит учёт. */
-    async record(user: { uid: string; role?: unknown; tgName?: unknown; name?: unknown }, body: unknown): Promise<{ on: boolean }> {
+    async record(user: { uid: string; role?: unknown; dev?: unknown; tgName?: unknown; name?: unknown }, body: unknown): Promise<{ on: boolean }> {
       if (!on(user.role)) return { on: false }
       const c = clean(body)
       if (!c) throw fail(400, 'bad chunk')
       const ref = col().doc(`${user.uid}_${c.day}`)
-      const who = { uid: user.uid, name: String(user.tgName || user.name || ''), role: String(user.role) }
+      const who = { uid: user.uid, name: String(user.tgName || user.name || ''), role: user.dev === true ? 'dev' : String(user.role) }      // разработчик — отдельной подписью (по правам он преподаватель)
       await db.runTransaction(async (tx) => {
         const s = await tx.get(ref)
         tx.set(ref, merge(s.exists ? (s.data() as DayDoc) : undefined, c, who))

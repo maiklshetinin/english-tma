@@ -33,4 +33,7 @@ let bad = false; try { await act.record({ uid: 'tg:1', role: 'teacher' }, { day:
 ok(bad, 'кривой кусок — 400')
 ok((await act.range('2026-11-13', '2026-11-19')).length === 1 && (await act.range('2026-11-20', '2026-11-21')).length === 0, 'чтение по дням')
 
+await act.record({ uid: 'tg:9', role: 'teacher', dev: true, tgName: 'Михаил' }, c)
+ok(store.get('activity/tg:9_2026-11-19')?.role === 'dev', 'разработчик подписан как разработчик')
+
 console.log(fails ? `${fails} FAIL` : 'all ok'); process.exit(fails ? 1 : 0)
