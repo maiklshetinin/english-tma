@@ -103,4 +103,18 @@ describe('Gemini: модель подбирается сама', () => {
     expect((await checkAnswer(q, f)).score).toBe(80)
     expect(ai.model).toBe('gemini-3.6-flash'); expect(urls.at(-1)).toContain('gemini-3.6-flash:generateContent')
   })
+  it('503 «перегружена» → следующая модель из списка ключа; ключ не помечается сломанным', async () => {
+    ai.model = 'gemini-3.8-flash'; addKey('k1'); const used: string[] = []
+    const f = (async (u: string) => {
+      if (u.endsWith('?pageSize=1000')) return reply(200, { models: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'].map(n => ({ name: 'models/' + n, supportedGenerationMethods: ['generateContent'] })) })
+      const m = u.match(/models\/([^:]+):/)![1]; used.push(m)
+      return m === 'gemini-3.6-flash' ? good({ score: 70, missed_points: [], feedback: '' }) : reply(503, { error: { code: 503, message: 'The model is overloaded.' } })
+    }) as any
+    expect((await checkAnswer(q, f)).score).toBe(70)
+    expect(used).toEqual(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash']); expect(ai.model).toBe('gemini-3.6-flash')
+    ai.keys = []; addKey('k2'); ai.model = 'gemini-3.8-flash'
+    await expect(checkAnswer(q, (async (u: string) => u.endsWith('?pageSize=1000') ? reply(200, { models: [] }) : reply(503, { error: { message: 'overloaded' } })) as any)).rejects.toThrow(/перегружена/)
+    expect(ai.keys[0].ok).toBe(null)                                                        // ключ рабочий — не «ошибка»
+  })
 })
+

@@ -39,13 +39,13 @@ export function retryMs(text) {
   return Math.round(ms)
 }
 /** Ошибка Google → коротко по-русски */
-export function errText(status, msg) {
+export function errText(status, msg, model = ai.model) {
   const m = String(msg ?? '')
   if (status === 429 || /quota|rate limit|RESOURCE_EXHAUSTED/i.test(m)) return 'Квота закончилась'
   if (/API key not valid|API_KEY_INVALID/i.test(m)) return 'Ключ не принят Google — скопируйте целиком'
   if (status === 403) return 'Нет доступа к Gemini API у этого ключа'
-  if (status === 404) return `Модель «${ai.model}» недоступна этому ключу` + (m ? ': ' + m.slice(0, 140) : '')          // текст Google — чтобы было видно причину
-  if (status >= 500) return 'Google не ответил — попробуйте позже'
+  if (status === 404) return `Модель «${model}» недоступна этому ключу` + (m ? ': ' + m.slice(0, 140) : '')          // текст Google — чтобы было видно причину
+  if (status >= 500) return `Модель «${model}» сейчас перегружена у Google (${status}) — попробуйте позже`          // ключ тут ни при чём
   return m ? m.slice(0, 160) : 'Ошибка ' + status
 }
 
@@ -57,14 +57,14 @@ export const SYSTEM = 'Ты проверяешь устный ответ уче�
   + 'feedback — одно короткое предложение на русском: по смыслу или по польскому языку ответа, доброжелательно.'
 const SCHEMA = { type: 'OBJECT', properties: { score: { type: 'INTEGER' }, missed_points: { type: 'ARRAY', items: { type: 'STRING' } }, feedback: { type: 'STRING' } }, required: ['score', 'missed_points', 'feedback'] }
 
-async function call(key, prompt, json, fetcher = fetch, system = SYSTEM) {
+async function call(key, prompt, json, fetcher = fetch, system = SYSTEM, model = ai.model) {
   const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: {} }          // без temperature: новые модели (3.x) её не принимают
   if (json) { body.systemInstruction = { parts: [{ text: system }] }; body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = SCHEMA }
   let r
-  try { r = await fetcher(API + encodeURIComponent(ai.model) + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) }) }
+  try { r = await fetcher(API + encodeURIComponent(model) + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) }) }
   catch { const e = new Error('Нет связи с Google'); e.net = true; throw e }
   const raw = await r.text()
-  if (!r.ok) { let msg = raw; try { msg = JSON.parse(raw).error?.message ?? raw } catch { /* не JSON */ } const e = new Error(errText(r.status, msg)); e.status = r.status; e.wait = retryMs(raw); throw e }
+  if (!r.ok) { let msg = raw; try { msg = JSON.parse(raw).error?.message ?? raw } catch { /* не JSON */ } const e = new Error(errText(r.status, msg, model)); e.status = r.status; e.wait = retryMs(raw); throw e }
   return JSON.parse(raw).candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
 }
 /** Какие текстовые модели видит ключ (Google: GET …/v1beta/models) → самая свежая Flash: сначала псевдоним gemini-flash-latest,
@@ -83,15 +83,26 @@ export async function listModels(key, fetcher = fetch) {
   const list = JSON.parse(await r.text()).models ?? []
   return list.filter(m => (m.supportedGenerationMethods ?? []).includes('generateContent')).map(m => String(m.name ?? '').replace(/^models\//, '')).filter(Boolean)
 }
-/** «Нет такой модели» (404) — спросить у Google, какие модели видит ключ, взять свежую текстовую Flash. true — модель сменилась */
-async function fixModel(key, fetcher) {
-  const m = bestModel(await listModels(key, fetcher).catch(() => []), [ai.model])          // кроме той, что не ответила
-  if (!m || m === ai.model) return false
-  setModel(m); return true
+/** Модель не ответила — 404 (недоступна ключу) или 5xx (перегружена у Google, 19.11.2026: gemini-3.8-flash отвечал 503):
+ *  спросить у Google, какие модели видит ключ, и попробовать следующие свежие Flash (до 3). Ответила — запомнить её */
+const BUSY = (e) => e?.status === 404 || e?.status >= 500
+async function withModels(key, fetcher, fn) {
+  try { return await fn(ai.model) } catch (e) {
+    if (!BUSY(e)) throw e
+    const names = await listModels(key, fetcher).catch(() => []), tried = [ai.model]
+    let last = e
+    for (let i = 0; i < 3; i++) {
+      const m = bestModel(names, tried); if (!m) break
+      tried.push(m)
+      try { const r = await fn(m); setModel(m); return r } catch (e2) { last = e2; if (!BUSY(e2)) throw e2 }
+    }
+    throw last
+  }
 }
 function mark(x, ok, e) {
   if (x.day !== today()) { x.day = today(); x.n = 0 }
-  x.n++; x.ok = ok; x.err = ok ? '' : e.message
+  x.n++; x.err = ok ? '' : e.message
+  if (ok || !(e?.status >= 500)) x.ok = ok                   // 5xx — перегружен Google, ключ рабочий: статус ключа не трогаем
   x.until = ok ? 0 : e.status === 429 ? Date.now() + (e.wait || 3600e3) : 0
   save()
 }
@@ -109,9 +120,7 @@ export async function checkAnswer(q, fetcher = fetch) {
   let last = null
   for (const x of list) {
     try {
-      let raw
-      try { raw = await call(x.key, text, true, fetcher, system) }
-      catch (e) { if (e.status === 404 && await fixModel(x.key, fetcher)) raw = await call(x.key, text, true, fetcher, system); else throw e }          // модель не нашлась — подобрали и ещё раз
+      const raw = await withModels(x.key, fetcher, (m) => call(x.key, text, true, fetcher, system, m))          // не ответила модель — следующая из списка ключа
       const out = JSON.parse(raw)
       mark(x, true)
       const score = Math.max(0, Math.min(100, Math.round(Number(out.score) || 0)))
@@ -120,7 +129,7 @@ export async function checkAnswer(q, fetcher = fetch) {
       last = e
       if (e instanceof SyntaxError) { mark(x, false, new Error('Gemini ответил не JSON')); continue }
       mark(x, false, e)
-      if (e.net) break                                       // нет сети — другие ключи не помогут
+      if (e.net || e.status >= 500) break                    // нет сети или Google перегружен — другие ключи не помогут
     }
   }
   throw last ?? new Error('Проверка не удалась')
@@ -128,9 +137,5 @@ export async function checkAnswer(q, fetcher = fetch) {
 /** «Проверить» у ключа: крошечный запрос к модели проверки */
 export async function testKey(key, fetcher = fetch) {
   const x = ai.keys.find(k => k.key === key); if (!x) return
-  const ping = () => call(key, 'Ответь одним словом: ok', false, fetcher)
-  try {
-    try { await ping() } catch (e) { if (e.status === 404 && await fixModel(key, fetcher)) await ping(); else throw e }          // нет модели — подобрать по списку Google
-    mark(x, true)
-  } catch (e) { mark(x, false, e) }
+  try { await withModels(key, fetcher, (m) => call(key, 'Ответь одним словом: ok', false, fetcher, SYSTEM, m)); mark(x, true) } catch (e) { mark(x, false, e) }          // не ответила модель — следующая из списка ключа
 }
