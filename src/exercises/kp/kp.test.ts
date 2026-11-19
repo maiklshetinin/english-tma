@@ -67,12 +67,12 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
   it('кнопка JSON: вопрос, эталон, порог и общий промпт; «Применить» — свой промпт и порог у экрана', async () => {
     const st: any = reactive({ ...step }), log: string[] = []
     const w = mount(host(st, log))
-    await w.find('.cf .ext').trigger('click')
+    await w.findAll('.cf .ext').at(-1)!.trigger('click')
     const o = JSON.parse((w.find('.kjt').element as HTMLTextAreaElement).value)
-    expect(o).toEqual({ id: null, star: false, question: step.text, reference: step.ideal, pass_threshold: 60, system_prompt: SYSTEM })
+    expect(o).toEqual({ id: null, star: false, look: 'pdf', marks: true, question: step.text, reference: step.ideal, pass_threshold: 60, system_prompt: SYSTEM })
     await w.find('.kjt').setValue(JSON.stringify({ ...o, pass_threshold: 70, system_prompt: 'Bądź surowy.' })); await w.find('.kjo').trigger('click')
     expect(st.prompt).toBe('Bądź surowy.'); expect(st.pass).toBe(70); expect(log).toContain('changed'); expect(w.find('.kj').exists()).toBe(false)
-    await w.find('.cf .ext').trigger('click'); await w.find('.kjt').setValue('{ сломано'); await w.find('.kjo').trigger('click')
+    await w.findAll('.cf .ext').at(-1)!.trigger('click'); await w.find('.kjt').setValue('{ сломано'); await w.find('.kjo').trigger('click')
     expect(w.find('.kjb em').text()).toMatch(/Не JSON/); expect(st.prompt).toBe('Bądź surowy.')
     await w.find('.kjt').setValue(JSON.stringify({ ...o })); await w.find('.kjo').trigger('click')          // вернули общий — у экрана своего нет
     expect('prompt' in st).toBe(false); expect('pass' in st).toBe(false)
@@ -113,5 +113,15 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
       await vi.advanceTimersByTimeAsync(600); await w.vm.$nextTick()
       expect(w.find('.foot .go').attributes('disabled')).toBeUndefined(); expect(w.find('.kl span').text()).toBe('4 слова')
     } finally { vi.useRealTimers() }
+  })
+  it('вид и выделения: по умолчанию PDF с выделениями; «линии», «подложки», без выделений — простой текст', async () => {
+    g.next.push(res(70), res(70))
+    const rich = { ...step, ideal: '==Adwent== trwa **cztery tygodnie**' }
+    const w = mount(LessonPlayer, { props: { steps: [rich], resolve, embedded: true } })
+    expect(w.find('.kb.ref').classes()).toContain('pdf')
+    const v = mount(LessonPlayer, { props: { steps: [{ ...rich, look: 'cards', plain: true }], resolve, embedded: true } })
+    expect(v.find('.kb.miss').classes()).toContain('cards')
+    await v.find('textarea.ka').setValue('coś'); await v.find('.foot .go').trigger('click'); await flushPromises()
+    expect(v.find('.kb.ref .kr').text()).toBe('Adwent trwa cztery tygodnie'); expect(v.find('.kb.ref b').exists()).toBe(false)
   })
 })

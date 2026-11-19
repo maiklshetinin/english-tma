@@ -31,6 +31,7 @@ export interface Step {
   text?: string                                                      // «Подсказка»: текст правила; фразы с переводом и звуком — в opts; «Ответь на вопрос»: вопрос
   ideal?: string                                                     // «Ответ по смыслу»: эталон; оформление как в домашке: **жирный**, ==оранжевый термин==, _курсив_, «• » — пункт (чату уходит без разметки)
   star?: boolean; n?: number                                         // «Ответ по смыслу»: красная звезда (знать обязательно) и номер вопроса, как в домашке
+  look?: 'lines' | 'cards'; plain?: boolean                          // «Ответ по смыслу»: вид (нет — как PDF), эталон без выделений
   prompt?: string; pass?: number                                     // «Ответ по смыслу»: свой промпт для чата и порог зачёта, % (нет — общие, utils/ai.js)
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
   head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
@@ -421,6 +422,8 @@ function stepFrom(o: any): Step | null {
   if (o.kind === 'kp' && Number.isInteger(o.pass) && o.pass > 0 && o.pass <= 100) s.pass = o.pass
   if (o.kind === 'kp' && o.star === true) s.star = true
   if (o.kind === 'kp' && Number.isInteger(o.n) && o.n > 0 && o.n < 100) s.n = o.n
+  if (o.kind === 'kp' && (o.look === 'lines' || o.look === 'cards')) s.look = o.look
+  if (o.kind === 'kp' && o.plain === true) s.plain = true
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
       .map((x: any) => ({ w: x.w.trim(), ...(TILE[x.k] ? { k: x.k } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))

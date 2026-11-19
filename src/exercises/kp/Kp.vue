@@ -58,6 +58,13 @@ onMounted(() => { if (ta.value) ta.value.value = p.st.text || ''; syncTm = setIn
 watch(() => p.st.text, (v) => { if (ta.value && ta.value.value !== (v || '')) ta.value.value = v || '' })
 watch(ta, (el) => { if (el) el.value = p.st.text || '' }, { flush: 'sync' })          // поле появилось заново (повтор вопроса) — со своим текстом
 onBeforeUnmount(() => clearInterval(syncTm))
+// вид экрана (19.11.2026): pdf — как домашка (подписи на подложке, без рамок; по умолчанию), lines — тонкие линии между частями,
+// cards — мягкие подложки; step.plain — эталон без выделений (просто абзацы). Меняются кнопками в подвале правки
+const LOOKS = { pdf: 'PDF', lines: 'линии', cards: 'подложки' }
+const look = computed(() => (LOOKS[props.step.look] ? props.step.look : 'pdf'))
+function nextLook() { const k = Object.keys(LOOKS), n = k[(k.indexOf(look.value) + 1) % k.length]; if (n === 'pdf') delete props.step.look; else props.step.look = n; ed.changed() }
+function toggleMarks() { if (props.step.plain) delete props.step.plain; else props.step.plain = true; ed.changed() }
+const mk = (x) => (props.step.plain ? '' : x.k)          // выделения выключены — всё обычным текстом
 function toggleStar() { if (props.step.star) delete props.step.star; else props.step.star = true; ed.changed() }
 
 const r = computed(() => p.st.ai)                          // { score, missed, feedback } или { error }
@@ -73,7 +80,7 @@ const tick = computed(() => [pt(pass.value / 100, 40), pt(pass.value / 100, 56)]
 
 // «JSON» в правке: экран текстом (как присылает Gemini) — поправили и «Применить»; промпт и порог по умолчанию не сохраняются
 const jsOpen = ref(false), js = ref(''), jsErr = ref('')
-const asJson = () => JSON.stringify({ id: props.step.n ?? null, star: !!props.step.star, question: props.step.text ?? '', reference: props.step.ideal ?? '', pass_threshold: pass.value, system_prompt: props.step.prompt || SYSTEM }, null, 2)
+const asJson = () => JSON.stringify({ id: props.step.n ?? null, star: !!props.step.star, look: look.value, marks: !props.step.plain, question: props.step.text ?? '', reference: props.step.ideal ?? '', pass_threshold: pass.value, system_prompt: props.step.prompt || SYSTEM }, null, 2)
 function jsToggle() { jsOpen.value = !jsOpen.value; if (jsOpen.value) { js.value = asJson(); jsErr.value = '' } }
 function jsApply() {
   let o; try { o = JSON.parse(js.value) } catch { jsErr.value = 'Не JSON — проверьте кавычки и запятые'; return }
@@ -83,6 +90,8 @@ function jsApply() {
   if (typeof o.question === 'string') s.text = o.question
   if (typeof o.reference === 'string') s.ideal = o.reference
   if (o.star === true) s.star = true; else if (o.star === false) delete s.star
+  if (o.look === 'lines' || o.look === 'cards') s.look = o.look; else if (o.look === 'pdf') delete s.look
+  if (o.marks === false) s.plain = true; else if (o.marks === true) delete s.plain
   if (Number.isInteger(o.id) && o.id > 0 && o.id < 100) s.n = o.id; else if (o.id === null) delete s.n
   if (o.pass_threshold == null || n === PASS) delete s.pass; else s.pass = n
   const pr = typeof o.system_prompt === 'string' ? o.system_prompt.trim() : ''
@@ -114,13 +123,13 @@ function jsApply() {
       </div>
     </div>
 
-    <div class="kl"><label :for="'kpa-' + step.id">Ваш ответ</label><span>{{ p.edit ? '' : words }}</span></div>
+    <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label><span>{{ p.edit ? '' : words }}</span></div>
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
     <div v-else class="ka done">{{ p.st.text }}</div>
 
-    <div class="kb miss">
-      <div class="kh">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template>
+    <div class="kb miss" :class="look">
+      <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
         <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template></span></div>
       <p v-if="p.edit" class="ph">Пункты от Gemini — после проверки</p>
       <p v-else-if="r?.error" class="ph er">{{ r.error }}</p>
@@ -128,13 +137,13 @@ function jsApply() {
       <p v-else-if="checked" class="ph">Всё главное прозвучало</p>
       <p v-else class="ph">Появится после проверки</p>
     </div>
-    <div class="kb ref">
-      <div class="kh">Эталон</div>
+    <div class="kb ref" :class="look">
+      <div class="kh"><span class="kht">Эталон</span></div>
       <ExText v-if="p.edit" v-model="step.ideal" tag="p" class="kr raw" ph="Полный «идеальный» ответ. Оформление: ==термин== оранжевым, **жирный**, _курсив_, строка с «• » — пункт" multi />
       <div v-else-if="p.st.done" class="kr">
         <template v-for="(b, i) in refBlocks" :key="i">
-          <p v-if="b.p"><template v-for="(x, j) in b.p" :key="j"><b v-if="x.k === 'b' || x.k === 'acc'" :class="x.k === 'acc' && 'acc'">{{ x.t }}</b><i v-else-if="x.k === 'i'">{{ x.t }}</i><template v-else>{{ x.t }}</template></template></p>
-          <ul v-else><li v-for="(li, j) in b.ul" :key="j"><template v-for="(x, m) in li" :key="m"><b v-if="x.k === 'b' || x.k === 'acc'" :class="x.k === 'acc' && 'acc'">{{ x.t }}</b><i v-else-if="x.k === 'i'">{{ x.t }}</i><template v-else>{{ x.t }}</template></template></li></ul>
+          <p v-if="b.p"><template v-for="(x, j) in b.p" :key="j"><b v-if="mk(x) === 'b' || mk(x) === 'acc'" :class="mk(x) === 'acc' && 'acc'">{{ x.t }}</b><i v-else-if="mk(x) === 'i'">{{ x.t }}</i><template v-else>{{ x.t }}</template></template></p>
+          <ul v-else><li v-for="(li, j) in b.ul" :key="j"><template v-for="(x, m) in li" :key="m"><b v-if="mk(x) === 'b' || mk(x) === 'acc'" :class="mk(x) === 'acc' && 'acc'">{{ x.t }}</b><i v-else-if="mk(x) === 'i'">{{ x.t }}</i><template v-else>{{ x.t }}</template></template></li></ul>
         </template>
       </div>
       <p v-else class="ph">Откроется после проверки — не подглядывайте</p>
@@ -148,6 +157,8 @@ function jsApply() {
   </template>
   <template v-else-if="part === 'tools'">
     <span class="kjw">
+      <ExTool title="Вид экрана: PDF (как в домашке) → линии → подложки" @click="nextLook">Вид: {{ LOOKS[look] }}</ExTool>
+      <ExTool :on="!step.plain" title="Выделения в эталоне: оранжевые термины, жирный, курсив — включить / выключить" @click="toggleMarks">Выделения{{ step.plain ? ' выкл' : ' ✓' }}</ExTool>
       <ExTool :on="jsOpen" title="Экран текстом: вопрос, эталон, порог и промпт для Gemini" @click="jsToggle">JSON{{ step.prompt || step.pass ? ' ✓' : '' }}</ExTool>
       <span v-if="jsOpen" class="kj" @pointerdown.stop @keydown.stop>
         <small>Этот экран: вопрос, эталон, порог зачёта и промпт для Gemini{{ step.prompt ? ' (свой)' : ' (общий)' }}</small>
@@ -180,9 +191,16 @@ function jsApply() {
 .ka { display: block; width: 100%; height: 132px; box-sizing: border-box; margin: 0; padding: 11px 13px; border: 1px solid #e3c79c; border-radius: 12px; background: transparent;
   font-family: 'PT Serif', Georgia, serif; font-size: 17px; line-height: 1.5; color: #351a05; resize: none; outline: none; overflow: auto; user-select: text }
 .ka:focus { border-color: #1cb0f6 } .ka::placeholder { color: #a08766 } .ka[readonly] { opacity: .7 }
-.ka.done { border-color: transparent; white-space: pre-wrap } .ka.ro { color: #a08766; font-style: italic }
+.ka.done { height: auto; min-height: 0; padding: 2px 0; border-color: transparent; white-space: pre-wrap; overflow: visible }          /* после проверки — целиком, без прокрутки */ .ka.ro { color: #a08766; font-style: italic }
 .kb { display: flex; flex-direction: column; gap: 6px; box-sizing: border-box; padding: 10px 13px; border: 1px dashed #e3c79c; border-radius: 12px; overflow: auto }
-.kb.miss { height: 112px; flex: none } .kb.ref { min-height: 120px }
+.kb { padding: 0; border: 0; border-radius: 0; overflow: visible }          /* 19.11.2026: без пунктирных рамок и прокрутки — блок высотой с текст */
+/* А · PDF: подписи — на подложке, как «Ответы» в домашке */
+.kl.pdf { margin-bottom: -4px; align-items: center }
+.kl.pdf label, .pdf .kht { padding: 2px 10px; border-radius: 7px; background: #f2dab5; font-family: 'PT Serif', Georgia, serif; font-size: 14px; font-style: italic; font-weight: 700; color: #7b4224; text-transform: none; letter-spacing: 0 }
+/* Б · тонкие линии между частями */
+.kb.lines { padding-top: 12px; border-top: 1px solid #e9cfa6 }
+/* В · мягкие подложки; «Не прозвучало» — с оранжевой полоской */
+.kb.cards { padding: 10px 13px; border-radius: 12px; background: #fff6e6 } .kb.miss.cards { border-left: 3px solid #cd8a30; border-radius: 0 12px 12px 0 }
 .kh { display: flex; align-items: center; gap: 4px; font-family: var(--font); font-size: 12px; font-weight: 800; color: #6b5a48; text-transform: uppercase; letter-spacing: .3px }
 .kby { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #8a6a48 } .kby img { width: 15px; height: 15px; object-fit: contain }
 /* подвал до проверки: с кем мост */
