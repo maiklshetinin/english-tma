@@ -223,6 +223,9 @@ app.get('/dev/activity', requireUser, requireDev, wrap(async (req, res) => {    
   const [days, vs] = await Promise.all([activity.range(from, to), visits.range(from, to)])
   res.json({ settings: activity.settings, days, visits: vs })
 }))
+app.get('/dev/visits', requireUser, requireDev, wrap(async (req, res) => {          // ?from&to → { visits } — вкладка «Заходы» (журнал)
+  res.json({ visits: await visits.range(String(req.query.from || ''), String(req.query.to || '')) })
+}))
 // Очистка логов разработчиком: { what: 'visits' | 'activity', days? } — дни старше `days` дней (без него — всё) → { deleted }
 app.post('/dev/logs/clean', requireUser, requireDev, wrap(async (req, res) => {
   const days = Number(req.body?.days), what = String(req.body?.what || '')

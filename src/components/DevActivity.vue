@@ -7,6 +7,7 @@ import { request } from '../stores/api'
 import { TABS } from '../store/app'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
+import { devJump } from '../composables/useNetLog'
 
 const pad = (n) => String(n).padStart(2, '0')
 const dayOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -68,8 +69,15 @@ const rows = computed(() => {
 })
 const open = ref({})          // раскрытые «Ленты по времени»
 const exp = ref({})
-const isOpen = (r, i) => exp.value[r.k] ?? i === 0          // первая строка раскрыта сама
-const flip = (r, i) => { exp.value[r.k] = !isOpen(r, i) }
+const isOpen = (r) => exp.value[r.k] ?? false          // вариант «Е»: по умолчанию всё свёрнуто
+const flip = (r) => { exp.value[r.k] = !isOpen(r) }
+// Пришли из «Заходов» (нажали на человека): его день и его строки раскрыты
+watch(() => devJump.n, () => {
+  if (!devJump.day) return
+  view.value = 'day'; day.value = devJump.day
+  for (const k of Object.keys(exp.value)) exp.value[k] = false
+  for (const src of ['web', 'tg']) exp.value[devJump.uid + '|' + src] = true
+}, { immediate: true })
 const COLORS = ['#1cb0f6', '#58cc02', '#ff9600', '#ce82ff', '#ff4b4b', '#2b70c9', '#ff86d0']
 const av = (p) => ({ name: p.name || '?', photoUrl: p.photo || '', tgId: Number(String(p.uid).replace(/^tg:/, '')) || undefined, color: COLORS[[...String(p.uid)].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length] })
 
@@ -113,7 +121,7 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
     <p v-if="off" class="nt warn">Учёт активности выключен — видны только заходы (они пишутся всегда). Включить учёт — «Профиль → Для разработчика → Учёт активности».</p>
     <p v-else-if="data" class="nt">Учёт: преподаватели — <b>{{ data.settings.teachers ? 'вкл' : 'выкл' }}</b>, ученики — <b>{{ data.settings.students ? 'вкл' : 'выкл' }}</b> · данные раз в 5 минут и при сворачивании</p>
 
-    <!-- День (вариант «Д»): строка на человека и источник, тег у имени; раскрытие — вкладки значками -->
+    <!-- День (вариант «Е»): строка на высоту кружка — стрелка, аватар, имя, тег источника, роль; по умолчанию свёрнуто; раскрытие — вкладки значками. Время заходов — во вкладке «Заходы» (и в подсказке у числа) -->
     <template v-if="view === 'day' && data">
       <p v-if="!rows.length" class="nt">За этот день ни заходов, ни учёта.</p>
       <table v-else class="tm">
@@ -123,14 +131,13 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
             <tr class="pr" :class="{ on: isOpen(r, i), cont: !r.head }" tabindex="0" :aria-expanded="isOpen(r, i)" @click="flip(r, i)" @keydown.enter.prevent="flip(r, i)" @keydown.space.prevent="flip(r, i)">
               <td>
                 <span class="who">
-                  <Avatar v-if="r.head" :s="av(r)" :size="28" /><span v-else class="avsp" />
-                  <span class="wn2">
-                    <span class="nl"><b v-if="r.head">{{ r.name || r.uid }}</b><span class="tag" :title="`${SRC[r.src]} · ${r.dev === 'phone' ? 'телефон' : 'компьютер'}`">
-                      <svg v-if="r.dev === 'phone'" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/></svg>
-                      <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="1.8"/><path d="M9 20h6M12 16.5V20"/></svg>{{ SRC[r.src] }}</span></span>
-                    <small v-if="r.head" :class="r.role">{{ ROLE[r.role] ?? r.role }}</small>
-                  </span>
                   <i class="car" aria-hidden="true">{{ isOpen(r, i) ? '▾' : '▸' }}</i>
+                  <Avatar v-if="r.head" :s="av(r)" :size="24" /><span v-else class="avsp" />
+                  <b v-if="r.head" class="nm">{{ r.name || r.uid }}</b>
+                  <span class="tag" :title="`${SRC[r.src]} · ${r.dev === 'phone' ? 'телефон' : 'компьютер'}`">
+                    <svg v-if="r.dev === 'phone'" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/></svg>
+                    <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="1.8"/><path d="M9 20h6M12 16.5V20"/></svg>{{ SRC[r.src] }}</span>
+                  <small v-if="r.head" class="rl2" :class="r.role">{{ ROLE[r.role] ?? r.role }}</small>
                 </span>
               </td>
               <td class="n" :title="r.vl.length ? r.vl.map((x) => hm(x.t)).join(', ') : ''">{{ r.visits }}</td>
@@ -217,16 +224,16 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
 /* день — вариант «Д»: строгая таблица с тонкими линиями */
 .tm { width: 100%; border-collapse: collapse; font-size: 13px }
 .tm th { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 10.5px; font-weight: 700; color: var(--hint); text-transform: uppercase; letter-spacing: .4px; text-align: right; white-space: nowrap } .tm th.l { text-align: left }
-.tm td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle }
+.tm td { padding: 4px 10px; height: 36px; box-sizing: border-box; border-bottom: 1px solid var(--border); vertical-align: middle }
 .pr { cursor: pointer } .pr:hover td, .pr.on td { background: var(--surface) } .pr:focus-visible { outline: 2px solid var(--g-acc, #1a73e8); outline-offset: -2px }
-.pr.cont td { padding-top: 6px; padding-bottom: 6px }
-.sx td { padding: 6px 10px; font-size: 12.5px; background: color-mix(in srgb, var(--surface) 55%, var(--card)) } .sx td.ind { padding-left: 48px }
-.who { display: flex; align-items: center; gap: 10px; min-width: 0 } .avsp { width: 28px; flex: none }
+.sx td { height: auto; padding: 5px 10px; font-size: 12.5px; background: color-mix(in srgb, var(--surface) 55%, var(--card)) } .sx td.ind { padding-left: 62px }
+.who { display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap } .avsp { width: 24px; flex: none }
+.nm { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis } .rl2 { font-size: 11px; font-weight: 600; color: #1a73e8 } .rl2.student { color: #188038 } .rl2.dev { color: #8430ce }
 .wn2 { display: grid; gap: 2px; min-width: 0; line-height: 1.25 } .nl { display: flex; align-items: center; gap: 8px; min-width: 0 } .nl b { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .wn2 small { font-size: 11px; font-weight: 600; color: #1a73e8 } .wn2 small.student { color: #188038 } .wn2 small.dev { color: #8430ce }
 .tag { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; border: 1px solid var(--border); border-radius: 99px; background: var(--card); font-size: 11px; font-weight: 700; color: var(--text); white-space: nowrap }
 .tag svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--hint) }
-.car { margin-left: auto; font-style: normal; font-size: 11px; color: var(--hint) }
+.car { flex: none; width: 10px; font-style: normal; font-size: 10px; color: var(--hint) }
 .n { text-align: right; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums } .n.g { color: #1a73e8; font-weight: 800 } .n.m { color: var(--hint); font-weight: 600 } .n.b2 { color: #1a73e8; font-weight: 700 }
 .tcol { width: 30%; min-width: 96px } .tm2 { color: var(--hint); font-variant-numeric: tabular-nums; white-space: nowrap }
 .tn2 { display: flex; align-items: center; gap: 8px; font-weight: 600 } .ti { flex: none; color: var(--hint) }
