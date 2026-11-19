@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Tutor TMA — мост с чатом (ChatGPT / Gemini / Claude)
 // @namespace    english-tma
-// @version      1.1
+// @version      1.2
 // @description  Берёт с сервера Tutor TMA проверки «Ответ по смыслу», вставляет их в открытый чат, ждёт ответ и отправляет его обратно
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
 // @match        https://gemini.google.com/*
 // @match        https://claude.ai/*
 // @run-at       document-idle
+// @noframes
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -29,7 +30,7 @@
   const CFG = {
     pollMs: 30_000,        // таймаут долгого запроса (сервер отвечает пустым через 25 с)
     answerMs: 85_000,      // сколько ждём ответ чата (сервер ждёт 100 с)
-    stableMs: 1200,        // ответ не менялся столько — считаем готовым
+    stableMs: 500,         // полный JSON с нашим id не менялся столько — ответ готов (кнопку «стоп» не ждём: 1.2)
     newChatEvery: 10,      // после стольких проверок — новый чат (старые сообщения замедляют ответы); 0 — никогда
     hotkey: { alt: true, shift: true, code: 'KeyB' },
   }
@@ -119,6 +120,18 @@
     return mine.test(page) ? page.slice(-20_000) : ''
   }
 
+  /** В тексте есть законченный JSON-объект с нашим id (чат дописал ответ) */
+  function complete(t, id) {
+    const at = t.search(new RegExp(`\\{\\s*"id"\\s*:\\s*"${id}"`)); if (at < 0) return false
+    let depth = 0, str = false, esc = false
+    for (let j = at; j < t.length; j++) {
+      const c = t[j]
+      if (str) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') str = false; continue }
+      if (c === '"') str = true; else if (c === '{') depth++; else if (c === '}' && --depth === 0) { try { JSON.parse(t.slice(at, j + 1)); return true } catch { return false } }
+    }
+    return false
+  }
+
   /** Одно задание: вставить, отправить, дождаться ответа с нашим id, пока он не перестанет меняться */
   async function run(job) {
     show('проверяет…', '#f5a524')
@@ -127,14 +140,16 @@
     if (!el) throw new Error('не нашёл поле ввода чата — откройте обычный чат (не настройки) и не сворачивайте окно')
     await fill(el, job.text)
     await send(el)
-    await until(busy, 8000, 150)                              // чат начал отвечать (может проскочить незаметно — не беда)
+    // 1.2 (19.11.2026): ответ готов, как только в чате законченный JSON с нашим id и он полсекунды не меняется — кнопку «стоп» не ждём
+    // (у Gemini она висела дольше ответа: проверка шла 25 с при ответе за 3–5 с); без JSON — по-старому: чат перестал отвечать
     const t0 = Date.now()
     let last = '', since = Date.now()
     while (Date.now() - t0 < CFG.answerMs) {
-      await sleep(400)
+      await sleep(250)
       const t = harvest(job.id)
       if (t !== last) { last = t; since = Date.now(); continue }
-      if (t && !busy() && Date.now() - since >= CFG.stableMs) return t
+      if (t && complete(t, job.id) && Date.now() - since >= CFG.stableMs) return t
+      if (t && !busy() && Date.now() - since >= 2500) return t
     }
     throw new Error(last ? 'чат не закончил ответ вовремя' : 'чат не ответил')
   }
