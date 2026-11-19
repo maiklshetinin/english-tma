@@ -7,12 +7,12 @@ import { SYSTEM, checkAnswer } from '../../utils/ai'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 
 // проверку через мост подменяем: score задаёт тест
-const g = vi.hoisted(() => ({ next: [] as any[] }))
-vi.mock('../../utils/ai', async (orig) => ({ ...(await orig<any>()), checkAnswer: vi.fn(async () => { const r = g.next.shift(); if (r instanceof Error) throw r; return r }) }))
+const g = vi.hoisted(() => ({ next: [] as any[], bridge: { online: true, sites: ['Gemini'] } as any }))
+vi.mock('../../utils/ai', async (orig) => ({ ...(await orig<any>()), checkAnswer: vi.fn(async () => { const r = g.next.shift(); if (r instanceof Error) throw r; return r }), bridgeStatus: vi.fn(async () => g.bridge) }))
 
 const resolve = (v: string) => v
 const step = { id: 'q1', kind: 'kp', text: 'Kiedy i jak obchodzimy Mikołajki?', ideal: 'Mikołajki obchodzimy szóstego grudnia…' }
-const res = (score: number) => ({ score, missed: score < 100 ? ['подарки в ботинках'] : [], feedback: 'Dobrze!', ok: score >= 60 })
+const res = (score: number, site = '') => ({ score, missed: score < 100 ? ['подарки в ботинках'] : [], feedback: 'Dobrze!', site, ok: score >= 60 })
 
 describe('«Ответ по смыслу»: экран у ученика', () => {
   beforeEach(() => { g.next = [] })
@@ -89,5 +89,17 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     expect(vi.mocked(checkAnswer).mock.calls.at(-1)![0].reference).toContain('==Adwent==')          // разметку снимает checkAnswer (kpPlain)
     const plain = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
     expect(plain.find('.kst').exists()).toBe(false)                                                                     // без звезды — без звезды
+  })
+  it('после проверки видно, какой чат проверил: значок и название', async () => {
+    g.next.push(res(70, 'Claude'))
+    const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
+    await flushPromises(); expect(w.find('.kby').text()).toBe('проверитGemini'); expect(w.find('.kby img').attributes('src')).toBe('/ai/gemini.svg')          // до проверки — с кем мост
+    await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
+    expect(w.find('.kby').text()).toBe('проверилClaude'); expect(w.find('.kby img').attributes('src')).toBe('/ai/Claude%20Spark%20-%20Clay.svg')
+  })
+  it('моста нет — «ИИ не в сети»', async () => {
+    g.bridge = { online: false, sites: [] }
+    const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } }); await flushPromises()
+    expect(w.find('.kby.off').text()).toBe('ИИ не в сети'); g.bridge = { online: true, sites: ['Gemini'] }
   })
 })

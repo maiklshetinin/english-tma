@@ -17,6 +17,20 @@ export const SYSTEM = 'Ты проверяешь устный ответ уче�
 /** Эталон без разметки оформления (**жирный**, ==термин==, _курсив_, «• ») — так его видит чат */
 export const kpPlain = (t) => String(t ?? '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1').replace(/(^|[^\p{L}\d])_(.+?)_(?![\p{L}\d])/gu, '$1$2').replace(/^• /gm, '- ')
 
+/** Мост в сети и с какими чатами: { online, sites: ['Gemini', …] }. Ответ живёт 15 с — экраны урока не дёргают сервер каждый раз */
+let stCache = null
+export async function bridgeStatus(request = apiRequest) {
+  if (stCache && Date.now() - stCache.at < 15_000) return stCache.v
+  const r = await request('/ai/status')
+  const b = r.ok ? await r.json().catch(() => null) : null
+  const v = { online: !!b?.online, sites: Array.isArray(b?.sites) ? b.sites.map(String) : [] }
+  stCache = { at: Date.now(), v }
+  return v
+}
+/** Значок чата (файлы — public/ai/); нет — пусто, показываем только название */
+const AI_ICON = { ChatGPT: 'gpt.svg', Gemini: 'gemini.svg', Claude: 'Claude Spark - Clay.svg' }
+export const aiIcon = (site) => (AI_ICON[site] ? import.meta.env.BASE_URL + 'ai/' + encodeURIComponent(AI_ICON[site]) : '')
+
 export async function checkAnswer(q, request = apiRequest) {
   const need = Number.isFinite(q.pass) ? q.pass : PASS
   const r = await request('/ai/check', { method: 'POST', body: JSON.stringify({ question: q.question, reference: kpPlain(q.reference), answer: q.answer, prompt: q.prompt?.trim() || undefined }) })
@@ -24,5 +38,5 @@ export async function checkAnswer(q, request = apiRequest) {
   try { body = await r.json() } catch { /* не JSON */ }
   if (!r.ok) throw new Error(body?.error || 'Ошибка сервера ' + r.status)
   const score = Math.max(0, Math.min(100, Math.round(Number(body?.score) || 0)))
-  return { score, missed: Array.isArray(body?.missed) ? body.missed.map(String) : [], feedback: String(body?.feedback ?? ''), ok: score >= need }
+  return { score, missed: Array.isArray(body?.missed) ? body.missed.map(String) : [], feedback: String(body?.feedback ?? ''), site: String(body?.site ?? ''), ok: score >= need }
 }

@@ -390,6 +390,7 @@ app.get('/avatar/:tgId', requireUser, wrap(async (req, res) => {
 // «Ответ по смыслу»: проверка через чат в браузере преподавателя (ai.ts, скрипт public/ai-bridge.user.js). Ключ моста — в settings/ai
 const aiDoc = () => db.collection('settings').doc('ai')
 const ai = makeAi({ loadToken: async () => String((await aiDoc().get()).get('token') || ''), saveToken: async (token) => { await aiDoc().set({ token }, { merge: true }) } })
+app.get('/ai/status', requireUser, (_req, res) => { res.json(ai.pub()) })      // { online, sites: ['Gemini', …] } — значок «проверит» на экране ученика, без базы
 app.post('/ai/check', requireUser, wrap(async (req, res) => res.json(await ai.check(req.body ?? {}))))      // { question, reference, answer, prompt? } → { score, missed, feedback }
 app.get('/dev/ai', requireUser, requireDev, wrap(async (_req, res) => res.json({ ...ai.status(), token: await ai.token() })))
 app.post('/dev/ai/token', requireUser, requireDev, wrap(async (_req, res) => res.json({ token: await ai.newToken() })))

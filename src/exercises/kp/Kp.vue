@@ -12,7 +12,7 @@ import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
 import { usePlay, useEdit } from '../ctx'
-import { PASS, SYSTEM } from '../../utils/ai'
+import { PASS, SYSTEM, bridgeStatus, aiIcon } from '../../utils/ai'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -40,6 +40,12 @@ const refBlocks = computed(() => {
   }
   return out
 })
+// с кем мост: до проверки — «проверит [значок] Gemini» (какие чаты в сети), после — «проверил …»; моста нет — «ИИ не в сети»
+const bridge = ref(null)
+onMounted(() => { bridgeStatus().then((b) => { bridge.value = b }).catch(() => { bridge.value = null }) })
+const by = computed(() => (checked.value && r.value.site ? { t: 'проверил', sites: [r.value.site] }
+  : !checked.value && bridge.value?.sites.length ? { t: 'проверит', sites: bridge.value.sites }
+    : !checked.value && bridge.value && !bridge.value.online ? { t: 'ИИ не в сети', sites: [], off: true } : null))
 function toggleStar() { if (props.step.star) delete props.step.star; else props.step.star = true; ed.changed() }
 
 const r = computed(() => p.st.ai)                          // { score, missed, feedback } или { error }
@@ -102,7 +108,8 @@ function jsApply() {
     <div v-else class="ka done">{{ p.st.text }}</div>
 
     <div class="kb miss">
-      <div class="kh">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></div>
+      <div class="kh">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template>
+        <span v-if="by" class="kby" :class="{ off: by.off }">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template></span></div>
       <p v-if="p.edit" class="ph">Пункты от Gemini — после проверки</p>
       <p v-else-if="r?.error" class="ph er">{{ r.error }}</p>
       <ul v-else-if="checked && r.missed.length"><li v-for="(m, k) in r.missed" :key="k">{{ m }}</li></ul>
@@ -161,7 +168,8 @@ function jsApply() {
 .ka.done { border-color: transparent; white-space: pre-wrap } .ka.ro { color: #a08766; font-style: italic }
 .kb { display: flex; flex-direction: column; gap: 6px; box-sizing: border-box; padding: 10px 13px; border: 1px dashed #e3c79c; border-radius: 12px; overflow: auto }
 .kb.miss { height: 112px; flex: none } .kb.ref { min-height: 120px }
-.kh { font-family: var(--font); font-size: 12px; font-weight: 800; color: #6b5a48; text-transform: uppercase; letter-spacing: .3px }
+.kh { display: flex; align-items: center; gap: 4px; font-family: var(--font); font-size: 12px; font-weight: 800; color: #6b5a48; text-transform: uppercase; letter-spacing: .3px }
+.kby { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #8a6a48 } .kby img { width: 15px; height: 15px; object-fit: contain } .kby.off { color: #b3261e }
 .kb ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-family: 'PT Serif', Georgia, serif; font-size: 15px; line-height: 1.35; color: #351a05 }
 .ph { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 14.5px; font-style: italic; color: #8a6a48 } .ph.er { color: #b3261e; font-style: normal }
 .kr { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 15.5px; font-weight: 400; line-height: 1.5; color: #351a05 }

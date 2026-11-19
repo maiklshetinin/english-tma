@@ -13,6 +13,7 @@
 //  • Стикеры-заметки, как в FigJam: doc.notes, лежат на холсте; двойной клик — писать, тянуть — двигать.
 // Только для преподавателя. Хранение: на сервере (Firestore, курс целиком; кружки — в S3 через сервер), а в браузере —
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
+import { aiIcon } from '../../utils/ai'
 import { ask, say, askText, dialog } from '../../composables/useDialog'
 import { useAuthStore } from '../../stores/auth'
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
@@ -30,6 +31,7 @@ import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
 import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, BOOK_TPL, PAGE_TPL, BOOK } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
+const AI_SITES = ['ChatGPT', 'Gemini', 'Claude']          // чаты, с которыми работает мост (значки — public/ai/)
 
 const router = useRouter(), route = useRoute()
 const goBack = () => router.push({ name: 'path' })            // назад — в «Курсы»
@@ -1942,6 +1944,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
+          <span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span>          <!-- 19.11.2026: какие чаты умеют проверять -->
         </button>
         </div></div>
         </div>
@@ -1983,6 +1986,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 </template>
 
 <style scoped>
+.xai { display: flex; justify-content: center; gap: 7px; margin-top: 2px } .xai img { width: 16px; height: 16px; object-fit: contain }          /* «Ответ по смыслу»: ChatGPT · Gemini · Claude */
 .ce { position: fixed; inset: 0; z-index: 30; background: var(--surface); user-select: none; -webkit-user-select: none; font-family: var(--font) }
 .ce.dragging, .ce.dragging * { cursor: grabbing !important }
 /* Холст: бесконечное поле в точку; содержимое — в координатах холста (центр рельса — x = 0) */

@@ -52,12 +52,15 @@ export function parseReply(id: string, text: string) {
   return null
 }
 
-type Job = { id: string; text: string; at: number; taken: number; done: (r: { text?: string; error?: string }) => void }
+type Job = { id: string; text: string; at: number; taken: number; site?: string; done: (r: { text?: string; error?: string }) => void }
 
 export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: string) => Promise<void>; now?: () => number; jobMs?: number; pollMs?: number; seenMs?: number }) {
   const now = o.now ?? Date.now, JOB = o.jobMs ?? 100_000, POLL = o.pollMs ?? 25_000, SEEN = o.seenMs ?? 60_000
   const queue: Job[] = [], waiting: Array<(j: Job | null) => void> = []
   const st = { seenAt: 0, site: '', served: 0, lastError: '', lastAt: 0, lastMs: 0 }
+  const sites = new Map<string, number>()                                      // каждый чат отдельно: когда последний раз спрашивал задание
+  const seen = (site: unknown) => { const s = cut(site, 20); st.seenAt = now(); if (s) { st.site = s; sites.set(s, now()) } }
+  const live = () => [...sites].filter(([, t]) => now() - t <= SEEN).map(([s]) => s)
   let token = '', loaded: Promise<void> | null = null
   const ensure = () => (loaded ??= o.loadToken().then((t) => { token = t }).catch(() => { loaded = null }))
 
@@ -75,8 +78,9 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
       if (now() - st.seenAt > SEEN) throw fail(503, 'Мост с чатом не в сети — откройте вкладку с чатом и скриптом')
       if (queue.length >= 20) throw fail(503, 'Очередь проверок переполнена — попробуйте через минуту')
       const id = 'k' + randomBytes(3).toString('hex'), t0 = now()
+      let job: Job | null = null
       const reply = await new Promise<{ text?: string; error?: string }>((done) => {
-        const j: Job = { id, text: chatText(id, q), at: t0, taken: 0, done }
+        const j: Job = job = { id, text: chatText(id, q), at: t0, taken: 0, done }
         const tm = setTimeout(() => j.done({ error: j.taken ? 'Чат не ответил вовремя' : 'Мост не забрал задание' }), JOB)
         j.done = (r) => { clearTimeout(tm); const i = queue.indexOf(j); if (i >= 0) queue.splice(i, 1); done(r) }
         queue.push(j); give()
@@ -86,11 +90,11 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
       const r = parseReply(id, reply.text ?? '')
       if (!r) { st.lastError = 'Чат ответил не JSON'; throw fail(502, 'Чат ответил не в том формате') }
       st.served++; st.lastError = ''
-      return r
+      return { ...r, site: (job as Job | null)?.site ?? '' }          // какой чат проверил (ChatGPT / Gemini / Claude) — значок у ученика
     },
     /** Скрипт спрашивает задание: есть — сразу, нет — ждём до POLL мс. onGone — скрипт отключился до ответа: задание вернуть в очередь */
     async next(site: unknown, onGone: (f: () => void) => void): Promise<{ id: string; text: string } | null> {
-      st.seenAt = now(); st.site = cut(site, 20)
+      seen(site)
       const j = await new Promise<Job | null>((res) => {
         let over = false
         const fin = (x: Job | null) => { if (over) { if (x) { x.taken = 0; give() } return } over = true; clearTimeout(tm); const i = waiting.indexOf(fin); if (i >= 0) waiting.splice(i, 1); res(x) }
@@ -98,7 +102,8 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
         waiting.push(fin); give()
         onGone(() => fin(null))
       })
-      st.seenAt = now()
+      seen(site)
+      if (j) j.site = cut(site, 20)
       return j && { id: j.id, text: j.text }
     },
     /** Скрипт прислал ответ чата (или ошибку) */
@@ -109,7 +114,9 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
       j.done(body.error ? { error: cut(body.error, 200) } : { text: cut(body.text, 20_000) })
       return true
     },
-    status() { return { online: now() - st.seenAt <= SEEN, seenAt: st.seenAt, site: st.site, queue: queue.length, served: st.served, lastError: st.lastError, lastAt: st.lastAt, lastMs: st.lastMs } },
+    /** Для экрана ученика: в сети ли проверка и какие чаты подключены */
+    pub() { const l = live(); return { online: now() - st.seenAt <= SEEN, sites: l } },
+    status() { return { online: now() - st.seenAt <= SEEN, seenAt: st.seenAt, site: st.site, sites: live(), queue: queue.length, served: st.served, lastError: st.lastError, lastAt: st.lastAt, lastMs: st.lastMs } },
     async token() { await ensure(); return token },
     async newToken() { const t = randomBytes(18).toString('base64url'); await o.saveToken(t); token = t; loaded = Promise.resolve(); return t },
     async isToken(t: unknown) { await ensure(); return !!token && typeof t === 'string' && t.length === token.length && t === token },

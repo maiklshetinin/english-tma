@@ -7,6 +7,7 @@ import { request, post } from '../stores/api'
 import { API } from '../firebase'
 import { showToast } from '../composables/useToast'
 import { ask } from '../composables/useDialog'
+import { aiIcon } from '../utils/ai'
 
 const st = ref(null), err = ref(''), show = ref(false), now = ref(Date.now())
 const SCRIPT = location.origin + import.meta.env.BASE_URL + 'ai-bridge.user.js'
@@ -38,7 +39,8 @@ const ago = (t) => { const s = Math.max(0, Math.round((now.value - t) / 1000)); 
 
     <p v-if="err" class="e">{{ err }}</p>
     <div v-else-if="st" class="sts">
-      <span class="s" :class="st.online ? 'ok' : 'bad'"><i />{{ st.online ? `в сети${st.site ? ' · ' + st.site : ''}` : 'не в сети' }}</span>
+      <span class="s" :class="st.online ? 'ok' : 'bad'"><i />{{ st.online ? 'в сети' : 'не в сети' }}</span>
+      <span v-for="s in st.sites ?? []" :key="s" class="ai"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</span>
       <span v-if="st.seenAt && !st.online" class="m">был {{ ago(st.seenAt) }}</span>
       <span class="m">проверок: <b>{{ st.served }}</b></span>
       <span v-if="st.queue" class="m">в очереди: <b>{{ st.queue }}</b></span>
@@ -71,6 +73,7 @@ const ago = (t) => { const s = Math.max(0, Math.round((now.value - t) / 1000)); 
 .sts, .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 9px 10px; border-radius: 9px; background: var(--surface); font-size: 13px }
 .s { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; white-space: nowrap } .s i { width: 9px; height: 9px; border-radius: 50% }
 .s.ok { color: #1f883d } .s.ok i { background: #1f883d } .s.bad { color: #cf222e } .s.bad i { background: #cf222e }
+.ai { display: inline-flex; align-items: center; gap: 5px; font-weight: 700 } .ai img { width: 16px; height: 16px; object-fit: contain }
 .m { color: var(--hint) } .m b { color: var(--text); font-variant-numeric: tabular-nums }
 .e { margin: 0; font-size: 12.5px; color: #cf222e }
 .lb { font-size: 11px; font-weight: 800; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }

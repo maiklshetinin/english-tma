@@ -12,10 +12,10 @@ const q = { question: 'Kiedy i jak obchodzimy Mikołajki?', reference: 'Mikołaj
 
 describe('Проверка ответа через мост', () => {
   it('запрос на /ai/check, оценка и зачёт от 60 %', async () => {
-    const { f, calls } = fake(200, { score: 64.4, missed: ['подарки в ботинках'], feedback: 'Dobrze!' })
+    const { f, calls } = fake(200, { score: 64.4, missed: ['подарки в ботинках'], feedback: 'Dobrze!', site: 'Gemini' })
     const r = await checkAnswer(q, f)
     expect(calls[0]).toEqual({ path: '/ai/check', body: { question: q.question, reference: q.reference, answer: q.answer } })
-    expect(r).toEqual({ score: 64, missed: ['подарки в ботинках'], feedback: 'Dobrze!', ok: true })
+    expect(r).toEqual({ score: 64, missed: ['подарки в ботинках'], feedback: 'Dobrze!', site: 'Gemini', ok: true })
     expect(PASS).toBe(60)
   })
   it('свой промпт уходит на сервер, свой порог — считается здесь', async () => {

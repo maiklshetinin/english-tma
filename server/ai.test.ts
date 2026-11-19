@@ -26,6 +26,8 @@ ok(!!job && job.text.includes(job.id), 'скрипт получил задани
 ok(ai.done(job!.id, { text: `{"id":"${job!.id}","score":65,"missed_points":["x"],"feedback":"ok"}` }), 'ответ принят')
 const res = await p
 ok(res.score === 65 && res.missed[0] === 'x' && ai.status().served === 1, 'ученик получил оценку')
+ok(res.site === 'ChatGPT', 'и знает, какой чат проверил')
+ok(ai.pub().online && ai.pub().sites.includes('ChatGPT'), 'ученику видно, какой чат в сети')
 
 const w = ai.next('Claude', () => {})                        // скрипт уже ждёт — задание отдаётся сразу
 const p2 = ai.check({ question: 'q', reference: 'r', answer: 'a' })
