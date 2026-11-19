@@ -6,8 +6,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
 import GhostIcon from './GhostIcon.vue'
+import WeekMoney from './WeekMoney.vue'
+import WeekMoneyPair from './WeekMoneyPair.vue'
 import { gridFrame, setGridFrame, LESSON_STYLES, lessonStyle, setLessonStyle, pastShade, setPastShade, GHOST_ICONS, ghostIcon, setGhostIcon, MONEY_STYLES, moneyStyle, setMoneyStyle } from '../utils/gridStyle'
-defineProps({ auto: { type: Boolean, default: null }, autoTo: { type: String, default: '' } })
+defineProps({ auto: { type: Boolean, default: null }, autoTo: { type: String, default: '' },
+  week: { type: Object, default: null }, month: { type: Object, default: null }, monthLabel: { type: String, default: 'месяц' } })      // деньги — чтобы в «Деньгах» показать настоящие плашки
 const emit = defineEmits(['auto'])
 const open = ref(null)
 function flipAuto() { open.value = null; emit('auto') }          // меню закрываем: выключатель может спросить подтверждение
@@ -53,8 +56,14 @@ onUnmounted(() => removeEventListener('keydown', onKey))
         </button>
         <div class="gs-h sep">Деньги</div>
         <div class="mn-row" role="radiogroup" aria-label="Деньги над таблицей">
-          <button v-for="m in MONEY_STYLES" :key="m.id" class="gh-it mn-it" :class="{ on: moneyStyle === m.id }" role="radio" :aria-checked="moneyStyle === m.id" @click="setMoneyStyle(m.id)">
-            <span class="mn-pv" :class="m.id" aria-hidden="true"><i /><i /></span><small>{{ m.title }}</small>
+          <button v-for="m in MONEY_STYLES" :key="m.id" class="mn-it" :class="{ on: moneyStyle === m.id }" role="radio" :aria-checked="moneyStyle === m.id" @click="setMoneyStyle(m.id)">
+            <!-- превью — настоящие плашки с цифрами этой недели и месяца, уменьшенные (без цифр — схема) -->
+            <span v-if="week && month" class="mn-real" :class="m.id" aria-hidden="true">
+              <WeekMoneyPair v-if="m.id === 'one'" :week="week" :month="month" :month-label="monthLabel" />
+              <template v-else><WeekMoney :m="week" /><WeekMoney :m="month" :label="monthLabel" /></template>
+            </span>
+            <span v-else class="mn-pv" :class="m.id" aria-hidden="true"><i /><i /></span>
+            <small>{{ m.title }}</small>
           </button>
         </div>
         <div class="gs-h sep">Привидение</div>
@@ -102,9 +111,12 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .gh-it { display: grid; justify-items: center; gap: 3px; padding: 7px 2px 5px; border: 0; border-radius: 12px; background: var(--surface); font: inherit; color: var(--hint); cursor: pointer; --gi-bg: var(--surface) }
 .gh-it small { font-size: 10px; font-weight: 700; white-space: nowrap } .gh-it:hover { background: var(--border) } .gh-it:hover { --gi-bg: var(--border) }
 .gh-it.on { box-shadow: inset 0 0 0 2px var(--blue); background: var(--blue-l); color: var(--blue); --gi-bg: var(--blue-l) }
-/* «Деньги» — две плитки: превью двух плашек рядом или одной в две строки */
-.mn-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 4px 10px 6px }
-.mn-it { padding: 9px 2px 6px }
+/* «Деньги» — плитки одна под другой, в каждой настоящие плашки (уменьшены zoom), выбранная — синяя рамка */
+.mn-row { display: grid; gap: 6px; padding: 4px 10px 6px }
+.mn-it { display: grid; justify-items: center; gap: 4px; padding: 8px 6px 5px; border: 0; border-radius: 12px; background: var(--surface); font: inherit; color: var(--hint); cursor: pointer }
+.mn-it small { font-size: 10px; font-weight: 700 } .mn-it:hover { background: var(--border) }
+.mn-it.on { box-shadow: inset 0 0 0 2px var(--blue); background: var(--blue-l); color: var(--blue) }
+.mn-real { display: flex; gap: 6px; pointer-events: none; zoom: .82 } .mn-real.one { zoom: .95 }
 .mn-pv { display: flex; gap: 3px; height: 22px } .mn-pv i { width: 30px; border-radius: 5px; background: var(--card); box-shadow: inset 0 0 0 1px var(--hint-2), inset 0 -4px 0 -2px #009300 }
 .mn-pv.one { flex-direction: column; gap: 0; width: 46px; padding: 2px 5px; box-sizing: border-box; border-radius: 5px; background: var(--card); box-shadow: inset 0 0 0 1px var(--hint-2) }
 .mn-pv.one i { flex: 1; width: auto; border-radius: 0; background: none; box-shadow: inset 0 -2px 0 -1px #009300 }

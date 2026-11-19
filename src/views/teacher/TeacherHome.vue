@@ -379,7 +379,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <button class="icon-btn wk-next" :disabled="week >= maxWeek" :title="week >= maxWeek ? 'Дальше пока не планируем' : 'Следующая неделя'" aria-label="Следующая неделя" @click="week++"><AppIcon name="back" :size="20" /></button>
             <WeekLoad class="wload" :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <i class="brk" aria-hidden="true" /><i class="brk b2" aria-hidden="true" />
-            <GridStyleButton :auto="autoFill" :auto-to="spreadTo" @auto="toggleAuto" />      <!-- в меню решётки — и «Автоподстановка» (19.11.2026: убрали кнопку «авто» из шапки) -->
+            <GridStyleButton :auto="autoFill" :auto-to="spreadTo" :week="money" :month="monthMoney" :month-label="monthName" @auto="toggleAuto" />      <!-- в меню решётки — и «Автоподстановка» (19.11.2026: убрали кнопку «авто» из шапки) -->
             <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Стикер: перетащите в свободную ячейку" aria-label="Стикер: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i v-for="(s, k) in pack" :key="s.id" :style="{ '--c': s.c, '--bg': s.bg, left: 8 + k * 6 + 'px', transform: `rotate(${k * 5 - 6}deg)` }" /></button>
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="allGhosts.length" class="icon-btn gall gback" :class="{ on: !hiddenGhosts.length }" :aria-pressed="!hiddenGhosts.length"
