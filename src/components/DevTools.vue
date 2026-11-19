@@ -2,12 +2,13 @@
 // Панель разработчика — как DevTools в Chrome, только у разработчика (App.vue: auth.isDev). Открыть: жучок в углу или Ctrl + `.
 // Пристыкована справа (на узком экране — снизу); край тянется мышкой, приложение при этом сужается, а не перекрывается:
 // #app на время панели становится своим «окном» (position: fixed + transform — фиксированные элементы приложения живут внутри него).
-// Вкладки: Консоль сервера, Нагрузка на базу, Сервер (вкладку «Сеть» убрали 18.11.2026 — дубль Network в Chrome DevTools). Ширина, высота, вкладка — запоминаются.
+// Вкладки: Консоль сервера, Нагрузка на базу, Сервер, Активность (учёт по людям, 19.11.2026; вкладку «Сеть» убрали 18.11.2026 — дубль Network в Chrome DevTools). Ширина, высота, вкладка — запоминаются.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { devtools } from '../composables/useNetLog'
 import DevConsole from './DevConsole.vue'
 import DevUsage from './DevUsage.vue'
 import DevServer from './DevServer.vue'
+import DevActivity from './DevActivity.vue'
 import { theme } from '../composables/useTelegram'
 // Вид — как панель «Графики» в уроке (CourseViewer.vue): перегородка с «ручкой», размер «ширина × высота» пока тянешь,
 // вкладки как в DevTools и свой выключатель «Тёмная» (общий с «Графиками»: tma.graphsTheme; не трогали — как у приложения)
@@ -54,7 +55,7 @@ const onKey = (e) => { if ((e.ctrlKey || e.metaKey) && e.code === 'Backquote') {
 onMounted(() => { clamp(); dock(); addEventListener('resize', onResize); addEventListener('keydown', onKey); addEventListener('pointerdown', onDownCapture, true) })
 onBeforeUnmount(() => { st.open && document.getElementById('app')?.classList.remove('dt-docked', 'dt-docked-b'); removeEventListener('resize', onResize); removeEventListener('keydown', onKey); removeEventListener('pointerdown', onDownCapture, true) })
 
-const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['server', 'Сервер']]
+const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['server', 'Сервер'], ['activity', 'Активность']]
 
 </script>
 
@@ -76,6 +77,7 @@ const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['se
 
       <section v-if="st.tab === 'console'" class="pane fill"><DevConsole fill /></section>
       <section v-else-if="st.tab === 'usage'" class="pane"><DevUsage /></section>
+      <section v-else-if="st.tab === 'activity'" class="pane"><DevActivity /></section>
       <section v-else class="pane"><DevServer /></section>
     </aside>
   </Teleport>

@@ -6,7 +6,7 @@ import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import AppVersion from '../../components/AppVersion.vue'
 import { showToast } from '../../composables/useToast'
-import { hapticOn, setHaptic } from '../../composables/useTelegram'
+import { hapticOn, setHaptic, swipeLock, setSwipeLock } from '../../composables/useTelegram'
 import { sfxOn, setSfx, sfxResult } from '../../composables/useSfx'
 import { apiFetch, canLogout } from '../../firebase'
 import { useStudentsStore } from '../../stores/students'
@@ -49,6 +49,14 @@ if (auth.isDev) loadTeam()
 async function setView(t, on) {
   try { await post('/dev/access', { uid: t.uid, viewOnly: on }, 'Права'); t.viewOnly = on; showToast(on ? `${t.name}: только просмотр` : `${t.name}: полный доступ`) } catch (e) { showToast(e.message) }
 }
+// Учёт активности (server/activity.ts): отдельно для преподавателей и учеников; смотреть — панель разработчика → «Активность»
+const actSet = ref(null)
+const td = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+if (auth.isDev) request(`/dev/activity?from=${td}&to=${td}`, undefined, 'Активность').then((r) => { actSet.value = r.settings }).catch(() => { actSet.value = null })
+async function setAct(k, on) {
+  try { actSet.value = await post('/dev/activity', { [k]: on }, 'Активность'); showToast(`Учёт активности: ${k === 'teachers' ? 'преподаватели' : 'ученики'} — ${on ? 'включён' : 'выключен'}`) } catch (e) { showToast(e.message) }
+}
+function openActivity() { devtools.tab = 'activity'; devtools.open = true }
 function updateEveryone() { updateAll(); showToast('Отправлено: обновятся все, как только новая версия будет на сайте (тихо — или плашкой, если человек сейчас работает)') }
 async function ping() {
   if (!import.meta.env.VITE_API_URL) return showToast('Не задан API_URL — приложение не знает адрес сервера')
@@ -95,6 +103,11 @@ async function ping() {
         <span class="tx">Вибрация<small>Отклик телефона: ответ верно / ошибка, «урок проведён»</small></span>
         <input type="checkbox" class="sw" :checked="hapticOn" aria-label="Вибрация" @change="setHaptic($event.target.checked)" />
       </label>
+      <label class="it">
+        <span class="ic"><AppIcon name="sliders" :size="18" /></span>
+        <span class="tx">Блокировать свайп вниз<small>Свайп вниз не сворачивает приложение — удобнее листать и тянуть уроки. Только в Telegram на телефоне</small></span>
+        <input type="checkbox" class="sw" :checked="swipeLock" aria-label="Блокировать свайп вниз" @change="setSwipeLock($event.target.checked)" />
+      </label>
     </section>
 
     <!-- Для разработчика (DEV_IDS): проверка связи с сервером. Обычный преподаватель этого не видит -->
@@ -138,6 +151,18 @@ async function ping() {
               <label class="vsw"><span>{{ t.viewOnly ? 'только просмотр' : 'полный доступ' }}</span><input type="checkbox" :checked="t.viewOnly" @change="setView(t, $event.target.checked)" /><i /></label>
             </div>
             <span v-if="team && !team.length" class="none">нет других преподавателей (TEACHER_IDS) или старая сборка сервера</span>
+          </div>
+        </div>
+        <!-- учёт активности: заходы, время «открыто» / «активен» по вкладкам, лента; смотреть — панель разработчика → «Активность» -->
+        <div class="it vr">
+          <span class="ic"><AppIcon name="chart" :size="18" /></span>
+          <div class="tx">Учёт активности<small>Заходы за день, сколько времени приложение было на экране и сколько из него были действия (мышь, нажатия, касания) — по вкладкам и лентой. Выключено — ничего не считается и не отправляется.</small>
+            <template v-if="actSet">
+              <label class="rw"><b>Преподаватели</b><input type="checkbox" class="sw" :checked="actSet.teachers" aria-label="Учёт: преподаватели" @change="setAct('teachers', $event.target.checked)" /></label>
+              <label class="rw"><b>Ученики</b><input type="checkbox" class="sw" :checked="actSet.students" aria-label="Учёт: ученики" @change="setAct('students', $event.target.checked)" /></label>
+              <button type="button" class="lnk" @click="openActivity">Смотреть — панель разработчика → «Активность»</button>
+            </template>
+            <span v-else class="none">нет ответа от сервера (спит или старая сборка)</span>
           </div>
         </div>
         <!-- сеть, консоль сервера, нагрузка на базу, сервер — в панели разработчика (DevTools.vue), открывается на любом экране -->
@@ -219,6 +244,7 @@ async function ping() {
 .vsw { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--hint); cursor: pointer } .vsw input { position: absolute; opacity: 0; width: 1px; height: 1px }
 .vsw i { position: relative; width: 36px; height: 22px; border-radius: 11px; background: #34c759; transition: background .2s } .vsw i::after { content: ''; position: absolute; top: 2px; left: 16px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: left .2s }
 .vsw input:checked + i { background: #ff9500 } .vsw input:checked + i::after { left: 2px }
+.lnk { justify-self: start; margin-top: 8px; padding: 0; border: 0; background: none; color: var(--blue); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer }
 .none { margin-top: 4px; font-size: 13px; color: var(--hint) }
 /* кэш: заголовок со сроком справа, ниже — цифры плитками */
 .duw { flex: 1; min-width: 0 }

@@ -26,6 +26,12 @@ export function setHaptic(on) {
   hapticOn.value = !!on; try { localStorage.setItem(HK, on ? '1' : '0') } catch { /* приватный режим */ }
   if (on) try { tg?.HapticFeedback?.notificationOccurred('success') } catch { /* старый клиент */ }      // включили — сразу чувствуется, как это
 }
+// Свайп вниз (19.11.2026): по умолчанию заблокирован — не сворачивает приложение (Bot API 7.7+: мешал листать таблицу и тянуть уроки;
+// закрыть — кнопкой «Закрыть» / свайпом по шапке Telegram). В Профиле можно выключить блокировку, чтобы сравнить; выбор — на устройстве.
+const SK = 'tma.swipeLock'
+export const swipeLock = ref((() => { try { return localStorage.getItem(SK) !== '0' } catch { return true } })())
+function applySwipe() { try { swipeLock.value ? tg?.disableVerticalSwipes?.() : tg?.enableVerticalSwipes?.() } catch { /* старый клиент Telegram — свайп как есть */ } }
+export function setSwipeLock(on) { swipeLock.value = !!on; try { localStorage.setItem(SK, on ? '1' : '0') } catch { /* приватный режим */ } applySwipe() }
 const hf = () => (hapticOn.value ? tg?.HapticFeedback : null)
 const safe = (f) => { try { f() } catch { /* старый клиент Telegram */ } }
 export function initTelegram() {
@@ -33,8 +39,7 @@ export function initTelegram() {
   if (!tg) return
   tg.ready()
   tg.expand()
-  // Свайп вниз больше не сворачивает приложение (Bot API 7.7+): мешал листать таблицу и тянуть уроки. Закрыть — кнопкой «Закрыть» / свайпом по шапке Telegram
-  try { tg.disableVerticalSwipes?.() } catch { /* старый клиент Telegram — свайп останется */ }
+  applySwipe()          // блокировка свайпа вниз — как выбрано в Профиле (по умолчанию включена)
   tg.onEvent?.('themeChanged', applyTheme)
 }
 export const useTelegram = () => ({

@@ -5,6 +5,6 @@ import { reactive, watch } from 'vue'
 
 const KEY = 'tutor-devtools'
 const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') } catch { return {} } })()
-const TABS = ['console', 'usage', 'server']
+const TABS = ['console', 'usage', 'server', 'activity']
 export const devtools = reactive({ open: !!saved.open, w: saved.w || 460, h: saved.h || 360, tab: TABS.includes(saved.tab) ? saved.tab : 'console' })
 watch(devtools, () => { try { localStorage.setItem(KEY, JSON.stringify(devtools)) } catch { /* приватный режим */ } }, { deep: true })

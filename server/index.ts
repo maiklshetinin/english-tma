@@ -24,6 +24,7 @@ import { dropCache, cacheTtl, setCacheTtl, cacheStats, cacheSize } from './cache
 import { makeRender } from './render.js'
 import { captureConsole, onLine, logs, onRequest, startSampler, serverStats, SRANGES, type SRange } from './devops.js'
 import { countFirestore, inRoute, ours, since as usageSince, RANGES, type Range } from './metrics.js'
+import { makeActivity } from './activity.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -202,6 +203,22 @@ app.post('/dev/cache', requireUser, requireDev, wrap(async (req, res) => {      
     await cacheDoc().set({ min: cacheTtl() / 60_000 }, { merge: true })
   }
   res.json(cacheInfo())
+}))
+
+// Учёт активности (activity.ts): заходы, время на экране и с действиями — по вкладкам и лентой. Выключатели — отдельно для
+// преподавателей и учеников (settings/activity, по умолчанию выключено); приложение спрашивает /me/activity при входе
+const activity = makeActivity({ db })
+activity.load().catch((e) => console.error('settings/activity:', e))
+app.get('/me/activity', requireUser, (req, res) => { res.json({ on: activity.on(req.user.role) }) })
+app.post('/me/activity', requireUser, wrap(async (req, res) => res.json(await activity.record(req.user, req.body))))      // кусок раз в 5 мин → { on }
+app.get('/dev/activity', requireUser, requireDev, wrap(async (req, res) => {          // ?from&to (YYYY-MM-DD) → { settings, days }
+  res.json({ settings: activity.settings, days: await activity.range(String(req.query.from || ''), String(req.query.to || '')) })
+}))
+app.post('/dev/activity', requireUser, requireDev, wrap(async (req, res) => {          // { teachers?, students? } → выключатели
+  const s = await activity.set({ teachers: req.body?.teachers, students: req.body?.students })
+  console.warn(`учёт активности: преподаватели ${s.teachers ? 'вкл' : 'выкл'}, ученики ${s.students ? 'вкл' : 'выкл'}`)
+  live.broadcast({ t: 'actlog', ...s })          // у преподавателей на связи — сразу; ученики узнают при следующем входе
+  res.json(s)
 }))
 
 // Ученики. Сайт не ходит в Firestore напрямую — только через эти маршруты; доступ определяется ролью в токене.

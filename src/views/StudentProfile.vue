@@ -6,6 +6,7 @@ import PaymentCard from '../components/PaymentCard.vue'
 import DemoSwitch from '../components/DemoSwitch.vue'
 import HapticSwitch from '../components/HapticSwitch.vue'
 import SoundSwitch from '../components/SoundSwitch.vue'
+import SwipeSwitch from '../components/SwipeSwitch.vue'
 import AppVersion from '../components/AppVersion.vue'
 import LogoutButton from '../components/LogoutButton.vue'
 import { useAuthStore } from '../stores/auth'
@@ -18,7 +19,7 @@ const auth = useAuthStore()
       <div><h3 style="margin:0">{{ auth.user?.first_name || student.name }}</h3>
         <div class="hint">{{ auth.user?.username ? '@' + auth.user.username : 'Ученик' }} · {{ student.level }}</div></div>
     </div>
-    <StatsGrid /><PaymentCard /><SoundSwitch /><HapticSwitch /><DemoSwitch />
+    <StatsGrid /><PaymentCard /><SoundSwitch /><HapticSwitch /><SwipeSwitch /><DemoSwitch />
     <LogoutButton />
     <AppVersion />
   </div>
