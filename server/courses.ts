@@ -14,7 +14,7 @@ import { isMediaUrl } from './media.js'
 export interface CoursesDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 export const COURSE_TYPES = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw', 'test', 'tutor', 'reward']
 export const COURSE_ITEMS_MAX = 500, COURSES_MAX = 100
-export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer', 'sort', 'odd'], STEPS_MAX = 40
+export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer', 'sort', 'odd', 'kp'], STEPS_MAX = 40
 const ID = /^[\w-]{1,64}$/
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
@@ -63,6 +63,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (kind === 'speak' || kind === 'gap') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)) }
     if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 8).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))          // до 8 — банк слов из учебника (предлоги)
     if (kind === 'answer') { put(o, 'text', str(r.text, 300)); put(o, 'note', str(r.note, 600)); put(o, 'tr', str(r.tr, 300)) }
+    if (kind === 'kp') { put(o, 'text', str(r.text, 300)); put(o, 'ideal', str(r.ideal, 3000)) }          // «Ответ по смыслу»: вопрос и эталон (Gemini сверяет)
     // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.
     // k — цвет плитки (o/g/y/p/b), mix — перемешивать у ученика, hint — подсказка «Нажмите фразу, затем колонку»
     const KC = ['o', 'g', 'y', 'p', 'b'], kc = (v: unknown) => (KC.includes(String(v)) ? String(v) : undefined)

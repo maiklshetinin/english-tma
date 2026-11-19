@@ -124,7 +124,7 @@ const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 // ---------- Чекпоинт собирается сам ----------
 // Экраны учителя (если положил) + экраны из уроков этой Chapter, где ученик ошибся (прогресс с сервера; в «Как видит ученик» — ошибки
 // этого просмотра). Ошибок нет — проверяемые экраны из уроков Chapter, до CK_MAX, равномерно — чекпоинт не бывает пустым.
-const GRADED = ['choice', 'order', 'gap', 'pairs', 'odd', 'sort'], CK_MAX = 8
+const GRADED = ['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp'], CK_MAX = 8
 const open = ref(null)                         // открытое во весь экран задание
 const misses = reactive(new Set())             // экраны с ошибкой в открытом сейчас уроке
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
@@ -300,7 +300,7 @@ const missItems = (t) => { const m = missOf(t.id); return m.length ? okSteps(t).
 const ckInfo = (id) => ckMap.value.flatMap(c => c.cks).find(k => k.id === id)
 const rvInfo = (uid) => ckMap.value.find(c => c.id === uid)?.rv
 // итог урока: что уйдёт в чекпоинт этой Chapter (экраны с ошибкой) — для проверки, что автоматика сработала
-const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || ''
+const stepWord = (s) => hitsOf(s, { ok: true })[0]?.text || (s.kind === 'kp' ? s.text?.trim() ?? '' : '')          // «Ответ по смыслу» — сам вопрос
 const ckLog = computed(() => {
   const x = open.value; if (!x || x.type === 'checkpoint' || x.virtual) return null
   const u = units.value.find(u => u.tasks.some(t => t.id === x.id))

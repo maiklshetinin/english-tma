@@ -14,6 +14,7 @@ import { review as rvStore, toggleFav } from '../stores/review'
 import { keyOf } from '../utils/review'
 import { exOf } from '../exercises'
 import { providePlay, useEdit } from '../exercises/ctx'
+import { checkAnswer } from '../utils/gemini'
 import { shuffle, orderParts, gapParts, gapOk, gapList, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -53,9 +54,9 @@ const src = (v, k) => (v ? props.resolve(v, k) : '')
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
 const { hapticResult, hapticTick } = useTelegram()      // виброотклик на ответы (в Профиле можно выключить)
-const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null })
+const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false })          // ai, busy — «Ответ по смыслу» (Gemini)
 function setup() {
-  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null }); Object.assign(mine, { ok: 0, all: 0 })
+  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false }); Object.assign(mine, { ok: 0, all: 0 })
   recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''; rec.miss = false
   const s = step.value; if (!s || props.edit) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single || props.mini ? idx : shuffle(idx) }
@@ -91,7 +92,7 @@ function pick(k) {
   st.picked = k; verdict(k === (step.value.ans ?? 0))
 }
 const right = computed(() => step.value?.kind === 'choice' ? st.picked === (step.value.ans ?? 0) : st.res === true)
-const checks = computed(() => ['choice', 'order', 'gap', 'odd', 'sort'].includes(step.value?.kind))
+const checks = computed(() => ['choice', 'order', 'gap', 'odd', 'sort', 'kp'].includes(step.value?.kind))
 
 // ---- пары ----
 function tap(side, k) {
@@ -199,10 +200,17 @@ function again() { const v = vid.value; if (v) { v.currentTime = 0; v.play().cat
 function sendText() { if (st.text.trim()) st.done = true }
 
 // ---- дальше ----
-const later = computed(() => (retry || props.again) && st.done && ['choice', 'order', 'gap', 'odd', 'sort'].includes(step.value?.kind) && !right.value)          // ошибка → «вернёмся в конце»
+const later = computed(() => (retry || props.again) && st.done && ['choice', 'order', 'gap', 'odd', 'sort', 'kp'].includes(step.value?.kind) && !right.value && !st.ai?.error)          // ошибка → «вернёмся в конце» (без проверки ИИ — не ошибка)
+// «Ответ по смыслу» меньше 60 % возвращается в конце урока только один раз: вторая попытка снова мимо — урок идёт дальше
+const kpBack = new Set()
 // на ветке в редакторе повтор встаёт в конец сразу, как только ответили неверно (не ждём «Продолжить»)
 watch(later, (v) => { if (v && props.embedded) emit('miss') })
-function next() { if (props.single || !st.done) return; if (props.embedded) return emit('next', { ...mine }); if (later.value) seq.value.push(cur.value); i.value++ }
+function next() {
+  if (props.single || !st.done) return; if (props.embedded) return emit('next', { ...mine })
+  const kp = step.value?.kind === 'kp'
+  if (later.value && !(kp && kpBack.has(cur.value))) { seq.value.push(cur.value); if (kp) kpBack.add(cur.value) }
+  i.value++
+}
 const answer = computed(() => step.value?.opts?.[step.value.ans ?? 0])
 const time = computed(() => { const s = props.stats ? props.stats.sec : Math.round(((endT.value || Date.now()) - t0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const acc = computed(() => { const x = props.stats ?? score; return x.all ? Math.round(x.ok / x.all * 100) : 100 })
@@ -221,8 +229,8 @@ const words = computed(() => {
 const say = (a) => { au?.pause(); au = new Audio(src(a, 'audio')); au.play().catch(() => {}) }
 // экран решён (или показан, если без оценки) — ответ в Review: верно / нет, у «Пар» — какие пары перепутали
 watch(() => st.done, (d) => {
-  const s = step.value; if (!d || !props.track || !s || !['choice', 'order', 'gap', 'pairs', 'odd', 'sort'].includes(s.kind)) return
-  emit('answer', { step: s, ok: s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong] })
+  const s = step.value; if (!d || !props.track || !s || !['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp'].includes(s.kind)) return
+  emit('answer', { step: s, ok: s.kind === 'kp' && st.ai?.error ? null : s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong] })          // ИИ не ответил — без оценки
 })
 // всё объявлено — теперь можно запускать (immediate вызывает setup сразу)
 watch([i, () => (props.single || props.embedded ? JSON.stringify(step.value) : props.steps)], setup, { immediate: true })     // в конструкторе — заново при каждой правке
@@ -233,28 +241,43 @@ const onKey = (e) => { if (e.key === 'Enter' && !props.single && !props.embedded
 const isBook = computed(() => !isFinal.value && !!step.value?.bk && !!BOOK[step.value.bk])
 // «Учебник 1:1» (18.11.2026) — отдельная вкладка: оформление точно как в книге (bs: 'page'); без bs — Настин вид
 const isPage = computed(() => isBook.value && step.value?.bs === 'page')
-const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !step.value.opts?.length) || step.value?.kind === 'odd' || step.value?.kind === 'sort'))
+const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !step.value.opts?.length) || step.value?.kind === 'odd' || step.value?.kind === 'sort' || step.value?.kind === 'kp'))
 // ---- книжные (экспериментальные): «Найди лишнее» и «Распредели по колонкам» ----
 const sortLeft = computed(() => (step.value?.kind !== 'sort' ? 0 : step.value.tw ? st.tw.flat().filter(v => !v.trim()).length : st.order.filter(k => st.place[k] == null).length))
 // «Заполни таблицу» (Настя, 18.11.2026): банк слов, образцы зачёркнуты; ученик вписывает форму в колонку — порядок в колонке не важен
-const canCheck = computed(() => { const k = step.value?.kind; return k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
+const canCheck = computed(() => { const k = step.value?.kind; return k === 'kp' ? !!st.text.trim() && !st.busy : k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
 function sortPick(k) { if (!st.done) st.sel = st.sel === k ? null : k }
 function sortPut(c) { if (st.done || st.sel == null) return; st.place = { ...st.place, [st.sel]: c }; st.sel = null; hapticTick?.() }
 function sortBack(k) { if (st.done) return; const p = { ...st.place }; delete p[k]; st.place = p }
 const sortOkAt = (k) => st.place[k] === step.value.items[k].c
 function checkAny() {
   const s = step.value; if (st.done || !canCheck.value) return
+  if (s.kind === 'kp') return aiCheck()
   if (s.kind === 'odd') return verdict(st.picked === (s.ans ?? 0))
   if (s.kind === 'sort' && s.tw) { st.twr = twCheck(s, st.tw); return verdict(st.twr.all) }
   if (s.kind === 'sort') return verdict((s.items ?? []).every((_, k) => sortOkAt(k)))
   check()
+}
+// «Ответ по смыслу»: Gemini сверяет ответ с эталоном (utils/gemini.js); от 60 % — верно. Не ответил (нет ключа, квота, сеть) — экран
+// закрывается без оценки: эталон открыт, в Review и в ошибки урока ничего не идёт
+async function aiCheck() {
+  const s = step.value; st.busy = true
+  try {
+    const r = await checkAnswer({ question: s.text ?? '', reference: s.ideal ?? '', answer: st.text })
+    if (step.value !== s) return
+    st.ai = r; verdict(r.ok)
+  } catch (e) {
+    if (step.value !== s) return
+    st.ai = { error: e?.nokey ? 'Проверка недоступна: нет ключа Gemini. Сравните ответ с эталоном.' : `Проверка недоступна (${e?.message || 'ошибка'}). Сравните ответ с эталоном.` }
+    st.done = true
+  } finally { st.busy = false }
 }
 onMounted(() => { if (!props.mini) addEventListener('keydown', onKey) }); onUnmounted(() => removeEventListener('keydown', onKey))
 
 // ---- Упражнения-шаблоны (src/exercises): экран рисует шаблон своего типа, плеер даёт ему состояние и действия ----
 const edApi = useEdit()
 // ответ — зелёный или красный подвал и звук (один раз на ответ)
-const fbState = computed(() => (isFinal.value || props.edit ? '' : (checks.value && st.done && right.value) || (step.value?.kind === 'speak' && st.done) ? 'good' : checks.value && st.done && !right.value ? 'bad' : ''))
+const fbState = computed(() => (isFinal.value || props.edit || st.ai?.error ? '' : (checks.value && st.done && right.value) || (step.value?.kind === 'speak' && st.done) ? 'good' : checks.value && st.done && !right.value ? 'bad' : ''))
 watch(fbState, (v) => { if (v) sfxResult(v === 'good') })          // в правке на ветке — «изменено» и файлы (от LessonRail)
 const ex = computed(() => (isFinal.value ? null : exOf(step.value)))
 providePlay(reactive({

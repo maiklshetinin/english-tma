@@ -11,3 +11,6 @@
 .ex-chip:hover { background: #fff; border-color: #6fa8f0 }
 /* ✕ — убрать (файл, вариант, строку) */
 .ex-x { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; font: inherit; font-size: 11px; line-height: 1; cursor: pointer }
+
+/* «Ответ по смыслу» (kp, Karta Polaka): весь экран — как домашка курса, кремовая бумага (19.11.2026) */
+.lp:has(> .body.x-kp) { background: #ffeccf }

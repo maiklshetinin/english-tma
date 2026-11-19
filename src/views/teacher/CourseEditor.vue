@@ -533,7 +533,7 @@ const XGROUPS_STD = (() => {
     { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
-  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL])
+  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp'])          // kp — на своей вкладке «Karta Polaka»
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
@@ -545,10 +545,12 @@ const XGROUPS_BOOK = [
 ].map(g => ({ ...g, book: true, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 // «Как в учебнике» (18.11.2026) — те же 8 типов, но вид максимально как страница учебника (bs: 'page'); Настины остаются отдельной вкладкой
 const XGROUPS_PAGE = XGROUPS_BOOK.map(g => ({ ...g, k: 'p' + g.k, items: g.ids.map(id => TPL.find(v => v.id === 'pg_' + id)).filter(Boolean) }))
-const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }]
+// «Karta Polaka» (19.11.2026) — упражнения курса к собеседованию: ответ своими словами, проверяет Gemini по эталону
+const XGROUPS_KP = [{ k: 'S', t: 'Ответ по смыслу', d: 'проверяет ИИ по эталону', items: TPL.filter(v => v.id === 'kp') }]
+const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'kp', t: 'Karta Polaka', exp: true }]
 const trayTab = ref((() => { try { const v = localStorage.getItem('ce.trayTab'); return TRAY_TABS.some(b => b.k === v) ? v : 'app' } catch { return 'app' } })())          // была вкладка «Мои» (конструктор убран 18.11.2026) — откроется «Как в Busuu»
 watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })
-const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : XGROUPS_STD)
+const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : trayTab.value === 'kp' ? XGROUPS_KP : XGROUPS_STD)
   .map(g => ({ ...g, cols: g.items.length })))          // все плашки группы — в один ряд
 const NEW_MINI = [...BOOK_TPL, ...PAGE_TPL]          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
 const skillsT = (t) => SKILLS[t.id] ?? []
@@ -1932,7 +1934,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <small><b>{{ T[k].t }}</b>{{ TASK_D[k] }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
-        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i></button></div>
+        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i></button></div>
         <!-- мини-окошки: как выглядит экран -->
         <div class="xrow">
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">

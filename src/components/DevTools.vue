@@ -2,7 +2,7 @@
 // Панель разработчика — как DevTools в Chrome, только у разработчика (App.vue: auth.isDev). Открыть: жучок в углу или Ctrl + `.
 // Пристыкована справа (на узком экране — снизу); край тянется мышкой, приложение при этом сужается, а не перекрывается:
 // #app на время панели становится своим «окном» (position: fixed + transform — фиксированные элементы приложения живут внутри него).
-// Вкладки: Консоль сервера, Нагрузка на базу, Сервер, Логи (журнал заходов: кто, когда, с чего) и Активность (учёт по людям, 19.11.2026; вкладку «Сеть» убрали 18.11.2026 — дубль Network в Chrome DevTools). Ширина, высота, вкладка — запоминаются.
+// Вкладки: Консоль сервера, Нагрузка на базу, Сервер, Логи (журнал заходов: кто, когда, с чего), ИИ (ключи Gemini для «Ответа по смыслу», 19.11.2026) и Активность (учёт по людям, 19.11.2026; вкладку «Сеть» убрали 18.11.2026 — дубль Network в Chrome DevTools). Ширина, высота, вкладка — запоминаются.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { devtools } from '../composables/useNetLog'
 import DevConsole from './DevConsole.vue'
@@ -10,6 +10,7 @@ import DevUsage from './DevUsage.vue'
 import DevServer from './DevServer.vue'
 import DevActivity from './DevActivity.vue'
 import DevVisits from './DevVisits.vue'
+import DevAi from './DevAi.vue'
 import { theme } from '../composables/useTelegram'
 // Вид — как панель «Графики» в уроке (CourseViewer.vue): перегородка с «ручкой», размер «ширина × высота» пока тянешь,
 // вкладки как в DevTools и свой выключатель «Тёмная» (общий с «Графиками»: tma.graphsTheme; не трогали — как у приложения)
@@ -56,7 +57,7 @@ const onKey = (e) => { if ((e.ctrlKey || e.metaKey) && e.code === 'Backquote') {
 onMounted(() => { clamp(); dock(); addEventListener('resize', onResize); addEventListener('keydown', onKey); addEventListener('pointerdown', onDownCapture, true) })
 onBeforeUnmount(() => { st.open && document.getElementById('app')?.classList.remove('dt-docked', 'dt-docked-b'); removeEventListener('resize', onResize); removeEventListener('keydown', onKey); removeEventListener('pointerdown', onDownCapture, true) })
 
-const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['server', 'Сервер'], ['visits', 'Логи'], ['activity', 'Активность']]
+const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['server', 'Сервер'], ['visits', 'Логи'], ['activity', 'Активность'], ['ai', 'ИИ']]
 
 </script>
 
@@ -80,6 +81,7 @@ const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['se
       <section v-else-if="st.tab === 'usage'" class="pane"><DevUsage /></section>
       <section v-else-if="st.tab === 'visits'" class="pane"><DevVisits /></section>
       <section v-else-if="st.tab === 'activity'" class="pane"><DevActivity /></section>
+      <section v-else-if="st.tab === 'ai'" class="pane"><DevAi /></section>
       <section v-else class="pane"><DevServer /></section>
     </aside>
   </Teleport>

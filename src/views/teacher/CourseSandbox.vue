@@ -32,7 +32,7 @@ const RV_MAX = 10                                            // как в Course
 const PACES = [[0, 'всё в 1 день'], [1, 'урок в день'], [2, 'через день']]
 
 // ── курс: пример или ваш (главы → уроки → проверяемые экраны со словами) ──
-const GRADED = ['choice', 'order', 'gap', 'pairs', 'odd', 'sort'], CK_MAX = 8
+const GRADED = ['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp'], CK_MAX = 8
 const DEMO = [
   { title: 'Chapter 1: Приветствия', own: [], lessons: [{ title: 'Урок 1 · Hello', screens: [
     { id: 's2', kind: 'Выбери ответ', words: ['Hello'] }, { id: 's3', kind: 'Пары', words: ['Bye', 'See you'] }, { id: 's4', kind: 'Собери фразу', words: ['Nice to meet you'] }] }] },
