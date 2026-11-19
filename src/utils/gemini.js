@@ -73,12 +73,12 @@ async function call(key, prompt, json, fetcher = fetch, system = SYSTEM, model =
 }
 /** Какие текстовые модели видит ключ (Google: GET …/v1beta/models) → самая свежая Flash: сначала псевдоним gemini-flash-latest,
  *  потом стабильная (без preview), потом версия новее; Lite — в последнюю очередь. Озвучка, картинки, Live и т.п. не подходят. */
-export function bestModel(names, skip = []) {
+export function bestModel(names, skip = [], lite = false) {
   const ok = names.filter(n => /^gemini-/.test(n) && /flash/i.test(n) && !skip.includes(n) && !/(tts|image|live|audio|embed|vision|native|computer|robotics|exp|omni|transcribe)/i.test(n))
   // 19.11.2026: у ключа автора в списке есть и gemini-2.5-flash, и gemini-flash-latest, но 2.5 Google новым проектам не отдаёт (404) —
   // поэтому сначала стабильная модель с самым новым номером (gemini-3.8-flash), псевдоним latest и preview — потом
   const ver = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) ?? [])[1] ?? '0')
-  const rank = (n) => [/lite/i.test(n) ? 1 : 0, /latest/i.test(n) ? 1 : 0, /preview/i.test(n) ? 1 : 0, -ver(n), n.length]
+  const rank = (n) => [/lite/i.test(n) === lite ? 0 : 1, /latest/i.test(n) ? 1 : 0, /preview/i.test(n) ? 1 : 0, -ver(n), n.length]
   return ok.sort((a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1; return 0 })[0] ?? ''
 }
 export async function listModels(key, fetcher = fetch) {
@@ -96,7 +96,8 @@ async function withModels(key, fetcher, fn) {
     const names = await listModels(key, fetcher).catch(() => []), tried = [ai.model]
     let last = e
     for (let i = 0; i < 5; i++) {                            // до 5 запасных: свежие Flash, потом Lite (они обычно свободнее)
-      const m = bestModel(names, tried); if (!m) break
+      // 19.11.2026: 3.7, 3.8, 3.6 и 3.5 Flash отдали 503 разом — у Google это общая очередь; Lite — другая, поэтому через раз пробуем Lite
+      const m = bestModel(names, tried, i % 2 === 1) || bestModel(names, tried, i % 2 === 0); if (!m) break
       tried.push(m)
       try { const r = await fn(m); setModel(m); return r } catch (e2) { last = e2; if (!BUSY(e2)) throw e2 }
     }

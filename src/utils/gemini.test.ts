@@ -132,5 +132,17 @@ describe('Gemini: модель подбирается сама', () => {
     await expect(checkAnswer(q, (async (u: string) => u.endsWith('?pageSize=1000') ? reply(200, { models: [] }) : reply(503, { error: { message: 'overloaded' } })) as any)).rejects.toThrow(/перегружена/)
     expect(ai.keys[0].ok).toBe(null)                                                        // ключ рабочий — не «ошибка»
   })
+
+  it('все свежие Flash перегружены → через раз пробуется Lite (у неё своя очередь)', async () => {
+    ai.model = 'gemini-3.7-flash'; addKey('k1'); const used: string[] = []
+    const names = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.6-flash-lite', 'gemini-3.1-flash-lite']
+    const f = (async (u: string) => {
+      if (u.endsWith('?pageSize=1000')) return reply(200, { models: names.map(n => ({ name: 'models/' + n, supportedGenerationMethods: ['generateContent'] })) })
+      const m = u.match(/models\/([^:]+):/)![1]; used.push(m)
+      return m === 'gemini-3.1-flash-lite' ? good({ score: 65, missed_points: [], feedback: '' }) : reply(503, { error: { code: 503, message: 'overloaded' } })
+    }) as any
+    expect((await checkAnswer(q, f)).score).toBe(65)
+    expect(used).toEqual(['gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-3.6-flash-lite', 'gemini-3.6-flash', 'gemini-3.1-flash-lite'])
+  })
 })
 
