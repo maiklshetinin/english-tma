@@ -22,7 +22,8 @@ const ini = (n) => (n || '?').trim()[0]?.toUpperCase() || '?'
 const chatOn = computed(() => !!(notesState.open || notesState.draft))          // общий чат открыт
 // Разработчику: «</>» — панель разработчика (вместо жука в углу, 19.11.2026). Пока кнопка видна — жук не показывается (devtools.tags)
 const rootOn = computed(() => has.value || (props.theme && !props.inline))
-watchEffect((onCleanup) => { if (auth.isDev && rootOn.value) { devtools.tags++; onCleanup(() => { devtools.tags-- }) } })
+watchEffect((onCleanup) => { if (auth.isDev && rootOn.value && !props.inline) {          // в панели редактора курсов «</>» нет — там жук в углу
+  devtools.tags++; onCleanup(() => { devtools.tags-- }) } })
 const label = (p) => (p.where === 'courses' ? 'в редакторе курсов' : WHERE[p.where] ? `«${WHERE[p.where]}»` : 'в приложении')
 </script>
 <template>
@@ -40,7 +41,7 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
       <svg viewBox="0 0 24 24"><path v-if="shared.hidden" d="M3 3l18 18M10.6 6.2A9.7 9.7 0 0 1 12 6c5 0 9 6 9 6a16 16 0 0 1-2.6 3.2M6.4 7.6C4.3 9.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1.1M9.9 10a3 3 0 0 0 4.1 4.1" /><path v-else d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /></svg></button>
     <button v-if="!inline" class="nt" :class="{ on: chatOn }" :aria-pressed="chatOn" :title="`Чат${unreadCount ? ' — новых: ' + unreadCount : ''}`" aria-label="Чат" @click="toggleChat(); open = false">
       <AppIcon name="chat" :size="16" /><em v-if="unreadCount">{{ unreadCount }}</em></button>
-    <button v-if="auth.isDev" class="cur tag" :class="{ on: devtools.open }" :aria-pressed="devtools.open" title="Панель разработчика (Ctrl + `)" aria-label="Панель разработчика" @click="devtools.open = !devtools.open">&lt;/&gt;</button>
+    <button v-if="auth.isDev && !inline" class="cur tag" :class="{ on: devtools.open }" :aria-pressed="devtools.open" title="Панель разработчика (Ctrl + `)" aria-label="Панель разработчика" @click="devtools.open = !devtools.open">&lt;/&gt;</button>
     <button class="row" :title="people.map(p => (p.me ? 'Вы' : p.name) + ' — ' + label(p)).join('\n')" @click="open = !open">
       <span v-for="p in shown" :key="p.uid" class="av" :class="{ ghost: p.me && shared.hidden }" :style="{ '--c': p.color }">
         <img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" @error="bad[p.uid] = true" />
