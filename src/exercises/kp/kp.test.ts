@@ -93,13 +93,25 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
   it('после проверки видно, какой чат проверил: значок и название', async () => {
     g.next.push(res(70, 'Claude'))
     const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
-    await flushPromises(); expect(w.find('.kby').text()).toBe('проверитGemini'); expect(w.find('.kby img').attributes('src')).toBe('/ai/gemini.svg')          // до проверки — с кем мост
+    await flushPromises(); expect(w.find('.kbr').text()).toBe('Мост подключёнGemini'); expect(w.find('.kbr img').attributes('src')).toBe('/ai/gemini.svg')          // до проверки — с кем мост, в подвале
+    expect(w.find('.kby').exists()).toBe(false)
     await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
     expect(w.find('.kby').text()).toBe('проверилClaude'); expect(w.find('.kby img').attributes('src')).toBe('/ai/Claude%20Spark%20-%20Clay.svg')
   })
-  it('моста нет — «ИИ не в сети»', async () => {
+  it('моста нет — в подвале «Мост не в сети»', async () => {
     g.bridge = { online: false, sites: [] }
     const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } }); await flushPromises()
-    expect(w.find('.kby.off').text()).toBe('ИИ не в сети'); g.bridge = { online: true, sites: ['Gemini'] }
+    expect(w.find('.kbr.off').text()).toBe('Мост не в сети — проверки не будет'); g.bridge = { online: true, sites: ['Gemini'] }
+  })
+  it('текст от программы диктовки (без события input) — подхватывается, «Проверить» становится активной', async () => {
+    vi.useFakeTimers()
+    try {
+      const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
+      const el0 = w.find('textarea.ka').element as HTMLTextAreaElement
+      el0.value = 'Adwent to czas oczekiwania'          // вставили напрямую, события нет
+      expect(w.find('.foot .go').attributes('disabled')).toBeDefined()
+      await vi.advanceTimersByTimeAsync(600); await w.vm.$nextTick()
+      expect(w.find('.foot .go').attributes('disabled')).toBeUndefined(); expect(w.find('.kl span').text()).toBe('4 слова')
+    } finally { vi.useRealTimers() }
   })
 })

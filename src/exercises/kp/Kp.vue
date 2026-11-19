@@ -7,7 +7,7 @@
 // а «JSON» в подвале — весь экран текстом: вопрос, эталон, порог и промпт для Gemini (свой у этого экрана; для теста промпта).
 // 19.11.2026: точь-в-точь как в ответах домашки — номер и вопрос на подложке #f2dab5, красная гранёная звезда у обязательных (step.star),
 // в эталоне оранжевые термины, жирный, курсив, абзацы с отступом и пункты (разметка: ==термин==, **жирный**, _курсив_, «• »).
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
@@ -40,12 +40,24 @@ const refBlocks = computed(() => {
   }
   return out
 })
-// с кем мост: до проверки — «проверит [значок] Gemini» (какие чаты в сети), после — «проверил …»; моста нет — «ИИ не в сети»
+// с кем мост: до проверки — в подвале «● Мост подключён · [значок] Gemini» / «Мост не в сети» (обновляется, пока экран открыт),
+// после — в заголовке «Не прозвучало»: «проверил [значок] Gemini»
 const bridge = ref(null)
-onMounted(() => { bridgeStatus().then((b) => { bridge.value = b }).catch(() => { bridge.value = null }) })
-const by = computed(() => (checked.value && r.value.site ? { t: 'проверил', sites: [r.value.site] }
-  : !checked.value && bridge.value?.sites.length ? { t: 'проверит', sites: bridge.value.sites }
-    : !checked.value && bridge.value && !bridge.value.online ? { t: 'ИИ не в сети', sites: [], off: true } : null))
+const loadBridge = () => bridgeStatus().then((b) => { bridge.value = b }).catch(() => { bridge.value = null })
+let brTm = 0
+onMounted(() => { if (p.edit) return; loadBridge(); if (props.part === 'fb') brTm = setInterval(() => { if (!p.st.done) loadBridge() }, 15_000) })
+onBeforeUnmount(() => clearInterval(brTm))
+const by = computed(() => (checked.value && r.value.site ? { t: 'проверил', sites: [r.value.site] } : null))
+// 19.11.2026: программы диктовки вставляют текст в поле напрямую, без события input — v-model этого не видит («0 слов»,
+// «Проверить» серая), а Vue при любой перерисовке ещё и стирал такой текст (value он переписывает всегда). Поэтому поле без привязки:
+// своё значение пишем в него, только когда текст поменялся в данных (watch), и сверяем поле само: при нажатиях, вставке, уходе фокуса и раз в полсекунды
+const ta = ref(null)
+const sync = () => { const v = ta.value?.value; if (typeof v === 'string' && v !== p.st.text && !p.st.done) p.st.text = v }
+let syncTm = 0
+onMounted(() => { if (ta.value) ta.value.value = p.st.text || ''; syncTm = setInterval(sync, 500) })
+watch(() => p.st.text, (v) => { if (ta.value && ta.value.value !== (v || '')) ta.value.value = v || '' })
+watch(ta, (el) => { if (el) el.value = p.st.text || '' }, { flush: 'sync' })          // поле появилось заново (повтор вопроса) — со своим текстом
+onBeforeUnmount(() => clearInterval(syncTm))
 function toggleStar() { if (props.step.star) delete props.step.star; else props.step.star = true; ed.changed() }
 
 const r = computed(() => p.st.ai)                          // { score, missed, feedback } или { error }
@@ -104,12 +116,12 @@ function jsApply() {
 
     <div class="kl"><label :for="'kpa-' + step.id">Ваш ответ</label><span>{{ p.edit ? '' : words }}</span></div>
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
-    <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" v-model="p.st.text" class="ka" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop />
+    <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
     <div v-else class="ka done">{{ p.st.text }}</div>
 
     <div class="kb miss">
       <div class="kh">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template>
-        <span v-if="by" class="kby" :class="{ off: by.off }">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template></span></div>
+        <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template></span></div>
       <p v-if="p.edit" class="ph">Пункты от Gemini — после проверки</p>
       <p v-else-if="r?.error" class="ph er">{{ r.error }}</p>
       <ul v-else-if="checked && r.missed.length"><li v-for="(m, k) in r.missed" :key="k">{{ m }}</li></ul>
@@ -131,6 +143,9 @@ function jsApply() {
   <template v-else-if="part === 'fb' && p.st.done && r">
     <small>{{ r.error ? 'Без проверки' : tierT[tier] }}</small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
   </template>
+  <template v-else-if="part === 'fb' && !p.st.done && !p.edit && bridge">
+    <span class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
+  </template>
   <template v-else-if="part === 'tools'">
     <span class="kjw">
       <ExTool :on="jsOpen" title="Экран текстом: вопрос, эталон, порог и промпт для Gemini" @click="jsToggle">JSON{{ step.prompt || step.pass ? ' ✓' : '' }}</ExTool>
@@ -147,7 +162,7 @@ function jsApply() {
 .kq { display: flex; align-items: center; gap: 14px; min-height: 84px }
 /* вопрос — как заголовок вопроса в ответах домашки: номер и текст на подложке, звезда наползает слева */
 .kqw { position: relative; flex: 1; min-width: 0; display: flex; align-items: center }
-.kqt { flex: 1; min-width: 0; padding: 5px 12px; border-radius: 10px; background: #f2dab5; font-family: 'PT Serif', Georgia, serif; font-size: 19px; font-weight: 400; line-height: 1.35; color: #351a05 }
+.kqt { flex: 1; min-width: 0; padding: 5px 12px; border-radius: 10px; background: #f2dab5; font-family: 'PT Serif', Georgia, serif; font-size: 18px; font-weight: 400; line-height: 1.35; color: #351a05 }
 .kqt :deep(.exf) { background: transparent } .kqn { margin-right: .3em }
 .kst { flex: none; width: 30px; height: 30px; margin: 0 -9px 0 -6px; padding: 0; border: 0; background: none; position: relative; z-index: 1 } button.kst { cursor: pointer }
 .kst svg { display: block; width: 100%; height: 100% } .kst .s1 { fill: #ff3b3b } .kst .s2 { fill: #d10f0f }
@@ -169,10 +184,13 @@ function jsApply() {
 .kb { display: flex; flex-direction: column; gap: 6px; box-sizing: border-box; padding: 10px 13px; border: 1px dashed #e3c79c; border-radius: 12px; overflow: auto }
 .kb.miss { height: 112px; flex: none } .kb.ref { min-height: 120px }
 .kh { display: flex; align-items: center; gap: 4px; font-family: var(--font); font-size: 12px; font-weight: 800; color: #6b5a48; text-transform: uppercase; letter-spacing: .3px }
-.kby { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #8a6a48 } .kby img { width: 15px; height: 15px; object-fit: contain } .kby.off { color: #b3261e }
+.kby { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #8a6a48 } .kby img { width: 15px; height: 15px; object-fit: contain }
+/* подвал до проверки: с кем мост */
+.kbr { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #3d7a00 } .kbr.off { color: #b3261e }
+.kbr i { width: 8px; height: 8px; border-radius: 50%; background: currentColor } .kbr img { width: 16px; height: 16px; margin-left: 4px; object-fit: contain }
 .kb ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-family: 'PT Serif', Georgia, serif; font-size: 15px; line-height: 1.35; color: #351a05 }
 .ph { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 14.5px; font-style: italic; color: #8a6a48 } .ph.er { color: #b3261e; font-style: normal }
-.kr { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 15.5px; font-weight: 400; line-height: 1.5; color: #351a05 }
+.kr { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 18px; font-weight: 400; line-height: 1.5;          /* как в домашке: эталон тем же кеглем, что вопрос */ color: #351a05 }
 .kr.raw { white-space: pre-wrap }
 .kr p { margin: 0; text-indent: 1em } .kr ul { margin: 2px 0; padding-left: 22px; display: grid; gap: 2px } .kr li::marker { color: #cd8a30 }
 .kr b { font-weight: 700 } .kr b.acc { color: #cd8a30 } .kr i { font-style: italic }
@@ -184,7 +202,7 @@ function jsApply() {
 .kjb { display: flex; align-items: center; justify-content: flex-end; gap: 6px } .kjb em { margin-right: auto; font-size: 11.5px; font-style: normal; font-weight: 700; color: var(--red-d, #c33) }
 .kjg, .kjo { padding: 5px 12px; border: 0; border-radius: 9px; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer } .kjg { background: var(--surface); color: var(--text) } .kjo { background: var(--blue); color: #fff }
 @media (min-width: 900px) {
-  .lp:not(.embedded):not(.single) .kqt { font-size: 24px }
+  .lp:not(.embedded):not(.single) .kqt, .lp:not(.embedded):not(.single) .kr { font-size: 20px }
   .lp:not(.embedded):not(.single) .ka { height: 150px; font-size: 18px }
 }
 </style>
