@@ -378,9 +378,8 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
             <button class="icon-btn wk-next" :disabled="week >= maxWeek" :title="week >= maxWeek ? 'Дальше пока не планируем' : 'Следующая неделя'" aria-label="Следующая неделя" @click="week++"><AppIcon name="back" :size="20" /></button>
             <WeekLoad class="wload" :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
             <i class="brk" aria-hidden="true" /><i class="brk b2" aria-hidden="true" />
-            <GridStyleButton />
+            <GridStyleButton :auto="autoFill" :auto-to="spreadTo" @auto="toggleAuto" />      <!-- в меню решётки — и «Автоподстановка» (19.11.2026: убрали кнопку «авто» из шапки) -->
             <button class="trial-pad" :class="{ held: dnd.active && dnd.payload?.kind === 'trial' }" title="Стикер: перетащите в свободную ячейку" aria-label="Стикер: перетащите в ячейку" @pointerdown="grabTrial" @dragstart.prevent><i v-for="(s, k) in pack" :key="s.id" :style="{ '--c': s.c, '--bg': s.bg, left: 8 + k * 6 + 'px', transform: `rotate(${k * 5 - 6}deg)` }" /></button>
-            <button class="af-sw" role="switch" :aria-checked="autoFill" :aria-label="`Автоподстановка расписания: ${autoFill ? 'включена' : 'выключена'}`" :title="`Автоподстановка (тест): уроки этой недели сами ставятся на 4 недели вперёд (сейчас — ${spreadTo}); деньги — по месяцам, по дате урока — настоящими уроками, только в свободное время. Ученики их видят`" @click="toggleAuto"><i :class="{ on: autoFill }" aria-hidden="true" /><span><b>авто</b><small>{{ spreadTo }}</small></span></button>
             <button v-if="ghosts.length" class="icon-btn gall" :title="`Как на этой неделе: поставить все уроки (${ghosts.length})`" :aria-label="`Поставить все уроки, как на этой неделе: ${ghosts.length}`" @click="confirmAll"><AppIcon name="copy" :size="18" /><i>{{ ghosts.length }}</i></button>
             <button v-if="allGhosts.length" class="icon-btn gall gback" :class="{ on: !hiddenGhosts.length }" :aria-pressed="!hiddenGhosts.length"
               :title="hiddenGhosts.length ? `Вернуть подсказки (${hiddenGhosts.length}) — бледные уроки «как на этой неделе»` : `Скрыть подсказки (${allGhosts.length})`" :aria-label="hiddenGhosts.length ? `Вернуть подсказки: ${hiddenGhosts.length}` : `Скрыть подсказки: ${allGhosts.length}`" @click="toggleGhosts">
@@ -404,7 +403,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 .side { grid-area: side; position: sticky; top: 0; z-index: 8; padding: 10px 0 6px; background: var(--bg) }
 .main { grid-area: main; min-width: 0 }
 /* Одна таблица; над ней: переключатель недель, спидометр нагрузки, деньги недели */
-.weeks { display: grid; gap: 14px; max-width: 900px; margin: 0 auto; width: 100% }
+.weeks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; max-width: 900px; margin: 0 auto; width: 100% }
 /* Плашка недели между «‹» и «›» — всегда одной ширины (подписи короткие: «Эта неделя», «Следующая», «Через 2 нед.», «2 нед. назад»): ничего не прыгает.
    Голубая — только текущая неделя; серая — вы на другой неделе, нажатие вернёт. «›» — та же стрелка «назад», повёрнутая. */
 .wk-back { border-color: var(--border) }
@@ -412,24 +411,21 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 .wk-now { flex: none; width: 116px; height: 40px; display: grid; align-content: center; justify-items: center; padding: 0 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.2; white-space: nowrap; cursor: pointer }
 .wk-now b { font-size: 13px; font-weight: 800 } .wk-now small { font-size: 11px; font-weight: 700; color: var(--hint) }
 .wk-now.on { background: var(--blue-l); border-color: var(--blue-l) } .wk-now:hover, .wk-now.open { border-color: var(--blue) }      /* нажатие — календарь месяца */ .wk-now.on b, .wk-now.on small { color: var(--blue) }
-/* «авто · до 6 дек» — выключатель автоподстановки расписания (как в iPhone). Деньги недели и месяца — WeekMoney, одинаковые плашки */
-.af-sw { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 9px 0 7px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; line-height: 1.1; white-space: nowrap; cursor: pointer }
-.af-sw i { position: relative; flex: none; width: 30px; height: 18px; border-radius: 99px; background: var(--hint-2); transition: background .15s }
-.af-sw i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s }
-.af-sw i.on { background: var(--blue) } .af-sw i.on::after { transform: translateX(12px) }
-.wh .af-sw span { display: grid; justify-items: start } .wh .af-sw b { font-size: 12px; font-weight: 800 } .af-sw small { font-size: 10px; font-weight: 800; color: var(--hint) }
-.wcol { display: grid; gap: 6px; min-width: 0 }
-.wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 4px; font-size: 14px; color: var(--hint) }
+/* Деньги недели и месяца — WeekMoney, одинаковые плашки. Выключатель автоподстановки — в меню решётки (GridStyleButton) */
+.wcol { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0 }
+/* 19.11.2026: колонка не шире своего места. Раньше появлялись «Как на этой неделе» / привидение — шапка в одну строку становилась шире,
+   общая колонка расширялась под неё, и таблица прыгала вправо, к ученикам (а сжатие шапки fitWh не срабатывало: колонка росла вместе с ней) */
+.wh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; padding: 0 4px; font-size: 14px; color: var(--hint) }
 .wh .money { margin-left: auto } .wh .money + .money { margin-left: 0 }
 /* Пачка закладок 40×40 (как «решётка»): три закладки веером, сверху — последний выбранный цвет; тащим её в ячейку */
 .trial-pad { position: relative; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font: inherit; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none }
 .trial-pad i { position: absolute; top: 7px; width: 12px; height: 25px; border-radius: 2px 2px 3px 3px; background: var(--bg); box-shadow: inset 0 6px 0 var(--c), 0 1px 3px rgba(0, 0, 0, .2); transform-origin: 50% 100% }
 .trial-pad:hover { border-color: var(--hint-2) } .trial-pad.held { opacity: .55 }
-@media (min-width: 1024px) { .wh { flex-wrap: nowrap; gap: 8px } .wh > * { flex: none } .wh .wk-now { flex: 0 1 116px; min-width: 96px } .af-sw small { display: none } }      /* на компьютере шапка всегда в одну строку: если тесно, сжимается плашка недели */
+@media (min-width: 1024px) { .wh { flex-wrap: nowrap; gap: 8px } .wh > * { flex: none } .wh .wk-now { flex: 0 1 116px; min-width: 96px } }      /* на компьютере шапка всегда в одну строку: если тесно, сжимается плашка недели */
 /* 18.11.2026: с «Как на этой неделе», привидением и «Статус» шапка не влезала и уезжала под учеников. Тесно — прячем подписи «авто» и «Статус» (остаются выключатель и «?1»); совсем тесно — деньги переходят на вторую строку, а не наезжают */
 .wh .whbr { display: none }
 @media (min-width: 1024px) {
-  .wh[data-lv] .askt, .wh[data-lv] .af-sw span { display: none } .wh[data-lv] .af-sw { padding: 0 7px }
+  .wh[data-lv] .askt { display: none }
   .wh[data-lv="2"] .money :deep(small), .wh[data-lv="2"] .money :deep(.lost), .wh[data-lv="3"] .money :deep(.lost) { display: none }
   .wh[data-lv="3"] { flex-wrap: wrap; row-gap: 8px } .wh[data-lv="3"] .whbr { display: block; flex: 0 0 100%; height: 0 }
   .wh[data-lv="3"] .money { flex: 1 1 0; min-width: 0; margin-left: 0 }          /* вторая строка — обе суммы рядом, поровну */
@@ -458,7 +454,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
   .wh .money { order: 6; flex: 1 1 0; min-width: 0; min-height: 54px; box-sizing: border-box; align-content: center; padding: 4px 10px; border-radius: 14px }
   .wh .money :deep(.top) { justify-self: start } .wh .money :deep(b) { font-size: 15px } .wh .money :deep(small) { font-size: 11px }
   /* третья строка: слева «авто» и «Статус», справа — вид таблицы и стикеры */
-  .af-sw { order: 8; height: 40px } .ask { order: 9 } .gall { order: 10 } .wh :deep(.gsb) { order: 11; margin-left: auto } .trial-pad { order: 12 }          /* GridStyleButton — без одного корня, поэтому :deep */
+  .ask { order: 9 } .gall { order: 10 } .wh :deep(.gsb) { order: 11; margin-left: auto } .trial-pad { order: 12 }          /* GridStyleButton — без одного корня, поэтому :deep */
 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */

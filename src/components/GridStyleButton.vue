@@ -1,10 +1,15 @@
 <script setup>
 // Кнопка с решёткой над таблицей недели: меню (как в iOS) — рамка, прошедшее время и вид урока (серый / голубой). См. utils/gridStyle.js.
+// 19.11.2026: сюда же переехал выключатель «Автоподстановка» (был отдельной кнопкой «авто» в шапке): props auto / autoTo, событие auto.
+// Пока автоподстановка включена — на решётке синяя точка, чтобы не забыть.
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
 import GhostIcon from './GhostIcon.vue'
 import { gridFrame, setGridFrame, LESSON_STYLES, lessonStyle, setLessonStyle, pastShade, setPastShade, GHOST_ICONS, ghostIcon, setGhostIcon } from '../utils/gridStyle'
+defineProps({ auto: { type: Boolean, default: null }, autoTo: { type: String, default: '' } })
+const emit = defineEmits(['auto'])
 const open = ref(null)
+function flipAuto() { open.value = null; emit('auto') }          // меню закрываем: выключатель может спросить подтверждение
 function toggle(e) {
   if (open.value) { open.value = null; return }
   const r = e.currentTarget.getBoundingClientRect(), W = 280
@@ -16,7 +21,7 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <button class="gsb" :class="{ on: open }" title="Вид сетки" aria-label="Вид сетки" :aria-expanded="!!open" @click="toggle"><AppIcon name="grid" :size="18" /></button>
+  <button class="gsb" :class="{ on: open }" :title="auto ? `Вид сетки · автоподстановка включена (${autoTo})` : 'Вид сетки'" aria-label="Вид сетки" :aria-expanded="!!open" @click="toggle"><AppIcon name="grid" :size="18" /><i v-if="auto" class="gs-dot" aria-hidden="true" /></button>
   <Teleport to="body">
     <div v-if="open" class="gs-bg" @click.self="open = null">
       <div class="gs-pop" :style="open" role="menu" aria-label="Вид сетки">
@@ -31,6 +36,14 @@ onUnmounted(() => removeEventListener('keydown', onKey))
           <span class="gs-tx"><b>Прошедшее время</b><small>закрашивать серым</small></span>
           <input type="checkbox" class="sw" :checked="pastShade" @change="setPastShade($event.target.checked)" />
         </label>
+        <template v-if="auto !== null">
+          <div class="gs-h sep">Расписание</div>
+          <label class="gs-r" role="menuitemcheckbox" :aria-checked="auto">
+            <span class="gs-pv auto"><i v-for="n in 6" :key="n" :class="{ a: n % 3 === 1 }" /></span>
+            <span class="gs-tx"><b>Автоподстановка</b><small>уроки этой недели — на 4 недели вперёд{{ autoTo ? ', ' + autoTo : '' }}</small></span>
+            <input type="checkbox" class="sw" :checked="auto" @change.prevent="flipAuto" />
+          </label>
+        </template>
         <div class="gs-h sep">Урок</div>
         <button v-for="s in LESSON_STYLES" :key="s.id" class="gs-r" role="menuitemradio" :aria-checked="lessonStyle === s.id" @click="setLessonStyle(s.id)">
           <span class="ls-pv" :class="s.id"><i /><b /></span>
@@ -48,6 +61,7 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 
 <style scoped>
 .gsb { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--hint); cursor: pointer }
+.gsb { position: relative } .gs-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 2px var(--card) }
 .gsb:hover, .gsb.on { color: var(--blue); border-color: var(--blue); background: var(--blue-l) }
 .gs-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .06) }
 .gs-pop { position: fixed; display: grid; padding: 4px 0; border-radius: 16px; background: var(--card); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 0 0 1px rgba(0, 0, 0, .04); overflow: hidden; transform-origin: top center; animation: gsp .16s ease-out }
@@ -67,6 +81,8 @@ onUnmounted(() => removeEventListener('keydown', onKey))
 .gs-pv.frm { box-shadow: 0 0 0 2px var(--hint-2) } .gs-pv.frm.off { box-shadow: none; background: transparent } .gs-pv.frm i { background: var(--border) }
 .gs-h.sep { margin-top: 2px; padding-top: 10px; box-shadow: inset 0 1px 0 var(--border) }
 .gs-pv.bgd { width: 38px; height: 25px; padding: 0; background-color: #f4f4f4; background-image: radial-gradient(circle, #bdbdbd .9px, transparent 1.2px); background-size: 5px 5px }
+/* Превью «автоподстановка»: уроки в первом столбце повторяются вниз */
+.gs-pv.auto i { background: var(--card); box-shadow: inset 0 0 0 1px var(--hint-2) } .gs-pv.auto i.a { background: var(--blue); box-shadow: none }
 /* Превью «прошедшее время» и вида урока */
 .gs-pv.past i { background: var(--card); box-shadow: inset 0 0 0 1px var(--hint-2) } .gs-pv.past i.p { background: var(--border) } .gs-pv.past i.h { background: linear-gradient(var(--border) 50%, var(--card) 50%) }
 .ls-pv { flex: none; position: relative; display: flex; align-items: center; width: 38px; height: 20px }
