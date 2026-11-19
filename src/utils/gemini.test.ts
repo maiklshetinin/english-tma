@@ -80,3 +80,24 @@ describe('«Ответ по смыслу» в уроке', () => {
     expect(r.steps.every(s => !stepIssue(s))).toBe(true)
   })
 })
+
+describe('Gemini: модель подбирается сама', () => {
+  beforeEach(() => { ai.keys = []; ai.model = 'gemini-flash-latest' })
+  it('из списка моделей ключа — свежая текстовая Flash', async () => {
+    const { bestModel } = await import('./gemini')
+    expect(bestModel(['gemini-2.5-flash-preview-tts', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash-preview', 'gemini-3.1-flash-image'])).toBe('gemini-3.6-flash')
+    expect(bestModel(['gemini-3.6-flash', 'gemini-flash-latest'])).toBe('gemini-flash-latest')
+    expect(bestModel(['gemini-2.5-flash-preview-tts'])).toBe('')
+  })
+  it('404 «нет такой модели» → список моделей ключа → другая модель, повтор', async () => {
+    addKey('k1'); const urls: string[] = []
+    const f = (async (u: string) => {
+      urls.push(u)
+      if (u.endsWith('?pageSize=1000')) return reply(200, { models: [{ name: 'models/gemini-2.5-flash-preview-tts', supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-3.6-flash', supportedGenerationMethods: ['generateContent', 'countTokens'] }] })
+      if (u.includes('gemini-flash-latest')) return reply(404, { error: { code: 404, message: 'models/gemini-flash-latest is not found' } })
+      return good({ score: 80, missed_points: [], feedback: 'ok' })
+    }) as any
+    expect((await checkAnswer(q, f)).score).toBe(80)
+    expect(ai.model).toBe('gemini-3.6-flash'); expect(urls.at(-1)).toContain('gemini-3.6-flash:generateContent')
+  })
+})

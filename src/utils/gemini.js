@@ -7,7 +7,7 @@ import { reactive } from 'vue'
 const KEYS = 'tma.ai.keys.v1', MODEL = 'tma.ai.model'
 export const MODEL_DEFAULT = 'gemini-flash-latest'          // псевдоним Google: всегда свежая Flash-модель (gemini-2.5-flash новым проектам уже не выдают — 404)
 export const PASS = 60                                    // зачёт — от 60 % (рекомендация курса: 60–70 % «идеального» ответа — уже хорошо)
-const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
+const API = 'https://generativelanguage.googleapis.com/v1beta/models/'          // тот же адрес и заголовок x-goog-api-key, что у рабочей озвучки (gemini-2.5-flash-preview-tts)
 
 const read = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d } catch { return d } }
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* приватный режим */ } }
@@ -67,6 +67,27 @@ async function call(key, prompt, json, fetcher = fetch, system = SYSTEM) {
   if (!r.ok) { let msg = raw; try { msg = JSON.parse(raw).error?.message ?? raw } catch { /* не JSON */ } const e = new Error(errText(r.status, msg)); e.status = r.status; e.wait = retryMs(raw); throw e }
   return JSON.parse(raw).candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
 }
+/** Какие текстовые модели видит ключ (Google: GET …/v1beta/models) → самая свежая Flash: сначала псевдоним gemini-flash-latest,
+ *  потом стабильная (без preview), потом версия новее; Lite — в последнюю очередь. Озвучка, картинки, Live и т.п. не подходят. */
+export function bestModel(names) {
+  const ok = names.filter(n => /flash/i.test(n) && !/(tts|image|live|audio|embed|vision|native|computer|robotics|exp)/i.test(n))
+  if (ok.includes('gemini-flash-latest')) return 'gemini-flash-latest'
+  const ver = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) ?? [])[1] ?? '0')
+  const rank = (n) => [/lite/i.test(n) ? 1 : 0, /preview|latest/i.test(n) ? 1 : 0, -ver(n), n.length]
+  return ok.sort((a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1; return 0 })[0] ?? ''
+}
+export async function listModels(key, fetcher = fetch) {
+  const r = await fetcher(API.replace(/\/$/, '') + '?pageSize=1000', { headers: { 'x-goog-api-key': key } })
+  if (!r.ok) return []
+  const list = JSON.parse(await r.text()).models ?? []
+  return list.filter(m => (m.supportedGenerationMethods ?? []).includes('generateContent')).map(m => String(m.name ?? '').replace(/^models\//, '')).filter(Boolean)
+}
+/** «Нет такой модели» (404) — спросить у Google, какие модели видит ключ, взять свежую текстовую Flash. true — модель сменилась */
+async function fixModel(key, fetcher) {
+  const m = bestModel(await listModels(key, fetcher).catch(() => []))
+  if (!m || m === ai.model) return false
+  setModel(m); return true
+}
 function mark(x, ok, e) {
   if (x.day !== today()) { x.day = today(); x.n = 0 }
   x.n++; x.ok = ok; x.err = ok ? '' : e.message
@@ -87,7 +108,10 @@ export async function checkAnswer(q, fetcher = fetch) {
   let last = null
   for (const x of list) {
     try {
-      const out = JSON.parse(await call(x.key, text, true, fetcher, system))
+      let raw
+      try { raw = await call(x.key, text, true, fetcher, system) }
+      catch (e) { if (e.status === 404 && await fixModel(x.key, fetcher)) raw = await call(x.key, text, true, fetcher, system); else throw e }          // модель не нашлась — подобрали и ещё раз
+      const out = JSON.parse(raw)
       mark(x, true)
       const score = Math.max(0, Math.min(100, Math.round(Number(out.score) || 0)))
       return { score, missed: (Array.isArray(out.missed_points) ? out.missed_points : []).map(String).filter(Boolean).slice(0, 8), feedback: String(out.feedback ?? ''), ok: score >= need }
@@ -103,5 +127,9 @@ export async function checkAnswer(q, fetcher = fetch) {
 /** «Проверить» у ключа: крошечный запрос к модели проверки */
 export async function testKey(key, fetcher = fetch) {
   const x = ai.keys.find(k => k.key === key); if (!x) return
-  try { await call(key, 'Ответь одним словом: ok', false, fetcher); mark(x, true) } catch (e) { mark(x, false, e) }
+  const ping = () => call(key, 'Ответь одним словом: ok', false, fetcher)
+  try {
+    try { await ping() } catch (e) { if (e.status === 404 && await fixModel(key, fetcher)) await ping(); else throw e }          // нет модели — подобрать по списку Google
+    mark(x, true)
+  } catch (e) { mark(x, false, e) }
 }

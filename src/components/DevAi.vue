@@ -2,10 +2,11 @@
 // Вкладка «ИИ» панели разработчика (19.11.2026): ключи Gemini для упражнения «Ответ по смыслу» (src/exercises/kp).
 // Ключи — только в этом браузере (utils/gemini.js), на сервер не уходят. Пробуются сверху вниз; кончилась квота — следующий,
 // исчерпанный пропускается до времени, которое назвал Google. «Проверить» — крошечный запрос к модели проверки.
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ai, addKey, removeKey, moveKey, setModel, testKey, mask, countToday } from '../utils/gemini'
 
 const fresh = ref(''), busy = ref(''), now = ref(Date.now()), modelIn = ref(ai.model)
+watch(() => ai.model, (m) => { modelIn.value = m })          // модель подобралась сама (Google ответил «нет такой модели») — видно в поле
 const hm = (t) => new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 function add() { if (addKey(fresh.value)) { const k = fresh.value.trim(); fresh.value = ''; test(k) } }
 async function test(k) { busy.value = k; try { await testKey(k) } finally { busy.value = ''; now.value = Date.now() } }
@@ -26,6 +27,7 @@ const rows = computed(() => ai.keys.map(x => {
       <button type="submit" :disabled="!fresh.trim()">Добавить</button>
     </form>
     <label class="mdl"><span>Модель проверки</span><input v-model="modelIn" spellcheck="false" @change="setModel(modelIn); modelIn = ai.model" /></label>
+    <p class="nt">Если Google ответит «нет такой модели», приложение само возьмёт свежую текстовую Flash из списка моделей вашего ключа.</p>
     <p v-if="!rows.length" class="nt">Ключей пока нет — без ключа упражнение покажет эталон без процента.</p>
     <table v-else class="kt">
       <thead><tr><th>Ключ</th><th>Проверка</th><th title="Запросов к Gemini сегодня">Сегодня</th><th>Последняя ошибка</th><th /></tr></thead>
