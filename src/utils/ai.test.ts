@@ -23,6 +23,11 @@ describe('Проверка ответа через мост', () => {
     const r = await checkAnswer({ ...q, prompt: '  Sprawdzasz…  ', pass: 70 }, f)
     expect(calls[0].body.prompt).toBe('Sprawdzasz…'); expect(r.ok).toBe(false)
   })
+  it('чату эталон уходит без оформления', async () => {
+    const { f, calls } = fake(200, { score: 50, missed: [], feedback: '' })
+    await checkAnswer({ ...q, reference: '==Adwent== trwa **cztery tygodnie** _(na przykład)_ pod_kreślnik\n• ==Choinka==: życie' }, f)
+    expect(calls[0].body.reference).toBe('Adwent trwa cztery tygodnie (na przykład) pod_kreślnik\n- Choinka: życie')
+  })
   it('мост не в сети — ошибка с текстом сервера', async () => {
     const { f } = fake(503, { error: 'Мост с чатом не в сети — откройте вкладку с чатом и скриптом' })
     await expect(checkAnswer(q, f)).rejects.toThrow(/не в сети/)
@@ -41,5 +46,11 @@ describe('«Ответ по смыслу» в уроке', () => {
     expect(r.steps.map(s => [s.kind, s.text, s.ideal])).toEqual([['kp', 'Kiedy i jak obchodzimy Mikołajki?', 'Mikołajki obchodzimy…'], ['kp', 'Co to jest Wielki Post?', 'Wielki Post to…']])
     expect(r.steps.every(s => s.prompt === 'Sprawdzasz…' && s.pass === 70)).toBe(true)          // промпт и порог урока — каждому экрану
     expect(r.steps.every(s => !stepIssue(s))).toBe(true)
+  })
+  it('оформление из домашки: reference_html → разметка, звезда и номер', () => {
+    const r = stepsFromJson(JSON.stringify({ questions: [{ id: 5, star: true, question: 'Tradycje?', reference: 'x',
+      reference_html: '<p>Podczas <b>Wigilii</b>:</p><ul><li><b class="acc">Kolędowanie</b>: <i>„</i><b>Cicha noc</b><i>”</i> &amp; <i>(dary)</i></li></ul>' }, { id: 6, question: 'Bez?', reference: 'y' }] }))!
+    expect(r.steps[0]).toMatchObject({ kind: 'kp', n: 5, star: true, ideal: 'Podczas **Wigilii**:\n• ==Kolędowanie==: „**Cicha noc**” & _(dary)_' })
+    expect(r.steps[1].star).toBeUndefined(); expect(r.steps[1]).toMatchObject({ n: 6, ideal: 'y' })
   })
 })

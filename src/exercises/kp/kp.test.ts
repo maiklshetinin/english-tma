@@ -69,12 +69,25 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     const w = mount(host(st, log))
     await w.find('.cf .ext').trigger('click')
     const o = JSON.parse((w.find('.kjt').element as HTMLTextAreaElement).value)
-    expect(o).toEqual({ question: step.text, reference: step.ideal, pass_threshold: 60, system_prompt: SYSTEM })
+    expect(o).toEqual({ id: null, star: false, question: step.text, reference: step.ideal, pass_threshold: 60, system_prompt: SYSTEM })
     await w.find('.kjt').setValue(JSON.stringify({ ...o, pass_threshold: 70, system_prompt: 'Bądź surowy.' })); await w.find('.kjo').trigger('click')
     expect(st.prompt).toBe('Bądź surowy.'); expect(st.pass).toBe(70); expect(log).toContain('changed'); expect(w.find('.kj').exists()).toBe(false)
     await w.find('.cf .ext').trigger('click'); await w.find('.kjt').setValue('{ сломано'); await w.find('.kjo').trigger('click')
     expect(w.find('.kjb em').text()).toMatch(/Не JSON/); expect(st.prompt).toBe('Bądź surowy.')
     await w.find('.kjt').setValue(JSON.stringify({ ...o })); await w.find('.kjo').trigger('click')          // вернули общий — у экрана своего нет
     expect('prompt' in st).toBe(false); expect('pass' in st).toBe(false)
+  })
+  it('как в домашке: номер и вопрос на подложке, звезда, в эталоне — оранжевые термины, жирный, курсив, пункты', async () => {
+    g.next.push(res(70))
+    const rich = { ...step, n: 5, star: true, ideal: '==Adwent== trwa **cztery tygodnie** _(na przykład)_.\nTradycje:\n• ==Choinka==: symbol życia\n• **Opłatek**' }
+    const w = mount(LessonPlayer, { props: { steps: [rich], resolve, embedded: true } })
+    expect(w.find('.kqt').text()).toBe('5.' + step.text); expect(w.find('.kst svg').exists()).toBe(true)
+    await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
+    const ref = w.find('.kb.ref .kr')
+    expect(ref.find('b.acc').text()).toBe('Adwent'); expect(ref.find('p b:not(.acc)').text()).toBe('cztery tygodnie'); expect(ref.find('i').text()).toBe('(na przykład)')
+    expect(ref.findAll('li').map((x) => x.text())).toEqual(['Choinka: symbol życia', 'Opłatek']); expect(ref.text()).not.toContain('==')
+    expect(vi.mocked(checkAnswer).mock.calls.at(-1)![0].reference).toContain('==Adwent==')          // разметку снимает checkAnswer (kpPlain)
+    const plain = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
+    expect(plain.find('.kst').exists()).toBe(false)                                                                     // без звезды — без звезды
   })
 })

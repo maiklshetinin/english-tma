@@ -29,7 +29,8 @@ export interface Step {
   phrase?: string; note?: string; by?: 'letters'                     // by: 'letters' — «Собери слово»: по буквам, а не по словам
                                      // «Собери фразу»: фраза (слова через пробел), перевод — в tr, пояснение
   text?: string                                                      // «Подсказка»: текст правила; фразы с переводом и звуком — в opts; «Ответь на вопрос»: вопрос
-  ideal?: string                                                     // «Ответ по смыслу»: эталон ответа (с ним Gemini сверяет ответ ученика)
+  ideal?: string                                                     // «Ответ по смыслу»: эталон; оформление как в домашке: **жирный**, ==оранжевый термин==, _курсив_, «• » — пункт (чату уходит без разметки)
+  star?: boolean; n?: number                                         // «Ответ по смыслу»: красная звезда (знать обязательно) и номер вопроса, как в домашке
   prompt?: string; pass?: number                                     // «Ответ по смыслу»: свой промпт для чата и порог зачёта, % (нет — общие, utils/ai.js)
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
   head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
@@ -397,6 +398,17 @@ export function stepJson(s: Step): Omit<Step, 'id'> { const { id: _id, ...rest }
 const STR = ['word', 'tr', 'ex', 'exTr', 'image', 'audio', 'video', 'exAudio', 'phrase', 'note', 'text', 'ideal', 'prompt'] as const
 const str = (v: unknown) => (typeof v === 'string' && v.trim() && !v.startsWith('idb:') && !v.startsWith('blob:') ? v : undefined)
 /** Один экран из «сырого» объекта: тип должен быть известным, остальные поля — только знакомые и нужного вида (лишнее отбрасываем) */
+/** Эталон из HTML домашки → разметка экрана: <b class="acc"> — ==оранжевый==, <b> — **жирный**, <i> — _курсив_, <p> — абзац, <li> — «• » */
+export function kpFromHtml(h: string) {
+  const un = (t: string) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+  return un(h
+    .replace(/<b class="acc">([\s\S]*?)<\/b>/g, '==$1==')
+    .replace(/<(b|strong)>([\s\S]*?)<\/\1>/g, '**$2**')
+    .replace(/<(i|em)>([\s\S]*?)<\/\1>/g, (_, _t, x) => (/[\p{L}\d]/u.test(x) ? '_' + x + '_' : x))          // курсивные кавычки без букв — просто кавычки
+    .replace(/<li>/g, '\n• ').replace(/<\/(p|li|ul)>|<br\s*\/?>/g, '\n').replace(/<[^>]+>/g, ''))
+    .split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n')
+}
+
 function stepFrom(o: any): Step | null {
   if (!o || typeof o !== 'object' || !(o.kind in KINDS)) return null
   const s: any = { id: stepId(), kind: o.kind }
@@ -407,6 +419,8 @@ function stepFrom(o: any): Step | null {
   if (Number.isInteger(o.ans) && o.ans >= 0) s.ans = o.ans
   if (typeof o.min === 'number' && o.min > 0 && o.min <= 60) s.min = o.min
   if (o.kind === 'kp' && Number.isInteger(o.pass) && o.pass > 0 && o.pass <= 100) s.pass = o.pass
+  if (o.kind === 'kp' && o.star === true) s.star = true
+  if (o.kind === 'kp' && Number.isInteger(o.n) && o.n > 0 && o.n < 100) s.n = o.n
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
       .map((x: any) => ({ w: x.w.trim(), ...(TILE[x.k] ? { k: x.k } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
@@ -443,7 +457,14 @@ export function stepsFromJson(text: string): { steps: Step[]; bad: number } | nu
   }
   // вопросы урока Karta Polaka (как присылает Gemini): { questions: [{ question, reference }] } → экраны «Ответ по смыслу»
   // промпт и порог из api_config / pass_threshold — каждому экрану (можно потом поправить в JSON экрана)
-  if (Array.isArray(v?.questions)) { const pr = str(v.api_config?.system_prompt), pass = v.pass_threshold; v = v.questions.filter((q: any) => str(q?.question)).map((q: any) => ({ kind: 'kp', text: q.question, ...(str(q.reference) ? { ideal: q.reference } : {}), ...(pr ? { prompt: pr } : {}), ...(pass != null ? { pass } : {}) })) }
+  // 19.11.2026: оформление из домашки — reference_html (оранжевые термины, жирный, курсив, списки) → разметка эталона; star — красная звезда, id — номер
+  if (Array.isArray(v?.questions)) {
+    const pr = str(v.api_config?.system_prompt), pass = v.pass_threshold
+    v = v.questions.filter((q: any) => str(q?.question)).map((q: any) => {
+      const ideal = str(q.reference_html) ? kpFromHtml(q.reference_html) : str(q.reference)
+      return { kind: 'kp', text: q.question, ...(ideal ? { ideal } : {}), ...(q.star === true ? { star: true } : {}), ...(Number.isInteger(q.id) ? { n: q.id } : {}), ...(pr ? { prompt: pr } : {}), ...(pass != null ? { pass } : {}) }
+    })
+  }
   const list = Array.isArray(v) ? v : Array.isArray(v?.steps) ? v.steps : v?.kind ? [v] : null
   if (!list?.length || !list.some((o: any) => o?.kind)) return null
   const steps = list.map(stepFrom).filter(Boolean) as Step[]

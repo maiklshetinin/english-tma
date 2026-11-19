@@ -5,6 +5,8 @@
 // поле ответа (после проверки — тот же текст на том же месте), «Не прозвучало», «Эталон». Отзыв Gemini — в подвале.
 // Вид — как домашка курса: кремовый фон и шрифты Alice / PT Serif. В правке: вопрос и эталон правятся на своих местах,
 // а «JSON» в подвале — весь экран текстом: вопрос, эталон, порог и промпт для Gemini (свой у этого экрана; для теста промпта).
+// 19.11.2026: точь-в-точь как в ответах домашки — номер и вопрос на подложке #f2dab5, красная гранёная звезда у обязательных (step.star),
+// в эталоне оранжевые термины, жирный, курсив, абзацы с отступом и пункты (разметка: ==термин==, **жирный**, _курсив_, «• »).
 import { ref, computed, onMounted } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
@@ -24,6 +26,22 @@ onMounted(() => {
   document.head.appendChild(l)
 })
 
+// эталон с оформлением домашки: строки — абзацы, «• » — пункт списка; внутри ==оранжевый==, **жирный**, _курсив_
+const TOK = /(\*\*.+?\*\*|==.+?==|(?<![\p{L}\d])_.+?_(?![\p{L}\d]))/u
+const runs = (l) => l.split(new RegExp(TOK.source, 'gu')).filter(Boolean).map((x) => (
+  x.startsWith('**') && x.endsWith('**') && x.length > 4 ? { t: x.slice(2, -2), k: 'b' }
+    : x.startsWith('==') && x.endsWith('==') && x.length > 4 ? { t: x.slice(2, -2), k: 'acc' }
+      : x.length > 2 && x.startsWith('_') && x.endsWith('_') ? { t: x.slice(1, -1), k: 'i' } : { t: x, k: '' }))
+const refBlocks = computed(() => {
+  const out = []
+  for (const l of String(props.step.ideal ?? '').split('\n').map((x) => x.trim()).filter(Boolean)) {
+    if (l.startsWith('• ')) { const last = out.at(-1), li = runs(l.slice(2)); if (last?.ul) last.ul.push(li); else out.push({ ul: [li] }) }
+    else out.push({ p: runs(l) })
+  }
+  return out
+})
+function toggleStar() { if (props.step.star) delete props.step.star; else props.step.star = true; ed.changed() }
+
 const r = computed(() => p.st.ai)                          // { score, missed, feedback } или { error }
 const checked = computed(() => !!r.value && r.value.score != null)
 const words = computed(() => { const n = (p.st.text || '').trim() ? p.st.text.trim().split(/\s+/).length : 0; return `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'слово' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'слова' : 'слов'}` })
@@ -37,7 +55,7 @@ const tick = computed(() => [pt(pass.value / 100, 40), pt(pass.value / 100, 56)]
 
 // «JSON» в правке: экран текстом (как присылает Gemini) — поправили и «Применить»; промпт и порог по умолчанию не сохраняются
 const jsOpen = ref(false), js = ref(''), jsErr = ref('')
-const asJson = () => JSON.stringify({ question: props.step.text ?? '', reference: props.step.ideal ?? '', pass_threshold: pass.value, system_prompt: props.step.prompt || SYSTEM }, null, 2)
+const asJson = () => JSON.stringify({ id: props.step.n ?? null, star: !!props.step.star, question: props.step.text ?? '', reference: props.step.ideal ?? '', pass_threshold: pass.value, system_prompt: props.step.prompt || SYSTEM }, null, 2)
 function jsToggle() { jsOpen.value = !jsOpen.value; if (jsOpen.value) { js.value = asJson(); jsErr.value = '' } }
 function jsApply() {
   let o; try { o = JSON.parse(js.value) } catch { jsErr.value = 'Не JSON — проверьте кавычки и запятые'; return }
@@ -46,6 +64,8 @@ function jsApply() {
   if (o.pass_threshold != null && !(Number.isInteger(n) && n > 0 && n <= 100)) { jsErr.value = 'pass_threshold — целое от 1 до 100'; return }
   if (typeof o.question === 'string') s.text = o.question
   if (typeof o.reference === 'string') s.ideal = o.reference
+  if (o.star === true) s.star = true; else if (o.star === false) delete s.star
+  if (Number.isInteger(o.id) && o.id > 0 && o.id < 100) s.n = o.id; else if (o.id === null) delete s.n
   if (o.pass_threshold == null || n === PASS) delete s.pass; else s.pass = n
   const pr = typeof o.system_prompt === 'string' ? o.system_prompt.trim() : ''
   if (!pr || pr === SYSTEM) delete s.prompt; else s.prompt = pr
@@ -57,7 +77,14 @@ function jsApply() {
   <template v-if="part === 'body'">
     <ExHead :step="step" :def="J.head" />
     <div class="kq">
-      <ExText v-model="step.text" tag="b" class="kqt" ph="Kiedy i jak obchodzimy Mikołajki?" multi empty="…" />
+      <div class="kqw">
+        <button v-if="p.edit" type="button" class="kst" :class="{ off: !step.star }" :title="step.star ? 'Обязательный вопрос (звезда) — убрать' : 'Сделать обязательным (красная звезда)'" @click="toggleStar"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 50L38.4 3.4L35.4 37.8Z" class="s1" /><path d="M50 50L38.4 3.4L57.1 32.4Z" class="s2" /><path d="M50 50L90.7 24.6L57.1 32.4Z" class="s1" /><path d="M50 50L90.7 24.6L69.0 51.3Z" class="s2" /><path d="M50 50L86.8 80.9L69.0 51.3Z" class="s1" /><path d="M50 50L86.8 80.9L54.6 68.4Z" class="s2" /><path d="M50 50L32.0 94.5L54.6 68.4Z" class="s1" /><path d="M50 50L32.0 94.5L33.9 60.1Z" class="s2" /><path d="M50 50L2.1 46.7L33.9 60.1Z" class="s1" /><path d="M50 50L2.1 46.7L35.4 37.8Z" class="s2" /></svg></button>
+        <span v-else-if="step.star" class="kst" title="Ответ нужно знать обязательно"><svg viewBox="0 0 100 100" role="img" aria-label="Обязательный вопрос"><path d="M50 50L38.4 3.4L35.4 37.8Z" class="s1" /><path d="M50 50L38.4 3.4L57.1 32.4Z" class="s2" /><path d="M50 50L90.7 24.6L57.1 32.4Z" class="s1" /><path d="M50 50L90.7 24.6L69.0 51.3Z" class="s2" /><path d="M50 50L86.8 80.9L69.0 51.3Z" class="s1" /><path d="M50 50L86.8 80.9L54.6 68.4Z" class="s2" /><path d="M50 50L32.0 94.5L54.6 68.4Z" class="s1" /><path d="M50 50L32.0 94.5L33.9 60.1Z" class="s2" /><path d="M50 50L2.1 46.7L33.9 60.1Z" class="s1" /><path d="M50 50L2.1 46.7L35.4 37.8Z" class="s2" /></svg></span>
+        <ExText v-model="step.text" tag="div" class="kqt" ph="Kiedy i jak obchodzimy Mikołajki?" multi>
+          <template #before><span v-if="step.n" class="kqn">{{ step.n }}.</span></template>
+          <span v-if="step.n" class="kqn">{{ step.n }}.</span>{{ step.text || '…' }}
+        </ExText>
+      </div>
       <div class="kg" :class="checked && tier">
         <svg viewBox="0 0 120 66" role="img" :aria-label="checked ? `Совпадение по смыслу ${r.score} %` : 'Ещё не проверено'">
           <path d="M12 60 A48 48 0 0 1 108 60" class="tr" />
@@ -84,8 +111,13 @@ function jsApply() {
     </div>
     <div class="kb ref">
       <div class="kh">Эталон</div>
-      <ExText v-if="p.edit" v-model="step.ideal" tag="p" class="kr" ph="Полный «идеальный» ответ — с ним Gemini сверяет ответ ученика" multi />
-      <p v-else-if="p.st.done" class="kr">{{ step.ideal }}</p>
+      <ExText v-if="p.edit" v-model="step.ideal" tag="p" class="kr raw" ph="Полный «идеальный» ответ. Оформление: ==термин== оранжевым, **жирный**, _курсив_, строка с «• » — пункт" multi />
+      <div v-else-if="p.st.done" class="kr">
+        <template v-for="(b, i) in refBlocks" :key="i">
+          <p v-if="b.p"><template v-for="(x, j) in b.p" :key="j"><b v-if="x.k === 'b' || x.k === 'acc'" :class="x.k === 'acc' && 'acc'">{{ x.t }}</b><i v-else-if="x.k === 'i'">{{ x.t }}</i><template v-else>{{ x.t }}</template></template></p>
+          <ul v-else><li v-for="(li, j) in b.ul" :key="j"><template v-for="(x, m) in li" :key="m"><b v-if="x.k === 'b' || x.k === 'acc'" :class="x.k === 'acc' && 'acc'">{{ x.t }}</b><i v-else-if="x.k === 'i'">{{ x.t }}</i><template v-else>{{ x.t }}</template></template></li></ul>
+        </template>
+      </div>
       <p v-else class="ph">Откроется после проверки — не подглядывайте</p>
     </div>
   </template>
@@ -106,7 +138,13 @@ function jsApply() {
 
 <style scoped>
 .kq { display: flex; align-items: center; gap: 14px; min-height: 84px }
-.kqt { flex: 1; min-width: 0; font-family: 'PT Serif', Georgia, serif; font-size: 21px; font-weight: 400; line-height: 1.3; color: #351a05 }
+/* вопрос — как заголовок вопроса в ответах домашки: номер и текст на подложке, звезда наползает слева */
+.kqw { position: relative; flex: 1; min-width: 0; display: flex; align-items: center }
+.kqt { flex: 1; min-width: 0; padding: 5px 12px; border-radius: 10px; background: #f2dab5; font-family: 'PT Serif', Georgia, serif; font-size: 19px; font-weight: 400; line-height: 1.35; color: #351a05 }
+.kqt :deep(.exf) { background: transparent } .kqn { margin-right: .3em }
+.kst { flex: none; width: 30px; height: 30px; margin: 0 -9px 0 -6px; padding: 0; border: 0; background: none; position: relative; z-index: 1 } button.kst { cursor: pointer }
+.kst svg { display: block; width: 100%; height: 100% } .kst .s1 { fill: #ff3b3b } .kst .s2 { fill: #d10f0f }
+.kst.off { opacity: .28; filter: grayscale(1) } .kst.off:hover { opacity: .6 }
 .kg { flex: none; display: flex; align-items: center; gap: 8px; width: 178px }
 .kg svg { width: 84px; height: 46px; flex: none; overflow: visible }
 .kg .tr { fill: none; stroke: #f0d6ae; stroke-width: 11; stroke-linecap: round }
@@ -126,7 +164,10 @@ function jsApply() {
 .kh { font-family: var(--font); font-size: 12px; font-weight: 800; color: #6b5a48; text-transform: uppercase; letter-spacing: .3px }
 .kb ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-family: 'PT Serif', Georgia, serif; font-size: 15px; line-height: 1.35; color: #351a05 }
 .ph { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 14.5px; font-style: italic; color: #8a6a48 } .ph.er { color: #b3261e; font-style: normal }
-.kr { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 15.5px; line-height: 1.55; color: #351a05; white-space: pre-wrap }
+.kr { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 15.5px; font-weight: 400; line-height: 1.5; color: #351a05 }
+.kr.raw { white-space: pre-wrap }
+.kr p { margin: 0; text-indent: 1em } .kr ul { margin: 2px 0; padding-left: 22px; display: grid; gap: 2px } .kr li::marker { color: #cd8a30 }
+.kr b { font-weight: 700 } .kr b.acc { color: #cd8a30 } .kr i { font-style: italic }
 /* «JSON» в подвале правки — окошко поверх (окно экрана не растёт) */
 .kjw { position: relative; display: inline-flex }
 .kj { position: absolute; left: 0; bottom: calc(100% + 12px); z-index: 6; display: grid; gap: 6px; width: 440px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); box-shadow: 0 6px 20px rgba(0, 0, 0, .12); font-family: var(--font) }

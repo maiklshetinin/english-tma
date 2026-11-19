@@ -14,9 +14,12 @@ export const SYSTEM = 'Ты проверяешь устный ответ уче�
 /** Проверка: { score 0–100, missed: [], feedback, ok: score ≥ порога }. prompt, pass — свои у экрана (нет — по умолчанию).
  *  Мост не в сети, чат не ответил — ошибка с текстом сервера
  *  @param {{ question: string, reference: string, answer: string, prompt?: string, pass?: number }} q */
+/** Эталон без разметки оформления (**жирный**, ==термин==, _курсив_, «• ») — так его видит чат */
+export const kpPlain = (t) => String(t ?? '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1').replace(/(^|[^\p{L}\d])_(.+?)_(?![\p{L}\d])/gu, '$1$2').replace(/^• /gm, '- ')
+
 export async function checkAnswer(q, request = apiRequest) {
   const need = Number.isFinite(q.pass) ? q.pass : PASS
-  const r = await request('/ai/check', { method: 'POST', body: JSON.stringify({ question: q.question, reference: q.reference, answer: q.answer, prompt: q.prompt?.trim() || undefined }) })
+  const r = await request('/ai/check', { method: 'POST', body: JSON.stringify({ question: q.question, reference: kpPlain(q.reference), answer: q.answer, prompt: q.prompt?.trim() || undefined }) })
   let body = null
   try { body = await r.json() } catch { /* не JSON */ }
   if (!r.ok) throw new Error(body?.error || 'Ошибка сервера ' + r.status)
