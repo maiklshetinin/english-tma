@@ -5,6 +5,8 @@ import { ref, computed } from 'vue'
 import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import AppVersion from '../../components/AppVersion.vue'
+import GeminiKeys from '../../components/GeminiKeys.vue'
+import { ai as gem } from '../../utils/gemini'
 import { showToast } from '../../composables/useToast'
 import { ask } from '../../composables/useDialog'
 import { hapticOn, setHaptic, swipeLock, setSwipeLock } from '../../composables/useTelegram'
@@ -127,14 +129,26 @@ async function ping() {
       </label>
     </section>
 
+    <!-- Ключи Gemini (19.11.2026): свои у каждого преподавателя, только в этом браузере; на будущее — для озвучки. Свёрнуто, чтобы не мешало -->
+    <details class="grp keys">
+      <summary class="it">
+        <span class="ic"><AppIcon name="lock" :size="18" /></span>
+        <span class="tx">Ключи Gemini<small>Свои ключи Google для озвучки — хранятся только в этом браузере</small></span>
+        <span class="val">{{ gem.keys.length || '' }} <i class="chev">›</i></span>
+      </summary>
+      <div class="kp"><GeminiKeys /></div>
+    </details>
+
     <!-- Для разработчика (DEV_IDS): проверка связи с сервером. Обычный преподаватель этого не видит -->
     <template v-if="auth.isDev">
       <h4 class="gh">Для разработчика</h4>
       <section class="grp">
         <!-- кто сейчас в приложении: кружки (зелёная галочка — свежая сборка, оранжевая стрелка — старая) и мини-таблица сборок по коммиту -->
-        <div class="it vr">
-          <span class="ic"><AppIcon name="users" :size="18" /></span>
-          <div class="tx">Версии в приложении<small>на сайте сейчас: <code class="cm">{{ fresh }}</code>{{ site ? '' : ' (локально)' }}</small>
+        <details class="fold">
+          <summary class="it"><span class="ic"><AppIcon name="users" :size="18" /></span><span class="tx">Версии в приложении<small>на сайте сейчас: <code class="cm">{{ fresh }}</code>{{ site ? '' : ' (локально)' }}</small></span><span class="val">{{ vers.filter((p) => p.old).length ? `↻ ${vers.filter((p) => p.old).length} ` : '' }}<i class="chev">›</i></span></summary>
+        <div class="it vr fb">
+          <span class="ic" />
+          <div class="tx">
             <div v-if="vers.length" class="ppl">
               <span v-for="p in vers" :key="p.uid" class="pp" :class="{ old: p.old, off: !p.on }" :title="(p.on ? '' : seen(p.at) + '. ') + (!p.vers.length ? 'Версия пока неизвестна' : p.old ? 'Старая версия — нажмите «Обновить у всех»' : 'Свежая версия')">
                 <span class="pa"><Avatar :s="p" :size="44" /><i v-if="p.vers.length" class="pb">{{ p.old ? '↻' : '✓' }}</i></span>
@@ -154,15 +168,18 @@ async function ping() {
             <span v-else class="none">никого нет на связи</span>
           </div>
         </div>
+        </details>
         <button class="it" @click="updateEveryone">
           <span class="ic"><AppIcon name="download" :size="18" /></span>
           <span class="tx">Обновить у всех<small>после git push: обновятся, как только новая версия будет на сайте; кто работает — увидит плашку</small></span>
         </button>
         <!-- кэш чтений базы на сервере: дольше срок — меньше Reads в Firestore; любая правка через приложение всё равно сбрасывает нужное сразу -->
         <!-- права: кому «только просмотр» -->
-        <div class="it vr">
-          <span class="ic"><AppIcon name="users" :size="18" /></span>
-          <div class="tx">Права<small>«Уроки — просмотр» — нельзя менять только уроки в расписании (создать, перенести, отметить, удалить), остальное можно. «Всё — просмотр» — ничего не сохраняется: уроки, ученики, курсы. Чат работает.</small>
+        <details class="fold">
+          <summary class="it"><span class="ic"><AppIcon name="lock" :size="18" /></span><span class="tx">Права<small>кому только просмотр</small></span><span class="val"><i class="chev">›</i></span></summary>
+        <div class="it vr fb">
+          <span class="ic" />
+          <div class="tx"><small>«Уроки — просмотр» — нельзя менять только уроки в расписании (создать, перенести, отметить, удалить), остальное можно. «Всё — просмотр» — ничего не сохраняется: уроки, ученики, курсы. Чат работает.</small>
             <div v-for="t in team ?? []" :key="t.uid" class="rw">
               <Avatar :s="{ name: t.name, photoUrl: t.photo, color: '#9aa0a6' }" :size="30" /><b>{{ t.name }}</b>
               <label class="vsw" title="Уроки в расписании: создать, перенести, отметить проведённым / отменённым, удалить — нельзя; остальное можно"><span>уроки — просмотр</span><input type="checkbox" :checked="t.lessonsLock" :disabled="t.viewOnly" @change="setLessons(t, $event.target.checked)" /><i /></label>
@@ -171,10 +188,13 @@ async function ping() {
             <span v-if="team && !team.length" class="none">нет других преподавателей (TEACHER_IDS) или старая сборка сервера</span>
           </div>
         </div>
+        </details>
         <!-- учёт активности: заходы, время «открыто» / «активен» по вкладкам, лента; смотреть — панель разработчика → «Активность» -->
-        <div class="it vr">
-          <span class="ic"><AppIcon name="chart" :size="18" /></span>
-          <div class="tx">Учёт активности<small>Сколько времени приложение было на экране и сколько из него были действия (мышь, нажатия, касания) — по вкладкам и лентой. Выключено — ничего не считается и не отправляется.</small>
+        <details class="fold">
+          <summary class="it"><span class="ic"><AppIcon name="chart" :size="18" /></span><span class="tx">Учёт активности<small>{{ !actSet ? 'нет ответа от сервера' : actSet.teachers && actSet.students ? 'включён у всех' : actSet.teachers ? 'включён у преподавателей' : actSet.students ? 'включён у учеников' : 'выключен' }} · очистка логов</small></span><span class="val"><i class="chev">›</i></span></summary>
+        <div class="it vr fb">
+          <span class="ic" />
+          <div class="tx"><small>Сколько времени приложение было на экране и сколько из него были действия (мышь, нажатия, касания) — по вкладкам и лентой. Выключено — ничего не считается и не отправляется.</small>
             <template v-if="actSet">
               <label class="rw"><b>Преподаватели</b><input type="checkbox" class="sw" :checked="actSet.teachers" aria-label="Учёт: преподаватели" @change="setAct('teachers', $event.target.checked)" /></label>
               <label class="rw"><b>Ученики</b><input type="checkbox" class="sw" :checked="actSet.students" aria-label="Учёт: ученики" @change="setAct('students', $event.target.checked)" /></label>
@@ -190,16 +210,19 @@ async function ping() {
             </div>
           </div>
         </div>
+        </details>
         <!-- сеть, консоль сервера, нагрузка на базу, сервер — в панели разработчика (DevTools.vue), открывается на любом экране -->
         <button class="it" @click="devtools.open = !devtools.open">
           <span class="ic"><AppIcon name="sliders" :size="18" /></span>
           <span class="tx">Панель разработчика<small>сеть с чтениями базы, консоль сервера, нагрузка, сервер · на любом экране: жучок в углу или Ctrl + `</small></span>
           <span class="val">{{ devtools.open ? 'закрыть' : 'открыть' }}</span>
         </button>
-        <div class="it vr">
-          <span class="ic"><AppIcon name="sliders" :size="18" /></span>
+        <details class="fold">
+          <summary class="it"><span class="ic"><AppIcon name="sheet" :size="18" /></span><span class="tx">Кэш базы на сервере<small>{{ cache ? `экономия ${savedPct}% · срок и сброс` : 'нет ответа от сервера' }}</small></span><span class="val"><i class="chev">›</i></span></summary>
+        <div class="it vr fb">
+          <span class="ic" />
           <div class="tx">
-            <span class="ch">Кэш базы на сервере
+            <span class="ch">Срок
               <select class="sel" :value="cache?.min ?? 10" :disabled="!cache" aria-label="Срок кэша" @change="setCache({ min: +$event.target.value }, +$event.target.value ? 'Срок кэша изменён — кэш начат заново' : 'Кэш выключен')">
                 <option v-for="[m, t] in CACHE_OPTS" :key="m" :value="m">{{ t }}</option>
               </select>
@@ -221,6 +244,7 @@ async function ping() {
           <span class="tx">Сбросить кэш<small>если правили данные руками в консоли Firebase</small></span>
           <span class="val" @click.stop="loadCache" title="Обновить цифры">↻</span>
         </button>
+        </details>
         <button class="it" :disabled="busy" @click="ping">
           <span class="ic"><AppIcon name="refresh" :size="18" /></span>
           <span class="tx">Проверить связь с сервером</span>
@@ -239,6 +263,9 @@ async function ping() {
 .tg { gap: 8px }
 .me { display: grid; justify-items: center; gap: 4px; padding: 8px 0 14px; text-align: center }
 .me > b { margin-top: 8px; font-size: 22px } .me small { font-size: 14px; font-weight: 600; color: var(--hint) }
+.keys > summary { list-style: none } .keys > summary::-webkit-details-marker { display: none }
+.chev { display: inline-block; font-style: normal; transition: transform .2s } .keys[open] .chev { transform: rotate(90deg) }
+.kp { padding: 4px 16px 14px }
 .gh { margin: 10px 16px 2px; font-size: 13px; font-weight: 700; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }
 /* Группа строк как в Telegram: белая плашка, строки с тонким разделителем от текста (не от края) */
 .grp { overflow: hidden; border-radius: 14px; background: var(--card); border: 1px solid var(--border) }
@@ -246,6 +273,9 @@ async function ping() {
 .it + .it { background: linear-gradient(var(--border), var(--border)) right top / calc(100% - 60px) 1px no-repeat }      /* разделитель — от текста, как в Telegram */
 .it:hover:not(:disabled) { background: var(--surface) } .it:disabled { cursor: default; opacity: .6 }
 .ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; color: var(--hint) }      /* значки — просто серые, без цветных квадратиков */
+.fold > summary { list-style: none } .fold > summary::-webkit-details-marker { display: none }
+.fold + .it, .it + .fold, .fold + .fold { background: linear-gradient(var(--border), var(--border)) right top / calc(100% - 60px) 1px no-repeat }
+.fold[open] .chev { transform: rotate(90deg) } .fb { padding-top: 0 }
 .tx { flex: 1; display: grid; gap: 1px; min-width: 0; font-size: 16px; font-weight: 600 } .tx small { font-size: 12px; font-weight: 500; color: var(--hint) }
 .val { flex: none; font-size: 15px; font-weight: 500; color: var(--hint) }
 .ttl { display: inline-flex; align-items: center; gap: 6px } .tst { font-style: normal; padding: 1px 6px; border-radius: 6px; background: #ffc800; color: #4b3a00; font-size: 11px; font-weight: 900; letter-spacing: .3px }      /* жёлтый ярлык «ТЕСТ» — как на самой странице песочницы */

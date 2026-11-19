@@ -3,13 +3,12 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, reactive } from 'vue'
 import { provideEdit } from '../ctx'
 import { EX } from '../index'
-import { SYSTEM } from '../../utils/gemini'
-import { checkAnswer } from '../../utils/gemini'
+import { SYSTEM, checkAnswer } from '../../utils/ai'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 
-// Gemini подменяем: score задаёт тест
+// проверку через мост подменяем: score задаёт тест
 const g = vi.hoisted(() => ({ next: [] as any[] }))
-vi.mock('../../utils/gemini', async (orig) => ({ ...(await orig<any>()), checkAnswer: vi.fn(async () => { const r = g.next.shift(); if (r instanceof Error) throw r; return r }) }))
+vi.mock('../../utils/ai', async (orig) => ({ ...(await orig<any>()), checkAnswer: vi.fn(async () => { const r = g.next.shift(); if (r instanceof Error) throw r; return r }) }))
 
 const resolve = (v: string) => v
 const step = { id: 'q1', kind: 'kp', text: 'Kiedy i jak obchodzimy Mikołajki?', ideal: 'Mikołajki obchodzimy szóstego grudnia…' }
@@ -34,11 +33,11 @@ describe('«Ответ по смыслу»: экран у ученика', () =>
     expect(w.find('.ka.done').text()).toBe('Szóstego grudnia, dzieci dostają prezenty')
     expect(w.find('.foot').classes()).toContain('good'); expect(w.find('.foot .fb').text()).toContain('Dobrze!')
   })
-  it('Gemini не ответил — без оценки: эталон открыт, подвал не красный, в Review — ok: null', async () => {
-    g.next.push(Object.assign(new Error('Нет ключа Gemini'), { nokey: true }))
+  it('мост не ответил — без оценки: эталон открыт, подвал не красный, в Review — ok: null', async () => {
+    g.next.push(new Error('Мост с чатом не в сети — откройте вкладку с чатом и скриптом'))
     const w = mount(LessonPlayer, { props: { steps: [step], resolve, track: true } })
     await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
-    expect(w.find('.kb.miss').text()).toContain('нет ключа Gemini'); expect(w.find('.kb.ref').text()).toContain(step.ideal)
+    expect(w.find('.kb.miss').text()).toContain('Мост с чатом не в сети'); expect(w.find('.kb.ref').text()).toContain(step.ideal)
     expect(w.find('.foot').classes()).not.toContain('bad')
     expect(w.emitted('answer')!.at(-1)![0]).toMatchObject({ ok: null })
   })

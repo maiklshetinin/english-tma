@@ -1,6 +1,6 @@
 <script setup>
 // «Ответ по смыслу» (Karta Polaka, 19.11.2026): вопрос; ученик надиктовывает ответ в поле (своим приложением или микрофоном
-// клавиатуры), «Проверить» — Gemini сверяет с эталоном по смыслу (utils/gemini.js, ключи — во вкладке «ИИ» панели разработчика).
+// клавиатуры), «Проверить» — чат (ChatGPT / Gemini / Claude) в браузере преподавателя сверяет с эталоном по смыслу через мост (utils/ai.js, server/ai.ts).
 // Всё стоит на своих местах с самого начала, после проверки только заполняется — экран не прыгает: спидометр справа от вопроса,
 // поле ответа (после проверки — тот же текст на том же месте), «Не прозвучало», «Эталон». Отзыв Gemini — в подвале.
 // Вид — как домашка курса: кремовый фон и шрифты Alice / PT Serif. В правке: вопрос и эталон правятся на своих местах,
@@ -10,7 +10,7 @@ import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
 import { usePlay, useEdit } from '../ctx'
-import { PASS, SYSTEM } from '../../utils/gemini'
+import { PASS, SYSTEM } from '../../utils/ai'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -24,7 +24,7 @@ onMounted(() => {
   document.head.appendChild(l)
 })
 
-const r = computed(() => p.st.ai)                          // { score, missed, feedback } или { error, nokey }
+const r = computed(() => p.st.ai)                          // { score, missed, feedback } или { error }
 const checked = computed(() => !!r.value && r.value.score != null)
 const words = computed(() => { const n = (p.st.text || '').trim() ? p.st.text.trim().split(/\s+/).length : 0; return `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'слово' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'слова' : 'слов'}` })
 const tier = computed(() => { const s = r.value?.score ?? 0; return s >= pass.value ? 'ok' : s >= 40 ? 'mid' : 'low' })

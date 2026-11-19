@@ -14,7 +14,7 @@ import { review as rvStore, toggleFav } from '../stores/review'
 import { keyOf } from '../utils/review'
 import { exOf } from '../exercises'
 import { providePlay, useEdit } from '../exercises/ctx'
-import { checkAnswer } from '../utils/gemini'
+import { checkAnswer } from '../utils/ai'
 import { shuffle, orderParts, gapParts, gapOk, gapList, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -54,7 +54,7 @@ const src = (v, k) => (v ? props.resolve(v, k) : '')
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
 const { hapticResult, hapticTick } = useTelegram()      // виброотклик на ответы (в Профиле можно выключить)
-const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false })          // ai, busy — «Ответ по смыслу» (Gemini)
+const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false })          // ai, busy — «Ответ по смыслу» (проверка через мост с чатом)
 function setup() {
   Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false }); Object.assign(mine, { ok: 0, all: 0 })
   recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''; rec.miss = false
@@ -258,7 +258,7 @@ function checkAny() {
   if (s.kind === 'sort') return verdict((s.items ?? []).every((_, k) => sortOkAt(k)))
   check()
 }
-// «Ответ по смыслу»: Gemini сверяет ответ с эталоном (utils/gemini.js); от 60 % — верно. Не ответил (нет ключа, квота, сеть) — экран
+// «Ответ по смыслу»: чат через мост сверяет ответ с эталоном (utils/ai.js); от 60 % — верно. Не ответил (мост не в сети, чат молчит) — экран
 // закрывается без оценки: эталон открыт, в Review и в ошибки урока ничего не идёт
 async function aiCheck() {
   const s = step.value; st.busy = true
@@ -268,7 +268,7 @@ async function aiCheck() {
     st.ai = r; verdict(r.ok)
   } catch (e) {
     if (step.value !== s) return
-    st.ai = { error: e?.nokey ? 'Проверка недоступна: нет ключа Gemini. Сравните ответ с эталоном.' : `Проверка недоступна (${e?.message || 'ошибка'}). Сравните ответ с эталоном.` }
+    st.ai = { error: `Проверка недоступна (${e?.message || 'ошибка'}). Сравните ответ с эталоном.` }
     st.done = true
   } finally { st.busy = false }
 }

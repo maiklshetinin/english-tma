@@ -1,13 +1,12 @@
-// Проверка ответа по смыслу через Gemini (упражнение «Ответ по смыслу», src/exercises/kp) — 19.11.2026.
-// Ключи Google хранятся ТОЛЬКО в этом браузере (localStorage), на сервер не уходят; запрос к Gemini идёт прямо отсюда.
+// Ключи Gemini преподавателя (19.11.2026) — на будущее, для озвучки: таблица в профиле (components/GeminiKeys.vue).
+// Хранятся ТОЛЬКО в этом браузере (localStorage), на сервер не уходят; запрос к Google идёт прямо отсюда.
 // Ключи пробуются сверху вниз: кончилась квота — берётся следующий, а исчерпанный пропускается до времени,
-// которое назвал Google («Please retry in 10h39m…»). Вкладка «ИИ» в панели разработчика (DevAi.vue) — список ключей и проверка.
+// которое назвал Google («Please retry in 10h39m…»). Проверка ответов «по смыслу» сюда больше не ходит — она через мост с чатом (utils/ai.js).
 import { reactive } from 'vue'
 
 const KEYS = 'tma.ai.keys.v1', MODEL = 'tma.ai.model'
 export const MODEL_DEFAULT = 'gemini-3.8-flash'          // свежая стабильная Flash из списка моделей ключа автора (19.11.2026); не ответит — подберётся сама
 export const WAIT = 25_000                                // сколько ждём ответа одной модели, потом следующая
-export const PASS = 60                                    // зачёт — от 60 % (рекомендация курса: 60–70 % «идеального» ответа — уже хорошо)
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'          // тот же адрес и заголовок x-goog-api-key, что у рабочей озвучки (gemini-2.5-flash-preview-tts)
 
 const read = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d } catch { return d } }
@@ -50,17 +49,9 @@ export function errText(status, msg, model = ai.model) {
   return m ? m.slice(0, 160) : 'Ошибка ' + status
 }
 
-/** Промпт по умолчанию; у экрана может быть свой (step.prompt — правится в JSON экрана) */
-export const SYSTEM = 'Ты проверяешь устный ответ ученика на вопрос (подготовка к собеседованию на Карту поляка, польский язык). '
-  + 'Оценивай ответ по смыслу относительно эталона (reference), а не по буквальному совпадению слов. Засчитывай синонимы, перефразирование и иной порядок слов, если смысл сохранён. '
-  + 'Ответ может быть надиктован — не снижай оценку за мелкие ошибки распознавания речи. Эталон намеренно полный: 60–70 % его смысла — уже хороший ответ. '
-  + 'Верни строго JSON: score — целое 0–100 (полнота передачи смысла эталона); missed_points — короткие пункты на русском только о важных фактах эталона, которые не прозвучали (всё ключевое есть — пустой массив); '
-  + 'feedback — одно короткое предложение на русском: по смыслу или по польскому языку ответа, доброжелательно.'
-const SCHEMA = { type: 'OBJECT', properties: { score: { type: 'INTEGER' }, missed_points: { type: 'ARRAY', items: { type: 'STRING' } }, feedback: { type: 'STRING' } }, required: ['score', 'missed_points', 'feedback'] }
-
-async function call(key, prompt, json, fetcher = fetch, system = SYSTEM, model = ai.model) {
+/** Текстовый запрос к модели → текст ответа */
+export async function call(key, prompt, fetcher = fetch, model = ai.model) {
   const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: {} }          // без temperature: новые модели (3.x) её не принимают
-  if (json) { body.systemInstruction = { parts: [{ text: system }] }; body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = SCHEMA }
   let r
   // 25 с на ответ: модели 3.x у Google бывают перегружены и молчат минутами (форум Google, ноябрь 2026) — тогда следующая модель
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), WAIT)
@@ -112,35 +103,8 @@ function mark(x, ok, e) {
   save()
 }
 
-/** Проверка ответа: { score 0–100, missed: [], feedback, ok: score ≥ порога }. prompt, pass — свои у экрана (нет — по умолчанию).
- *  Нет ключей — ошибка с nokey; все не сработали — с текстом последней ошибки */
-/** @param {{ question: string, reference: string, answer: string, prompt?: string, pass?: number }} q */
-export async function checkAnswer(q, fetcher = fetch) {
-  const { question, reference, answer, prompt, pass } = q
-  const system = prompt?.trim() || SYSTEM, need = Number.isFinite(pass) ? pass : PASS
-  const text = `Вопрос: ${question}\n\nЭталон (reference): ${reference}\n\nОтвет ученика: ${answer}`
-  const list = ai.keys.filter(x => !(x.until > Date.now()))
-  if (!ai.keys.length) { const e = new Error('Нет ключа Gemini'); e.nokey = true; throw e }
-  if (!list.length) throw new Error('У всех ключей закончилась квота')
-  let last = null
-  for (const x of list) {
-    try {
-      const raw = await withModels(x.key, fetcher, (m) => call(x.key, text, true, fetcher, system, m))          // не ответила модель — следующая из списка ключа
-      const out = JSON.parse(raw)
-      mark(x, true)
-      const score = Math.max(0, Math.min(100, Math.round(Number(out.score) || 0)))
-      return { score, missed: (Array.isArray(out.missed_points) ? out.missed_points : []).map(String).filter(Boolean).slice(0, 8), feedback: String(out.feedback ?? ''), ok: score >= need }
-    } catch (e) {
-      last = e
-      if (e instanceof SyntaxError) { mark(x, false, new Error('Gemini ответил не JSON')); continue }
-      mark(x, false, e)
-      if (e.net || e.status >= 500) break                    // нет сети или Google перегружен — другие ключи не помогут
-    }
-  }
-  throw last ?? new Error('Проверка не удалась')
-}
 /** «Проверить» у ключа: крошечный запрос к модели проверки */
 export async function testKey(key, fetcher = fetch) {
   const x = ai.keys.find(k => k.key === key); if (!x) return
-  try { await withModels(key, fetcher, (m) => call(key, 'Ответь одним словом: ok', false, fetcher, SYSTEM, m)); mark(x, true) } catch (e) { mark(x, false, e) }          // не ответила модель — следующая из списка ключа
+  try { await withModels(key, fetcher, (m) => call(key, 'Ответь одним словом: ok', fetcher, m)); mark(x, true) } catch (e) { mark(x, false, e) }          // не ответила модель — следующая из списка ключа
 }

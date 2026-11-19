@@ -26,6 +26,7 @@ import { captureConsole, onLine, logs, onRequest, startSampler, serverStats, SRA
 import { countFirestore, inRoute, ours, since as usageSince, RANGES, type Range } from './metrics.js'
 import { makeActivity } from './activity.js'
 import { makeVisits } from './visits.js'
+import { makeAi } from './ai.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -49,7 +50,7 @@ countFirestore()          // свой счётчик чтений и запис�
 
 const app = express()
 const small = express.json({ limit: '10kb' }), big = express.json({ limit: '1mb' })            // путь, пресеты и колоды с карточками — крупнее обычных запросов
-app.use(cors({ origin: list(env.ALLOWED_ORIGIN), exposedHeaders: ['X-DB-Reads', 'X-DB-Writes', 'X-DB-Cached', 'X-Server-Ms'] }), (req, res, next) => (/^\/(paths|presets|decks|courses)\//.test(req.path) ? big : small)(req, res, next))
+app.use(cors({ origin: list(env.ALLOWED_ORIGIN), exposedHeaders: ['X-DB-Reads', 'X-DB-Writes', 'X-DB-Cached', 'X-Server-Ms'] }), (req, res, next) => (/^\/(paths|presets|decks|courses|ai)\//.test(req.path) ? big : small)(req, res, next))
 // метка запроса для счётчика «кто читает» (metrics.ts): «GET /lessons/range», длинные id → :id
 const routeLabel = (req: Request) => req.method + ' /' + req.path.split('/').filter(Boolean).slice(0, 3).map((p) => (p.length >= 12 || /^\d+$/.test(p) || /^tg:/.test(p) ? ':id' : p)).join('/')
 // Счёт каждого запроса — в заголовки ответа (перед отправкой): чтений и записей базы, отдано из кэша, время на сервере. Их показывает
@@ -68,8 +69,8 @@ app.use((req, res, next) => {                              // строка в л
   next()
 })
 // Правки в реальном времени: после удачной правки (не GET) остальным преподавателям — «перезагрузите это» (live.ts)
-const LIVE_SKIP = new Set(['courses', 'media', 'me', 'ping', 'auth', 'dev'])        // курсы синхронизируются сами, остальное — не данные
-const CACHE_KEEP = new Set(['lessons', 'schedule', 'courses', 'media', 'me', 'ping', 'notes'])      // уроки сбрасывают кэш сами и точечно (schedule.ts), остальное кэш не трогает
+const LIVE_SKIP = new Set(['courses', 'media', 'me', 'ping', 'auth', 'dev', 'ai'])        // курсы синхронизируются сами, остальное — не данные
+const CACHE_KEEP = new Set(['lessons', 'schedule', 'courses', 'media', 'me', 'ping', 'notes', 'ai'])      // уроки сбрасывают кэш сами и точечно (schedule.ts), остальное кэш не трогает
 app.use((req, res, next) => {
   res.on('finish', () => {
     const what = req.path.split('/')[1] || ''
@@ -133,7 +134,7 @@ const viewOnly = new Set<string>(), lessonsLock = new Set<string>()
 const accessDoc = () => db.collection('settings').doc('access')
 accessDoc().get().then((d) => { for (const u of (d.get('viewOnly') ?? []) as string[]) viewOnly.add(String(u)); for (const u of (d.get('lessonsLock') ?? []) as string[]) lessonsLock.add(String(u)) }).catch((e) => console.error('settings/access:', e))
 const LESSONS = /^\/lessons(\/|$)/
-const VIEW_OK = /^\/(me|ping)(\/|$)/
+const VIEW_OK = /^\/(me|ping|ai)(\/|$)/
 const requireUser = async (req: Request, res: Response, next: NextFunction) => {
   let u
   try { u = await auth.verifyIdToken((req.headers.authorization || '').replace(/^Bearer /, '')) } catch { return void res.status(401).json({ error: 'unauthorized' }) }
@@ -385,6 +386,20 @@ app.get('/avatar/:tgId', requireUser, wrap(async (req, res) => {
   res.set('Content-Type', img.headers.get('content-type') || 'image/jpeg').set('Cache-Control', 'private, max-age=86400')
   res.send(Buffer.from(await img.arrayBuffer()))
 }))
+
+// «Ответ по смыслу»: проверка через чат в браузере преподавателя (ai.ts, скрипт public/ai-bridge.user.js). Ключ моста — в settings/ai
+const aiDoc = () => db.collection('settings').doc('ai')
+const ai = makeAi({ loadToken: async () => String((await aiDoc().get()).get('token') || ''), saveToken: async (token) => { await aiDoc().set({ token }, { merge: true }) } })
+app.post('/ai/check', requireUser, wrap(async (req, res) => res.json(await ai.check(req.body ?? {}))))      // { question, reference, answer, prompt? } → { score, missed, feedback }
+app.get('/dev/ai', requireUser, requireDev, wrap(async (_req, res) => res.json({ ...ai.status(), token: await ai.token() })))
+app.post('/dev/ai/token', requireUser, requireDev, wrap(async (_req, res) => res.json({ token: await ai.newToken() })))
+// Сам мост: без входа в приложение, по ключу моста (заголовок X-Bridge-Token). Скрипт ходит через GM_xmlhttpRequest — CORS не нужен
+const requireBridge = (req: Request, res: Response, next: NextFunction) => { ai.isToken(req.headers['x-bridge-token']).then((ok) => (ok ? next() : res.status(401).json({ error: 'bad bridge token' })), next) }
+app.get('/ai/bridge/next', requireBridge, wrap(async (req, res) => {
+  const j = await ai.next(req.query.site, (f) => res.on('close', f))
+  if (j) res.json(j); else res.status(204).end()
+}))
+app.post('/ai/bridge/done', requireBridge, wrap(async (req, res) => res.json({ ok: ai.done(req.body?.id, req.body ?? {}) })))
 
 // Google Таблица → CSV (таблица должна быть открыта «по ссылке»). Адрес собираем сами из id, чужие URL не ходят.
 app.get('/sheets/csv', requireUser, requireTeacher, wrap(async (req, res) => {
