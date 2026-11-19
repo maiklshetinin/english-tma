@@ -72,6 +72,11 @@ ok('избранное сохраняется (только true)', store.get('r
   ok('хранится не больше 24 месяцев — старые убираются', Object.keys(store.get('review/s2').mon).length === 24 && !store.get('review/s2').mon['2024-01'])
 }
 
+// --- оценка по проценту (ИИ-проверка) в истории ---
+{ const h = (g: unknown) => cleanReviewItem(it('Hi', { hist: [{ t: T0, ok: true, ex: 'ИИ', g }] })).hist[0] as any
+  ok('оценка 1–4 в истории сохраняется', h(4).g === 4 && h(2).g === 2)
+  ok('кривая оценка не сохраняется (без 400)', h(7).g === undefined && h('4').g === undefined && h(undefined).g === undefined) }
+
 // --- очистка ---
 await R.reset(masha)
 ok('«Очистить» — свой словарь удалён, у преподавателя на месте', !store.has('review/s1') && store.has('review/teacher_tg:1'))

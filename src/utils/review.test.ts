@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hitsOf, applyHits, levelOf, stateOf, kindOf, replay, recallAt, intervalOf, type RItem } from './review'
+import { hitsOf, applyHits, levelOf, stateOf, kindOf, replay, recallAt, intervalOf, gradeOf, type RItem } from './review'
 import type { Step } from './lesson'
 
 const DAY = 86_400_000
@@ -47,5 +47,24 @@ describe('review', () => {
     const t = 1e12, old = { hist: [{ t: t + 3 * DAY, ok: true, ex: 'x' }, { t: t + 1000, ok: null, ex: 'x' }, { t, ok: true, ex: 'x' }] }
     const m = replay(old)!; expect(m.n).toBe(2); expect(levelOf(m.s)).toBe('medium')
     expect(stateOf(old as any, t + 3 * DAY).recall).toBe(100)
+  })
+  it('процент ответа (ИИ-проверка): «Трудно» / «Легко» двигают память по-разному', () => {
+    expect([gradeOf(true), gradeOf(false)]).toEqual([3, 1])                                   // без процента — как раньше
+    expect([20, 40, 59, 60, 84, 85, 100].map(p => gradeOf(p >= 60, p))).toEqual([1, 2, 2, 3, 3, 4, 4])
+    const t = 1e12, scr = (pct?: number) => ({ key: 'screen:k:l:1', kind: 'screen' as const, text: 'Kiedy obchodzimy Mikołajki?', ok: (pct ?? 70) >= 60, pct })
+    const one = (pct?: number) => { const it: Record<string, RItem> = {}; applyHits(it, [scr(pct)], ctx, t); applyHits(it, [scr(pct)], ctx, t + 3 * DAY); return it['screen:k:l:1'] }
+    const easy = one(95), good = one(61), hard = one(50), plain = one()
+    expect(easy.f!.s).toBeGreaterThan(good.f!.s)
+    expect(good.f!.s).toBeGreaterThan(hard.f!.s)
+    expect(easy.due).toBeGreaterThan(good.due)
+    expect(good.f!.s).toBe(plain.f!.s)                                                        // 60–84 % — то же, что обычное «верно»
+    expect(easy.hist[0].g).toBe(4); expect(good.hist[0].g).toBeUndefined(); expect(hard.hist[0].g).toBe(2)
+    expect(hard.bad).toBe(2)                                                                  // меньше 60 % — не зачтено, в счётчике ошибок
+    expect(replay({ hist: easy.hist })!.s).toBe(easy.f!.s)                                    // старая запись без памяти пересчитается так же
+  })
+  it('слова не меняются: процент к ним не приходит', () => {
+    const it1: Record<string, RItem> = {}, it2: Record<string, RItem> = {}
+    applyHits(it1, [{ text: 'merci', ok: true }], ctx, 1e12); applyHits(it2, [{ text: 'merci', ok: true, pct: undefined }], ctx, 1e12)
+    expect(it1.merci.f).toEqual(it2.merci.f); expect(it1.merci.hist[0].g).toBeUndefined()
   })
 })
