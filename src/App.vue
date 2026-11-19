@@ -90,6 +90,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
     <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" /><ScreenNotes v-if="auth.isTeacher && route.name !== 'courses'" />
   </template>
   <div v-if="access.viewOnly && auth.isTeacher" class="viewonly" title="Разработчик включил режим просмотра: всё видно, но изменения не сохраняются">👁 Только просмотр</div>
+  <div v-else-if="access.lessonsLock && auth.isTeacher && route.name !== 'courses'" class="viewonly" title="Разработчик включил: уроки в расписании не меняются (создать, перенести, отметить, удалить), остальное — можно">👁 Уроки — только просмотр</div>
   <AppDialog />
   <UpdateBanner />
   <DevTools v-if="auth.isDev" />      <!-- панель разработчика, как DevTools в Chrome: жучок в углу или Ctrl + ` -->

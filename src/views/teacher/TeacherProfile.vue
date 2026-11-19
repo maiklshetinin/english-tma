@@ -54,6 +54,10 @@ if (auth.isDev) loadTeam()
 async function setView(t, on) {
   try { await post('/dev/access', { uid: t.uid, viewOnly: on }, 'Права'); t.viewOnly = on; showToast(on ? `${t.name}: только просмотр` : `${t.name}: полный доступ`) } catch (e) { showToast(e.message) }
 }
+// «Уроки — только просмотр» (19.11.2026): нельзя только правки уроков в расписании, остальное — можно
+async function setLessons(t, on) {
+  try { await post('/dev/access', { uid: t.uid, lessonsLock: on }, 'Права'); t.lessonsLock = on; showToast(on ? `${t.name}: уроки — только просмотр` : `${t.name}: уроки можно менять`) } catch (e) { showToast(e.message) }
+}
 // Учёт активности (server/activity.ts): отдельно для преподавателей и учеников; смотреть — панель разработчика → «Активность»
 const actSet = ref(null)
 const td = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
@@ -158,10 +162,11 @@ async function ping() {
         <!-- права: кому «только просмотр» -->
         <div class="it vr">
           <span class="ic"><AppIcon name="users" :size="18" /></span>
-          <div class="tx">Права<small>«Только просмотр» — всё видно, но ничего не сохраняется: статусы уроков, ученики, курсы. Чат работает.</small>
+          <div class="tx">Права<small>«Уроки — просмотр» — нельзя менять только уроки в расписании (создать, перенести, отметить, удалить), остальное можно. «Всё — просмотр» — ничего не сохраняется: уроки, ученики, курсы. Чат работает.</small>
             <div v-for="t in team ?? []" :key="t.uid" class="rw">
               <Avatar :s="{ name: t.name, photoUrl: t.photo, color: '#9aa0a6' }" :size="30" /><b>{{ t.name }}</b>
-              <label class="vsw"><span>{{ t.viewOnly ? 'только просмотр' : 'полный доступ' }}</span><input type="checkbox" :checked="t.viewOnly" @change="setView(t, $event.target.checked)" /><i /></label>
+              <label class="vsw" title="Уроки в расписании: создать, перенести, отметить проведённым / отменённым, удалить — нельзя; остальное можно"><span>уроки — просмотр</span><input type="checkbox" :checked="t.lessonsLock" :disabled="t.viewOnly" @change="setLessons(t, $event.target.checked)" /><i /></label>
+              <label class="vsw"><span>всё — просмотр</span><input type="checkbox" :checked="t.viewOnly" @change="setView(t, $event.target.checked)" /><i /></label>
             </div>
             <span v-if="team && !team.length" class="none">нет других преподавателей (TEACHER_IDS) или старая сборка сервера</span>
           </div>
@@ -265,6 +270,7 @@ async function ping() {
 .vsw { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--hint); cursor: pointer } .vsw input { position: absolute; opacity: 0; width: 1px; height: 1px }
 .vsw i { position: relative; width: 36px; height: 22px; border-radius: 11px; background: #34c759; transition: background .2s } .vsw i::after { content: ''; position: absolute; top: 2px; left: 16px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: left .2s }
 .vsw input:checked + i { background: #ff9500 } .vsw input:checked + i::after { left: 2px }
+.vsw:has(input:disabled) { opacity: .45; cursor: default } .rw:has(.vsw) { flex-wrap: wrap; row-gap: 6px }          /* «всё — просмотр» включено — «уроки» и так закрыты */
 .lnk { justify-self: start; margin-top: 8px; padding: 0; border: 0; background: none; color: var(--blue); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer }
 .lgn { margin-top: 8px } .lgc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; font-weight: 700 } .lgc > span { flex: 1 }
 .lgb { padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--red-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .lgb:hover { background: var(--surface) }

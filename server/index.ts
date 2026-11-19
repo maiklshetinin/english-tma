@@ -126,16 +126,20 @@ app.post('/ping', wrap(async (req, res) => {
 // Дальше — запросы с Firebase ID-токеном (Authorization: Bearer …)
 // «Только просмотр» (назначает разработчик в «Профиле → Для разработчика → Права»): преподаватель всё видит, но ничего не меняет —
 // любой запрос, кроме чтения, — 403. Можно только своё служебное (/me, /ping) и чат на экране (он идёт по живому соединению, live.ts).
-// Список — в базе settings/access { viewOnly: [uid] }, читается один раз при запуске.
-const viewOnly = new Set<string>()
+// «Уроки — только просмотр» (19.11.2026): мягче — запрещены только правки уроков в расписании (/lessons: создать, перенести, отметить,
+// отменить, удалить), всё остальное (курсы, ученики, колоды…) — можно.
+// Списки — в базе settings/access { viewOnly: [uid], lessonsLock: [uid] }, читаются один раз при запуске.
+const viewOnly = new Set<string>(), lessonsLock = new Set<string>()
 const accessDoc = () => db.collection('settings').doc('access')
-accessDoc().get().then((d) => { for (const u of (d.get('viewOnly') ?? []) as string[]) viewOnly.add(String(u)) }).catch((e) => console.error('settings/access:', e))
+accessDoc().get().then((d) => { for (const u of (d.get('viewOnly') ?? []) as string[]) viewOnly.add(String(u)); for (const u of (d.get('lessonsLock') ?? []) as string[]) lessonsLock.add(String(u)) }).catch((e) => console.error('settings/access:', e))
+const LESSONS = /^\/lessons(\/|$)/
 const VIEW_OK = /^\/(me|ping)(\/|$)/
 const requireUser = async (req: Request, res: Response, next: NextFunction) => {
   let u
   try { u = await auth.verifyIdToken((req.headers.authorization || '').replace(/^Bearer /, '')) } catch { return void res.status(401).json({ error: 'unauthorized' }) }
   req.user = { ...u, role: roleOf(u) }
   if (req.method !== 'GET' && viewOnly.has(u.uid) && u.dev !== true && !VIEW_OK.test(req.path)) return void res.status(403).json({ error: 'view only' })
+  if (req.method !== 'GET' && lessonsLock.has(u.uid) && u.dev !== true && LESSONS.test(req.path)) return void res.status(403).json({ error: 'lessons view only' })
   next()
 }
 const requireTeacher = (req: Request, res: Response, next: NextFunction) => (req.user.role === 'teacher' ? next() : res.status(403).json({ error: 'teacher only' }))
@@ -180,20 +184,21 @@ app.post('/dev/restart', requireUser, requireDev, wrap(async (req, res) => {
   if (!viaApi) setTimeout(() => process.exit(1), 400)
 }))
 // Права: кто из преподавателей — «только просмотр». Список преподавателей — TEACHER_IDS (имя и фото — из их записи users)
-app.get('/me/access', requireUser, (req, res) => { res.json({ viewOnly: viewOnly.has(req.user.uid) && (req.user as { dev?: boolean }).dev !== true }) })
+app.get('/me/access', requireUser, (req, res) => { const dev = (req.user as { dev?: boolean }).dev === true; res.json({ viewOnly: viewOnly.has(req.user.uid) && !dev, lessonsLock: lessonsLock.has(req.user.uid) && !dev }) })
 app.get('/dev/access', requireUser, requireDev, wrap(async (_req, res) => {
   const ids = [...new Set(TEACHER_IDS)].filter((id) => !DEV_IDS.includes(id))
   const docs = ids.length ? await db.getAll(...ids.map((id) => db.collection('users').doc(`tg:${id}`))) : []
-  res.json({ teachers: ids.map((id, i) => ({ uid: `tg:${id}`, name: String(docs[i]?.get('name') || 'id ' + id), photo: String(docs[i]?.get('photoUrl') || ''), viewOnly: viewOnly.has(`tg:${id}`),
+  res.json({ teachers: ids.map((id, i) => ({ uid: `tg:${id}`, name: String(docs[i]?.get('name') || 'id ' + id), photo: String(docs[i]?.get('photoUrl') || ''), viewOnly: viewOnly.has(`tg:${id}`), lessonsLock: lessonsLock.has(`tg:${id}`),
     ver: String(docs[i]?.get('ver') || ''), verAt: Number(docs[i]?.get('verAt')) || 0 })) })          // ver — последняя открытая версия сайта (пишет /me/visit)
 }))
 app.post('/dev/access', requireUser, requireDev, wrap(async (req, res) => {
-  const uid = String(req.body?.uid || ''), on = req.body?.viewOnly === true
+  const uid = String(req.body?.uid || '')          // { uid, viewOnly?: bool, lessonsLock?: bool } — меняется то, что прислали
   if (!/^tg:\d+$/.test(uid) || !TEACHER_IDS.includes(uid.slice(3))) return void res.status(400).json({ error: 'bad uid' })
-  if (on) viewOnly.add(uid); else viewOnly.delete(uid)
-  await accessDoc().set({ viewOnly: [...viewOnly] }, { merge: true })
-  console.warn(`права: ${uid} — ${on ? 'только просмотр' : 'полный доступ'}`)
-  live.broadcast({ t: 'access', uid, viewOnly: on })          // у неё сразу сменится режим, без перезахода
+  const put = (set: Set<string>, v: unknown) => { if (typeof v !== 'boolean') return; if (v) set.add(uid); else set.delete(uid) }
+  put(viewOnly, req.body?.viewOnly); put(lessonsLock, req.body?.lessonsLock)
+  await accessDoc().set({ viewOnly: [...viewOnly], lessonsLock: [...lessonsLock] }, { merge: true })
+  console.warn(`права: ${uid} — ${viewOnly.has(uid) ? 'только просмотр' : lessonsLock.has(uid) ? 'уроки — только просмотр' : 'полный доступ'}`)
+  live.broadcast({ t: 'access', uid, viewOnly: viewOnly.has(uid), lessonsLock: lessonsLock.has(uid) })          // у неё сразу сменится режим, без перезахода
   res.json({ ok: true })
 }))
 app.post('/dev/cache', requireUser, requireDev, wrap(async (req, res) => {          // { min } — срок в минутах (0 — выключить), или { clear: true }
