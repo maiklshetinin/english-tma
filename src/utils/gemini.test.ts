@@ -9,7 +9,7 @@ const QUOTA = { error: { code: 429, message: 'You exceeded your current quota. P
 const q = { question: 'Kiedy i jak obchodzimy Mikołajki?', reference: 'Mikołajki obchodzimy 6 grudnia…', answer: 'Szóstego grudnia, dzieci dostają prezenty' }
 
 describe('Gemini: ключи и проверка ответа', () => {
-  beforeEach(() => { ai.keys = []; ai.model = 'gemini-2.5-flash' })
+  beforeEach(() => { ai.keys = []; ai.model = 'gemini-flash-latest' })
 
   it('ключи: добавить без повторов, маска, порядок, удалить', () => {
     expect(addKey('  AIzaSyAAAA1111bbbb ')).toBe(true); expect(addKey('AIzaSyAAAA1111bbbb')).toBe(false); addKey('AIzaSyBBBB2222cccc')
@@ -31,7 +31,7 @@ describe('Gemini: ключи и проверка ответа', () => {
     addKey('k1'); let sent: any
     const r = await checkAnswer(q, (async (_u: string, o: any) => { sent = { url: _u, ...o, body: JSON.parse(o.body) }; return good({ score: 64.4, missed_points: ['подарки в ботинках'], feedback: 'Хорошо!' }) }) as any)
     expect(r).toEqual({ score: 64, missed: ['подарки в ботинках'], feedback: 'Хорошо!', ok: true })
-    expect(sent.url).toContain('gemini-2.5-flash:generateContent'); expect(sent.headers['x-goog-api-key']).toBe('k1')
+    expect(sent.url).toContain('gemini-flash-latest:generateContent'); expect(sent.body.generationConfig.temperature).toBeUndefined(); expect(sent.headers['x-goog-api-key']).toBe('k1')
     expect(sent.body.generationConfig.responseMimeType).toBe('application/json'); expect(sent.body.contents[0].parts[0].text).toContain(q.answer)
     expect(ai.keys[0]).toMatchObject({ ok: true, err: '', n: 1 })
     expect((await checkAnswer(q, (async () => good({ score: PASS - 1, missed_points: [], feedback: '' })) as any)).ok).toBe(false)

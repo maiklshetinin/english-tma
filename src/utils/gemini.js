@@ -5,7 +5,7 @@
 import { reactive } from 'vue'
 
 const KEYS = 'tma.ai.keys.v1', MODEL = 'tma.ai.model'
-export const MODEL_DEFAULT = 'gemini-2.5-flash'
+export const MODEL_DEFAULT = 'gemini-flash-latest'          // псевдоним Google: всегда свежая Flash-модель (gemini-2.5-flash новым проектам уже не выдают — 404)
 export const PASS = 60                                    // зачёт — от 60 % (рекомендация курса: 60–70 % «идеального» ответа — уже хорошо)
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
 
@@ -14,7 +14,8 @@ const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } cat
 const today = () => new Date().toISOString().slice(0, 10)
 
 /** Ключи: { key, ok: true|false|null (ещё не пробовали), err, until (мс — квота до), day, n (запросов за day) } */
-export const ai = reactive({ keys: read(KEYS, []), model: read(MODEL, MODEL_DEFAULT) })
+const OLD = ['gemini-2.5-flash']                                    // было по умолчанию до 19.11.2026 — переводим на псевдоним
+export const ai = reactive({ keys: read(KEYS, []), model: ((m) => (OLD.includes(m) ? MODEL_DEFAULT : m))(read(MODEL, MODEL_DEFAULT)) })
 const save = () => { write(KEYS, ai.keys); write(MODEL, ai.model) }
 
 export const mask = (k) => (k.length > 12 ? `${k.slice(0, 8)}…${k.slice(-4)}` : k)
@@ -57,7 +58,7 @@ export const SYSTEM = 'Ты проверяешь устный ответ уче�
 const SCHEMA = { type: 'OBJECT', properties: { score: { type: 'INTEGER' }, missed_points: { type: 'ARRAY', items: { type: 'STRING' } }, feedback: { type: 'STRING' } }, required: ['score', 'missed_points', 'feedback'] }
 
 async function call(key, prompt, json, fetcher = fetch, system = SYSTEM) {
-  const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0 } }
+  const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: {} }          // без temperature: новые модели (3.x) её не принимают
   if (json) { body.systemInstruction = { parts: [{ text: system }] }; body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = SCHEMA }
   let r
   try { r = await fetcher(API + encodeURIComponent(ai.model) + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) }) }
