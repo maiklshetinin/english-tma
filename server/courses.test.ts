@@ -63,7 +63,7 @@ await C.put(me, 'k8', { ...course, items: [{ id: 'L', type: 'lesson', title: '',
   { id: 'o1', kind: 'odd', bs: 'boom', ans: 7, note: 'x', mix: false, opts: [{ w: 'egg', k: 'y' }, { w: 'coffee', k: 'zzz' }] },
   { id: 'o2', kind: 'sort', bk: 'sort', bn: 7, bs: 'page', cols: [{ t: 'A' }, { t: 'B' }, { t: 'C' }, { t: 'D' }, { t: 'E' }, { t: 'F' }], items: [{ w: 'p', c: 1, k: 'g' }, { w: 'q', c: 9 }], hint: false }] }] })
 { const s = ((await C.get('k8')) as any).items[0].steps
-  ok('найди лишнее: опции, цвет, ответ в пределах', s[0].opts.length === 2 && s[0].opts[0].k === 'y' && !s[0].opts[1].k && s[0].ans === 1 && s[0].mix === false && s[0].note === 'x')
+  ok('найди лишнее: опции, цвет, ответ в пределах', s[0].opts.length === 2 && s[0].opts[0].k === '#fbedb0' && !s[0].opts[1].k && s[0].ans === 1 && s[0].mix === false && s[0].note === 'x')
   ok('распредели: до 5 колонок, метка задания учебника, колонка фразы в пределах', s[1].cols.length === 5 && s[1].items[0].c === 1 && s[1].items[1].c === 4 && s[1].hint === false && s[1].bk === 'sort' && s[1].bn === 7 && s[1].bs === 'page' && !('bs' in s[0])) }
 // «Ответ по смыслу» (Karta Polaka): вопрос и эталон сохраняются, лишнее срезается
 await C.put(me, 'k11', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'q1', kind: 'kp', text: 'Kiedy i jak obchodzimy Mikołajki?', ideal: 'Mikołajki obchodzimy szóstego grudnia…', prompt: 'Mój prompt', pass: 70, star: true, n: 3, look: 'cards', plain: true, note: 'x', junk: 1 }, { id: 'q2', kind: 'kp', text: 'Q', ideal: 'I', pass: 500 }] }] })

@@ -63,6 +63,12 @@ describe('«Ответ по смыслу» в уроке', () => {
     expect(applyStepJson(s, JSON.stringify({ kind: 'odd', opts: [{ w: 'a' }, { w: 'b' }, { w: 'c' }], ans: 2 }))).toBe('')
     expect(s.kind).toBe('odd'); expect(s.phrase).toBeUndefined(); expect(s.ans).toBe(2); expect(s.id).toBe('x1')          // сменили тип — старые поля ушли
   })
+  it('свой цвет плитки #rrggbb: фон как есть, текст — тёмный оттенок; кривой — по кругу', async () => {
+    const { tileOf, TILE } = await import('./lesson')
+    expect(tileOf('#E8D5FF', 0)).toEqual({ bg: '#e8d5ff', fg: '#4a4452' }); expect(tileOf('p', 0)).toEqual(TILE.p); expect(tileOf('#zzz', 1)).toEqual(TILE.g)
+    const r = stepsFromJson(JSON.stringify({ kind: 'odd', opts: [{ w: 'a', k: '#FFAA00' }, { w: 'b', k: 'y' }, { w: 'c', k: 'red' }], ans: 0 }))!
+    expect(r.steps[0].opts!.map((o) => o.k)).toEqual(['#ffaa00', '#fbedb0', undefined])          // буква → код
+  })
   it('экраны по одному, каждый в ```json и с «[cite: 1]» (как отдаёт Gemini) — тоже вставляются', () => {
     const one = (w: string) => '```json\n{\n"kind": "gap",\n"bk": "bkword",\n"head": "Write the possessive adjectives",\n"phrase": "(He) [' + w + '] father {x}.",\n"tr": "Его отец.",\n"opts": []\n}\n```[cite: 1]'
     const r = stepsFromJson(one('His') + '\n\n' + one('My') + '\n\n' + one('Their'))!

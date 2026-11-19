@@ -8,12 +8,12 @@ import ExHead from '../parts/ExHead.vue'
 import ExAudio from '../parts/ExAudio.vue'
 import ExTool from '../parts/ExTool.vue'
 import { usePlay, useEdit } from '../ctx'
-import { TILE, TILE_K, tileK, twLayout, SORT_MAX, SORT_COLS_MAX, TW_ROWS_MAX } from '../../utils/lesson'
+import { TILE_K, tileK, tileOf, twLayout, SORT_MAX, SORT_COLS_MAX, TW_ROWS_MAX } from '../../utils/lesson'
 import J from './sort.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
 const s = computed(() => props.step)
-const tile = (k, i) => TILE[tileK(k, i)]
+const tile = (k, i) => tileOf(k, i)          // буква — готовая пара, #rrggbb — свой фон
 const twL = computed(() => (s.value.tw ? twLayout(s.value) : null))
 const grid = computed(() => ({ gridTemplateColumns: `repeat(${s.value.cols?.length || 2}, minmax(0, 1fr))` }))
 const left = computed(() => (s.value.tw ? p.st.tw.flat().filter(v => !v.trim()).length : p.st.order.filter(k => p.st.place[k] == null).length))
@@ -100,7 +100,7 @@ const twDelCol = (ci) => { s.value.cols.splice(ci, 1); s.value.items = (s.value.
               <button type="button" class="pen" title="Цвет, перенести, удалить" @click="menu = menu === it ? null : it">✎</button>
               <span v-if="menu === it" class="smenu" @pointerdown.stop>
                 <small>Цвет фразы</small>
-                <span class="sdots"><button v-for="k in TILE_K" :key="k" type="button" :class="{ on: tileK(it.k, step.items.indexOf(it)) === k }" :style="{ background: TILE[k].bg }" @click="setTile(it, k)" /></span>
+                <span class="sdots"><button v-for="k in TILE_K" :key="k" type="button" :class="{ on: tileK(it.k, step.items.indexOf(it)) === k }" :style="{ background: tileOf(k, 0).bg }" @click="setTile(it, k)" /></span>
                 <button v-for="(c2, j) in step.cols" v-show="j !== it.c" :key="j" type="button" class="smi" @click="moveTo(it, j)">Переместить в «{{ c2.t || 'Колонка ' + (j + 1) }}» →</button>
                 <button type="button" class="smi del" @click="delItem(it)">Удалить</button>
               </span>

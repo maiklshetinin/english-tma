@@ -66,7 +66,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (kind === 'kp') { put(o, 'text', str(r.text, 300)); put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; if (r.look === 'lines' || r.look === 'cards') o.look = r.look; if (r.plain === true) o.plain = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n } put(o, 'prompt', str(r.prompt, 4000)); const p = Number(r.pass); if (Number.isInteger(p) && p > 0 && p <= 100) o.pass = p }          // свой промпт для Gemini и порог, %          // «Ответ по смыслу»: вопрос и эталон (Gemini сверяет)
     // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.
     // k — цвет плитки (o/g/y/p/b), mix — перемешивать у ученика, hint — подсказка «Нажмите фразу, затем колонку»
-    const KC = ['o', 'g', 'y', 'p', 'b'], kc = (v: unknown) => (KC.includes(String(v)) ? String(v) : undefined)
+    // цвет плитки — код #rrggbb (19.11.2026); старые буквы — в коды тех же цветов
+    const KC: Record<string, string> = { o: '#fbe1c8', g: '#cfeccf', y: '#fbedb0', p: '#f8d3e2', b: '#cfe6f7' }, kc = (v: unknown) => (KC[String(v)] ?? (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v).toLowerCase() : undefined))
     if (kind === 'odd' || kind === 'sort') { put(o, 'note', str(r.note, 600)); if (r.mix === false) o.mix = false }
     if (kind === 'odd') {
       o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120) }; put(out, 'k', kc(q.k)); return out })

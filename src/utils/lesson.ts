@@ -73,10 +73,22 @@ export const KINDS: Record<StepKind, { t: string; d: string; c: string; dk: stri
     ic: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="M15 15l3 3M18 15l-3 3"/>' },
 }
 /** Цвета плиток книжных экранов: ключ → фон / текст (как у Насти: персик, мята, лимон, роза, небо) */
-export const TILE_K = ['o', 'g', 'y', 'p', 'b']
+// Цвет плитки — шестизначный код фона #rrggbb (19.11.2026; раньше — буквы o, g, y, p, b: старые экраны переводятся в коды сами).
+// Пять готовых цветов — с подобранным цветом текста; любой другой код — текст тем же цветом, но тёмным
 export const TILE: Record<string, { bg: string; fg: string }> = { o: { bg: '#fbe1c8', fg: '#7a4314' }, g: { bg: '#cfeccf', fg: '#1f5c33' }, y: { bg: '#fbedb0', fg: '#6b5200' }, p: { bg: '#f8d3e2', fg: '#7a1f45' }, b: { bg: '#cfe6f7', fg: '#14507a' } }
+export const TILE_K = Object.values(TILE).map((t) => t.bg)          // готовые цвета — коды: '#fbe1c8', '#cfeccf', …
 /** Цвет плитки: свой — или по кругу по номеру */
-export const tileK = (k: string | undefined, i: number) => (k && TILE[k] ? k : TILE_K[i % TILE_K.length])
+export const HEX = /^#[0-9a-f]{6}$/i
+/** Код цвета: '#E8D5FF' → '#e8d5ff', старая буква 'o' → '#fbe1c8', остальное — undefined */
+export const tileHex = (k: unknown) => (typeof k === 'string' ? (TILE[k] ? TILE[k].bg : HEX.test(k) ? k.toLowerCase() : undefined) : undefined)
+export const tileK = (k: string | undefined, i: number) => tileHex(k) ?? TILE_K[i % TILE_K.length]
+/** Фон и текст плитки: готовый цвет — с подобранным текстом; свой код — текст тем же цветом, но тёмным */
+export function tileOf(k: string | undefined, i: number): { bg: string; fg: string } {
+  const t = tileK(k, i), own = Object.values(TILE).find((x) => x.bg === t)
+  if (own) return own
+  const n = parseInt(t.slice(1), 16), dark = (v: number) => Math.round(v * 0.32).toString(16).padStart(2, '0')
+  return { bg: t, fg: '#' + dark(n >> 16) + dark((n >> 8) & 255) + dark(n & 255) }
+}
 export const KIND_LIST = Object.keys(KINDS) as StepKind[]
 
 /** Примерное время экрана по типу, в минутах (как «11 MIN» у урока в Busuu); репетитор может поставить своё */
@@ -131,10 +143,10 @@ export function fishStep(kind: StepKind): Step {
   if (kind === 'answer') return { id: stepId(), kind, text: 'What’s your name?', note: 'Начни с «My name’s…» или «I’m…»', tr: 'My name’s Anna.', image: fish('wave.jpg') }
   if (kind === 'kp') return { id: stepId(), kind, text: 'Kiedy i jak obchodzimy Mikołajki?',
     ideal: 'Mikołajki obchodzimy szóstego grudnia na cześć świętego Mikołaja, biskupa z Miry. W nocy z piątego na szóstego grudnia święty Mikołaj przynosi dzieciom drobne prezenty, na przykład słodycze, zabawki albo książki, i zostawia je w wyczyszczonych butach lub pod poduszką.' }
-  if (kind === 'odd') return { id: stepId(), kind, ans: 1, note: 'Coffee — напиток, остальное — еда.', opts: [{ w: 'egg', k: 'y' }, { w: 'coffee', k: 'b' }, { w: 'apple', k: 'g' }, { w: 'banana', k: 'o' }] }
+  if (kind === 'odd') return { id: stepId(), kind, ans: 1, note: 'Coffee — напиток, остальное — еда.', opts: [{ w: 'egg', k: '#fbedb0' }, { w: 'coffee', k: '#cfe6f7' }, { w: 'apple', k: '#cfeccf' }, { w: 'banana', k: '#fbe1c8' }] }
   if (kind === 'sort') return { id: stepId(), kind, cols: [{ t: 'Active voice' }, { t: 'Passive voice' }], items: [
-    { w: 'Mike eats an apple', c: 0, k: 'g' }, { w: 'An apple is eaten by Mike', c: 1, k: 'o' }, { w: 'Mike buys apples', c: 0, k: 'o' },
-    { w: 'Apples are bought by Mike', c: 1, k: 'y' }, { w: 'My sister tidies the room', c: 0, k: 'p' }, { w: 'The room is tidied by my sister', c: 1, k: 'b' }] }
+    { w: 'Mike eats an apple', c: 0, k: '#cfeccf' }, { w: 'An apple is eaten by Mike', c: 1, k: '#fbe1c8' }, { w: 'Mike buys apples', c: 0, k: '#fbe1c8' },
+    { w: 'Apples are bought by Mike', c: 1, k: '#fbedb0' }, { w: 'My sister tidies the room', c: 0, k: '#f8d3e2' }, { w: 'The room is tidied by my sister', c: 1, k: '#cfe6f7' }] }
   if (kind === 'pairs') return { id: stepId(), kind, pairs: [{ a: 'I approve', b: 'одобряю' }, { a: 'no problem', b: 'без проблем' }, { a: 'I have no objection', b: 'я не возражаю' }] }
   return { id: stepId(), kind, word: 'it’s fine', tr: 'всё в порядке', ex: 'Jim said it’s fine if we meet at 3 o’clock.', exTr: 'Джим сказал, что можно встретиться в 3 часа.',
     image: fish('its-fine.jpg'), audio: fish('its-fine.mp3'), exAudio: fish('its-fine-ex.mp3') }
@@ -181,7 +193,7 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'bkpic', kind: 'gap', t: 'Дополни по картинке', d: 'Фото и банк слов (до 8)', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkpic', head: 'Complete the sentences', image: fish('wave.jpg'), phrase: 'She is [in] the room.', tr: 'Она в комнате.', opts: ['on', 'between', 'in', 'at', 'under', 'next to', 'behind', 'in front of'].map(w => ({ w })) }) },
   { id: 'bkqa', kind: 'gap', t: 'Ответь по картинке', d: 'Фото и короткий ответ', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkqa', head: 'Answer the questions', image: fish('wave.jpg'), phrase: 'Is she a teacher? [Yes, she is./Yes, she is/Yes she is]', tr: 'Она учитель? Да.', opts: [] }) },
   { id: 'bkfree', kind: 'answer', t: 'Свободный ответ', d: 'Про себя, без автопроверки', make: () => ({ id: stepId(), kind: 'answer', bk: 'bkfree', head: 'Answer the questions about you', text: 'Do you like pizza?', note: 'Yes, I do. / No, I don’t.', tr: 'Yes, I do. I love pizza!' }) },
-  { id: 'odd', kind: 'odd', t: 'Найди лишнее', d: 'Одно слово не подходит', make: () => ({ id: stepId(), kind: 'odd', bk: 'odd', head: 'Circle the uncountable noun', ans: 2, note: 'Sugar — неисчисляемое, остальное можно посчитать.', opts: [{ w: 'potato', k: 'o' }, { w: 'biscuit', k: 'y' }, { w: 'sugar', k: 'b' }, { w: 'cherry', k: 'p' }] }) },
+  { id: 'odd', kind: 'odd', t: 'Найди лишнее', d: 'Одно слово не подходит', make: () => ({ id: stepId(), kind: 'odd', bk: 'odd', head: 'Circle the uncountable noun', ans: 2, note: 'Sugar — неисчисляемое, остальное можно посчитать.', opts: [{ w: 'potato', k: '#fbe1c8' }, { w: 'biscuit', k: '#fbedb0' }, { w: 'sugar', k: '#cfe6f7' }, { w: 'cherry', k: '#f8d3e2' }] }) },
   // «Заполни таблицу» — как нарисовала Настя (18.11.2026): банк слов сверху (образцы зачёркнуты), ученик вписывает форму в нужную колонку
   { id: 'sort', kind: 'sort', t: 'Заполни таблицу', d: 'Распредели слова по колонкам', make: () => ({ id: stepId(), kind: 'sort', bk: 'sort', tw: true, head: 'Complete the table', cols: ['-s', '-es', '-ies', '-ves', 'other'].map(t => ({ t })), rows: 4,
     items: ([['bag', 'bags', 0, 1], ['child', 'children', 4, 1], ['boy', 'boys', 0], ['box', 'boxes', 1], ['baby', 'babies', 2], ['knife', 'knives', 3], ['man', 'men', 4], ['tomato', 'tomatoes', 1], ['leaf', 'leaves', 3],
@@ -377,7 +389,8 @@ export function shuffle<T>(a: T[], rnd = Math.random): T[] {
 export function stepsOut(steps: Step[] | undefined): Step[] {
   const ok = (v?: string) => (v && !v.startsWith('idb:') && !v.startsWith('blob:') ? v : undefined)
   return (steps ?? []).map(s => JSON.parse(JSON.stringify({ ...s, image: ok(s.image), audio: ok(s.audio), video: ok(s.video), exAudio: ok(s.exAudio),
-    ...(s.opts ? { opts: s.opts.map(o => ({ ...o, image: ok(o.image), audio: ok(o.audio) })) } : {}) })))
+    ...(s.opts ? { opts: s.opts.map(o => ({ ...o, image: ok(o.image), audio: ok(o.audio), k: tileHex(o.k) })) } : {}),
+    ...(s.items ? { items: s.items.map(x => ({ ...x, k: tileHex(x.k) })) } : {}) })))          // цвет плитки — всегда кодом #rrggbb
 }
 
 /** Пришли шаги с сервера / от коллеги: свои файлы, которые ещё только в браузере, не теряем */
@@ -442,7 +455,7 @@ function stepFrom(o: any): Step | null {
   if (o.kind === 'kp' && o.plain === true) s.plain = true
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
-      .map((x: any) => ({ w: x.w.trim(), ...(TILE[x.k] ? { k: x.k } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
+      .map((x: any) => ({ w: x.w.trim(), ...(tileHex(x.k) ? { k: tileHex(x.k) } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
     if (opts.length) s.opts = o.kind === 'tip' ? opts : opts.slice(0, o.kind === 'odd' ? ODD_MAX : o.kind === 'gap' ? GAP_OPTS_MAX : OPTS_MAX)
     if (s.ans != null && s.opts && s.ans >= s.opts.length) delete s.ans
   }
@@ -456,7 +469,7 @@ function stepFrom(o: any): Step | null {
   if (o.cs === true) s.cs = true
   if (o.noEx === true) s.noEx = true
   if (Number.isInteger(o.rows) && o.rows > 0) s.rows = Math.min(o.rows, TW_ROWS_MAX)
-  if (Array.isArray(o.items)) s.items = o.items.filter((x: any) => str(x?.w)).map((x: any) => ({ w: x.w.trim(), c: Number.isInteger(x.c) && x.c >= 0 ? Math.min(x.c, (s.cols?.length ?? 2) - 1) : 0, ...(TILE[x.k] ? { k: x.k } : {}), ...(str(x.a) ? { a: x.a.trim() } : {}), ...(x.ex === true ? { ex: true } : {}) })).slice(0, SORT_MAX)
+  if (Array.isArray(o.items)) s.items = o.items.filter((x: any) => str(x?.w)).map((x: any) => ({ w: x.w.trim(), c: Number.isInteger(x.c) && x.c >= 0 ? Math.min(x.c, (s.cols?.length ?? 2) - 1) : 0, ...(tileHex(x.k) ? { k: tileHex(x.k) } : {}), ...(str(x.a) ? { a: x.a.trim() } : {}), ...(x.ex === true ? { ex: true } : {}) })).slice(0, SORT_MAX)
   if (Array.isArray(o.pairs)) {
     const pairs = o.pairs.map((x: any) => (Array.isArray(x) ? { a: x[0], b: x[1] } : x)).filter((x: any) => str(x?.a) && str(x?.b)).map((x: any) => ({ a: x.a.trim(), b: x.b.trim() }))
     if (pairs.length) s.pairs = pairs.slice(0, PAIRS_MAX)

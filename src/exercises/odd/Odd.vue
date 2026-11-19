@@ -8,14 +8,14 @@ import ExHead from '../parts/ExHead.vue'
 import ExTool from '../parts/ExTool.vue'
 import ExPop from '../parts/ExPop.vue'
 import { usePlay, useEdit } from '../ctx'
-import { TILE, TILE_K, tileK } from '../../utils/lesson'
+import { TILE_K, tileK, tileOf } from '../../utils/lesson'
 import J from './odd.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
 const s = computed(() => props.step)
 const page = computed(() => !!s.value.bk && s.value.bs === 'page')
 const ans = computed(() => s.value.ans ?? 0)
-const tile = (k, i) => TILE[tileK(k, i)]
+const tile = (k, i) => tileOf(k, i)          // буква — готовая пара, #rrggbb — свой фон
 const nextTile = (k, i) => tile(TILE_K[(TILE_K.indexOf(tileK(k, i)) + 1) % TILE_K.length], 0)
 function nextK(o, i) { o.k = TILE_K[(TILE_K.indexOf(tileK(o.k, i)) + 1) % TILE_K.length]; ed.changed() }
 function setAns(k) { s.value.ans = k; ed.changed() }

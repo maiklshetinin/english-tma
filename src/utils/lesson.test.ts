@@ -63,7 +63,7 @@ describe('книжные экраны', () => {
     expect(stepIssue({ id: 'x', kind: 'sort', cols: [{ t: 'A' }, { t: '' }], items: [] } as any)).toBe('Подпишите колонки')
     expect(stepIssue({ id: 'x', kind: 'odd', opts: [{ w: 'a' }, { w: 'b' }], ans: 0 } as any)).toBe('Нужно хотя бы 3 слова')
     const r = stepsFromJson('{"kind":"sort","cols":["A","B"],"items":[{"w":"x","c":5,"k":"g"},{"w":"y"}],"mix":false}')!
-    expect(r.steps[0].cols).toEqual([{ t: 'A' }, { t: 'B' }]); expect(r.steps[0].items).toEqual([{ w: 'x', c: 1, k: 'g' }, { w: 'y', c: 0 }]); expect(r.steps[0].mix).toBe(false)
+    expect(r.steps[0].cols).toEqual([{ t: 'A' }, { t: 'B' }]); expect(r.steps[0].items).toEqual([{ w: 'x', c: 1, k: '#cfeccf' }, { w: 'y', c: 0 }])          // старая буква → код того же цвета; expect(r.steps[0].mix).toBe(false)
   })
 })
 
