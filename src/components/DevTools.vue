@@ -63,7 +63,7 @@ const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['se
 
 <template>
   <Teleport to="body">
-    <button v-if="!st.open" type="button" class="dt-fab" title="Панель разработчика (Ctrl + `)" @click="st.open = true">
+    <button v-if="!st.open && !st.tags" type="button" class="dt-fab" title="Панель разработчика (Ctrl + `)" @click="st.open = true">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9V8a3 3 0 0 1 6 0v1" /><path d="M8 9h8a6 6 0 0 1 1 3v3a5 5 0 0 1-10 0v-3a6 6 0 0 1 1-3" /><path d="M3 13h4M17 13h4M12 20v-6M4 19l3.35-2M20 19l-3.35-2M4 7l3.75 2.4M20 7l-3.75 2.4" /></svg>
     </button>
     <div v-if="st.open && sizeTip" class="szt" :style="wide ? { right: st.w + 18 + 'px' } : { bottom: st.h + 12 + 'px' }">{{ wide ? winW - st.w : winW }} × {{ wide ? winH : winH - st.h }}</div>
@@ -71,7 +71,7 @@ const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['se
       <div class="grip" :class="{ on: drag }" title="Потяните, чтобы изменить ширину приложения" />
       <div v-if="drag" class="shield" />
       <header class="tabs" role="tablist">
-        <label class="gth" title="Тёмная тема панели"><span>Тёмная</span><input v-model="gDark" type="checkbox" role="switch" :aria-checked="gDark" /><i aria-hidden="true" /></label>
+        <label class="gth" title="Тёмная тема панели" aria-label="Тёмная тема панели"><svg class="gmo" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.8 6.8 0 0 0 10.7 10.7z" /></svg><input v-model="gDark" type="checkbox" role="switch" :aria-checked="gDark" /><i aria-hidden="true" /></label>
         <button v-for="[k, t] in TABS" :key="k" type="button" role="tab" class="tab" :class="{ on: st.tab === k }" :aria-selected="st.tab === k" @click="st.tab = k">{{ t }}</button>
         <span class="sp" />
         <button type="button" class="ib" title="Закрыть (Ctrl + `)" @click="st.open = false">✕</button>
@@ -114,6 +114,7 @@ const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['se
 .tab { position: relative; flex: none; margin-bottom: -1px; padding: 8px 11px 7px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--g-mu); font: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: pointer }
 .tab:hover { background: var(--g-hov); color: var(--g-tx) } .tab.on { color: var(--g-acc); border-bottom-color: var(--g-acc) }
 .gth { flex: none; display: inline-flex; align-items: center; gap: 7px; margin-right: 10px; padding-right: 10px; border-right: 1px solid var(--g-bd); font-size: 12px; font-weight: 600; color: var(--g-mu); cursor: pointer; user-select: none }
+.gth .gmo { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round }          /* луна вместо надписи «Тёмная» (19.11.2026) */
 .gth input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none }
 .gth i { position: relative; width: 30px; height: 18px; border-radius: 9px; background: var(--g-hov); transition: background .2s } .gth i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .2s }
 .gth input:checked + i { background: #34c759 } .gth input:checked + i::after { transform: translateX(12px) }

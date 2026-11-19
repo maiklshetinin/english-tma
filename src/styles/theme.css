@@ -80,6 +80,15 @@ input, textarea, select { width: 100%; font: inherit; font-weight: 700; color: v
 input:focus, textarea:focus, select:focus { border-color: var(--hint-2); background: var(--card); }      /* фокус в поле — чуть темнее рамка, без синего */
 input::placeholder, textarea::placeholder { color: var(--hint-2); }
 input[type='checkbox'] { accent-color: var(--green); }
+/* Переключатель как на iPhone / в Telegram (19.11.2026) — для всех <input type="checkbox" class="sw">: без рамки и отступов общих полей
+   (из-за них кружок съезжал), 51×31, кружок 27, зелёный iOS. Перебивает scoped-стили .sw в компонентах */
+input[type='checkbox'].sw { -webkit-appearance: none; appearance: none; flex: none; position: relative; box-sizing: border-box; width: 51px; height: 31px; margin: 0; padding: 0;
+  border: 0; border-radius: 16px; background: #e9e9ea; outline: none; cursor: pointer; transition: background .25s ease; }
+input[type='checkbox'].sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .15), 0 1px 1px rgba(0, 0, 0, .16); transition: transform .25s cubic-bezier(.3, .7, .4, 1); }
+input[type='checkbox'].sw:checked { background: #34c759; } input[type='checkbox'].sw:checked::after { transform: translateX(20px); }
+input[type='checkbox'].sw:focus-visible { box-shadow: 0 0 0 3px rgba(52, 199, 89, .35); } input[type='checkbox'].sw:disabled { opacity: .45; cursor: default; }
+html[data-theme='dark'] input[type='checkbox'].sw:not(:checked) { background: #39393d; }
 
 .badge { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 800; }
 .badge.ok { background: var(--green-l); color: var(--green-d); }

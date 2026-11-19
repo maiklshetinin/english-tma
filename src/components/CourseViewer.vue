@@ -426,10 +426,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
         <div v-if="isSplit && sizeTip" class="szt" :style="{ right: panelNow + 18 + 'px' }">{{ lessonW }} × {{ winH }}</div>
         <!-- преподаватель: график Review сверху урока — сразу видно, куда ушло слово после ответа (как график колоды в сессии) -->
         <template v-if="steps.length && !of && auth.role === 'teacher'">
-          <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart">{{ rvChart ? 'Скрыть графики' : 'Графики' }}</button>
+          <button class="rvt" :class="{ on: rvChart }" title="График слов Review: куда ушло слово после ответа" @click="rvChart = !rvChart"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg><span>{{ rvChart ? 'Скрыть графики' : 'Графики' }}</span></button>
           <div v-if="rvChart" class="spl" title="Потяните, чтобы изменить ширину урока — до ширины телефона" @pointerdown="dragSplit" />
           <div v-if="rvChart" class="rvd" :class="{ dark: gDark }">
-            <div class="dtabs" role="tablist"><label class="gth" title="Тёмная тема панели"><span>Тёмная</span><input v-model="gDark" type="checkbox" role="switch" :aria-checked="gDark" /><i aria-hidden="true" /></label><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
+            <div class="dtabs" role="tablist"><label class="gth" title="Тёмная тема панели" aria-label="Тёмная тема панели"><svg class="gmo" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.8 6.8 0 0 0 10.7 10.7z" /></svg><input v-model="gDark" type="checkbox" role="switch" :aria-checked="gDark" /><i aria-hidden="true" /></label><button role="tab" :aria-selected="dockTab === 'mem'" :class="{ on: dockTab === 'mem' }" @click="dockTab = 'mem'">График запоминания</button><button role="tab" :aria-selected="dockTab === 'curve'" :class="{ on: dockTab === 'curve' }" @click="dockTab = 'curve'">Слово сейчас</button><button role="tab" :aria-selected="dockTab === 'words'" :class="{ on: dockTab === 'words' }" @click="dockTab = 'words'">Где сейчас слова</button><button role="tab" :aria-selected="dockTab === 'ck'" :class="{ on: dockTab === 'ck' }" @click="dockTab = 'ck'">Путь → чекпоинты</button></div>
             <MemoryChart v-if="dockTab === 'mem'" :focus="focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" dock />
             <WordNow v-else-if="dockTab === 'curve'" :focus="pickedKey || focusKey" :items="dictWords" :cfg="{ retention: algo.retention, maxDays: algo.maxDays }" :lesson="open.title" dock />
             <div v-else-if="dockTab === 'words'" class="gw">
@@ -567,7 +567,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 /* во весь экран */
 .full { position: fixed; inset: 0; z-index: 1000; background: var(--card); display: flex; flex-direction: column }
 .full :deep(.lp) { flex: 1; min-height: 0; height: auto }
-.rvt { position: absolute; top: 12px; right: 14px; z-index: 3; border: 0; border-radius: 12px; padding: 8px 12px; background: #eaf6fe; color: #1278b0; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer } .rvt.on { background: #1cb0f6; color: #fff }
+.rvt { position: absolute; top: 18px; left: 64px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 12px; padding: 8px 12px; background: #eaf6fe; color: #1278b0; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer } .rvt.on { background: #1cb0f6; color: #fff }
 .rvd { flex: none; max-height: 55vh; overflow: auto; padding: 56px 14px 6px; border-bottom: 1px solid var(--border); color: var(--g-tx); background: var(--g-page);
   --g-page: var(--bg); --g-bg: var(--card); --g-tx: var(--text); --g-mu: var(--hint); --g-bd: var(--border); --g-grid: var(--surface); --g-seg: var(--surface); --g-sub: var(--surface); --g-avg: #7c3aed; --g-sel: #2563eb; --g-bar: var(--surface); --g-hov: var(--border); --g-acc: #1a73e8 }      /* светлая — как тема приложения */
 /* тёмная тема панели — свои оттенки (не простое «инвертирование») */
@@ -592,6 +592,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .dtabs { position: sticky; top: 0; z-index: 3; display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 10px; padding: 0 8px; background: var(--g-bar); border-bottom: 1px solid var(--g-bd) }
 .dtabs button { flex: none; font: inherit; font-size: 12.5px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 11px 7px; background: none; color: var(--g-mu); cursor: pointer; white-space: nowrap }
 .dtabs .gth { flex: none; display: inline-flex; align-items: center; gap: 7px; margin-right: 10px; padding-right: 10px; border-right: 1px solid var(--g-bd); font-size: 12px; font-weight: 600; color: var(--g-mu); cursor: pointer; user-select: none }      /* выключатель темы панели, как в iPhone — первым слева */
+.gth .gmo { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round }          /* луна вместо надписи «Тёмная» (19.11.2026) */
 .gth input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none }
 .gth i { position: relative; width: 30px; height: 18px; border-radius: 9px; background: var(--g-hov); transition: background .2s } .gth i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .2s }
 .gth input:checked + i { background: #34c759 } .gth input:checked + i::after { transform: translateX(12px) } .gth input:focus-visible + i { outline: 2px solid var(--g-acc); outline-offset: 2px }
@@ -643,9 +644,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .x { position: absolute; left: 18px; top: 18px }
 /* на компьютере меню приложения слева остаётся видно поверх урока — в любой момент можно уйти в другой раздел */
 @media (min-width: 1024px) { .full { z-index: 9; padding-left: 116px } .x { left: 134px } }
-@media (min-width: 1024px) { .rvt { top: auto; right: auto; bottom: 24px; left: 140px } }
+@media (min-width: 1024px) { .rvt { left: 180px } }          /* 19.11.2026: «Графики» — сверху, справа от «назад» (было внизу слева) */
+.rvt svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
+@media (max-width: 600px) { .rvt span { display: none } .rvt { padding: 8px 9px } }          /* на телефоне — только значок, не налезает на полоску */
 /* урок уже 1024 (перегородку увели влево) — как на телефоне: меню приложения нет, урок во всю свою ширину */
-.full.split.simm { padding-left: 0 } .full.split.simm .x { left: 18px } .full.split.simm .rvt { left: 16px; bottom: 16px }
+.full.split.simm { padding-left: 0 } .full.split.simm .x { left: 18px } .full.split.simm .rvt { left: 64px }
 /* размер урока, пока тянем перегородку, — как в DevTools */
 .szt { position: absolute; top: 8px; z-index: 5; padding: 3px 8px; border-radius: 6px; background: rgba(32, 33, 36, .88); color: #fff; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none }      /* справа сверху на компьютере — панель «Сейчас здесь» (курсор, чат); кнопка — внизу слева, у «Продолжить» */
 .kr { width: min(360px, 80vw); height: min(360px, 80vw); border-radius: 50%; object-fit: cover; background: #000 }

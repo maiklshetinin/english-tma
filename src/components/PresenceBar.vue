@@ -3,7 +3,8 @@
 // (тем же цветом в редакторе курсов — его курсор и выделение). Нажатие — список: кто и где сейчас (вкладка, курс).
 // inline — внутри панели редактора курсов; иначе — на компьютере плавает в правом верхнем углу, на телефоне — тонкая строка
 // над страницей (и только если в приложении есть кто-то ещё). Без соединения (демо) — не видно.
-import { ref, computed } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
+import { devtools } from '../composables/useNetLog'
 import { live, people, WHERE, shared, setSharedCursors, setHidden } from '../composables/useLive'
 import AppIcon from './AppIcon.vue'
 import ThemeToggle from './ThemeToggle.vue'
@@ -19,11 +20,15 @@ const bad = ref({})
 const ini = (n) => (n || '?').trim()[0]?.toUpperCase() || '?'
 // Заметки на экране: список (новые сверху), нажатие — перейти к месту и открыть; «Новая заметка» — нажать на экран
 const chatOn = computed(() => !!(notesState.open || notesState.draft))          // общий чат открыт
+// Разработчику: «</>» — панель разработчика (вместо жука в углу, 19.11.2026). Пока кнопка видна — жук не показывается (devtools.tags)
+const rootOn = computed(() => has.value || (props.theme && !props.inline))
+watchEffect((onCleanup) => { if (auth.isDev && rootOn.value) { devtools.tags++; onCleanup(() => { devtools.tags-- }) } })
 const label = (p) => (p.where === 'courses' ? 'в редакторе курсов' : WHERE[p.where] ? `«${WHERE[p.where]}»` : 'в приложении')
 </script>
 <template>
   <div v-if="has || (theme && !inline)" class="pb" :class="{ inline, solo: people.length < 2, has }">
     <ThemeToggle v-if="theme && !inline" />
+    <button v-if="auth.isDev && !has" class="cur tag" :class="{ on: devtools.open }" :aria-pressed="devtools.open" title="Панель разработчика (Ctrl + `)" aria-label="Панель разработчика" @click="devtools.open = !devtools.open">&lt;/&gt;</button>
     <template v-if="has">
     <!-- Разработчику: общие курсоры на всех экранах — вкл/выкл сразу у всех (то же, что переключатель в «Профиле») -->
     <button v-if="auth.isDev && !inline" class="cur" :class="{ on: shared.cursors }" :aria-pressed="shared.cursors"
@@ -35,6 +40,7 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
       <svg viewBox="0 0 24 24"><path v-if="shared.hidden" d="M3 3l18 18M10.6 6.2A9.7 9.7 0 0 1 12 6c5 0 9 6 9 6a16 16 0 0 1-2.6 3.2M6.4 7.6C4.3 9.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1.1M9.9 10a3 3 0 0 0 4.1 4.1" /><path v-else d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /></svg></button>
     <button v-if="!inline" class="nt" :class="{ on: chatOn }" :aria-pressed="chatOn" :title="`Чат${unreadCount ? ' — новых: ' + unreadCount : ''}`" aria-label="Чат" @click="toggleChat(); open = false">
       <AppIcon name="chat" :size="16" /><em v-if="unreadCount">{{ unreadCount }}</em></button>
+    <button v-if="auth.isDev" class="cur tag" :class="{ on: devtools.open }" :aria-pressed="devtools.open" title="Панель разработчика (Ctrl + `)" aria-label="Панель разработчика" @click="devtools.open = !devtools.open">&lt;/&gt;</button>
     <button class="row" :title="people.map(p => (p.me ? 'Вы' : p.name) + ' — ' + label(p)).join('\n')" @click="open = !open">
       <span v-for="p in shown" :key="p.uid" class="av" :class="{ ghost: p.me && shared.hidden }" :style="{ '--c': p.color }">
         <img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" @error="bad[p.uid] = true" />
@@ -60,6 +66,7 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
 .cur { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--card); color: var(--hint); box-shadow: 0 2px 10px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04); cursor: pointer; transition: background .12s, color .12s }
 .cur svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round }
 .cur:hover { color: var(--text) } .cur.on { background: #0d99ff; color: #fff }
+.cur.tag { background: #3c4043; color: #fff; font: 700 11.5px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: -.5px } .cur.tag:hover { background: #202124; color: #fff } .cur.tag.on { background: #0d99ff }          /* «</>» — тёмная, видно, что для разработчика */
 .cur.inv svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .cur.inv.on { background: #5f6368; color: #fff }      /* невидимка — серым */
 .av.ghost { opacity: .45; filter: grayscale(1) }      /* вы — невидимка: свой кружок бледный */
 .nt { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--card); color: var(--hint); box-shadow: 0 2px 10px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .04); cursor: pointer }
