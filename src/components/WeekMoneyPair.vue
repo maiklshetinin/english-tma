@@ -27,7 +27,8 @@ watch(() => props.week.real + props.month.real, (to, from) => { if (to > from &&
 </template>
 <style scoped>
 /* Цвета — как у WeekMoney: зелёный #009300, в тёмной теме светлее */
-.wmp { --mg: #009300; flex: none; display: grid; grid-template-columns: auto auto auto; align-items: center; column-gap: 8px; row-gap: 2px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap; box-sizing: border-box }
+/* Высота ровно 48px — как у двух плашек WeekMoney: переключение вида ничего не сдвигает */
+.wmp { --mg: #009300; flex: none; display: grid; grid-template-columns: auto auto auto; align-content: center; align-items: center; height: 48px; column-gap: 8px; row-gap: 2px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap; box-sizing: border-box }
 .per { font-size: 11px; font-weight: 800; color: var(--hint) }
 .sum { position: relative; display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; padding-bottom: 3px }
 b { font-size: 14px; font-weight: 900; color: var(--mg); font-variant-numeric: tabular-nums } small { font-size: 11px; font-weight: 800; color: var(--hint); font-variant-numeric: tabular-nums }

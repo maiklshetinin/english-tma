@@ -37,7 +37,8 @@ onUnmounted(() => cancelAnimationFrame(raf))
 </template>
 <style scoped>
 /* Зелёный плашек денег — #009300, как на макете (спокойнее, чем салатовый --green); в тёмной теме — светлее, чтобы читался */
-.wm { --mg: #009300; flex: none; display: grid; min-width: 118px; padding: 4px 12px 5px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap }
+/* 19.11.2026: высота ровно 48px — как у сдвоенной плашки (WeekMoneyPair): переключение вида в меню решётки ничего не сдвигает */
+.wm { --mg: #009300; flex: none; display: grid; align-content: center; box-sizing: border-box; height: 48px; min-width: 118px; padding: 4px 12px 5px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); line-height: 1.15; white-space: nowrap }
 .top { justify-self: end; display: flex; align-items: baseline; gap: 5px }
 b { font-size: 18px; font-weight: 900; color: var(--mg); font-variant-numeric: tabular-nums } small { font-size: 12px; font-weight: 800; color: var(--hint) }
 b.up { display: inline-block; transform-origin: right center; animation: wmUp 1s ease-out }
