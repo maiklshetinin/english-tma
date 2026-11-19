@@ -14,7 +14,6 @@ import ScreenNotes from './components/ScreenNotes.vue'
 import BlockGate from './components/BlockGate.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
 import DevTools from './components/DevTools.vue'
-import { access, loadAccess } from './composables/useAccess'
 import './composables/useUpdate'      // «Обновить у всех» от разработчика
 import { useTabBadge } from './composables/useTabBadge'
 import { startLive, stopLive, setWhere, onLive, liveSend } from './composables/useLive'
@@ -49,7 +48,6 @@ useBackButton(computed(() => auth.status === 'ready' && !!route.params.id), () =
 // В демо-режиме роль можно задать в URL: ?demo&role=teacher (переключатель — в «Профиле»)
 // Вместе в реальном времени (только преподаватели): кто где сейчас и «коллега поменял данные — перезагрузить»
 watch(() => auth.status === 'ready' && auth.isTeacher, (on) => (on ? startLive() : stopLive()), { immediate: true })
-watch(() => auth.status === 'ready' && auth.isTeacher, (on) => { if (on) loadAccess() }, { immediate: true })          // «только просмотр» — от разработчика
 watch(() => route.meta.tab, (t) => { if (t !== 'courses') setWhere(String(t || '')) }, { immediate: true })      // в редакторе он сам скажет, какой курс
 // Учёт активности (useActivity.js) — если разработчик включил его для этой роли: заходы, время по вкладкам, лента
 watch(() => auth.status === 'ready', (ok) => { if (ok && !isDemo) startVisits() }, { immediate: true })          // лог заходов — всегда (useVisits.js)
@@ -89,8 +87,6 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
     </div>
     <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" /><ScreenNotes v-if="auth.isTeacher && route.name !== 'courses'" />
   </template>
-  <div v-if="access.viewOnly && auth.isTeacher" class="viewonly" title="Разработчик включил режим просмотра: всё видно, но изменения не сохраняются">👁 Только просмотр</div>
-  <div v-else-if="access.lessonsLock && auth.isTeacher && route.name !== 'courses'" class="viewonly" title="Разработчик включил: уроки в расписании не меняются (создать, перенести, отметить, удалить), остальное — можно">👁 Уроки — только просмотр</div>
   <AppDialog />
   <UpdateBanner />
   <DevTools v-if="auth.isDev" />      <!-- панель разработчика, как DevTools в Chrome: жучок в углу или Ctrl + ` -->
@@ -100,7 +96,6 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
 <style>
 .shell { padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)) }
 .splash { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 12px; max-width: 360px; margin: 20vh auto 0; text-align: center }
-.viewonly { position: fixed; left: 50%; top: calc(8px + var(--tg-safe-area-inset-top, 0px)); translate: -50% 0; z-index: 9980; padding: 5px 12px; border-radius: 999px; background: #fff3dc; color: #b06a00; font-size: 12.5px; font-weight: 800; box-shadow: 0 2px 10px rgba(0, 0, 0, .12); pointer-events: none }
 .spin { width: 40px; height: 40px; border-radius: 50%; border: 5px solid var(--border); border-top-color: var(--green); animation: r .8s linear infinite }
 @keyframes r { to { transform: rotate(360deg) } }
 @media (min-width: 1024px) { .shell { padding-left: 124px } .page { padding-bottom: 40px } }

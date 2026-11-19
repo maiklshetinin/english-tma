@@ -49,17 +49,10 @@ const awake = computed(() => cache.value && new Date(cache.value.since).toLocale
 async function setCache(body, msg) {
   try { cache.value = await post('/dev/cache', body, 'Кэш сервера'); showToast(msg) } catch (e) { showToast(e.message) }
 }
-// Права преподавателей: «только просмотр» — всё видит, ничего не меняет (сервер не примет записи)
+// Команда (для «Версий в приложении»): преподаватели и их последняя версия сайта
 const team = ref(null)
-const loadTeam = () => request('/dev/access', undefined, 'Права').then((r) => { team.value = r.teachers }).catch(() => { team.value = [] })
+const loadTeam = () => request('/dev/access', undefined, 'Команда').then((r) => { team.value = r.teachers }).catch(() => { team.value = [] })
 if (auth.isDev) loadTeam()
-async function setView(t, on) {
-  try { await post('/dev/access', { uid: t.uid, viewOnly: on }, 'Права'); t.viewOnly = on; showToast(on ? `${t.name}: только просмотр` : `${t.name}: полный доступ`) } catch (e) { showToast(e.message) }
-}
-// «Уроки — только просмотр» (19.11.2026): нельзя только правки уроков в расписании, остальное — можно
-async function setLessons(t, on) {
-  try { await post('/dev/access', { uid: t.uid, lessonsLock: on }, 'Права'); t.lessonsLock = on; showToast(on ? `${t.name}: уроки — только просмотр` : `${t.name}: уроки можно менять`) } catch (e) { showToast(e.message) }
-}
 // Учёт активности (server/activity.ts): отдельно для преподавателей и учеников; смотреть — панель разработчика → «Активность»
 const actSet = ref(null)
 const td = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
@@ -174,21 +167,6 @@ async function ping() {
           <span class="tx">Обновить у всех<small>после git push: обновятся, как только новая версия будет на сайте; кто работает — увидит плашку</small></span>
         </button>
         <!-- кэш чтений базы на сервере: дольше срок — меньше Reads в Firestore; любая правка через приложение всё равно сбрасывает нужное сразу -->
-        <!-- права: кому «только просмотр» -->
-        <details class="fold">
-          <summary class="it"><span class="ic"><AppIcon name="lock" :size="18" /></span><span class="tx">Права<small>кому только просмотр</small></span><span class="val"><i class="chev">›</i></span></summary>
-        <div class="it vr fb">
-          <span class="ic" />
-          <div class="tx"><small>«Уроки — просмотр» — нельзя менять только уроки в расписании (создать, перенести, отметить, удалить), остальное можно. «Всё — просмотр» — ничего не сохраняется: уроки, ученики, курсы. Чат работает.</small>
-            <div v-for="t in team ?? []" :key="t.uid" class="rw">
-              <Avatar :s="{ name: t.name, photoUrl: t.photo, color: '#9aa0a6' }" :size="30" /><b>{{ t.name }}</b>
-              <label class="vsw" title="Уроки в расписании: создать, перенести, отметить проведённым / отменённым, удалить — нельзя; остальное можно"><span>уроки — просмотр</span><input type="checkbox" :checked="t.lessonsLock" :disabled="t.viewOnly" @change="setLessons(t, $event.target.checked)" /><i /></label>
-              <label class="vsw"><span>всё — просмотр</span><input type="checkbox" :checked="t.viewOnly" @change="setView(t, $event.target.checked)" /><i /></label>
-            </div>
-            <span v-if="team && !team.length" class="none">нет других преподавателей (TEACHER_IDS) или старая сборка сервера</span>
-          </div>
-        </div>
-        </details>
         <!-- учёт активности: заходы, время «открыто» / «активен» по вкладкам, лента; смотреть — панель разработчика → «Активность» -->
         <details class="fold">
           <summary class="it"><span class="ic"><AppIcon name="chart" :size="18" /></span><span class="tx">Учёт активности<small>{{ !actSet ? 'нет ответа от сервера' : actSet.teachers && actSet.students ? 'включён у всех' : actSet.teachers ? 'включён у преподавателей' : actSet.students ? 'включён у учеников' : 'выключен' }} · очистка логов</small></span><span class="val"><i class="chev">›</i></span></summary>
@@ -299,10 +277,6 @@ async function ping() {
 .vt td { padding: 6px; border-top: 1px solid var(--border); font-weight: 600; vertical-align: middle } .vt td small { font-size: 11px; color: var(--hint) }
 .st { padding: 2px 8px; border-radius: 8px; background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green-d); font-size: 12px; font-weight: 800 } .vt tr.old .st { background: color-mix(in srgb, var(--orange-d) 15%, transparent); color: var(--orange-d) }
 .rw { display: flex; align-items: center; gap: 10px; margin-top: 8px } .rw b { flex: 1; font-size: 14px; font-weight: 700 }
-.vsw { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--hint); cursor: pointer } .vsw input { position: absolute; opacity: 0; width: 1px; height: 1px }
-.vsw i { position: relative; width: 36px; height: 22px; border-radius: 11px; background: #34c759; transition: background .2s } .vsw i::after { content: ''; position: absolute; top: 2px; left: 16px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: left .2s }
-.vsw input:checked + i { background: #ff9500 } .vsw input:checked + i::after { left: 2px }
-.vsw:has(input:disabled) { opacity: .45; cursor: default } .rw:has(.vsw) { flex-wrap: wrap; row-gap: 6px }          /* «всё — просмотр» включено — «уроки» и так закрыты */
 .lnk { justify-self: start; margin-top: 8px; padding: 0; border: 0; background: none; color: var(--blue); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer }
 .lgn { margin-top: 8px } .lgc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; font-weight: 700 } .lgc > span { flex: 1 }
 .lgb { padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--red-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .lgb:hover { background: var(--surface) }

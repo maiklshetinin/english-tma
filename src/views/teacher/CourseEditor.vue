@@ -25,7 +25,6 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import ExerciseMini from '../../components/ExerciseMini.vue'
-import { access, accessReady } from '../../composables/useAccess'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
@@ -126,7 +125,7 @@ const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), te
 const cleanInk = (k) => ({ id: k.id, c: k.c, w: k.w, p: k.p.map(Math.round) })
 const payload = () => ({ title: doc.title, mode: 'line', progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk),
   templates: (doc.templates ?? []).map(t => ({ id: t.id, t: t.t, d: t.d, step: stepsOut([t.step])[0] })) })          // templates — свои упражнения из конструктора (меню «Exercise» → «Мои»)
-function share() { if (access.viewOnly) return; clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
+function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
@@ -161,7 +160,6 @@ let pt = 0, busy = false
 const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(loose && x.grp ? { grp: x.grp } : {}), ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.type === 'unit' && x.hlo != null ? { hlo: x.hlo } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.topic ? { topic: x.topic } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
-  if (access.viewOnly) { sync.value = 'view'; return }          // «только просмотр»: сервер не примет — и не пытаемся
   clearTimeout(pt); pt = setTimeout(async () => {
     if (busy) return push(400)
     busy = true; sync.value = 'saving'
@@ -225,17 +223,16 @@ onMounted(async () => {
   }
   setWhere('courses', doc.id)                // коллеги видят, что я в этом курсе
   if (!online) return
-  await accessReady()                        // «только просмотр» — курс всегда с сервера, свои правки не отправляем
   try {
     const r = await apiRequest('/courses'); if (!r.ok) throw new Error(String(r.status))
     const { courses, storage } = await r.json(); storageOn.value = !!storage
     const target = want && want !== 'new' ? want : doc.id
     if (target !== doc.id && doc.dirty) await flush().catch(() => {})
-    if (courses.some(c => c.id === target) && !(target === doc.id && doc.dirty && !access.viewOnly)) {          // «только просмотр» — всегда версия с сервера
+    if (courses.some(c => c.id === target) && !(target === doc.id && doc.dirty)) {
       const c = await (await apiRequest(`/courses/${target}`)).json()
       if (target !== doc.id) Object.assign(doc, { items: [], loose: [] })         // другой курс — чужие локальные видео не тащим
       fromServer(c)
-    } else if (!want && (!doc.dirty || access.viewOnly) && courses.length) fromServer(await (await apiRequest(`/courses/${courses[0].id}`)).json())
+    } else if (!want && !doc.dirty && courses.length) fromServer(await (await apiRequest(`/courses/${courses[0].id}`)).json())
     else push(0)                                                                  // новый или с несохранёнными правками — на сервер
     setWhere('courses', doc.id)
     if (storageOn.value) uploadLocal()
@@ -1897,7 +1894,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <div class="fl tl-panel">
       <BackButton to="Курсы" @click="goBack" /><i class="vs" />
       <input v-model="doc.title" class="ttl" aria-label="Название курса" @input="save" />
-      <span class="sync" :class="sync" :title="{ view: 'Режим «только просмотр»: можно смотреть и проходить экраны, изменения не сохраняются', local: 'Демо: курс хранится только в этом браузере', saving: 'Сохраняю на сервер…', saved: 'Сохранено на сервере', offline: 'Нет связи с сервером — копия в браузере, отправлю, когда появится сеть' }[sync]">{{ { view: 'только просмотр', local: 'в браузере', saving: 'сохраняю…', saved: 'сохранено', offline: 'нет сети' }[sync] }}</span>
+      <span class="sync" :class="sync" :title="{ local: 'Демо: курс хранится только в этом браузере', saving: 'Сохраняю на сервер…', saved: 'Сохранено на сервере', offline: 'Нет связи с сервером — копия в браузере, отправлю, когда появится сеть' }[sync]">{{ { local: 'в браузере', saving: 'сохраняю…', saved: 'сохранено', offline: 'нет сети' }[sync] }}</span>
     </div>
     <div class="fl tr-panel">
       <PresenceBar inline /><i v-if="live.on" class="vs" />

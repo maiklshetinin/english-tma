@@ -9,7 +9,6 @@ import { computed, ref } from 'vue'
 import type { Lesson, ScheduleResponse } from '../../server/types'
 import { apiRequest, isDemo } from '../firebase'
 import { showToast } from '../composables/useToast'
-import { access } from '../composables/useAccess'
 import { nowIn } from '../utils/dates'
 
 const TMP = 'tmp-'                                          // временный id урока, пока сервер не вернул настоящий
@@ -101,8 +100,6 @@ export const useScheduleStore = defineStore('schedule', () => {
 
   function sync(task: () => Promise<unknown>) {      // поставить запрос в очередь; при ошибке — тост и перечитывание, когда очередь опустеет
     if (isDemo) return
-    // «Уроки — только просмотр» (разработчик в «Правах»): сервер такую правку не примет — не отправляем, а перечитываем расписание (правка откатится)
-    if (access.lessonsLock) { showToast('Уроки — только просмотр: изменения не сохраняются', null, 'bad'); dirty = true; task = async () => {} }
     pending++
     chain = chain.then(task).catch((e: Error) => { dirty = true; showToast(e.message, null, 'bad') }).then(async () => {
       if (--pending === 0 && dirty) { dirty = false; await load().catch(() => {}) }
