@@ -1,12 +1,13 @@
 // Лог заходов (19.11.2026) — пишется ВСЕГДА, независимо от выключателя «Учёт активности»: кто, когда и с чего открыл приложение.
 // Приложение шлёт отметку при запуске и при возвращении после 30+ минут в фоне (src/composables/useVisits.js).
-// Один документ на человека в день: visits/<uid>_<день> { uid, name, photo, role, day, n, list: [{ t, dev, app, pf }] }
+// Один документ на человека в день: visits/<uid>_<день> { uid, name, photo, role, day, n, list: [{ t, dev, app, pf, ver? }] }
+// Версия сайта (коммит сборки) ещё и в записи человека: users/<uid> { ver, verAt } — «Версии в приложении» видят её и без сети (19.11.2026).
 //   dev — phone | desktop, app — tg (Telegram) | web (сайт в браузере), pf — платформа Telegram (ios, android, tdesktop, macos, weba…).
 // Запись — ОДНА запись на заход, без чтения (19.11.2026): set с merge, счётчик — FieldValue.increment, список — arrayUnion. Очистка — разработчиком (clean).
 import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './errors.js'
 
-export interface Visit { t: number; dev: 'phone' | 'desktop'; app: 'tg' | 'web'; pf: string }
+export interface Visit { t: number; dev: 'phone' | 'desktop'; app: 'tg' | 'web'; pf: string; ver?: string }
 export interface VisitDay { uid: string; name: string; photo?: string; role: string; day: string; n: number; list: Visit[] }
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 
@@ -16,7 +17,8 @@ export function cleanVisit(b: unknown, now = Date.now()): { day: string; v: Visi
   if (!x || typeof x !== 'object' || typeof x.day !== 'string' || !DAY.test(x.day)) return null
   const dev = x.dev === 'phone' ? 'phone' : 'desktop', app = x.app === 'tg' ? 'tg' : 'web'
   const pf = typeof x.pf === 'string' ? x.pf.replace(/[^a-z0-9_-]/gi, '').slice(0, 16) : ''
-  return { day: x.day, v: { t: now, dev, app, pf } }
+  const ver = typeof x.ver === 'string' && /^[0-9a-z._-]{1,40}$/i.test(x.ver) ? x.ver : ''          // коммит сборки сайта (или dev)
+  return { day: x.day, v: { t: now, dev, app, pf, ...(ver ? { ver } : {}) } }
 }
 
 export function makeVisits({ db, FieldValue }: { db: Firestore; FieldValue: typeof FV }) {
@@ -28,6 +30,7 @@ export function makeVisits({ db, FieldValue }: { db: Firestore; FieldValue: type
       const ref = col('visits').doc(`${user.uid}_${c.day}`)
       const who = { uid: user.uid, name: String(user.tgName || ''), role: user.dev === true ? 'dev' : String(user.role ?? ''), ...(user.tgPhoto ? { photo: String(user.tgPhoto) } : {}) }
       await ref.set({ ...who, day: c.day, n: FieldValue.increment(1), list: FieldValue.arrayUnion(c.v) }, { merge: true })          // без чтения
+      if (c.v.ver) await col('users').doc(user.uid).set({ ver: c.v.ver, verAt: c.v.t }, { merge: true })          // какая версия сейчас у человека — в его записи (тоже без чтения)
       return { ok: true }
     },
     async range(from: string, to: string): Promise<VisitDay[]> {

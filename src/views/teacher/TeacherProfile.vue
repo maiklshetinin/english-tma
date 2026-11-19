@@ -31,8 +31,12 @@ const fresh = computed(() => site.value || MY_VER)
 const vers = computed(() => {
   const by = new Map()
   for (const u of live.users) { const p = by.get(u.uid) ?? { uid: u.uid, name: u.name, photoUrl: u.photo, color: u.color, me: false, vers: new Set(), tabs: 0 }; p.vers.add(u.ver || '?'); p.tabs++; if (u.cid === live.cid) p.me = true; by.set(u.uid, p) }
-  return [...by.values()].map((p) => ({ ...p, vers: [...p.vers], old: [...p.vers].some((v) => v !== fresh.value) })).sort((a, b) => a.me - b.me)
+  const out = [...by.values()].map((p) => ({ ...p, vers: [...p.vers], on: true, old: [...p.vers].some((v) => v !== fresh.value) }))
+  // остальные преподаватели (Настя и др.) — всегда, даже не в сети: последняя открытая версия из их записи (users.ver, пишет /me/visit)
+  for (const t of team.value ?? []) if (!by.has(t.uid)) out.push({ uid: t.uid, name: t.name, photoUrl: t.photo, color: '#9aa0a6', me: false, on: false, tabs: 0, at: t.verAt, vers: t.ver ? [t.ver] : [], old: !!t.ver && t.ver !== fresh.value })
+  return out.sort((a, b) => a.me - b.me || b.on - a.on)
 })
+const seen = (t) => { if (!t) return 'не в сети'; const d = new Date(t), hm = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }); return 'не в сети · заходил(а) ' + (d.toDateString() === new Date().toDateString() ? 'сегодня в ' + hm : d.toLocaleDateString('ru', { day: 'numeric', month: 'short' }) + ' в ' + hm) }
 // Кэш чтений базы на сервере (server/cache.ts): срок, сколько прочитано из базы и сколько отдано из памяти с запуска сервера
 const CACHE_OPTS = [[0, 'выкл'], [10, '10 мин'], [60, '1 ч'], [360, '6 ч'], [720, '12 ч'], [1440, '24 ч']]
 const cache = ref(null)
@@ -128,8 +132,8 @@ async function ping() {
           <span class="ic"><AppIcon name="users" :size="18" /></span>
           <div class="tx">Версии в приложении<small>на сайте сейчас: <code class="cm">{{ fresh }}</code>{{ site ? '' : ' (локально)' }}</small>
             <div v-if="vers.length" class="ppl">
-              <span v-for="p in vers" :key="p.uid" class="pp" :class="{ old: p.old }" :title="p.old ? 'Старая версия — нажмите «Обновить у всех»' : 'Свежая версия'">
-                <span class="pa"><Avatar :s="p" :size="44" /><i class="pb">{{ p.old ? '↻' : '✓' }}</i></span>
+              <span v-for="p in vers" :key="p.uid" class="pp" :class="{ old: p.old, off: !p.on }" :title="(p.on ? '' : seen(p.at) + '. ') + (!p.vers.length ? 'Версия пока неизвестна' : p.old ? 'Старая версия — нажмите «Обновить у всех»' : 'Свежая версия')">
+                <span class="pa"><Avatar :s="p" :size="44" /><i v-if="p.vers.length" class="pb">{{ p.old ? '↻' : '✓' }}</i></span>
                 <b>{{ p.me ? 'Вы' : p.name.split(' ')[0] }}</b>
               </span>
             </div>
@@ -137,9 +141,9 @@ async function ping() {
               <thead><tr><th>Кто</th><th>Сборка</th><th>Статус</th></tr></thead>
               <tbody>
                 <tr v-for="p in vers" :key="p.uid" :class="{ old: p.old }">
-                  <td>{{ p.me ? 'Вы' : p.name }}<small v-if="p.tabs > 1"> · {{ p.tabs }} вкладки</small></td>
-                  <td><code v-for="v in p.vers" :key="v" class="cm" :class="{ bad: v !== fresh }">{{ v }}</code></td>
-                  <td><span class="st">{{ p.old ? 'старая' : 'свежая' }}</span></td>
+                  <td>{{ p.me ? 'Вы' : p.name }}<small v-if="p.tabs > 1"> · {{ p.tabs }} вкладки</small><small v-if="!p.on" class="off">{{ seen(p.at) }}</small></td>
+                  <td><code v-for="v in p.vers" :key="v" class="cm" :class="{ bad: v !== fresh }">{{ v }}</code><small v-if="!p.vers.length">—</small></td>
+                  <td><span v-if="p.vers.length" class="st">{{ p.old ? 'старая' : 'свежая' }}</span><small v-else>пока неизвестна</small></td>
                 </tr>
               </tbody>
             </table>
@@ -249,6 +253,7 @@ async function ping() {
 .cm { padding: 1px 6px; border-radius: 6px; background: var(--surface); font-size: 12px; font-weight: 700; color: var(--text) } .cm.bad { background: color-mix(in srgb, var(--orange-d) 15%, transparent); color: var(--orange-d) } .cm + .cm { margin-left: 4px }
 /* кружки людей: галочка — свежая, ↻ — старая */
 .ppl { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 4px }
+.pp.off .pa { opacity: .5 } .vt td small.off { display: block }          /* не в сети — бледнее, под именем «заходил(а) …» */
 .pp { display: grid; justify-items: center; gap: 4px; min-width: 52px } .pp b { font-size: 12px; font-weight: 700 }
 .pa { position: relative; display: inline-grid; border-radius: 50%; box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--green) } .pp.old .pa { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--orange-d) }
 .pb { position: absolute; right: -4px; bottom: -4px; z-index: 2; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: #fff; font-size: 11px; font-style: normal; font-weight: 900; box-shadow: 0 0 0 2px var(--card) } .pp.old .pb { background: var(--orange-d) }

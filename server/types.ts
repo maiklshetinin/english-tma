@@ -122,6 +122,7 @@ export interface UserDoc {                // id документа — 'tg:<Tele
   photoUrl: string
   role: Role
   studentId?: string | null                // только у ученика
+  ver?: string; verAt?: number            // какая версия сайта (коммит сборки) у человека открыта последней и когда — пишет /me/visit (19.11.2026)
   lastLoginAt: ServerTime
   createdAt?: ServerTime
 }

@@ -184,7 +184,8 @@ app.get('/me/access', requireUser, (req, res) => { res.json({ viewOnly: viewOnly
 app.get('/dev/access', requireUser, requireDev, wrap(async (_req, res) => {
   const ids = [...new Set(TEACHER_IDS)].filter((id) => !DEV_IDS.includes(id))
   const docs = ids.length ? await db.getAll(...ids.map((id) => db.collection('users').doc(`tg:${id}`))) : []
-  res.json({ teachers: ids.map((id, i) => ({ uid: `tg:${id}`, name: String(docs[i]?.get('name') || 'id ' + id), photo: String(docs[i]?.get('photoUrl') || ''), viewOnly: viewOnly.has(`tg:${id}`) })) })
+  res.json({ teachers: ids.map((id, i) => ({ uid: `tg:${id}`, name: String(docs[i]?.get('name') || 'id ' + id), photo: String(docs[i]?.get('photoUrl') || ''), viewOnly: viewOnly.has(`tg:${id}`),
+    ver: String(docs[i]?.get('ver') || ''), verAt: Number(docs[i]?.get('verAt')) || 0 })) })          // ver — последняя открытая версия сайта (пишет /me/visit)
 }))
 app.post('/dev/access', requireUser, requireDev, wrap(async (req, res) => {
   const uid = String(req.body?.uid || ''), on = req.body?.viewOnly === true

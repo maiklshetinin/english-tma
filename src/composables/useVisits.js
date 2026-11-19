@@ -1,6 +1,8 @@
 // Лог заходов (19.11.2026) — всегда, без выключателя: отметка «открыл приложение» при запуске и при возвращении после 30+ минут
 // в фоне. С чего: телефон или компьютер, Telegram или сайт в браузере (+ платформа Telegram). Одна короткая запись — server/visits.ts.
+// С ней же — версия сайта (коммит сборки): сервер кладёт её в запись человека, «Версии в приложении» видят её и когда человек не в сети.
 import { apiFetch, tg } from '../firebase'
+import { MY_VER } from './useUpdate'
 
 const AWAY = 30 * 60_000
 const pad = (n) => String(n).padStart(2, '0')
@@ -11,7 +13,7 @@ export function device() {
   const phone = pf ? /^(ios|android|android_x)$/.test(pf) : !!matchMedia?.('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820
   return { dev: phone ? 'phone' : 'desktop', app: tg?.initData ? 'tg' : 'web', pf }
 }
-const send = () => apiFetch('/me/visit', { method: 'POST', body: JSON.stringify({ day: today(), ...device() }), keepalive: true }).catch(() => { /* нет сети — не страшно */ })
+const send = () => apiFetch('/me/visit', { method: 'POST', body: JSON.stringify({ day: today(), ...device(), ver: MY_VER }), keepalive: true }).catch(() => { /* нет сети — не страшно */ })
 
 let started = false, hiddenAt = 0
 /** После входа: отметить заход и следить за возвращениями */
