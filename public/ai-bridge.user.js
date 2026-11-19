@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Tutor TMA — мост с чатом (ChatGPT / Gemini / Claude)
 // @namespace    english-tma
-// @version      1.0
+// @version      1.1
 // @description  Берёт с сервера Tutor TMA проверки «Ответ по смыслу», вставляет их в открытый чат, ждёт ответ и отправляет его обратно
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -12,6 +12,8 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @updateURL    https://maiklshetinin.github.io/english-tma/ai-bridge.user.js
+// @downloadURL  https://maiklshetinin.github.io/english-tma/ai-bridge.user.js
 // @connect      onrender.com
 // @connect      *
 // ==/UserScript==
@@ -75,7 +77,12 @@
   const shown = (el) => !!el && (el.offsetParent !== null || el.getClientRects().length > 0)
   const first = (sels) => { for (const s of sels) for (const el of document.querySelectorAll(s)) if (shown(el)) return el; return null }
   const all = (sels) => { for (const s of sels) { const l = [...document.querySelectorAll(s)]; if (l.length) return l } return [] }
-  const input = () => first(SITE.input)
+  // 1.1 (19.11.2026): в узком окне или после обновления сайта поле бывает в другой обёртке — тогда любое видимое поле ввода,
+  // самое нижнее на странице (у чатов оно всегда внизу). Свою плашку моста не трогаем
+  const anyInput = () => [...document.querySelectorAll('[contenteditable="true"], textarea')]
+    .filter((el) => shown(el) && !pill.contains(el) && el.getBoundingClientRect().width > 120)
+    .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom)[0] || null
+  const input = () => first(SITE.input) || anyInput()
   const busy = () => !!first(SITE.busy)
   const textOf = (el) => (!el ? '' : 'value' in el && typeof el.value === 'string' ? el.value : el.innerText || el.textContent || '')
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -117,7 +124,7 @@
     show('проверяет…', '#f5a524')
     await until(() => !busy(), 30_000)                       // чат ещё дописывает прошлое — ждём
     const el = await until(input, 10_000)
-    if (!el) throw new Error('не нашёл поле ввода чата')
+    if (!el) throw new Error('не нашёл поле ввода чата — откройте обычный чат (не настройки) и не сворачивайте окно')
     await fill(el, job.text)
     await send(el)
     await until(busy, 8000, 150)                              // чат начал отвечать (может проскочить незаметно — не беда)
