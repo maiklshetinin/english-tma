@@ -131,7 +131,7 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
             <tr class="pr" :class="{ on: isOpen(r, i), cont: !r.head }" tabindex="0" :aria-expanded="isOpen(r, i)" @click="flip(r, i)" @keydown.enter.prevent="flip(r, i)" @keydown.space.prevent="flip(r, i)">
               <td>
                 <span class="who">
-                  <i class="car" aria-hidden="true">{{ isOpen(r, i) ? '▾' : '▸' }}</i>
+                  <svg class="car" :class="{ open: isOpen(r, i) }" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
                   <Avatar v-if="r.head" :s="av(r)" :size="24" /><span v-else class="avsp" />
                   <b v-if="r.head" class="nm">{{ r.name || r.uid }}</b>
                   <span class="tag" :title="`${SRC[r.src]} · ${r.dev === 'phone' ? 'телефон' : 'компьютер'}`">
@@ -233,7 +233,8 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
 .wn2 small { font-size: 11px; font-weight: 600; color: #1a73e8 } .wn2 small.student { color: #188038 } .wn2 small.dev { color: #8430ce }
 .tag { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; border: 1px solid var(--border); border-radius: 99px; background: var(--card); font-size: 11px; font-weight: 700; color: var(--text); white-space: nowrap }
 .tag svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--hint) }
-.car { flex: none; width: 10px; font-style: normal; font-size: 10px; color: var(--hint) }
+.car { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--text); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; opacity: .55; transition: transform .15s, opacity .15s }          /* стрелка раскрытия — крупная (19.11.2026) */
+.car.open { transform: rotate(90deg); opacity: .85 }
 .n { text-align: right; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums } .n.g { color: #1a73e8; font-weight: 800 } .n.m { color: var(--hint); font-weight: 600 } .n.b2 { color: #1a73e8; font-weight: 700 }
 .tcol { width: 30%; min-width: 96px } .tm2 { color: var(--hint); font-variant-numeric: tabular-nums; white-space: nowrap }
 .tn2 { display: flex; align-items: center; gap: 8px; font-weight: 600 } .ti { flex: none; color: var(--hint) }
