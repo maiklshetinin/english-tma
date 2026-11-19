@@ -6,6 +6,7 @@ import { reactive } from 'vue'
 
 const KEYS = 'tma.ai.keys.v1', MODEL = 'tma.ai.model'
 export const MODEL_DEFAULT = 'gemini-3.8-flash'          // свежая стабильная Flash из списка моделей ключа автора (19.11.2026); не ответит — подберётся сама
+export const WAIT = 25_000                                // сколько ждём ответа одной модели, потом следующая
 export const PASS = 60                                    // зачёт — от 60 % (рекомендация курса: 60–70 % «идеального» ответа — уже хорошо)
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'          // тот же адрес и заголовок x-goog-api-key, что у рабочей озвучки (gemini-2.5-flash-preview-tts)
 
@@ -61,8 +62,11 @@ async function call(key, prompt, json, fetcher = fetch, system = SYSTEM, model =
   const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: {} }          // без temperature: новые модели (3.x) её не принимают
   if (json) { body.systemInstruction = { parts: [{ text: system }] }; body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = SCHEMA }
   let r
-  try { r = await fetcher(API + encodeURIComponent(model) + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) }) }
-  catch { const e = new Error('Нет связи с Google'); e.net = true; throw e }
+  // 25 с на ответ: модели 3.x у Google бывают перегружены и молчат минутами (форум Google, ноябрь 2026) — тогда следующая модель
+  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), WAIT)
+  try { r = await fetcher(API + encodeURIComponent(model) + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), ...(ac ? { signal: ac.signal } : {}) }) }
+  catch { clearTimeout(tm); if (ac?.signal.aborted) { const e = new Error(`Модель «${model}» не ответила за ${WAIT / 1000} с — Google перегружен`); e.status = 504; throw e } const e = new Error('Нет связи с Google'); e.net = true; throw e }
+  clearTimeout(tm)
   const raw = await r.text()
   if (!r.ok) { let msg = raw; try { msg = JSON.parse(raw).error?.message ?? raw } catch { /* не JSON */ } const e = new Error(errText(r.status, msg, model)); e.status = r.status; e.wait = retryMs(raw); throw e }
   return JSON.parse(raw).candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
@@ -91,7 +95,7 @@ async function withModels(key, fetcher, fn) {
     if (!BUSY(e)) throw e
     const names = await listModels(key, fetcher).catch(() => []), tried = [ai.model]
     let last = e
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {                            // до 5 запасных: свежие Flash, потом Lite (они обычно свободнее)
       const m = bestModel(names, tried); if (!m) break
       tried.push(m)
       try { const r = await fn(m); setModel(m); return r } catch (e2) { last = e2; if (!BUSY(e2)) throw e2 }

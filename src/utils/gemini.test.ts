@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { ai, addKey, removeKey, moveKey, checkAnswer, testKey, retryMs, errText, mask, PASS } from './gemini'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { ai, addKey, removeKey, moveKey, checkAnswer, testKey, retryMs, errText, mask, PASS, WAIT } from './gemini'
 import { stepsFromJson, stepIssue, fishStep } from './lesson'
 
 // поддельный Google: по ключу — свой ответ
@@ -103,6 +103,22 @@ describe('Gemini: модель подбирается сама', () => {
     expect((await checkAnswer(q, f)).score).toBe(80)
     expect(ai.model).toBe('gemini-3.6-flash'); expect(urls.at(-1)).toContain('gemini-3.6-flash:generateContent')
   })
+  it('модель молчит дольше WAIT → обрыв по таймеру и следующая модель', async () => {
+    addKey('AIza-test-key-0001'); ai.model = 'gemini-3.8-flash'
+    vi.useFakeTimers()
+    try {
+      const fetcher = (async (u: string, o: any) => {
+        if (u.endsWith('?pageSize=1000')) return reply(200, { models: ['gemini-3.8-flash', 'gemini-3.7-flash'].map((n) => ({ name: 'models/' + n, supportedGenerationMethods: ['generateContent'] })) })
+        if (u.includes('3.7')) return good({ score: 80, missed_points: [], feedback: '' })
+        return new Promise((_, rej) => o.signal.addEventListener('abort', () => rej(new Error('aborted'))))
+      }) as any
+      const p = checkAnswer(q, fetcher)
+      await vi.advanceTimersByTimeAsync(WAIT + 10)
+      expect((await p).score).toBe(80)
+      expect(ai.model).toBe('gemini-3.7-flash')
+    } finally { vi.useRealTimers() }
+  })
+
   it('503 «перегружена» → следующая модель из списка ключа; ключ не помечается сломанным', async () => {
     ai.model = 'gemini-3.8-flash'; addKey('k1'); const used: string[] = []
     const f = (async (u: string) => {
