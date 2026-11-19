@@ -2,14 +2,13 @@
 // Приложение шлёт отметку при запуске и при возвращении после 30+ минут в фоне (src/composables/useVisits.js).
 // Один документ на человека в день: visits/<uid>_<день> { uid, name, photo, role, day, n, list: [{ t, dev, app, pf }] }
 //   dev — phone | desktop, app — tg (Telegram) | web (сайт в браузере), pf — платформа Telegram (ios, android, tdesktop, macos, weba…).
-// Запись — транзакция (1 чтение + 1 запись) на заход: на лимитах Spark незаметно. Очистка — разработчиком (clean).
-import type { Firestore } from 'firebase-admin/firestore'
+// Запись — ОДНА запись на заход, без чтения (19.11.2026): set с merge, счётчик — FieldValue.increment, список — arrayUnion. Очистка — разработчиком (clean).
+import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './errors.js'
 
 export interface Visit { t: number; dev: 'phone' | 'desktop'; app: 'tg' | 'web'; pf: string }
 export interface VisitDay { uid: string; name: string; photo?: string; role: string; day: string; n: number; list: Visit[] }
 const DAY = /^\d{4}-\d{2}-\d{2}$/
-export const MAX_LIST = 300
 
 /** Проверить отметку от приложения */
 export function cleanVisit(b: unknown, now = Date.now()): { day: string; v: Visit } | null {
@@ -20,26 +19,15 @@ export function cleanVisit(b: unknown, now = Date.now()): { day: string; v: Visi
   return { day: x.day, v: { t: now, dev, app, pf } }
 }
 
-export function addVisit(prev: VisitDay | undefined, day: string, v: Visit, who: { uid: string; name: string; role: string; photo?: string }): VisitDay {
-  const d: VisitDay = prev ? structuredClone(prev) : { ...who, day, n: 0, list: [] }
-  d.name = who.name || d.name; d.role = who.role || d.role; if (who.photo) d.photo = who.photo
-  d.n += 1
-  d.list = [...d.list, v].slice(-MAX_LIST)
-  return d
-}
-
-export function makeVisits({ db }: { db: Firestore }) {
+export function makeVisits({ db, FieldValue }: { db: Firestore; FieldValue: typeof FV }) {
   const col = (c: string) => db.collection(c)
   return {
     async record(user: { uid: string; role?: unknown; dev?: unknown; tgName?: unknown; tgPhoto?: unknown }, body: unknown) {
       const c = cleanVisit(body)
       if (!c) throw fail(400, 'bad visit')
       const ref = col('visits').doc(`${user.uid}_${c.day}`)
-      const who = { uid: user.uid, name: String(user.tgName || ''), photo: String(user.tgPhoto || ''), role: user.dev === true ? 'dev' : String(user.role ?? '') }
-      await db.runTransaction(async (tx) => {
-        const s = await tx.get(ref)
-        tx.set(ref, addVisit(s.exists ? (s.data() as VisitDay) : undefined, c.day, c.v, who))
-      })
+      const who = { uid: user.uid, name: String(user.tgName || ''), role: user.dev === true ? 'dev' : String(user.role ?? ''), ...(user.tgPhoto ? { photo: String(user.tgPhoto) } : {}) }
+      await ref.set({ ...who, day: c.day, n: FieldValue.increment(1), list: FieldValue.arrayUnion(c.v) }, { merge: true })          // без чтения
       return { ok: true }
     },
     async range(from: string, to: string): Promise<VisitDay[]> {

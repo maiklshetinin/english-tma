@@ -19,7 +19,13 @@ function checkDoc(v: unknown, inArray = false): void {
   if (Array.isArray(v)) { if (inArray) throw new Error('Nested arrays are not supported'); v.forEach((x) => checkDoc(x, true)); return }
   if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) for (const x of Object.values(v)) checkDoc(x, false)
 }
+// FieldValue.increment / arrayUnion — как в Firestore: применяются к тому, что уже лежит в документе
+const resolve = (prev: Doc | undefined, d: Doc): Doc => Object.fromEntries(Object.entries(d).map(([k, v]) =>
+  v && typeof v === 'object' && '__inc' in v ? [k, (Number(prev?.[k]) || 0) + v.__inc]
+    : v && typeof v === 'object' && '__union' in v ? [k, [...(Array.isArray(prev?.[k]) ? prev![k] : []), ...v.__union.filter((x: unknown) => !(prev?.[k] ?? []).some((y: unknown) => JSON.stringify(y) === JSON.stringify(x)))]]
+    : [k, v]))
 const apply = (op: Op, ref: { path: string }, d?: Doc, o?: { merge?: boolean }) => {
+  if (d && op !== 'delete') d = resolve(store.get(ref.path), d)
   if (op !== 'delete') checkDoc(d)
   if (op === 'set') store.set(ref.path, o?.merge ? { ...store.get(ref.path), ...d } : { ...d })
   if (op === 'update') { if (!store.has(ref.path)) throw new Error('update of missing doc ' + ref.path); store.set(ref.path, { ...store.get(ref.path), ...d }) }
@@ -64,4 +70,4 @@ export const db: any = {
     for (const [op, ref, d, o] of writes) apply(op, ref, d, o)
   },
 }
-export const FieldValue: any = { serverTimestamp: () => TS }
+export const FieldValue: any = { serverTimestamp: () => TS, increment: (n: number) => ({ __inc: n }), arrayUnion: (...v: unknown[]) => ({ __union: v }) }

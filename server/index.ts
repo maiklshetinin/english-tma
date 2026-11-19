@@ -213,7 +213,7 @@ activity.load().catch((e) => console.error('settings/activity:', e))
 app.get('/me/activity', requireUser, (req, res) => { res.json({ on: activity.on(req.user.role) }) })
 app.post('/me/activity', requireUser, wrap(async (req, res) => res.json(await activity.record(req.user, req.body))))      // кусок раз в 5 мин → { on }
 // Лог заходов (visits.ts) — всегда, без выключателя: время, телефон / компьютер, Telegram / сайт. Отметку шлёт приложение
-const visits = makeVisits({ db })
+const visits = makeVisits({ db, FieldValue })
 app.post('/me/visit', requireUser, wrap(async (req, res) => {          // { day, dev, app, pf } → { ok }
   if (req.user.role !== 'teacher' && req.user.role !== 'student') return void res.json({ ok: false })
   res.json(await visits.record(req.user, req.body))

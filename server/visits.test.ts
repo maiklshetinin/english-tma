@@ -1,5 +1,5 @@
 // npx tsx visits.test.ts — лог заходов: отметка, устройство, день, очистка
-import { db, store } from './fake-db.js'
+import { db, store, FieldValue } from './fake-db.js'
 import { cleanVisit, makeVisits } from './visits.js'
 let fails = 0
 const ok = (c: unknown, m: string) => { if (c) console.log('PASS', m); else { fails++; console.log('FAIL', m) } }
@@ -9,7 +9,7 @@ const c = cleanVisit({ day: '2026-11-19', dev: 'phone', app: 'tg', pf: 'ios<scri
 ok(c.v.dev === 'phone' && c.v.app === 'tg' && c.v.pf === 'iosscript' && c.v.t === 5, 'устройство и платформа, лишние символы выброшены')
 ok(cleanVisit({ day: '2026-11-19', dev: 'tv', app: 'x' })!.v.dev === 'desktop', 'непонятное устройство — компьютер, сайт')
 
-const v = makeVisits({ db })
+const v = makeVisits({ db, FieldValue })
 const me = { uid: 'tg:1', role: 'teacher', tgName: 'Аня', tgPhoto: 'p.jpg' }
 await v.record(me, { day: '2026-11-19', dev: 'phone', app: 'tg', pf: 'android' })
 await v.record(me, { day: '2026-11-19', dev: 'desktop', app: 'web' })
