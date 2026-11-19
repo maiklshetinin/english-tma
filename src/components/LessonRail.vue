@@ -13,7 +13,7 @@ import { exOf } from '../exercises'
 import { provideEdit } from '../exercises/ctx'
 import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
-import { stepJson, tplOf, tplTitle, tplDesc, SKILL_T, skillsOf, BOOK } from '../utils/lesson'
+import { stepJson, applyStepJson, tplOf, tplTitle, tplDesc, SKILL_T, skillsOf, BOOK } from '../utils/lesson'
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
@@ -217,6 +217,14 @@ const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, 
 // подсветка: ключи, строки, числа, true / false / null
 const jsonHtml = (s) => esc(JSON.stringify(stepJson(s), null, 2)).replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(-?\d+(?:\.\d+)?)\b|\b(true|false|null)\b/g,
   (m, str, colon, num, lit) => (str ? (colon ? `<span class="jk">${str}</span>${colon}` : `<span class="js">${str}</span>`) : num ? `<span class="jn">${num}</span>` : `<span class="jl">${lit}</span>`))
+// Правка JSON (19.11.2026): «Править» — тот же JSON в поле; «Применить» — экран из текста (id прежний), ошибка — строкой под полем
+const jsonEdit = reactive({}), jsonErr = reactive({})
+function jsonStart(s) { jsonEdit[s.id] = JSON.stringify(stepJson(s), null, 2); jsonErr[s.id] = '' }
+function jsonStop(s) { delete jsonEdit[s.id]; delete jsonErr[s.id] }
+function jsonApply(s) {
+  const e = applyStepJson(s, jsonEdit[s.id] ?? ''); if (e) { jsonErr[s.id] = e; return }
+  jsonStop(s); rk[s.id] = (rk[s.id] ?? 0) + 1; changed()          // экран пересобрать с новыми полями
+}
 function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { if (copied.value === s.id) copied.value = null }, 2000) }
 </script>
 
@@ -263,10 +271,13 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
             <svg v-if="jsonTheme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>
             <svg v-else viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
           </button>
-          <button class="jc" :class="{ ok: copied === s.id }" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать' }}</button>
+          <template v-if="jsonEdit[s.id] != null"><button class="jc" @click="jsonStop(s)">Отмена</button><button class="jc ap" @click="jsonApply(s)">Применить</button></template>
+          <template v-else><button v-if="!readonly" class="jc" title="Изменить экран прямо в JSON" @click="jsonStart(s)">Править</button><button class="jc" :class="{ ok: copied === s.id }" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать' }}</button></template>
         </div>
-        <pre v-html="jsonHtml(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
-        <small class="jft">Образец для ИИ. Обратно — Ctrl+V или перетащите JSON на холст</small>
+        <textarea v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" class="jed" spellcheck="false" aria-label="JSON экрана" @keydown.stop @keydown.ctrl.enter.prevent="jsonApply(s)" @keydown.meta.enter.prevent="jsonApply(s)" @keydown.esc="jsonStop(s)" @paste.stop @copy.stop @cut.stop @wheel="ownWheel" />
+        <small v-if="jsonErr[s.id]" class="jer">{{ jsonErr[s.id] }}</small>
+        <pre v-if="jsonEdit[s.id] == null" v-html="jsonHtml(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
+        <small class="jft">{{ jsonEdit[s.id] != null ? 'Ctrl+Enter — применить, Esc — отмена' : 'Образец для ИИ. Обратно — Ctrl+V или перетащите JSON на холст' }}</small>
       </div>
       <LessonPlayer v-else-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
       <!-- Упражнения-шаблоны (src/exercises): правка = тот же живой экран (LessonPlayer edit) — один файл разметки, окно не меняет размер -->
@@ -430,6 +441,10 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .jc { height: 30px; padding: 0 12px; border: 0; border-radius: 9px; background: var(--blue-l); color: var(--blue-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap } .jc.ok { background: var(--green-l); color: var(--green-d) }
 .jv pre { flex: 1; margin: 0; max-height: 380px; overflow: auto; padding: 12px 14px; border: 1px solid #ececec; border-radius: 12px; background: #f7f7f8; color: #3c3c3c; font: 12.5px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word }
 .jv.dark pre { background: #1e1e1e; border-color: #1e1e1e; color: #d4d4d4 }
+/* правка JSON — то же окно кода, но поле */
+.jed { flex: 1; min-height: 220px; max-height: 380px; margin: 0; padding: 12px 14px; box-sizing: border-box; border: 1px solid #8cc8ff; border-radius: 12px; background: #fff; color: #3c3c3c; font: 12.5px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; overflow: auto; resize: none; outline: none; user-select: text }
+.jv.dark .jed { background: #1e1e1e; color: #d4d4d4; border-color: #3a6ea5 }
+.jer { color: #c33; font-size: 12px; font-weight: 700 } .jc.ap { background: var(--blue); color: #fff } .jc.ap:hover { background: var(--blue-d) }
 .jv pre :deep(.jk) { color: #185fa5 } .jv pre :deep(.js) { color: #3b6d11 } .jv pre :deep(.jn) { color: #ba7517 } .jv pre :deep(.jl) { color: #9747ff }
 .jv.dark pre :deep(.jk) { color: #9cdcfe } .jv.dark pre :deep(.js) { color: #ce9178 } .jv.dark pre :deep(.jn) { color: #b5cea8 } .jv.dark pre :deep(.jl) { color: #569cd6 }
 .jft { font-size: 11px; font-weight: 700; color: var(--hint) }

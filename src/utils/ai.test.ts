@@ -47,6 +47,27 @@ describe('«Ответ по смыслу» в уроке', () => {
     expect(r.steps.every(s => s.prompt === 'Sprawdzasz…' && s.pass === 70)).toBe(true)          // промпт и порог урока — каждому экрану
     expect(r.steps.every(s => !stepIssue(s))).toBe(true)
   })
+  it('JSON упражнения из учебника: задание (head), учебник (bk), номер (bn) и варианты ответа сохраняются', () => {
+    const r = stepsFromJson(JSON.stringify([{ kind: 'gap', bk: 'bkword', bn: 5, head: 'Write the possessive adjectives', phrase: '(I) [My] sister is ten years old.', tr: 'Моей сестре десять лет.', opts: [] },
+      { kind: 'gap', bk: 'bkqa', head: 'Answer the questions', phrase: 'Is he a doctor? [No, he isn’t./No, he is not./No he isn’t]', tr: 'Он врач? Нет.', opts: [] }]))!
+    expect(r.steps[0]).toMatchObject({ kind: 'gap', bk: 'bkword', bn: 5, head: 'Write the possessive adjectives', phrase: '(I) [My] sister is ten years old.' })
+    expect(r.steps[1].head).toBe('Answer the questions'); expect(r.bad).toBe(0)
+  })
+  it('правка экрана JSON-ом: поля заменяются, id и незагруженные файлы остаются, ошибки — понятным текстом', async () => {
+    const { applyStepJson } = await import('./lesson')
+    const s: any = { id: 'x1', kind: 'gap', phrase: 'A [b].', tr: 'a', image: 'idb:123', opts: [] }
+    expect(applyStepJson(s, '{ сломано')).toMatch(/Не JSON/); expect(applyStepJson(s, '[{}]')).toMatch(/один объект/); expect(applyStepJson(s, '{"kind": "zzz"}')).toMatch(/Неизвестный kind «zzz»/)
+    expect(s.phrase).toBe('A [b].')                                                                         // при ошибке экран не тронут
+    expect(applyStepJson(s, JSON.stringify({ kind: 'gap', bk: 'bkword', head: 'Write it', phrase: '(He) [His] dog.', tr: 'Его собака.', image: 'idb:123', opts: [] }))).toBe('')
+    expect(s).toMatchObject({ id: 'x1', kind: 'gap', bk: 'bkword', head: 'Write it', phrase: '(He) [His] dog.', image: 'idb:123' })
+    expect(applyStepJson(s, JSON.stringify({ kind: 'odd', opts: [{ w: 'a' }, { w: 'b' }, { w: 'c' }], ans: 2 }))).toBe('')
+    expect(s.kind).toBe('odd'); expect(s.phrase).toBeUndefined(); expect(s.ans).toBe(2); expect(s.id).toBe('x1')          // сменили тип — старые поля ушли
+  })
+  it('экраны по одному, каждый в ```json и с «[cite: 1]» (как отдаёт Gemini) — тоже вставляются', () => {
+    const one = (w: string) => '```json\n{\n"kind": "gap",\n"bk": "bkword",\n"head": "Write the possessive adjectives",\n"phrase": "(He) [' + w + '] father {x}.",\n"tr": "Его отец.",\n"opts": []\n}\n```[cite: 1]'
+    const r = stepsFromJson(one('His') + '\n\n' + one('My') + '\n\n' + one('Their'))!
+    expect(r.steps.map((s) => s.phrase)).toEqual(['(He) [His] father {x}.', '(He) [My] father {x}.', '(He) [Their] father {x}.']); expect(r.steps[0].head).toBe('Write the possessive adjectives')
+  })
   it('оформление из домашки: reference_html → разметка, звезда и номер', () => {
     const r = stepsFromJson(JSON.stringify({ questions: [{ id: 5, star: true, question: 'Tradycje?', reference: 'x',
       reference_html: '<p>Podczas <b>Wigilii</b>:</p><ul><li><b class="acc">Kolędowanie</b>: <i>„</i><b>Cicha noc</b><i>”</i> &amp; <i>(dary)</i></li></ul>' }, { id: 6, question: 'Bez?', reference: 'y' }] }))!

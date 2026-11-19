@@ -395,8 +395,24 @@ export function keepLocalFiles(incoming: Step[] | undefined, local: Step[] | und
 // ---------- JSON экранов (17.11.2026): скопировать экран как JSON (образец для ИИ, обмен) и собрать экраны из JSON ----------
 /** Экран → JSON для копирования: без id и без файлов «только в этом браузере» */
 export function stepJson(s: Step): Omit<Step, 'id'> { const { id: _id, ...rest } = stepsOut([s])[0]; return rest }
+/** Правка экрана его JSON-ом (кнопка «{ }» → «Править», 19.11.2026): экран s получает поля из текста, id остаётся.
+ *  Файлы, ещё не загруженные на сервер (idb: / blob:), сохраняются, если в JSON то же значение. Ошибка — текст, иначе '' */
+export function applyStepJson(s: Step, text: string): string {
+  let raw: any = null
+  try { raw = JSON.parse(text) } catch { return 'Не JSON — проверьте кавычки, запятые и скобки' }
+  if (Array.isArray(raw)) return 'Здесь один экран — нужен один объект { … }, а не список [ … ]'
+  if (!raw || typeof raw !== 'object') return 'Нужен объект { … }'
+  if (!(raw.kind in KINDS)) return `Неизвестный kind${raw.kind ? ` «${raw.kind}»` : ''} — можно: ${Object.keys(KINDS).join(', ')}`
+  const r = stepsFromJson(text)
+  if (!r?.steps.length) return 'Экран не собрался — проверьте поля'
+  const ns: any = r.steps[0], old: any = s
+  for (const k of ['image', 'audio', 'video', 'exAudio']) if (typeof old[k] === 'string' && /^(idb|blob):/.test(old[k]) && raw[k] === old[k]) ns[k] = old[k]
+  for (const k of Object.keys(old)) if (k !== 'id') delete old[k]
+  Object.assign(old, { ...ns, id: s.id })
+  return ''
+}
 
-const STR = ['word', 'tr', 'ex', 'exTr', 'image', 'audio', 'video', 'exAudio', 'phrase', 'note', 'text', 'ideal', 'prompt'] as const
+const STR = ['head', 'word', 'tr', 'ex', 'exTr', 'image', 'audio', 'video', 'exAudio', 'phrase', 'note', 'text', 'ideal', 'prompt'] as const          // head — задание экрана («Write the possessive adjectives»; 19.11.2026: раньше терялось при вставке JSON)
 const str = (v: unknown) => (typeof v === 'string' && v.trim() && !v.startsWith('idb:') && !v.startsWith('blob:') ? v : undefined)
 /** Один экран из «сырого» объекта: тип должен быть известным, остальные поля — только знакомые и нужного вида (лишнее отбрасываем) */
 /** Эталон из HTML домашки → разметка экрана: <b class="acc"> — ==оранжевый==, <b> — **жирный**, <i> — _курсив_, <p> — абзац, <li> — «• » */
@@ -449,6 +465,23 @@ function stepFrom(o: any): Step | null {
 }
 /** Текст (от ИИ или скопированный) → экраны. Понимает: один экран, массив экранов, { steps: [...] } (урок),
  *  и текст с JSON внутри (```json … ``` или пояснения вокруг). null — это не JSON экранов. bad — сколько пропущено (незнакомый тип). */
+/** Все JSON-объекты верхнего уровня из текста — 19.11.2026: Gemini отдаёт экраны по одному, каждый в своём ```json и с «[cite: 1]» */
+function jsonObjects(t: string) {
+  const out: any[] = []
+  for (let i = t.indexOf('{'); i >= 0; ) {
+    let depth = 0, str = false, esc = false, end = -1
+    for (let j = i; j < t.length; j++) {
+      const c = t[j]
+      if (str) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') str = false; continue }
+      if (c === '"') str = true; else if (c === '{') depth++; else if (c === '}' && --depth === 0) { end = j; break }
+    }
+    if (end < 0) break
+    try { out.push(JSON.parse(t.slice(i, end + 1))) } catch { /* не JSON — дальше */ }
+    i = t.indexOf('{', end + 1)
+  }
+  return out
+}
+
 export function stepsFromJson(text: string): { steps: Step[]; bad: number } | null {
   if (!text || !/[[{]/.test(text)) return null
   let t = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
@@ -456,7 +489,7 @@ export function stepsFromJson(text: string): { steps: Step[]; bad: number } | nu
   try { v = JSON.parse(t) } catch {
     const a = t.search(/[[{]/), b = Math.max(t.lastIndexOf(']'), t.lastIndexOf('}'))      // вокруг JSON есть текст — берём от первой скобки до последней
     if (a < 0 || b <= a) return null
-    try { v = JSON.parse(t.slice(a, b + 1)) } catch { return null }
+    try { v = JSON.parse(t.slice(a, b + 1)) } catch { v = jsonObjects(t); if (!v.length) return null }
   }
   // вопросы урока Karta Polaka (как присылает Gemini): { questions: [{ question, reference }] } → экраны «Ответ по смыслу»
   // промпт и порог из api_config / pass_threshold — каждому экрану (можно потом поправить в JSON экрана)
