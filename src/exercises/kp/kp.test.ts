@@ -96,7 +96,10 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     await flushPromises(); expect(w.find('.kbr').text()).toBe('Мост подключёнGemini'); expect(w.find('.kbr img').attributes('src')).toBe('/ai/gemini.svg')          // до проверки — с кем мост, в подвале
     expect(w.find('.kby').exists()).toBe(false)
     await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
-    expect(w.find('.kby').text()).toBe('проверилClaude'); expect(w.find('.kby img').attributes('src')).toBe('/ai/Claude%20Spark%20-%20Clay.svg')
+    expect(w.find('.kby').text()).toBe('проверилClaude');
+    const w2 = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } }); g.next.push({ ...res(70, 'Gemini'), ms: 4830 })
+    await w2.find('textarea.ka').setValue('coś'); await w2.find('.foot .go').trigger('click'); await flushPromises()
+    expect(w2.find('.kby').text()).toBe('проверилGemini · 4,8 с'); expect(w.find('.kby img').attributes('src')).toBe('/ai/Claude%20Spark%20-%20Clay.svg')
   })
   it('моста нет — в подвале «Мост не в сети»', async () => {
     g.bridge = { online: false, sites: [] }

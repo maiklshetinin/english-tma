@@ -32,11 +32,11 @@ const AI_ICON = { ChatGPT: 'gpt.svg', Gemini: 'gemini.svg', Claude: 'Claude Spar
 export const aiIcon = (site) => (AI_ICON[site] ? import.meta.env.BASE_URL + 'ai/' + encodeURIComponent(AI_ICON[site]) : '')
 
 export async function checkAnswer(q, request = apiRequest) {
-  const need = Number.isFinite(q.pass) ? q.pass : PASS
+  const need = Number.isFinite(q.pass) ? q.pass : PASS, t0 = Date.now()          // ms — сколько ждал ученик (показывается у «проверил …»)
   const r = await request('/ai/check', { method: 'POST', body: JSON.stringify({ question: q.question, reference: kpPlain(q.reference), answer: q.answer, prompt: q.prompt?.trim() || undefined }) })
   let body = null
   try { body = await r.json() } catch { /* не JSON */ }
   if (!r.ok) throw new Error(body?.error || 'Ошибка сервера ' + r.status)
   const score = Math.max(0, Math.min(100, Math.round(Number(body?.score) || 0)))
-  return { score, missed: Array.isArray(body?.missed) ? body.missed.map(String) : [], feedback: String(body?.feedback ?? ''), site: String(body?.site ?? ''), ok: score >= need }
+  return { score, missed: Array.isArray(body?.missed) ? body.missed.map(String) : [], feedback: String(body?.feedback ?? ''), site: String(body?.site ?? ''), ms: Date.now() - t0, ok: score >= need }
 }
