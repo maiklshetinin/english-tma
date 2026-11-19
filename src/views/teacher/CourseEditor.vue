@@ -1943,8 +1943,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <button v-for="t in g.items" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
-          <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
-          <span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span>          <!-- 19.11.2026: какие чаты умеют проверять -->
+          <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i><span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span></span>          <!-- 19.11.2026: «Ответ по смыслу» — значки чатов в строку с навыком -->
         </button>
         </div></div>
         </div>
@@ -1986,7 +1985,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 </template>
 
 <style scoped>
-.xai { display: flex; justify-content: center; gap: 7px; margin-top: 2px } .xai img { width: 16px; height: 16px; object-fit: contain }          /* «Ответ по смыслу»: ChatGPT · Gemini · Claude */
+.xai { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px } .xai img { width: 15px; height: 15px; object-fit: contain }          /* «Ответ по смыслу»: ChatGPT · Gemini · Claude */
 .ce { position: fixed; inset: 0; z-index: 30; background: var(--surface); user-select: none; -webkit-user-select: none; font-family: var(--font) }
 .ce.dragging, .ce.dragging * { cursor: grabbing !important }
 /* Холст: бесконечное поле в точку; содержимое — в координатах холста (центр рельса — x = 0) */
