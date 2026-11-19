@@ -7,7 +7,7 @@
 //    запоминания» (настройка преподавателя, по умолчанию 90 %), но не дальше «максимального интервала».
 // Уровни по стабильности: < 3 дн — слабое, 3–20 дн — среднее, от 21 дн — сильное (как «зрелые» карточки в Anki).
 // Здесь только расчёт (без хранения) — чтобы было легко проверить тестами.
-import { fsrs, generatorParameters, createEmptyCard, forgetting_curve, Rating, State, type Card, type FSRS, type Grade } from 'ts-fsrs'
+import { fsrs, generatorParameters, createEmptyCard, forgetting_curve, Rating, State, type Card, type FSRS } from 'ts-fsrs'
 import { gapParts, orderParts, KINDS, type Step } from './lesson'
 
 const DAY = 86_400_000
@@ -30,7 +30,7 @@ const W = schedulerOf().parameters.w                                       // в
 
 export type RKind = 'word' | 'phrase' | 'skill' | 'topic' | 'screen'      // skill / topic — навык и тема грамматики (utils/skills.ts)
 export type RLevel = 'weak' | 'medium' | 'strong'
-export interface RHist { t: number; ok: boolean | null; ex: string; lesson?: string; g?: Grade }      // g — оценка FSRS, только если не обычная («Трудно» / «Легко» по проценту)
+export interface RHist { t: number; ok: boolean | null; ex: string; lesson?: string }
 /** Память слова по FSRS: стабильность (дни), сложность 1–10, последний ответ (мс), ответов, провалов, состояние (1 изучение, 2 повторение, 3 переучивание) */
 export interface RMem { s: number; d: number; last: number; n: number; l: number; st: number }
 export interface RItem {
@@ -41,7 +41,7 @@ export interface RItem {
   fav?: true                     // «Избранное»: закладка на экране «Новое слово» или звёздочка в словаре
 }
 /** Что проверял экран: слово / фраза + как ответили (true / false; null — только показали, без оценки) */
-export interface RHit { text: string; tr?: string; image?: string; audio?: string; kind?: RKind; key?: string; ok: boolean | null; pct?: number }      // key — свой ключ (у навыков и тем); pct — процент ответа (ИИ-проверка)
+export interface RHit { text: string; tr?: string; image?: string; audio?: string; kind?: RKind; key?: string; ok: boolean | null }      // key — свой ключ (у навыков и тем)
 
 const clean = (v?: string) => (v ?? '').replace(/\s+/g, ' ').trim()
 export const keyOf = (text: string) => clean(text).toLowerCase().replace(/[’‘`]/g, "'").replace(/[.!?…,;:]+$/g, '')
@@ -66,25 +66,16 @@ const cardOf = (m: RMem): Card => ({ due: new Date(m.last), stability: m.s, diff
   reps: m.n, lapses: m.l, state: m.st as State, last_review: new Date(m.last) })
 const memOfCard = (c: Card, t: number): RMem => ({ s: Math.round(c.stability * 1000) / 1000, d: Math.round(c.difficulty * 1000) / 1000, last: t, n: c.reps, l: c.lapses, st: c.state })
 
-/** Пороги процента для оценки FSRS (упражнения, где ответ оценивается процентом — ИИ-проверка) */
-export const PCT_GRADE = { hard: 40, good: 60, easy: 85 }
-/** Оценка ответа: без процента — как всегда (верно «Хорошо», ошибка «Снова»);
- *  с процентом — меньше 40 «Снова», 40–59 «Трудно», 60–84 «Хорошо», от 85 «Легко» (так 61 % и 95 % двигают память по-разному) */
-export function gradeOf(ok: boolean, pct?: number): Grade {
-  if (pct == null || !Number.isFinite(pct)) return ok ? Rating.Good : Rating.Again
-  return pct < PCT_GRADE.hard ? Rating.Again : pct < PCT_GRADE.good ? Rating.Hard : pct < PCT_GRADE.easy ? Rating.Good : Rating.Easy
-}
-
-/** Один ответ: память до (нет — первое знакомство) → память после. g — своя оценка (нет — по ok) */
-export function rate(m: RMem | undefined, ok: boolean, t: number, cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT, g?: Grade): RMem {
+/** Один ответ: память до (нет — первое знакомство) → память после */
+export function rate(m: RMem | undefined, ok: boolean, t: number, cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT): RMem {
   const at = m ? Math.max(t, m.last) : t
   const card = m ? cardOf(m) : createEmptyCard(new Date(at))
-  return memOfCard(schedulerOf(cfg).next(card, new Date(at), g ?? gradeOf(ok)).card, at)
+  return memOfCard(schedulerOf(cfg).next(card, new Date(at), ok ? Rating.Good : Rating.Again).card, at)
 }
 /** Записи до FSRS: память — из истории ответов (она хранится от новых к старым) */
 export function replay(x: Pick<RItem, 'hist'>, cfg: Pick<AlgoCfg, 'retention' | 'maxDays'> = ALGO_DEFAULT): RMem | undefined {
   let m: RMem | undefined
-  for (const h of [...x.hist].reverse()) if (h.ok !== null) m = rate(m, h.ok, h.t, cfg, h.g)
+  for (const h of [...x.hist].reverse()) if (h.ok !== null) m = rate(m, h.ok, h.t, cfg)
   return m
 }
 export const memOf = (x: Pick<RItem, 'f' | 'hist'>): RMem | undefined => x.f ?? replay(x)
@@ -116,16 +107,15 @@ export function applyHits(items: Record<string, RItem>, hits: RHit[], ctx: { ex:
     if (!x.tr && h.tr) x.tr = h.tr
     if (!x.image && h.image) x.image = h.image
     if (!x.audio && h.audio) x.audio = h.audio
-    const g = h.ok !== null ? gradeOf(h.ok, h.pct) : undefined
     if (h.ok !== null) {
       if (!x.f) { const m = replay(x, cfg); if (m) x.f = m }
-      x.f = rate(x.f, h.ok, now, cfg, g)
+      x.f = rate(x.f, h.ok, now, cfg)
       x.due = x.f.last + intervalOf(x.f.s, cfg) * DAY
       x.s = Math.round(recallAt(x.f.s, 0) * 100)                 // для старых версий сайта: «сила» = вероятность вспомнить сразу после ответа
       if (h.ok) x.ok++; else x.bad++
     }
     x.seen = now
-    x.hist = [{ t: now, ok: h.ok, ex: ctx.ex, lesson: ctx.lesson, ...(g && h.ok !== null && g !== gradeOf(h.ok) ? { g } : {}) }, ...x.hist].slice(0, 20)
+    x.hist = [{ t: now, ok: h.ok, ex: ctx.ex, lesson: ctx.lesson }, ...x.hist].slice(0, 20)
   }
   return items
 }

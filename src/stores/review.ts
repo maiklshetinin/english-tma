@@ -74,10 +74,10 @@ export async function syncReview(owner?: string | number | null) {
 }
 
 /** Ответ на экран урока → в словарь */
-export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[]; pct?: number }, ctx: { lesson?: string; course?: string; topic?: Topic; screen?: { key: string; text: string; tr?: string }; noTags?: boolean } = {}) {
+export function recordStep(step: Step, res: { ok?: boolean | null; wrong?: number[] }, ctx: { lesson?: string; course?: string; topic?: Topic; screen?: { key: string; text: string; tr?: string }; noTags?: boolean } = {}) {
   // слова экрана + его навыки и тема урока (вкладка «Грамматика и навыки»)
   // + сам экран (память упражнения — для «Повторения» Chapter); только проверяемые ответы
-  const scr = ctx.screen && res.ok != null ? [{ key: ctx.screen.key, kind: 'screen' as const, text: ctx.screen.text, tr: ctx.screen.tr ?? '', ok: res.ok, ...(res.pct != null ? { pct: res.pct } : {}) }] : []      // pct — процент ответа (ИИ-проверка): «Трудно» / «Легко» для памяти экрана
+  const scr = ctx.screen && res.ok != null ? [{ key: ctx.screen.key, kind: 'screen' as const, text: ctx.screen.text, tr: ctx.screen.tr ?? '', ok: res.ok }] : []
   const hits = [...hitsOf(step, res), ...(ctx.noTags ? [] : tagHits(step, res, ctx.topic)), ...scr]          // noTags — «Повторить эти слова»: только слова, навыки считаются по урокам; if (!hits.length) return
   applyHits(review.items, hits, { ex: exName(step), lesson: ctx.lesson, course: ctx.course }, Date.now(), { ...algo })
   for (const h of hits) { const k = h.key ?? keyOf(h.text); if (review.items[k]) pending.add(k) }

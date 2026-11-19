@@ -10,7 +10,7 @@ import { makeAccess } from './access.js'
 import { str, id } from './clean.js'
 import type { TokenUser } from './types.js'
 
-export interface ReviewHist { t: number; ok: boolean | null; ex: string; lesson?: string; g?: number }      // g — оценка FSRS 1–4, если не обычная («Трудно» / «Легко» по проценту)
+export interface ReviewHist { t: number; ok: boolean | null; ex: string; lesson?: string }
 export interface ReviewItem {
   key: string; kind: 'word' | 'phrase' | 'skill' | 'topic' | 'screen'; text: string; tr: string; image?: string; audio?: string
   s: number; due: number; seen: number; ok: number; bad: number; hist: ReviewHist[]; course?: string; lesson?: string
@@ -61,8 +61,7 @@ export function cleanReviewItem(v: unknown): ReviewItem {
   const hist = v.hist.slice(0, REVIEW_LIMITS.hist).map((h): ReviewHist => {
     if (!isObj(h) || (h.ok !== null && typeof h.ok !== 'boolean')) throw fail(400, 'bad hist')
     const lesson = str(h.lesson, 'lesson', 120)
-    const g = h.g                                                  // кривая оценка просто не сохраняется (старые сайты её не шлют)
-    return { t: ms(h.t, 'time'), ok: h.ok as boolean | null, ex: str(h.ex, 'exercise', 60), ...(lesson ? { lesson } : {}), ...(g === 1 || g === 2 || g === 3 || g === 4 ? { g } : {}) }
+    return { t: ms(h.t, 'time'), ok: h.ok as boolean | null, ex: str(h.ex, 'exercise', 60), ...(lesson ? { lesson } : {}) }
   })
   const out: ReviewItem = { key, kind: v.kind as ReviewItem['kind'], text: str(v.text, 'text', 200, true), tr: str(v.tr, 'translation', 200),
     s: Math.round(s * 10) / 10, due: ms(v.due, 'due'), seen: ms(v.seen, 'seen'), ok: cnt(v.ok, 'ok'), bad: cnt(v.bad, 'bad'), hist }
