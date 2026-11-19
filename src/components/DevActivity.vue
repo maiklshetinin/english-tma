@@ -6,6 +6,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { request } from '../stores/api'
 import { TABS } from '../store/app'
 import Avatar from './Avatar.vue'
+import AppIcon from './AppIcon.vue'
 
 const pad = (n) => String(n).padStart(2, '0')
 const dayOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -38,34 +39,37 @@ const dur = (sec) => { const m = Math.round(sec / 60); return sec > 0 && m < 1 ?
 const hm = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
 
 // день: люди по активному времени
-// День: люди из учёта активности (если включён) и из лога заходов (он есть всегда). Без учёта — только заходы
-const devCount = (list) => ({ phone: list.filter((x) => x.dev === 'phone').length, desk: list.filter((x) => x.dev !== 'phone').length })
-const DEVN = { tg: 'Telegram', web: 'сайт' }
-const people = computed(() => {
-  const by = new Map()
-  for (const d of (data.value?.days ?? []).filter((d) => d.day === day.value)) by.set(d.uid, { a: d })
-  for (const v of (data.value?.visits ?? []).filter((v) => v.day === day.value)) { const x = by.get(v.uid) ?? {}; x.v = v; by.set(v.uid, x) }
-  return [...by.values()].map(({ a: p, v }) => {
-    const vlist = v?.list ?? [], base = { uid: (p ?? v).uid, name: p?.name || v?.name, photo: p?.photo || v?.photo, role: p?.role || v?.role }
-    const visits = v ? v.n : p.visits, dv = devCount(vlist)
-    const vt = vlist.map((x) => x.t)
-    if (!p) return { ...base, hasAct: false, visits, dv, vlist, act: -1, first: Math.min(...vt), last: Math.max(...vt), spans: [], segs: [], tabs: [], hours: [] }
-    const h0 = new Date(p.first); h0.setMinutes(0, 0, 0)
-    const h1 = new Date(p.last); if (h1.getMinutes() || h1.getSeconds()) { h1.setHours(h1.getHours() + 1); h1.setMinutes(0, 0, 0) }
-    const a = h0.getTime(), b = Math.max(h1.getTime(), a + 3600_000), span = b - a
-    const step = span > 8 * 3600_000 ? 2 : 1
-    const hours = []; for (let t = a, i = 0; t <= b; t += 3600_000, i++) if (i % step === 0) hours.push({ x: ((t - a) / span) * 100, t: new Date(t).getHours() })
-    const segs = p.spans.map((s) => ({ ...s, x: ((s.a - a) / span) * 100, w: Math.max(0.4, ((s.b - s.a) / span) * 100), k: Math.min(1, s.act / Math.max(1, (s.b - s.a) / 1000)) }))
-    const tabs = Object.entries(p.tabs).map(([t, v]) => ({ t, ...v })).sort((x, y) => y.open - x.open)
-    const max = Math.max(1, ...tabs.map((t) => t.open))
-    return { ...p, ...base, hasAct: true, visits, dv, vlist, first: Math.min(p.first, ...vt), last: Math.max(p.last, ...vt), hours, segs, tabs, max }
-  }).sort((x, y) => y.act - x.act || y.visits - x.visits)
+// День (вариант «Д», 19.11.2026): строка на человека И источник — «Сайт» или «Telegram» тегом у имени; строки одного человека рядом,
+// во второй и дальше — только тег. Учёт активности (если включён) и лог заходов (всегда) сводятся по источнику.
+// В раскрытии — вкладки значками нижнего меню: открыто / активен и полоска (светлое — открыто, тёмное — активен) и «Лента по времени».
+const SRC = { tg: 'Telegram', web: 'Сайт' }
+const EXTRA_ICON = { courses: 'pencil', other: 'sliders', words: 'cards' }
+const icon = (role, t) => TABS[role]?.find((x) => x.id === t)?.icon ?? TABS.teacher.find((x) => x.id === t)?.icon ?? TABS.student.find((x) => x.id === t)?.icon ?? EXTRA_ICON[t] ?? 'list'
+function combine(x, y) {          // старый документ дня (без источника) + новый «сайт» — сложить
+  const tabs = { ...x.tabs }
+  for (const [k, v] of Object.entries(y.tabs)) tabs[k] = { open: (tabs[k]?.open ?? 0) + v.open, act: (tabs[k]?.act ?? 0) + v.act }
+  return { ...x, ...y, visits: x.visits + y.visits, open: x.open + y.open, act: x.act + y.act, first: Math.min(x.first, y.first), last: Math.max(x.last, y.last), tabs, spans: [...x.spans, ...y.spans].sort((p, q) => p.a - q.a) }
+}
+const rows = computed(() => {
+  const by = new Map(), get = (uid, src) => { const k = uid + '|' + src; let x = by.get(k); if (!x) by.set(k, (x = { k, uid, src, a: null, v: null, vl: [] })); return x }
+  for (const d of (data.value?.days ?? []).filter((d) => d.day === day.value)) { const x = get(d.uid, d.src ?? 'web'); x.a = x.a ? combine(x.a, d) : d }
+  for (const v of (data.value?.visits ?? []).filter((v) => v.day === day.value)) for (const it of v.list) { const x = get(v.uid, it.app === 'tg' ? 'tg' : 'web'); x.v = v; x.vl.push(it) }
+  const list = [...by.values()].map(({ k, uid, src, a: p, v, vl }) => {
+    const who = p ?? v, vt = vl.map((x) => x.t)
+    const tabs = p ? Object.entries(p.tabs).map(([t, x]) => ({ t, ...x })).sort((x, y) => y.open - x.open) : []
+    return { k, uid, src, name: p?.name || v?.name, photo: p?.photo || v?.photo, role: p?.role || who.role,
+      dev: vl.at(-1)?.dev ?? p?.dev ?? 'desktop', vl, visits: v ? vl.length : p.visits, hasAct: !!p, act: p?.act ?? 0, open: p?.open ?? 0,
+      first: Math.min(...(p ? [p.first] : []), ...vt), last: Math.max(...(p ? [p.last] : []), ...vt), tabs, max: Math.max(1, ...tabs.map((t) => t.open)), spans: p?.spans ?? [] }
+  })
+  const tot = new Map()          // люди — по общему «активен», внутри человека — источники по «активен»
+  for (const r of list) { const t = tot.get(r.uid) ?? { act: 0, visits: 0 }; t.act += r.act; t.visits += r.visits; tot.set(r.uid, t) }
+  list.sort((x, y) => (x.uid === y.uid ? y.act - x.act || y.visits - x.visits : tot.get(y.uid).act - tot.get(x.uid).act || tot.get(y.uid).visits - tot.get(x.uid).visits || (x.uid < y.uid ? -1 : 1)))
+  return list.map((r, i) => ({ ...r, head: i === 0 || list[i - 1].uid !== r.uid }))
 })
-const open = ref({})          // раскрытые ленты по uid
-// Вариант «В» (19.11.2026): строка на человека, нажатие раскрывает подробности; первая строка раскрыта сама
+const open = ref({})          // раскрытые «Ленты по времени»
 const exp = ref({})
-const isOpen = (p, i) => exp.value[p.uid] ?? i === 0
-const flip = (p, i) => { exp.value[p.uid] = !isOpen(p, i) }
+const isOpen = (r, i) => exp.value[r.k] ?? i === 0          // первая строка раскрыта сама
+const flip = (r, i) => { exp.value[r.k] = !isOpen(r, i) }
 const COLORS = ['#1cb0f6', '#58cc02', '#ff9600', '#ce82ff', '#ff4b4b', '#2b70c9', '#ff86d0']
 const av = (p) => ({ name: p.name || '?', photoUrl: p.photo || '', tgId: Number(String(p.uid).replace(/^tg:/, '')) || undefined, color: COLORS[[...String(p.uid)].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length] })
 
@@ -75,7 +79,7 @@ const weekRows = computed(() => {
   const row = (d) => by.get(d.uid) ?? { uid: d.uid, name: d.name, photo: d.photo, role: d.role, days: {}, act: 0, visits: 0 }
   for (const d of data.value?.days ?? []) {
     const r = row(d), c = r.days[d.day] ?? { act: 0, open: 0, visits: 0, has: false }
-    c.act = d.act; c.open = d.open; c.has = true; if (!c.fromV) c.visits = d.visits
+    c.act += d.act; c.open += d.open; c.has = true; if (!c.fromV) c.visits += d.visits          // сайт и Telegram — в сумму: в «7 днях» итог по человеку
     r.days[d.day] = c; r.act += d.act; r.name = d.name || r.name; r.photo = d.photo || r.photo; r.role = d.role || r.role; by.set(d.uid, r)
   }
   for (const v of data.value?.visits ?? []) {          // заходы — из лога заходов (точнее и есть всегда)
@@ -107,61 +111,53 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
 
     <p v-if="err" class="er">{{ err }}</p>
     <p v-if="off" class="nt warn">Учёт активности выключен — видны только заходы (они пишутся всегда). Включить учёт — «Профиль → Для разработчика → Учёт активности».</p>
-    <p v-else-if="data" class="nt">Учёт: преподаватели — <b>{{ data.settings.teachers ? 'вкл' : 'выкл' }}</b>, ученики — <b>{{ data.settings.students ? 'вкл' : 'выкл' }}</b>.
-      «Активен» — были действия (мышь, нажатия, касания, клавиатура, прокрутка), «открыто» — просто на экране. Данные приходят раз в 5 минут и при сворачивании.</p>
+    <p v-else-if="data" class="nt">Учёт: преподаватели — <b>{{ data.settings.teachers ? 'вкл' : 'выкл' }}</b>, ученики — <b>{{ data.settings.students ? 'вкл' : 'выкл' }}</b> · данные раз в 5 минут и при сворачивании</p>
 
-    <!-- День: таблица — строка на человека, нажатие раскрывает вкладки и ленту -->
+    <!-- День (вариант «Д»): строка на человека и источник, тег у имени; раскрытие — вкладки значками -->
     <template v-if="view === 'day' && data">
-      <p v-if="!people.length" class="nt">За этот день ни заходов, ни учёта.</p>
+      <p v-if="!rows.length" class="nt">За этот день ни заходов, ни учёта.</p>
       <table v-else class="tm">
-        <thead><tr><th class="l">Кто</th><th>Заходы</th><th>Активен</th><th>Открыто</th><th class="l dcol">День</th></tr></thead>
+        <thead><tr><th class="l">Кто</th><th>Заходы</th><th title="вкладка на экране">Открыто</th><th title="были действия: мышь, нажатия, касания, клавиатура, прокрутка">Активен</th><th class="l tcol">Время</th></tr></thead>
         <tbody>
-          <template v-for="(p, i) in people" :key="p.uid">
-            <tr class="pr" :class="{ on: isOpen(p, i) }" tabindex="0" :aria-expanded="isOpen(p, i)" @click="flip(p, i)" @keydown.enter.prevent="flip(p, i)" @keydown.space.prevent="flip(p, i)">
-              <td><span class="who"><Avatar :s="av(p)" :size="28" /><span class="wn2"><b>{{ p.name || p.uid }}</b><small :class="p.role">{{ ROLE[p.role] ?? p.role }}</small></span></span></td>
-              <td class="n">{{ p.visits }}<span v-if="p.vlist.length" class="dv"><span v-if="p.dv.phone" title="с телефона"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/></svg>{{ p.dv.phone }}</span><span v-if="p.dv.desk" title="с компьютера"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="1.8"/><path d="M9 20h6M12 16.5V20"/></svg>{{ p.dv.desk }}</span></span></td>
-              <td class="n g">{{ p.hasAct ? dur(p.act) : '—' }}</td>
-              <td class="n m">{{ p.hasAct ? dur(p.open) : '—' }}</td>
-              <td class="dcol">
-                <div v-if="p.hasAct" class="tb sm"><i v-for="(sg, k) in p.segs" :key="k" :style="{ left: sg.x + '%', width: sg.w + '%', background: color(sg.tab), opacity: 0.25 + 0.75 * sg.k }" /></div>
-                <small class="tr2">{{ hm(p.first) }}{{ p.last > p.first ? '–' + hm(p.last) : '' }}{{ p.hasAct ? '' : ' · учёт выкл.' }}</small>
+          <template v-for="(r, i) in rows" :key="r.k">
+            <tr class="pr" :class="{ on: isOpen(r, i), cont: !r.head }" tabindex="0" :aria-expanded="isOpen(r, i)" @click="flip(r, i)" @keydown.enter.prevent="flip(r, i)" @keydown.space.prevent="flip(r, i)">
+              <td>
+                <span class="who">
+                  <Avatar v-if="r.head" :s="av(r)" :size="28" /><span v-else class="avsp" />
+                  <span class="wn2">
+                    <span class="nl"><b v-if="r.head">{{ r.name || r.uid }}</b><span class="tag" :title="`${SRC[r.src]} · ${r.dev === 'phone' ? 'телефон' : 'компьютер'}`">
+                      <svg v-if="r.dev === 'phone'" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/></svg>
+                      <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="1.8"/><path d="M9 20h6M12 16.5V20"/></svg>{{ SRC[r.src] }}</span></span>
+                    <small v-if="r.head" :class="r.role">{{ ROLE[r.role] ?? r.role }}</small>
+                  </span>
+                  <i class="car" aria-hidden="true">{{ isOpen(r, i) ? '▾' : '▸' }}</i>
+                </span>
               </td>
+              <td class="n" :title="r.vl.length ? r.vl.map((x) => hm(x.t)).join(', ') : ''">{{ r.visits }}</td>
+              <td class="n m">{{ r.hasAct ? dur(r.open) : '—' }}</td>
+              <td class="n g">{{ r.hasAct ? dur(r.act) : '—' }}</td>
+              <td class="tcol tm2">{{ hm(r.first) }}{{ r.last > r.first ? ' – ' + hm(r.last) : '' }}</td>
             </tr>
-            <tr v-if="isOpen(p, i)" class="dx">
-              <td colspan="5">
-                <div class="dd">
-                  <!-- заходы: время и с чего (лог заходов — всегда) -->
-                  <div v-if="p.vlist.length" class="vl">
-                    <span v-for="(x, k) in p.vlist" :key="k" class="vc" :title="`${hm(x.t)} · ${x.dev === 'phone' ? 'телефон' : 'компьютер'} · ${DEVN[x.app]}${x.pf ? ' (' + x.pf + ')' : ''}`">
-                      <svg v-if="x.dev === 'phone'" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/></svg>
-                      <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="1.8"/><path d="M9 20h6M12 16.5V20"/></svg>
-                      {{ hm(x.t) }}<small>{{ DEVN[x.app] }}</small>
-                    </span>
-                  </div>
-                  <p v-if="!p.hasAct" class="nt">Учёт активности за этот день не вёлся — есть только заходы.</p>
-                  <div v-if="p.hasAct" class="tl">
-                    <div class="tb">
-                      <i v-for="(sg, k) in p.segs" :key="k" :style="{ left: sg.x + '%', width: sg.w + '%', background: color(sg.tab), opacity: 0.25 + 0.75 * sg.k }"
-                        :title="`${hm(sg.a)}–${hm(sg.b)} · ${label(p.role, sg.tab)} · активен ${dur(sg.act)} из ${dur((sg.b - sg.a) / 1000)}`" />
-                    </div>
-                    <div class="hr"><span v-for="h in p.hours" :key="h.x" :style="{ left: h.x + '%' }">{{ h.t }}:00</span></div>
-                  </div>
-                  <div v-for="t in p.tabs" :key="t.t" class="tr">
-                    <span class="tn"><i :style="{ background: color(t.t) }" />{{ label(p.role, t.t) }}</span>
-                    <span class="bar" :title="`активен ${Math.round((t.act / Math.max(1, t.open)) * 100)}% времени`"><i class="bo" :style="{ width: (t.open / p.max) * 100 + '%', background: color(t.t) }" /><i class="ba" :style="{ width: (t.act / p.max) * 100 + '%', background: color(t.t) }" /></span>
-                    <span>{{ dur(t.open) }}</span><b>{{ dur(t.act) }}</b>
-                  </div>
-                  <button v-if="p.hasAct" type="button" class="lk" @click.stop="open[p.uid] = !open[p.uid]">{{ open[p.uid] ? 'Скрыть ленту' : `Лента по времени (${p.spans.length})` }}</button>
-                  <ol v-if="open[p.uid]" class="ls">
-                    <li v-for="(sg, k) in p.spans" :key="k">
-                      <span class="lt">{{ hm(sg.a) }}–{{ hm(sg.b) }}</span>
-                      <span class="tn"><i :style="{ background: color(sg.tab) }" />{{ label(p.role, sg.tab) }}</span>
-                      <span class="lv">активен {{ dur(sg.act) }} из {{ dur((sg.b - sg.a) / 1000) }}</span>
-                    </li>
-                  </ol>
-                </div>
-              </td>
-            </tr>
+            <template v-if="isOpen(r, i)">
+              <tr v-if="!r.hasAct" class="sx"><td colspan="5" class="ind">Учёт активности не вёлся — только заходы: {{ r.vl.map((x) => hm(x.t)).join(', ') }}</td></tr>
+              <tr v-for="t in r.tabs" :key="t.t" class="sx">
+                <td class="ind"><span class="tn2"><AppIcon :name="icon(r.role, t.t)" :size="15" class="ti" />{{ label(r.role, t.t) }}</span></td>
+                <td />
+                <td class="n m">{{ dur(t.open) }}</td>
+                <td class="n b2">{{ dur(t.act) }}</td>
+                <td class="tcol"><span class="bar2" :title="`активен ${Math.round((t.act / Math.max(1, t.open)) * 100)}% времени`"><i class="bo" :style="{ width: (t.open / r.max) * 100 + '%' }" /><i class="ba" :style="{ width: (t.act / r.max) * 100 + '%' }" /></span></td>
+              </tr>
+              <tr v-if="r.hasAct" class="sx"><td colspan="5" class="ind">
+                <button type="button" class="lk" @click.stop="open[r.k] = !open[r.k]">{{ open[r.k] ? 'Скрыть ленту' : `Лента по времени (${r.spans.length}) →` }}</button>
+                <ol v-if="open[r.k]" class="ls">
+                  <li v-for="(sg, k) in r.spans" :key="k">
+                    <span class="lt">{{ hm(sg.a) }}–{{ hm(sg.b) }}</span>
+                    <span class="tn2"><AppIcon :name="icon(r.role, sg.tab)" :size="14" class="ti" />{{ label(r.role, sg.tab) }}</span>
+                    <span class="lv">активен {{ dur(sg.act) }} из {{ dur((sg.b - sg.a) / 1000) }}</span>
+                  </li>
+                </ol>
+              </td></tr>
+            </template>
           </template>
         </tbody>
       </table>
@@ -218,18 +214,24 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
 .ls { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: 320px; overflow: auto }
 .ls li { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid var(--border); font-size: 12.5px }
 .lt { font-variant-numeric: tabular-nums; font-weight: 700 } .lv { color: var(--hint); font-size: 11.5px; white-space: nowrap }
-/* день — таблица команды (вариант «В») */
-.tm { width: 100%; border-collapse: collapse; font-size: 12.5px }
-.tm th { padding: 0 6px 6px; font-size: 10.5px; font-weight: 700; color: var(--hint); text-transform: uppercase; letter-spacing: .3px; text-align: right; white-space: nowrap } .tm th.l { text-align: left }
-.tm td { padding: 7px 6px; border-top: 1px solid var(--border); vertical-align: middle }
-.pr { cursor: pointer } .pr:hover td, .pr.on td, .dx td { background: var(--surface) } .pr:focus-visible { outline: 2px solid var(--g-acc, #1a73e8); outline-offset: -2px }
-.dx td { border-top: 0; padding: 2px 8px 12px 40px }
-.who { display: flex; align-items: center; gap: 8px; min-width: 0 } .wn2 { display: grid; min-width: 0; line-height: 1.2 } .wn2 b { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.wn2 small { font-size: 10.5px; font-weight: 600; color: #1a73e8 } .wn2 small.student { color: #188038 } .wn2 small.dev { color: #8430ce }
-.n { text-align: right; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums } .n.g { color: #188038; font-weight: 800 } .n.m { color: var(--hint); font-weight: 600 }
-.dcol { width: 34%; min-width: 110px } .tb.sm { height: 6px; border-radius: 3px } .tr2 { font-size: 10px; color: var(--hint); font-variant-numeric: tabular-nums }
-.dd { display: grid; gap: 7px }
-@container (max-width: 400px) { .dcol { display: none } }
+/* день — вариант «Д»: строгая таблица с тонкими линиями */
+.tm { width: 100%; border-collapse: collapse; font-size: 13px }
+.tm th { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 10.5px; font-weight: 700; color: var(--hint); text-transform: uppercase; letter-spacing: .4px; text-align: right; white-space: nowrap } .tm th.l { text-align: left }
+.tm td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle }
+.pr { cursor: pointer } .pr:hover td, .pr.on td { background: var(--surface) } .pr:focus-visible { outline: 2px solid var(--g-acc, #1a73e8); outline-offset: -2px }
+.pr.cont td { padding-top: 6px; padding-bottom: 6px }
+.sx td { padding: 6px 10px; font-size: 12.5px; background: color-mix(in srgb, var(--surface) 55%, var(--card)) } .sx td.ind { padding-left: 48px }
+.who { display: flex; align-items: center; gap: 10px; min-width: 0 } .avsp { width: 28px; flex: none }
+.wn2 { display: grid; gap: 2px; min-width: 0; line-height: 1.25 } .nl { display: flex; align-items: center; gap: 8px; min-width: 0 } .nl b { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.wn2 small { font-size: 11px; font-weight: 600; color: #1a73e8 } .wn2 small.student { color: #188038 } .wn2 small.dev { color: #8430ce }
+.tag { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; border: 1px solid var(--border); border-radius: 99px; background: var(--card); font-size: 11px; font-weight: 700; color: var(--text); white-space: nowrap }
+.tag svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--hint) }
+.car { margin-left: auto; font-style: normal; font-size: 11px; color: var(--hint) }
+.n { text-align: right; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums } .n.g { color: #1a73e8; font-weight: 800 } .n.m { color: var(--hint); font-weight: 600 } .n.b2 { color: #1a73e8; font-weight: 700 }
+.tcol { width: 30%; min-width: 96px } .tm2 { color: var(--hint); font-variant-numeric: tabular-nums; white-space: nowrap }
+.tn2 { display: flex; align-items: center; gap: 8px; font-weight: 600 } .ti { flex: none; color: var(--hint) }
+.bar2 { position: relative; display: block; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden } .bar2 i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: #1a73e8 } .bar2 .bo { opacity: .22 }
+@container (max-width: 400px) { .tcol { display: none } }
 /* заходы: телефон / компьютер */
 .dv { display: inline-flex; gap: 6px; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--hint) } .dv span { display: inline-flex; align-items: center; gap: 2px }
 .dv svg, .vc svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }

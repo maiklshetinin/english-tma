@@ -7,6 +7,7 @@
 import { request } from '../stores/api'
 import { apiFetch } from '../firebase'
 import { onLive } from './useLive'
+import { device } from './useVisits'          // с чего: сайт или Telegram, телефон или компьютер — учёт идёт отдельно по источнику
 
 const TICK = 15_000, FLUSH = 5 * 60_000, NEW_VISIT = 30 * 60_000
 const EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll']
@@ -46,7 +47,8 @@ async function flush() {
   closeSpan()
   if (acc && (acc.visits || Object.keys(acc.tabs).length)) {
     const r = (v) => Math.round(v)
-    queue.push({ day: acc.day, visits: acc.visits, spans: acc.spans.map((s) => ({ ...s, a: r(s.a), b: r(s.b), act: r(s.act) })),
+    const d = device()
+    queue.push({ day: acc.day, visits: acc.visits, src: d.app, dev: d.dev, spans: acc.spans.map((s) => ({ ...s, a: r(s.a), b: r(s.b), act: r(s.act) })),
       tabs: Object.fromEntries(Object.entries(acc.tabs).map(([k, v]) => [k, { open: r(v.open), act: r(v.act) }])) })
     if (queue.length > 12) queue.shift()
   }

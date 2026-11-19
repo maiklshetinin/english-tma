@@ -2,8 +2,8 @@
 // отдельно для преподавателей и для учеников (по умолчанию выключен); смотреть — панель разработчика → «Активность».
 // Считает само приложение (src/composables/useActivity.js): каждые 15 с — какая вкладка на экране и было ли за это время действие
 // (мышь, нажатие, касание, клавиатура, прокрутка). «Открыто» — вкладка на экране, «Активен» — из этого времени с действиями.
-// Шлёт раз в 5 минут и при сворачивании; здесь — один документ на человека в день: activity/<uid>_<день>
-//   { uid, name, photo, role (teacher | student | dev), day, visits, open, act, first, last, tabs: { <вкладка>: { open, act } }, spans: [{ tab, a, b, act }] }
+// Шлёт раз в 5 минут и при сворачивании; здесь — один документ на человека, день и источник: activity/<uid>_<день>_<tg|web>
+//   { uid, name, photo, role (teacher | student | dev), src (tg | web), dev (phone | desktop), day, visits, open, act, first, last, tabs: { <вкладка>: { open, act } }, spans: [{ tab, a, b, act }] }
 // open / act — секунды; spans — лента: кусок времени на одной вкладке (a, b — мс), соседние куски одной вкладки склеиваются.
 // Запись — транзакция (1 чтение + 1 запись) раз в 5 минут на активного человека: на лимитах Spark это незаметно.
 import type { Firestore } from 'firebase-admin/firestore'
@@ -12,8 +12,8 @@ import { fail } from './errors.js'
 export interface ActSettings { teachers: boolean; students: boolean }
 export interface Span { tab: string; a: number; b: number; act: number }
 export interface Tabs { [tab: string]: { open: number; act: number } }
-export interface Chunk { day: string; visits: number; tabs: Tabs; spans: Span[] }
-export interface DayDoc { uid: string; name: string; photo?: string; role: string; day: string; visits: number; open: number; act: number; first: number; last: number; tabs: Tabs; spans: Span[] }
+export interface Chunk { day: string; visits: number; tabs: Tabs; spans: Span[]; src: 'tg' | 'web'; dev: 'phone' | 'desktop' }
+export interface DayDoc { uid: string; name: string; photo?: string; role: string; src?: 'tg' | 'web'; dev?: 'phone' | 'desktop'; day: string; visits: number; open: number; act: number; first: number; last: number; tabs: Tabs; spans: Span[] }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/, TAB = /^[a-z][a-z-]{0,23}$/
 export const MAX_SPANS = 500          // за день на человека — с запасом (документ остаётся маленьким)
@@ -39,12 +39,14 @@ export function clean(body: unknown, now = Date.now()): Chunk | null {
   }
   const visits = num(b.visits, 50)
   if (!visits && !Object.keys(tabs).length && !spans.length) return null
-  return { day: b.day, visits, tabs, spans }
+  const x = b as { src?: unknown; dev?: unknown }
+  return { day: b.day, visits, tabs, spans, src: x.src === 'tg' ? 'tg' : 'web', dev: x.dev === 'phone' ? 'phone' : 'desktop' }
 }
 
 /** Добавить кусок к дню: сложить счётчики, ленту — по времени, склеить соседние куски одной вкладки */
 export function merge(prev: DayDoc | undefined, c: Chunk, who: { uid: string; name: string; role: string; photo?: string }): DayDoc {
-  const d: DayDoc = prev ? structuredClone(prev) : { ...who, day: c.day, visits: 0, open: 0, act: 0, first: 0, last: 0, tabs: {}, spans: [] }
+  const d: DayDoc = prev ? structuredClone(prev) : { ...who, day: c.day, src: c.src, visits: 0, open: 0, act: 0, first: 0, last: 0, tabs: {}, spans: [] }
+  d.src = c.src; d.dev = c.dev
   d.name = who.name || d.name; d.role = who.role || d.role; if (who.photo) d.photo = who.photo          // фото из Telegram — для аватара в панели
   d.visits += c.visits
   for (const [k, v] of Object.entries(c.tabs)) {
@@ -83,7 +85,7 @@ export function makeActivity({ db }: { db: Firestore }) {
       if (!on(user.role)) return { on: false }
       const c = clean(body)
       if (!c) throw fail(400, 'bad chunk')
-      const ref = col().doc(`${user.uid}_${c.day}`)
+      const ref = col().doc(`${user.uid}_${c.day}_${c.src}`)          // 19.11.2026: отдельно сайт и Telegram (до этого — один документ на день)
       const who = { uid: user.uid, name: String(user.tgName || user.name || ''), photo: String(user.tgPhoto || ''), role: user.dev === true ? 'dev' : String(user.role) }      // разработчик — отдельной подписью (по правам он преподаватель)
       await db.runTransaction(async (tx) => {
         const s = await tx.get(ref)
