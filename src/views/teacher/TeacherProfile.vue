@@ -15,7 +15,7 @@ import { apiFetch, canLogout } from '../../firebase'
 import { useStudentsStore } from '../../stores/students'
 import { useAuthStore } from '../../stores/auth'
 import { live } from '../../composables/useLive'
-import { MY_VER, siteVer, updateAll } from '../../composables/useUpdate'
+import { MY_VER, siteVer, updateAll, reloadNow } from '../../composables/useUpdate'
 import { request, post } from '../../stores/api'
 import { devtools } from '../../composables/useNetLog'
 const auth = useAuthStore()
@@ -28,7 +28,10 @@ const switchRole = () => { if (!noStudents.value) auth.setRole(auth.role === 'st
 const busy = ref(false)
 // Разработчик: у кого какая версия сайта открыта (по вкладкам) и «Обновить у всех» (useUpdate.js)
 const site = ref('')
-if (auth.isDev) siteVer().then((v) => { site.value = v || '' })
+siteVer().then((v) => { site.value = v || '' })          // 19.11.2026: и у каждого преподавателя — своя версия «свежая / старая»
+const myOld = computed(() => !!site.value && site.value !== MY_VER)
+// своя строка для преподавателя: из «кто в приложении» (live), а без связи — по этой вкладке
+const myVers = computed(() => { const m = vers.value.find((p) => p.me); return [m ? { ...m, name: 'Вы' } : { uid: 'me', name: 'Вы', photoUrl: auth.user?.photo_url || '', color: '#58cc02', me: true, on: true, tabs: 1, vers: [MY_VER], old: myOld.value }] })
 const fresh = computed(() => site.value || MY_VER)
 const vers = computed(() => {
   const by = new Map()
@@ -120,6 +123,35 @@ async function ping() {
         <span class="tx">Блокировать свайп вниз<small>Свайп вниз не сворачивает приложение — удобнее листать и тянуть уроки. Только в Telegram на телефоне</small></span>
         <input type="checkbox" class="sw" :checked="swipeLock" aria-label="Блокировать свайп вниз" @change="setSwipeLock($event.target.checked)" />
       </label>
+    </section>
+
+    <!-- Своя версия приложения (19.11.2026): тот же блок «Версии в приложении», что у разработчика, только своя строка; старая — «Обновить» -->
+    <section v-if="!auth.isDev" class="grp">
+        <details class="fold">
+          <summary class="it"><span class="ic"><AppIcon name="users" :size="18" /></span><span class="tx">Версии в приложении<small>на сайте сейчас: <code class="cm">{{ fresh }}</code>{{ site ? '' : ' (локально)' }}</small></span><span class="val sv"><span v-for="p in myVers" :key="p.uid" class="pp sm" :class="{ old: p.old, off: !p.on }" :title="(p.me ? 'Вы' : p.name) + ': ' + (!p.vers.length ? 'версия неизвестна' : p.old ? 'старая версия' : 'свежая версия') + (p.on ? '' : ' · ' + seen(p.at))"><span class="pa"><Avatar :s="p" :size="26" /><i v-if="p.vers.length" class="pb">{{ p.old ? '↻' : '✓' }}</i></span></span><i class="chev">›</i></span></summary>
+        <div class="it vr fb">
+          <span class="ic" />
+          <div class="tx">
+            <div v-if="myVers.length" class="ppl">
+              <span v-for="p in myVers" :key="p.uid" class="pp" :class="{ old: p.old, off: !p.on }" :title="(p.on ? '' : seen(p.at) + '. ') + (!p.vers.length ? 'Версия пока неизвестна' : p.old ? 'Старая версия — нажмите «Обновить»' : 'Свежая версия')">
+                <span class="pa"><Avatar :s="p" :size="44" /><i v-if="p.vers.length" class="pb">{{ p.old ? '↻' : '✓' }}</i></span>
+                <b>{{ p.me ? 'Вы' : p.name.split(' ')[0] }}</b>
+              </span>
+            </div>
+            <table v-if="myVers.length" class="vt">
+              <thead><tr><th>Кто</th><th>Сборка</th><th>Статус</th></tr></thead>
+              <tbody>
+                <tr v-for="p in myVers" :key="p.uid" :class="{ old: p.old }">
+                  <td>{{ p.me ? 'Вы' : p.name }}<small v-if="p.tabs > 1"> · {{ p.tabs }} вкладки</small><small v-if="!p.on" class="off">{{ seen(p.at) }}</small></td>
+                  <td><code v-for="v in p.vers" :key="v" class="cm" :class="{ bad: v !== fresh }">{{ v }}</code><small v-if="!p.vers.length">—</small></td>
+                  <td><span v-if="p.vers.length" class="st">{{ p.old ? 'старая' : 'свежая' }}</span><small v-else>пока неизвестна</small></td>
+                </tr>
+              </tbody>
+            </table>
+            <button v-if="myOld" type="button" class="vch old" @click="reloadNow">↻ Обновить</button>
+          </div>
+        </div>
+        </details>
     </section>
 
     <!-- Ключи Gemini (19.11.2026): свои у каждого преподавателя, только в этом браузере; на будущее — для озвучки. Свёрнуто, чтобы не мешало -->
@@ -265,6 +297,8 @@ async function ping() {
 .vr { align-items: flex-start; cursor: default } .vr:hover { background: none !important } .vr > .ic { margin-top: 2px }
 .cm { padding: 1px 6px; border-radius: 6px; background: var(--surface); font-size: 12px; font-weight: 700; color: var(--text) } .cm.bad { background: color-mix(in srgb, var(--orange-d) 15%, transparent); color: var(--orange-d) } .cm + .cm { margin-left: 4px }
 /* кружки людей: галочка — свежая, ↻ — старая */
+.vch { flex: none; padding: 5px 11px; border: 0; border-radius: 99px; font: inherit; font-size: 12.5px; font-weight: 800; white-space: nowrap }          /* своя версия: свежая / старая */
+.vch.ok { background: #d7ffb8; color: #3d7a00 } .vch.old { background: #fff0d0; color: #a35a00; cursor: pointer } .vch.old:hover { background: #ffe2a8 }
 .sv { display: inline-flex; align-items: center; gap: 12px }          /* свёрнутые «Версии»: кружки с ✓ / ↻ прямо в строке (19.11.2026) */
 .pp.sm { min-width: 0 } .pp.sm .pb { width: 14px; height: 14px; right: -4px; bottom: -4px; font-size: 9px }
 .ppl { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 4px }
