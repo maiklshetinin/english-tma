@@ -145,7 +145,7 @@ async function ping() {
       <section class="grp">
         <!-- кто сейчас в приложении: кружки (зелёная галочка — свежая сборка, оранжевая стрелка — старая) и мини-таблица сборок по коммиту -->
         <details class="fold">
-          <summary class="it"><span class="ic"><AppIcon name="users" :size="18" /></span><span class="tx">Версии в приложении<small>на сайте сейчас: <code class="cm">{{ fresh }}</code>{{ site ? '' : ' (локально)' }}</small></span><span class="val">{{ vers.filter((p) => p.old).length ? `↻ ${vers.filter((p) => p.old).length} ` : '' }}<i class="chev">›</i></span></summary>
+          <summary class="it"><span class="ic"><AppIcon name="users" :size="18" /></span><span class="tx">Версии в приложении<small>на сайте сейчас: <code class="cm">{{ fresh }}</code>{{ site ? '' : ' (локально)' }}</small></span><span class="val sv"><span v-for="p in vers" :key="p.uid" class="pp sm" :class="{ old: p.old, off: !p.on }" :title="(p.me ? 'Вы' : p.name) + ': ' + (!p.vers.length ? 'версия неизвестна' : p.old ? 'старая версия' : 'свежая версия') + (p.on ? '' : ' · ' + seen(p.at))"><span class="pa"><Avatar :s="p" :size="26" /><i v-if="p.vers.length" class="pb">{{ p.old ? '↻' : '✓' }}</i></span></span><i class="chev">›</i></span></summary>
         <div class="it vr fb">
           <span class="ic" />
           <div class="tx">
@@ -287,6 +287,8 @@ async function ping() {
 .vr { align-items: flex-start; cursor: default } .vr:hover { background: none !important } .vr > .ic { margin-top: 2px }
 .cm { padding: 1px 6px; border-radius: 6px; background: var(--surface); font-size: 12px; font-weight: 700; color: var(--text) } .cm.bad { background: color-mix(in srgb, var(--orange-d) 15%, transparent); color: var(--orange-d) } .cm + .cm { margin-left: 4px }
 /* кружки людей: галочка — свежая, ↻ — старая */
+.sv { display: inline-flex; align-items: center; gap: 12px }          /* свёрнутые «Версии»: кружки с ✓ / ↻ прямо в строке (19.11.2026) */
+.pp.sm { min-width: 0 } .pp.sm .pb { width: 14px; height: 14px; right: -4px; bottom: -4px; font-size: 9px }
 .ppl { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 4px }
 .pp.off .pa { opacity: .5 } .vt td small.off { display: block }          /* не в сети — бледнее, под именем «заходил(а) …» */
 .pp { display: grid; justify-items: center; gap: 4px; min-width: 52px } .pp b { font-size: 12px; font-weight: 700 }
