@@ -3,7 +3,7 @@
 // Считает само приложение (src/composables/useActivity.js): каждые 15 с — какая вкладка на экране и было ли за это время действие
 // (мышь, нажатие, касание, клавиатура, прокрутка). «Открыто» — вкладка на экране, «Активен» — из этого времени с действиями.
 // Шлёт раз в 5 минут и при сворачивании; здесь — один документ на человека в день: activity/<uid>_<день>
-//   { uid, name, role (teacher | student | dev), day, visits, open, act, first, last, tabs: { <вкладка>: { open, act } }, spans: [{ tab, a, b, act }] }
+//   { uid, name, photo, role (teacher | student | dev), day, visits, open, act, first, last, tabs: { <вкладка>: { open, act } }, spans: [{ tab, a, b, act }] }
 // open / act — секунды; spans — лента: кусок времени на одной вкладке (a, b — мс), соседние куски одной вкладки склеиваются.
 // Запись — транзакция (1 чтение + 1 запись) раз в 5 минут на активного человека: на лимитах Spark это незаметно.
 import type { Firestore } from 'firebase-admin/firestore'
@@ -13,7 +13,7 @@ export interface ActSettings { teachers: boolean; students: boolean }
 export interface Span { tab: string; a: number; b: number; act: number }
 export interface Tabs { [tab: string]: { open: number; act: number } }
 export interface Chunk { day: string; visits: number; tabs: Tabs; spans: Span[] }
-export interface DayDoc { uid: string; name: string; role: string; day: string; visits: number; open: number; act: number; first: number; last: number; tabs: Tabs; spans: Span[] }
+export interface DayDoc { uid: string; name: string; photo?: string; role: string; day: string; visits: number; open: number; act: number; first: number; last: number; tabs: Tabs; spans: Span[] }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/, TAB = /^[a-z][a-z-]{0,23}$/
 export const MAX_SPANS = 500          // за день на человека — с запасом (документ остаётся маленьким)
@@ -43,9 +43,9 @@ export function clean(body: unknown, now = Date.now()): Chunk | null {
 }
 
 /** Добавить кусок к дню: сложить счётчики, ленту — по времени, склеить соседние куски одной вкладки */
-export function merge(prev: DayDoc | undefined, c: Chunk, who: { uid: string; name: string; role: string }): DayDoc {
+export function merge(prev: DayDoc | undefined, c: Chunk, who: { uid: string; name: string; role: string; photo?: string }): DayDoc {
   const d: DayDoc = prev ? structuredClone(prev) : { ...who, day: c.day, visits: 0, open: 0, act: 0, first: 0, last: 0, tabs: {}, spans: [] }
-  d.name = who.name || d.name; d.role = who.role || d.role
+  d.name = who.name || d.name; d.role = who.role || d.role; if (who.photo) d.photo = who.photo          // фото из Telegram — для аватара в панели
   d.visits += c.visits
   for (const [k, v] of Object.entries(c.tabs)) {
     const t = d.tabs[k] ?? { open: 0, act: 0 }
@@ -79,12 +79,12 @@ export function makeActivity({ db }: { db: Firestore }) {
       return { ...settings }
     },
     /** Кусок от приложения. Учёт для этой роли выключен — ничего не пишем, приложение остановит учёт. */
-    async record(user: { uid: string; role?: unknown; dev?: unknown; tgName?: unknown; name?: unknown }, body: unknown): Promise<{ on: boolean }> {
+    async record(user: { uid: string; role?: unknown; dev?: unknown; tgName?: unknown; tgPhoto?: unknown; name?: unknown }, body: unknown): Promise<{ on: boolean }> {
       if (!on(user.role)) return { on: false }
       const c = clean(body)
       if (!c) throw fail(400, 'bad chunk')
       const ref = col().doc(`${user.uid}_${c.day}`)
-      const who = { uid: user.uid, name: String(user.tgName || user.name || ''), role: user.dev === true ? 'dev' : String(user.role) }      // разработчик — отдельной подписью (по правам он преподаватель)
+      const who = { uid: user.uid, name: String(user.tgName || user.name || ''), photo: String(user.tgPhoto || ''), role: user.dev === true ? 'dev' : String(user.role) }      // разработчик — отдельной подписью (по правам он преподаватель)
       await db.runTransaction(async (tx) => {
         const s = await tx.get(ref)
         tx.set(ref, merge(s.exists ? (s.data() as DayDoc) : undefined, c, who))

@@ -5,6 +5,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { request } from '../stores/api'
 import { TABS } from '../store/app'
+import Avatar from './Avatar.vue'
 
 const pad = (n) => String(n).padStart(2, '0')
 const dayOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -49,13 +50,19 @@ const people = computed(() => (data.value?.days ?? []).filter((d) => d.day === d
   return { ...p, hours, segs, tabs, max }
 }))
 const open = ref({})          // раскрытые ленты по uid
+// Вариант «В» (19.11.2026): строка на человека, нажатие раскрывает подробности; первая строка раскрыта сама
+const exp = ref({})
+const isOpen = (p, i) => exp.value[p.uid] ?? i === 0
+const flip = (p, i) => { exp.value[p.uid] = !isOpen(p, i) }
+const COLORS = ['#1cb0f6', '#58cc02', '#ff9600', '#ce82ff', '#ff4b4b', '#2b70c9', '#ff86d0']
+const av = (p) => ({ name: p.name || '?', photoUrl: p.photo || '', tgId: Number(String(p.uid).replace(/^tg:/, '')) || undefined, color: COLORS[[...String(p.uid)].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length] })
 
 // неделя: таблица людей по дням
 const weekRows = computed(() => {
   const by = new Map()
   for (const d of data.value?.days ?? []) {
-    const r = by.get(d.uid) ?? { uid: d.uid, name: d.name, role: d.role, days: {}, act: 0, visits: 0 }
-    r.days[d.day] = d; r.act += d.act; r.visits += d.visits; r.name = d.name || r.name; by.set(d.uid, r)
+    const r = by.get(d.uid) ?? { uid: d.uid, name: d.name, photo: d.photo, role: d.role, days: {}, act: 0, visits: 0 }
+    r.days[d.day] = d; r.act += d.act; r.visits += d.visits; r.name = d.name || r.name; r.photo = d.photo || r.photo; r.role = d.role || r.role; by.set(d.uid, r)
   }
   return [...by.values()].sort((a, b) => b.act - a.act)
 })
@@ -84,42 +91,52 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
     <p v-else-if="data" class="nt">Учёт: преподаватели — <b>{{ data.settings.teachers ? 'вкл' : 'выкл' }}</b>, ученики — <b>{{ data.settings.students ? 'вкл' : 'выкл' }}</b>.
       «Активен» — были действия (мышь, нажатия, касания, клавиатура, прокрутка), «открыто» — просто на экране. Данные приходят раз в 5 минут и при сворачивании.</p>
 
-    <!-- День -->
+    <!-- День: таблица — строка на человека, нажатие раскрывает вкладки и ленту -->
     <template v-if="view === 'day' && data">
       <p v-if="!people.length" class="nt">За этот день ничего нет.</p>
-      <article v-for="p in people" :key="p.uid" class="pc">
-        <header class="ph"><b>{{ p.name || p.uid }}</b><span class="rl" :class="p.role">{{ ROLE[p.role] ?? p.role }}</span></header>
-        <div class="cs">
-          <span><b>{{ p.visits }}</b>заходов</span>
-          <span class="cg"><b>{{ dur(p.act) }}</b>активен</span>
-          <span><b>{{ dur(p.open) }}</b>открыто</span>
-          <span><b>{{ hm(p.first) }}–{{ hm(p.last) }}</b>первый / последний</span>
-        </div>
-        <!-- лента: цвет — вкладка, насыщенность — доля времени с действиями -->
-        <div class="tl">
-          <div class="tb">
-            <i v-for="(s, i) in p.segs" :key="i" :style="{ left: s.x + '%', width: s.w + '%', background: color(s.tab), opacity: 0.25 + 0.75 * s.k }"
-              :title="`${hm(s.a)}–${hm(s.b)} · ${label(p.role, s.tab)} · активен ${dur(s.act)} из ${dur((s.b - s.a) / 1000)}`" />
-          </div>
-          <div class="hr"><span v-for="h in p.hours" :key="h.x" :style="{ left: h.x + '%' }">{{ h.t }}</span></div>
-        </div>
-        <div class="tt">
-          <div class="tr th"><span>Вкладка</span><span /><span>Открыта</span><span>Активен</span></div>
-          <div v-for="t in p.tabs" :key="t.t" class="tr">
-            <span class="tn"><i :style="{ background: color(t.t) }" />{{ label(p.role, t.t) }}</span>
-            <span class="bar" :title="`активен ${Math.round((t.act / Math.max(1, t.open)) * 100)}% времени`"><i class="bo" :style="{ width: (t.open / p.max) * 100 + '%', background: color(t.t) }" /><i class="ba" :style="{ width: (t.act / p.max) * 100 + '%', background: color(t.t) }" /></span>
-            <span>{{ dur(t.open) }}</span><b>{{ dur(t.act) }}</b>
-          </div>
-        </div>
-        <button type="button" class="lk" @click="open[p.uid] = !open[p.uid]">{{ open[p.uid] ? 'Скрыть ленту' : `Лента по времени (${p.spans.length})` }}</button>
-        <ol v-if="open[p.uid]" class="ls">
-          <li v-for="(s, i) in p.spans" :key="i">
-            <span class="lt">{{ hm(s.a) }}–{{ hm(s.b) }}</span>
-            <span class="tn"><i :style="{ background: color(s.tab) }" />{{ label(p.role, s.tab) }}</span>
-            <span class="lv">активен {{ dur(s.act) }} из {{ dur((s.b - s.a) / 1000) }}</span>
-          </li>
-        </ol>
-      </article>
+      <table v-else class="tm">
+        <thead><tr><th class="l">Кто</th><th>Заходы</th><th>Активен</th><th>Открыто</th><th class="l dcol">День</th></tr></thead>
+        <tbody>
+          <template v-for="(p, i) in people" :key="p.uid">
+            <tr class="pr" :class="{ on: isOpen(p, i) }" tabindex="0" :aria-expanded="isOpen(p, i)" @click="flip(p, i)" @keydown.enter.prevent="flip(p, i)" @keydown.space.prevent="flip(p, i)">
+              <td><span class="who"><Avatar :s="av(p)" :size="28" /><span class="wn2"><b>{{ p.name || p.uid }}</b><small :class="p.role">{{ ROLE[p.role] ?? p.role }}</small></span></span></td>
+              <td class="n">{{ p.visits }}</td>
+              <td class="n g">{{ dur(p.act) }}</td>
+              <td class="n m">{{ dur(p.open) }}</td>
+              <td class="dcol">
+                <div class="tb sm"><i v-for="(sg, k) in p.segs" :key="k" :style="{ left: sg.x + '%', width: sg.w + '%', background: color(sg.tab), opacity: 0.25 + 0.75 * sg.k }" /></div>
+                <small class="tr2">{{ hm(p.first) }}–{{ hm(p.last) }}</small>
+              </td>
+            </tr>
+            <tr v-if="isOpen(p, i)" class="dx">
+              <td colspan="5">
+                <div class="dd">
+                  <div class="tl">
+                    <div class="tb">
+                      <i v-for="(sg, k) in p.segs" :key="k" :style="{ left: sg.x + '%', width: sg.w + '%', background: color(sg.tab), opacity: 0.25 + 0.75 * sg.k }"
+                        :title="`${hm(sg.a)}–${hm(sg.b)} · ${label(p.role, sg.tab)} · активен ${dur(sg.act)} из ${dur((sg.b - sg.a) / 1000)}`" />
+                    </div>
+                    <div class="hr"><span v-for="h in p.hours" :key="h.x" :style="{ left: h.x + '%' }">{{ h.t }}:00</span></div>
+                  </div>
+                  <div v-for="t in p.tabs" :key="t.t" class="tr">
+                    <span class="tn"><i :style="{ background: color(t.t) }" />{{ label(p.role, t.t) }}</span>
+                    <span class="bar" :title="`активен ${Math.round((t.act / Math.max(1, t.open)) * 100)}% времени`"><i class="bo" :style="{ width: (t.open / p.max) * 100 + '%', background: color(t.t) }" /><i class="ba" :style="{ width: (t.act / p.max) * 100 + '%', background: color(t.t) }" /></span>
+                    <span>{{ dur(t.open) }}</span><b>{{ dur(t.act) }}</b>
+                  </div>
+                  <button type="button" class="lk" @click.stop="open[p.uid] = !open[p.uid]">{{ open[p.uid] ? 'Скрыть ленту' : `Лента по времени (${p.spans.length})` }}</button>
+                  <ol v-if="open[p.uid]" class="ls">
+                    <li v-for="(sg, k) in p.spans" :key="k">
+                      <span class="lt">{{ hm(sg.a) }}–{{ hm(sg.b) }}</span>
+                      <span class="tn"><i :style="{ background: color(sg.tab) }" />{{ label(p.role, sg.tab) }}</span>
+                      <span class="lv">активен {{ dur(sg.act) }} из {{ dur((sg.b - sg.a) / 1000) }}</span>
+                    </li>
+                  </ol>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
     </template>
 
     <!-- 7 дней -->
@@ -130,7 +147,7 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
           <thead><tr><th>Кто</th><th v-for="d in week" :key="d">{{ new Date(d + 'T12:00:00').toLocaleDateString('ru', { weekday: 'short' }) }}<small>{{ d.slice(8) }}.{{ d.slice(5, 7) }}</small></th><th>Всего</th></tr></thead>
           <tbody>
             <tr v-for="r in weekRows" :key="r.uid">
-              <td class="wn">{{ r.name || r.uid }}<small>{{ ROLE[r.role] ?? r.role }}</small></td>
+              <td class="wn"><span class="who"><Avatar :s="av(r)" :size="24" /><span class="wn2"><b>{{ r.name || r.uid }}</b><small :class="r.role">{{ ROLE[r.role] ?? r.role }}</small></span></span></td>
               <td v-for="d in week" :key="d" class="wc" :class="{ has: r.days[d] }" :title="r.days[d] ? `активен ${dur(r.days[d].act)}, открыто ${dur(r.days[d].open)}, заходов ${r.days[d].visits}` : ''" @click="r.days[d] && ((day = d), (view = 'day'))">
                 <template v-if="r.days[d]"><b>{{ short(r.days[d].act) }}</b><small>{{ r.days[d].visits }}×</small></template><span v-else>—</span>
               </td>
@@ -145,7 +162,7 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
 </template>
 
 <style scoped>
-.da { display: grid; gap: 10px; min-width: 0 }
+.da { display: grid; gap: 10px; min-width: 0; container-type: inline-size }
 .hd { display: flex; align-items: center; gap: 8px } .hd > b { flex: 1; font-size: 16px; font-weight: 600 }
 .seg { display: inline-flex; padding: 2px; border-radius: 10px; background: var(--surface) }
 .seg button { padding: 5px 10px; border: 0; border-radius: 8px; background: none; color: var(--hint); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer } .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
@@ -173,6 +190,18 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
 .ls { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: 320px; overflow: auto }
 .ls li { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid var(--border); font-size: 12.5px }
 .lt { font-variant-numeric: tabular-nums; font-weight: 700 } .lv { color: var(--hint); font-size: 11.5px; white-space: nowrap }
+/* день — таблица команды (вариант «В») */
+.tm { width: 100%; border-collapse: collapse; font-size: 12.5px }
+.tm th { padding: 0 6px 6px; font-size: 10.5px; font-weight: 700; color: var(--hint); text-transform: uppercase; letter-spacing: .3px; text-align: right; white-space: nowrap } .tm th.l { text-align: left }
+.tm td { padding: 7px 6px; border-top: 1px solid var(--border); vertical-align: middle }
+.pr { cursor: pointer } .pr:hover td, .pr.on td, .dx td { background: var(--surface) } .pr:focus-visible { outline: 2px solid var(--g-acc, #1a73e8); outline-offset: -2px }
+.dx td { border-top: 0; padding: 2px 8px 12px 40px }
+.who { display: flex; align-items: center; gap: 8px; min-width: 0 } .wn2 { display: grid; min-width: 0; line-height: 1.2 } .wn2 b { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.wn2 small { font-size: 10.5px; font-weight: 600; color: #1a73e8 } .wn2 small.student { color: #188038 } .wn2 small.dev { color: #8430ce }
+.n { text-align: right; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums } .n.g { color: #188038; font-weight: 800 } .n.m { color: var(--hint); font-weight: 600 }
+.dcol { width: 34%; min-width: 110px } .tb.sm { height: 6px; border-radius: 3px } .tr2 { font-size: 10px; color: var(--hint); font-variant-numeric: tabular-nums }
+.dd { display: grid; gap: 7px }
+@container (max-width: 400px) { .dcol { display: none } }
 /* неделя */
 .wk { display: grid; gap: 6px; overflow-x: auto }
 .wk table { width: 100%; border-collapse: collapse; font-size: 12.5px }
