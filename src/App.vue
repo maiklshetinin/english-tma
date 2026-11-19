@@ -20,6 +20,7 @@ import { useTabBadge } from './composables/useTabBadge'
 import { startLive, stopLive, setWhere, onLive, liveSend } from './composables/useLive'
 import { active, onActive, idleFor } from './composables/useActive'
 import { initActivity, activityTab } from './composables/useActivity'
+import { startVisits } from './composables/useVisits'
 import { isDemo } from './firebase'
 import { useStudentsStore } from './stores/students'
 import { useScheduleStore } from './stores/schedule'
@@ -51,6 +52,7 @@ watch(() => auth.status === 'ready' && auth.isTeacher, (on) => (on ? startLive()
 watch(() => auth.status === 'ready' && auth.isTeacher, (on) => { if (on) loadAccess() }, { immediate: true })          // «только просмотр» — от разработчика
 watch(() => route.meta.tab, (t) => { if (t !== 'courses') setWhere(String(t || '')) }, { immediate: true })      // в редакторе он сам скажет, какой курс
 // Учёт активности (useActivity.js) — если разработчик включил его для этой роли: заходы, время по вкладкам, лента
+watch(() => auth.status === 'ready', (ok) => { if (ok && !isDemo) startVisits() }, { immediate: true })          // лог заходов — всегда (useVisits.js)
 watch(() => auth.status === 'ready', (ok) => { if (ok && !isDemo) initActivity(auth.isTeacher ? 'teacher' : 'student', () => String(route.meta.tab || '')) }, { immediate: true })
 watch(() => route.meta.tab, () => activityTab())
 const RELOAD = { students: () => useStudentsStore().load(), schedule: () => useScheduleStore().load(), groups: () => useGroupsStore().load(),

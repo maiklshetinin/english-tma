@@ -25,6 +25,7 @@ import { makeRender } from './render.js'
 import { captureConsole, onLine, logs, onRequest, startSampler, serverStats, SRANGES, type SRange } from './devops.js'
 import { countFirestore, inRoute, ours, since as usageSince, RANGES, type Range } from './metrics.js'
 import { makeActivity } from './activity.js'
+import { makeVisits } from './visits.js'
 import type { CreateStudentResponse, InviteResponse, PingResponse, TokenUser } from './types.js'
 
 // Пользователь из проверенного Firebase-токена кладётся в req.user (см. requireUser)
@@ -211,8 +212,24 @@ const activity = makeActivity({ db })
 activity.load().catch((e) => console.error('settings/activity:', e))
 app.get('/me/activity', requireUser, (req, res) => { res.json({ on: activity.on(req.user.role) }) })
 app.post('/me/activity', requireUser, wrap(async (req, res) => res.json(await activity.record(req.user, req.body))))      // кусок раз в 5 мин → { on }
-app.get('/dev/activity', requireUser, requireDev, wrap(async (req, res) => {          // ?from&to (YYYY-MM-DD) → { settings, days }
-  res.json({ settings: activity.settings, days: await activity.range(String(req.query.from || ''), String(req.query.to || '')) })
+// Лог заходов (visits.ts) — всегда, без выключателя: время, телефон / компьютер, Telegram / сайт. Отметку шлёт приложение
+const visits = makeVisits({ db })
+app.post('/me/visit', requireUser, wrap(async (req, res) => {          // { day, dev, app, pf } → { ok }
+  if (req.user.role !== 'teacher' && req.user.role !== 'student') return void res.json({ ok: false })
+  res.json(await visits.record(req.user, req.body))
+}))
+app.get('/dev/activity', requireUser, requireDev, wrap(async (req, res) => {          // ?from&to (YYYY-MM-DD) → { settings, days, visits }
+  const from = String(req.query.from || ''), to = String(req.query.to || '')
+  const [days, vs] = await Promise.all([activity.range(from, to), visits.range(from, to)])
+  res.json({ settings: activity.settings, days, visits: vs })
+}))
+// Очистка логов разработчиком: { what: 'visits' | 'activity', days? } — дни старше `days` дней (без него — всё) → { deleted }
+app.post('/dev/logs/clean', requireUser, requireDev, wrap(async (req, res) => {
+  const days = Number(req.body?.days), what = String(req.body?.what || '')
+  const before = Number.isFinite(days) && days > 0 ? new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10) : undefined
+  const deleted = await visits.clean(what, before)
+  console.warn(`логи: ${what} — удалено ${deleted} (${before ? 'до ' + before : 'всё'}) — ${devName(req)}`)
+  res.json({ deleted })
 }))
 app.post('/dev/activity', requireUser, requireDev, wrap(async (req, res) => {          // { teachers?, students? } → выключатели
   const s = await activity.set({ teachers: req.body?.teachers, students: req.body?.students })

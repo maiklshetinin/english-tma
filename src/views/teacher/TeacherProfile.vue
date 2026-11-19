@@ -6,6 +6,7 @@ import Avatar from '../../components/Avatar.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import AppVersion from '../../components/AppVersion.vue'
 import { showToast } from '../../composables/useToast'
+import { ask } from '../../composables/useDialog'
 import { hapticOn, setHaptic, swipeLock, setSwipeLock } from '../../composables/useTelegram'
 import { sfxOn, setSfx, sfxResult } from '../../composables/useSfx'
 import { apiFetch, canLogout } from '../../firebase'
@@ -57,6 +58,14 @@ async function setAct(k, on) {
   try { actSet.value = await post('/dev/activity', { [k]: on }, 'Активность'); showToast(`Учёт активности: ${k === 'teachers' ? 'преподаватели' : 'ученики'} — ${on ? 'включён' : 'выключен'}`) } catch (e) { showToast(e.message) }
 }
 function openActivity() { devtools.tab = 'activity'; devtools.open = true }
+// Очистка логов (server/visits.ts → clean): заходы и учёт активности, за период или целиком
+const CLEAN_OPTS = [[30, 'старше 30 дней'], [90, 'старше 90 дней'], [0, 'всё']]
+const cleanDays = ref(90)
+async function cleanLogs(what) {
+  const t = what === 'visits' ? 'заходов' : 'учёта активности', d = cleanDays.value
+  if (!(await ask(`Очистить лог ${t}${d ? ` старше ${d} дней` : ' целиком'}?`, { text: 'Удалённое не вернуть.', ok: 'Очистить', danger: true }))) return
+  try { const r = await post('/dev/logs/clean', { what, days: d }, 'Логи'); showToast(`Лог ${t}: удалено записей — ${r.deleted}`) } catch (e) { showToast(e.message) }
+}
 function updateEveryone() { updateAll(); showToast('Отправлено: обновятся все, как только новая версия будет на сайте (тихо — или плашкой, если человек сейчас работает)') }
 async function ping() {
   if (!import.meta.env.VITE_API_URL) return showToast('Не задан API_URL — приложение не знает адрес сервера')
@@ -156,13 +165,20 @@ async function ping() {
         <!-- учёт активности: заходы, время «открыто» / «активен» по вкладкам, лента; смотреть — панель разработчика → «Активность» -->
         <div class="it vr">
           <span class="ic"><AppIcon name="chart" :size="18" /></span>
-          <div class="tx">Учёт активности<small>Заходы за день, сколько времени приложение было на экране и сколько из него были действия (мышь, нажатия, касания) — по вкладкам и лентой. Выключено — ничего не считается и не отправляется.</small>
+          <div class="tx">Учёт активности<small>Сколько времени приложение было на экране и сколько из него были действия (мышь, нажатия, касания) — по вкладкам и лентой. Выключено — ничего не считается и не отправляется.</small>
             <template v-if="actSet">
               <label class="rw"><b>Преподаватели</b><input type="checkbox" class="sw" :checked="actSet.teachers" aria-label="Учёт: преподаватели" @change="setAct('teachers', $event.target.checked)" /></label>
               <label class="rw"><b>Ученики</b><input type="checkbox" class="sw" :checked="actSet.students" aria-label="Учёт: ученики" @change="setAct('students', $event.target.checked)" /></label>
               <button type="button" class="lnk" @click="openActivity">Смотреть — панель разработчика → «Активность»</button>
             </template>
             <span v-else class="none">нет ответа от сервера (спит или старая сборка)</span>
+            <small class="lgn">Заходы (время, телефон или компьютер, Telegram или сайт) пишутся всегда, независимо от переключателей.</small>
+            <div class="lgc">
+              <span>Очистить логи</span>
+              <select v-model.number="cleanDays" class="sel" aria-label="Что очистить"><option v-for="[d, t] in CLEAN_OPTS" :key="d" :value="d">{{ t }}</option></select>
+              <button type="button" class="lgb" @click="cleanLogs('visits')">заходы</button>
+              <button type="button" class="lgb" @click="cleanLogs('activity')">учёт</button>
+            </div>
           </div>
         </div>
         <!-- сеть, консоль сервера, нагрузка на базу, сервер — в панели разработчика (DevTools.vue), открывается на любом экране -->
@@ -245,6 +261,8 @@ async function ping() {
 .vsw i { position: relative; width: 36px; height: 22px; border-radius: 11px; background: #34c759; transition: background .2s } .vsw i::after { content: ''; position: absolute; top: 2px; left: 16px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: left .2s }
 .vsw input:checked + i { background: #ff9500 } .vsw input:checked + i::after { left: 2px }
 .lnk { justify-self: start; margin-top: 8px; padding: 0; border: 0; background: none; color: var(--blue); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer }
+.lgn { margin-top: 8px } .lgc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; font-weight: 700 } .lgc > span { flex: 1 }
+.lgb { padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--red-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .lgb:hover { background: var(--surface) }
 .none { margin-top: 4px; font-size: 13px; color: var(--hint) }
 /* кэш: заголовок со сроком справа, ниже — цифры плитками */
 .duw { flex: 1; min-width: 0 }

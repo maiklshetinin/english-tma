@@ -38,17 +38,29 @@ const dur = (sec) => { const m = Math.round(sec / 60); return sec > 0 && m < 1 ?
 const hm = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
 
 // день: люди по активному времени
-const people = computed(() => (data.value?.days ?? []).filter((d) => d.day === day.value).sort((a, b) => b.act - a.act).map((p) => {
-  const h0 = new Date(p.first); h0.setMinutes(0, 0, 0)
-  const h1 = new Date(p.last); if (h1.getMinutes() || h1.getSeconds()) { h1.setHours(h1.getHours() + 1); h1.setMinutes(0, 0, 0) }
-  const a = h0.getTime(), b = Math.max(h1.getTime(), a + 3600_000), span = b - a
-  const step = span > 8 * 3600_000 ? 2 : 1
-  const hours = []; for (let t = a, i = 0; t <= b; t += 3600_000, i++) if (i % step === 0) hours.push({ x: ((t - a) / span) * 100, t: new Date(t).getHours() })
-  const segs = p.spans.map((s) => ({ ...s, x: ((s.a - a) / span) * 100, w: Math.max(0.4, ((s.b - s.a) / span) * 100), k: Math.min(1, s.act / Math.max(1, (s.b - s.a) / 1000)) }))
-  const tabs = Object.entries(p.tabs).map(([t, v]) => ({ t, ...v })).sort((x, y) => y.open - x.open)
-  const max = Math.max(1, ...tabs.map((t) => t.open))
-  return { ...p, hours, segs, tabs, max }
-}))
+// День: люди из учёта активности (если включён) и из лога заходов (он есть всегда). Без учёта — только заходы
+const devCount = (list) => ({ phone: list.filter((x) => x.dev === 'phone').length, desk: list.filter((x) => x.dev !== 'phone').length })
+const DEVN = { tg: 'Telegram', web: 'сайт' }
+const people = computed(() => {
+  const by = new Map()
+  for (const d of (data.value?.days ?? []).filter((d) => d.day === day.value)) by.set(d.uid, { a: d })
+  for (const v of (data.value?.visits ?? []).filter((v) => v.day === day.value)) { const x = by.get(v.uid) ?? {}; x.v = v; by.set(v.uid, x) }
+  return [...by.values()].map(({ a: p, v }) => {
+    const vlist = v?.list ?? [], base = { uid: (p ?? v).uid, name: p?.name || v?.name, photo: p?.photo || v?.photo, role: p?.role || v?.role }
+    const visits = v ? v.n : p.visits, dv = devCount(vlist)
+    const vt = vlist.map((x) => x.t)
+    if (!p) return { ...base, hasAct: false, visits, dv, vlist, act: -1, first: Math.min(...vt), last: Math.max(...vt), spans: [], segs: [], tabs: [], hours: [] }
+    const h0 = new Date(p.first); h0.setMinutes(0, 0, 0)
+    const h1 = new Date(p.last); if (h1.getMinutes() || h1.getSeconds()) { h1.setHours(h1.getHours() + 1); h1.setMinutes(0, 0, 0) }
+    const a = h0.getTime(), b = Math.max(h1.getTime(), a + 3600_000), span = b - a
+    const step = span > 8 * 3600_000 ? 2 : 1
+    const hours = []; for (let t = a, i = 0; t <= b; t += 3600_000, i++) if (i % step === 0) hours.push({ x: ((t - a) / span) * 100, t: new Date(t).getHours() })
+    const segs = p.spans.map((s) => ({ ...s, x: ((s.a - a) / span) * 100, w: Math.max(0.4, ((s.b - s.a) / span) * 100), k: Math.min(1, s.act / Math.max(1, (s.b - s.a) / 1000)) }))
+    const tabs = Object.entries(p.tabs).map(([t, v]) => ({ t, ...v })).sort((x, y) => y.open - x.open)
+    const max = Math.max(1, ...tabs.map((t) => t.open))
+    return { ...p, ...base, hasAct: true, visits, dv, vlist, first: Math.min(p.first, ...vt), last: Math.max(p.last, ...vt), hours, segs, tabs, max }
+  }).sort((x, y) => y.act - x.act || y.visits - x.visits)
+})
 const open = ref({})          // раскрытые ленты по uid
 // Вариант «В» (19.11.2026): строка на человека, нажатие раскрывает подробности; первая строка раскрыта сама
 const exp = ref({})
@@ -60,11 +72,18 @@ const av = (p) => ({ name: p.name || '?', photoUrl: p.photo || '', tgId: Number(
 // неделя: таблица людей по дням
 const weekRows = computed(() => {
   const by = new Map()
+  const row = (d) => by.get(d.uid) ?? { uid: d.uid, name: d.name, photo: d.photo, role: d.role, days: {}, act: 0, visits: 0 }
   for (const d of data.value?.days ?? []) {
-    const r = by.get(d.uid) ?? { uid: d.uid, name: d.name, photo: d.photo, role: d.role, days: {}, act: 0, visits: 0 }
-    r.days[d.day] = d; r.act += d.act; r.visits += d.visits; r.name = d.name || r.name; r.photo = d.photo || r.photo; r.role = d.role || r.role; by.set(d.uid, r)
+    const r = row(d), c = r.days[d.day] ?? { act: 0, open: 0, visits: 0, has: false }
+    c.act = d.act; c.open = d.open; c.has = true; if (!c.fromV) c.visits = d.visits
+    r.days[d.day] = c; r.act += d.act; r.name = d.name || r.name; r.photo = d.photo || r.photo; r.role = d.role || r.role; by.set(d.uid, r)
   }
-  return [...by.values()].sort((a, b) => b.act - a.act)
+  for (const v of data.value?.visits ?? []) {          // заходы — из лога заходов (точнее и есть всегда)
+    const r = row(v), c = r.days[v.day] ?? { act: 0, open: 0, visits: 0, has: false }
+    c.visits = v.n; c.fromV = true; r.days[v.day] = c; r.name = r.name || v.name; r.photo = r.photo || v.photo; r.role = r.role || v.role; by.set(v.uid, r)
+  }
+  for (const r of by.values()) r.visits = Object.values(r.days).reduce((s, c) => s + c.visits, 0)
+  return [...by.values()].sort((a, b) => b.act - a.act || b.visits - a.visits)
 })
 const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м` : `${Math.floor(m / 60)}:${pad(m % 60)}` }
 </script>
@@ -87,31 +106,40 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
     </div>
 
     <p v-if="err" class="er">{{ err }}</p>
-    <p v-if="off" class="nt warn">Учёт выключен. Включить — «Профиль → Для разработчика → Учёт активности» (отдельно для преподавателей и учеников).</p>
+    <p v-if="off" class="nt warn">Учёт активности выключен — видны только заходы (они пишутся всегда). Включить учёт — «Профиль → Для разработчика → Учёт активности».</p>
     <p v-else-if="data" class="nt">Учёт: преподаватели — <b>{{ data.settings.teachers ? 'вкл' : 'выкл' }}</b>, ученики — <b>{{ data.settings.students ? 'вкл' : 'выкл' }}</b>.
       «Активен» — были действия (мышь, нажатия, касания, клавиатура, прокрутка), «открыто» — просто на экране. Данные приходят раз в 5 минут и при сворачивании.</p>
 
     <!-- День: таблица — строка на человека, нажатие раскрывает вкладки и ленту -->
     <template v-if="view === 'day' && data">
-      <p v-if="!people.length" class="nt">За этот день ничего нет.</p>
+      <p v-if="!people.length" class="nt">За этот день ни заходов, ни учёта.</p>
       <table v-else class="tm">
         <thead><tr><th class="l">Кто</th><th>Заходы</th><th>Активен</th><th>Открыто</th><th class="l dcol">День</th></tr></thead>
         <tbody>
           <template v-for="(p, i) in people" :key="p.uid">
             <tr class="pr" :class="{ on: isOpen(p, i) }" tabindex="0" :aria-expanded="isOpen(p, i)" @click="flip(p, i)" @keydown.enter.prevent="flip(p, i)" @keydown.space.prevent="flip(p, i)">
               <td><span class="who"><Avatar :s="av(p)" :size="28" /><span class="wn2"><b>{{ p.name || p.uid }}</b><small :class="p.role">{{ ROLE[p.role] ?? p.role }}</small></span></span></td>
-              <td class="n">{{ p.visits }}</td>
-              <td class="n g">{{ dur(p.act) }}</td>
-              <td class="n m">{{ dur(p.open) }}</td>
+              <td class="n">{{ p.visits }}<span v-if="p.vlist.length" class="dv"><span v-if="p.dv.phone" title="с телефона"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/></svg>{{ p.dv.phone }}</span><span v-if="p.dv.desk" title="с компьютера"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="1.8"/><path d="M9 20h6M12 16.5V20"/></svg>{{ p.dv.desk }}</span></span></td>
+              <td class="n g">{{ p.hasAct ? dur(p.act) : '—' }}</td>
+              <td class="n m">{{ p.hasAct ? dur(p.open) : '—' }}</td>
               <td class="dcol">
-                <div class="tb sm"><i v-for="(sg, k) in p.segs" :key="k" :style="{ left: sg.x + '%', width: sg.w + '%', background: color(sg.tab), opacity: 0.25 + 0.75 * sg.k }" /></div>
-                <small class="tr2">{{ hm(p.first) }}–{{ hm(p.last) }}</small>
+                <div v-if="p.hasAct" class="tb sm"><i v-for="(sg, k) in p.segs" :key="k" :style="{ left: sg.x + '%', width: sg.w + '%', background: color(sg.tab), opacity: 0.25 + 0.75 * sg.k }" /></div>
+                <small class="tr2">{{ hm(p.first) }}{{ p.last > p.first ? '–' + hm(p.last) : '' }}{{ p.hasAct ? '' : ' · учёт выкл.' }}</small>
               </td>
             </tr>
             <tr v-if="isOpen(p, i)" class="dx">
               <td colspan="5">
                 <div class="dd">
-                  <div class="tl">
+                  <!-- заходы: время и с чего (лог заходов — всегда) -->
+                  <div v-if="p.vlist.length" class="vl">
+                    <span v-for="(x, k) in p.vlist" :key="k" class="vc" :title="`${hm(x.t)} · ${x.dev === 'phone' ? 'телефон' : 'компьютер'} · ${DEVN[x.app]}${x.pf ? ' (' + x.pf + ')' : ''}`">
+                      <svg v-if="x.dev === 'phone'" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/></svg>
+                      <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="1.8"/><path d="M9 20h6M12 16.5V20"/></svg>
+                      {{ hm(x.t) }}<small>{{ DEVN[x.app] }}</small>
+                    </span>
+                  </div>
+                  <p v-if="!p.hasAct" class="nt">Учёт активности за этот день не вёлся — есть только заходы.</p>
+                  <div v-if="p.hasAct" class="tl">
                     <div class="tb">
                       <i v-for="(sg, k) in p.segs" :key="k" :style="{ left: sg.x + '%', width: sg.w + '%', background: color(sg.tab), opacity: 0.25 + 0.75 * sg.k }"
                         :title="`${hm(sg.a)}–${hm(sg.b)} · ${label(p.role, sg.tab)} · активен ${dur(sg.act)} из ${dur((sg.b - sg.a) / 1000)}`" />
@@ -123,7 +151,7 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
                     <span class="bar" :title="`активен ${Math.round((t.act / Math.max(1, t.open)) * 100)}% времени`"><i class="bo" :style="{ width: (t.open / p.max) * 100 + '%', background: color(t.t) }" /><i class="ba" :style="{ width: (t.act / p.max) * 100 + '%', background: color(t.t) }" /></span>
                     <span>{{ dur(t.open) }}</span><b>{{ dur(t.act) }}</b>
                   </div>
-                  <button type="button" class="lk" @click.stop="open[p.uid] = !open[p.uid]">{{ open[p.uid] ? 'Скрыть ленту' : `Лента по времени (${p.spans.length})` }}</button>
+                  <button v-if="p.hasAct" type="button" class="lk" @click.stop="open[p.uid] = !open[p.uid]">{{ open[p.uid] ? 'Скрыть ленту' : `Лента по времени (${p.spans.length})` }}</button>
                   <ol v-if="open[p.uid]" class="ls">
                     <li v-for="(sg, k) in p.spans" :key="k">
                       <span class="lt">{{ hm(sg.a) }}–{{ hm(sg.b) }}</span>
@@ -148,8 +176,8 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
           <tbody>
             <tr v-for="r in weekRows" :key="r.uid">
               <td class="wn"><span class="who"><Avatar :s="av(r)" :size="24" /><span class="wn2"><b>{{ r.name || r.uid }}</b><small :class="r.role">{{ ROLE[r.role] ?? r.role }}</small></span></span></td>
-              <td v-for="d in week" :key="d" class="wc" :class="{ has: r.days[d] }" :title="r.days[d] ? `активен ${dur(r.days[d].act)}, открыто ${dur(r.days[d].open)}, заходов ${r.days[d].visits}` : ''" @click="r.days[d] && ((day = d), (view = 'day'))">
-                <template v-if="r.days[d]"><b>{{ short(r.days[d].act) }}</b><small>{{ r.days[d].visits }}×</small></template><span v-else>—</span>
+              <td v-for="d in week" :key="d" class="wc" :class="{ has: r.days[d] }" :title="r.days[d] ? `${r.days[d].has ? `активен ${dur(r.days[d].act)}, открыто ${dur(r.days[d].open)}, ` : ''}заходов ${r.days[d].visits}` : ''" @click="r.days[d] && ((day = d), (view = 'day'))">
+                <template v-if="r.days[d]"><b>{{ r.days[d].has ? short(r.days[d].act) : '·' }}</b><small>{{ r.days[d].visits }}×</small></template><span v-else>—</span>
               </td>
               <td class="wc tot"><b>{{ short(r.act) }}</b><small>{{ r.visits }}×</small></td>
             </tr>
@@ -202,6 +230,11 @@ const short = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}м
 .dcol { width: 34%; min-width: 110px } .tb.sm { height: 6px; border-radius: 3px } .tr2 { font-size: 10px; color: var(--hint); font-variant-numeric: tabular-nums }
 .dd { display: grid; gap: 7px }
 @container (max-width: 400px) { .dcol { display: none } }
+/* заходы: телефон / компьютер */
+.dv { display: inline-flex; gap: 6px; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--hint) } .dv span { display: inline-flex; align-items: center; gap: 2px }
+.dv svg, .vc svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.vl { display: flex; flex-wrap: wrap; gap: 5px }
+.vc { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 99px; background: var(--card); border: 1px solid var(--border); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums } .vc small { font-size: 10.5px; font-weight: 600; color: var(--hint) }
 /* неделя */
 .wk { display: grid; gap: 6px; overflow-x: auto }
 .wk table { width: 100%; border-collapse: collapse; font-size: 12.5px }
