@@ -263,7 +263,7 @@ function checkAny() {
 async function aiCheck() {
   const s = step.value; st.busy = true
   try {
-    const r = await checkAnswer({ question: s.text ?? '', reference: s.ideal ?? '', answer: st.text })
+    const r = await checkAnswer({ question: s.text ?? '', reference: s.ideal ?? '', answer: st.text, prompt: s.prompt, pass: s.pass })          // свой промпт и порог экрана (JSON экрана) — если есть
     if (step.value !== s) return
     st.ai = r; verdict(r.ok)
   } catch (e) {

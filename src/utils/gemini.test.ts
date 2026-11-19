@@ -36,6 +36,13 @@ describe('Gemini: ключи и проверка ответа', () => {
     expect(ai.keys[0]).toMatchObject({ ok: true, err: '', n: 1 })
     expect((await checkAnswer(q, (async () => good({ score: PASS - 1, missed_points: [], feedback: '' })) as any)).ok).toBe(false)
   })
+  it('свой промпт и порог экрана', async () => {
+    addKey('k1'); let body: any
+    const r = await checkAnswer({ ...q, prompt: 'Mój prompt', pass: 80 }, (async (_u: string, o: any) => { body = JSON.parse(o.body); return good({ score: 75, missed_points: [], feedback: '' }) }) as any)
+    expect(body.systemInstruction.parts[0].text).toBe('Mój prompt'); expect(r.ok).toBe(false)
+    await checkAnswer(q, (async (_u: string, o: any) => { body = JSON.parse(o.body); return good({ score: 75, missed_points: [], feedback: '' }) }) as any)
+    expect(body.systemInstruction.parts[0].text).toMatch(/Карту поляка/)
+  })
   it('квота кончилась — берётся следующий ключ, исчерпанный пропускается до сброса', async () => {
     addKey('k1'); addKey('k2'); const used: string[] = []
     const f = (async (_u: string, o: any) => { used.push(o.headers['x-goog-api-key']); return o.headers['x-goog-api-key'] === 'k1' ? reply(429, QUOTA) : good({ score: 90, missed_points: [], feedback: 'Отлично' }) }) as any
@@ -66,9 +73,10 @@ describe('«Ответ по смыслу» в уроке', () => {
     expect(stepIssue({ id: 'a', kind: 'kp', ideal: 'x' })).toBe('Нет вопроса')
   })
   it('JSON вопросов от Gemini ({ questions: [{ question, reference }] }) → экраны', () => {
-    const r = stepsFromJson(JSON.stringify({ lesson_id: 'm2l6', pass_threshold: 60, questions: [
+    const r = stepsFromJson(JSON.stringify({ lesson_id: 'm2l6', pass_threshold: 70, api_config: { system_prompt: 'Sprawdzasz…' }, questions: [
       { id: 1, question: 'Kiedy i jak obchodzimy Mikołajki?', reference: 'Mikołajki obchodzimy…' }, { id: 2, question: 'Co to jest Wielki Post?', reference: 'Wielki Post to…' }, { id: 3, reference: 'без вопроса' }] }))!
     expect(r.steps.map(s => [s.kind, s.text, s.ideal])).toEqual([['kp', 'Kiedy i jak obchodzimy Mikołajki?', 'Mikołajki obchodzimy…'], ['kp', 'Co to jest Wielki Post?', 'Wielki Post to…']])
+    expect(r.steps.every(s => s.prompt === 'Sprawdzasz…' && s.pass === 70)).toBe(true)          // промпт и порог урока — каждому экрану
     expect(r.steps.every(s => !stepIssue(s))).toBe(true)
   })
 })

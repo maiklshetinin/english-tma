@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { defineComponent, h, reactive } from 'vue'
+import { provideEdit } from '../ctx'
+import { EX } from '../index'
+import { SYSTEM } from '../../utils/gemini'
+import { checkAnswer } from '../../utils/gemini'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 
 // Gemini подменяем: score задаёт тест
@@ -46,5 +51,31 @@ describe('«Ответ по смыслу»: экран у ученика', () =>
     expect(w.find('textarea.ka').exists()).toBe(true); expect((w.find('textarea.ka').element as HTMLTextAreaElement).value).toBe('')
     await answer(); await w.find('.foot .go').trigger('click')
     expect(w.find('.fin').exists()).toBe(true)                                // больше не крутим — итог урока
+  })
+  it('свой промпт и порог экрана уходят в проверку', async () => {
+    g.next.push(res(70))
+    const w = mount(LessonPlayer, { props: { steps: [{ ...step, prompt: 'Mój prompt', pass: 75 }], resolve, embedded: true } })
+    await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
+    expect((checkAnswer as any).mock.calls.at(-1)[0]).toMatchObject({ prompt: 'Mój prompt', pass: 75 })
+  })
+})
+
+describe('«Ответ по смыслу»: JSON экрана в правке', () => {
+  const host = (st: any, log: string[]) => defineComponent({ setup() {
+    provideEdit({ pick() {}, drop() {}, clear() {}, pct: () => null, changed: () => log.push('changed'), cards() {}, canUndo: () => false, undoCard() {}, dropFiles() {} })
+    return () => h(LessonPlayer, { steps: [st], resolve, embedded: true, edit: true }, { foot: () => h('div', { class: 'cf' }, [h(EX.kp.view, { step: st, part: 'tools' })]) })
+  } })
+  it('кнопка JSON: вопрос, эталон, порог и общий промпт; «Применить» — свой промпт и порог у экрана', async () => {
+    const st: any = reactive({ ...step }), log: string[] = []
+    const w = mount(host(st, log))
+    await w.find('.cf .ext').trigger('click')
+    const o = JSON.parse((w.find('.kjt').element as HTMLTextAreaElement).value)
+    expect(o).toEqual({ question: step.text, reference: step.ideal, pass_threshold: 60, system_prompt: SYSTEM })
+    await w.find('.kjt').setValue(JSON.stringify({ ...o, pass_threshold: 70, system_prompt: 'Bądź surowy.' })); await w.find('.kjo').trigger('click')
+    expect(st.prompt).toBe('Bądź surowy.'); expect(st.pass).toBe(70); expect(log).toContain('changed'); expect(w.find('.kj').exists()).toBe(false)
+    await w.find('.cf .ext').trigger('click'); await w.find('.kjt').setValue('{ сломано'); await w.find('.kjo').trigger('click')
+    expect(w.find('.kjb em').text()).toMatch(/Не JSON/); expect(st.prompt).toBe('Bądź surowy.')
+    await w.find('.kjt').setValue(JSON.stringify({ ...o })); await w.find('.kjo').trigger('click')          // вернули общий — у экрана своего нет
+    expect('prompt' in st).toBe(false); expect('pass' in st).toBe(false)
   })
 })

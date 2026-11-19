@@ -30,6 +30,7 @@ export interface Step {
                                      // «Собери фразу»: фраза (слова через пробел), перевод — в tr, пояснение
   text?: string                                                      // «Подсказка»: текст правила; фразы с переводом и звуком — в opts; «Ответь на вопрос»: вопрос
   ideal?: string                                                     // «Ответ по смыслу»: эталон ответа (с ним Gemini сверяет ответ ученика)
+  prompt?: string; pass?: number                                     // «Ответ по смыслу»: свой промпт для Gemini и порог зачёта, % (нет — общие, utils/gemini.js)
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
   head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
   tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
@@ -393,7 +394,7 @@ export function keepLocalFiles(incoming: Step[] | undefined, local: Step[] | und
 /** Экран → JSON для копирования: без id и без файлов «только в этом браузере» */
 export function stepJson(s: Step): Omit<Step, 'id'> { const { id: _id, ...rest } = stepsOut([s])[0]; return rest }
 
-const STR = ['word', 'tr', 'ex', 'exTr', 'image', 'audio', 'video', 'exAudio', 'phrase', 'note', 'text', 'ideal'] as const
+const STR = ['word', 'tr', 'ex', 'exTr', 'image', 'audio', 'video', 'exAudio', 'phrase', 'note', 'text', 'ideal', 'prompt'] as const
 const str = (v: unknown) => (typeof v === 'string' && v.trim() && !v.startsWith('idb:') && !v.startsWith('blob:') ? v : undefined)
 /** Один экран из «сырого» объекта: тип должен быть известным, остальные поля — только знакомые и нужного вида (лишнее отбрасываем) */
 function stepFrom(o: any): Step | null {
@@ -405,6 +406,7 @@ function stepFrom(o: any): Step | null {
   if (o.by === 'letters') s.by = 'letters'
   if (Number.isInteger(o.ans) && o.ans >= 0) s.ans = o.ans
   if (typeof o.min === 'number' && o.min > 0 && o.min <= 60) s.min = o.min
+  if (o.kind === 'kp' && Number.isInteger(o.pass) && o.pass > 0 && o.pass <= 100) s.pass = o.pass
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
       .map((x: any) => ({ w: x.w.trim(), ...(TILE[x.k] ? { k: x.k } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
@@ -440,7 +442,8 @@ export function stepsFromJson(text: string): { steps: Step[]; bad: number } | nu
     try { v = JSON.parse(t.slice(a, b + 1)) } catch { return null }
   }
   // вопросы урока Karta Polaka (как присылает Gemini): { questions: [{ question, reference }] } → экраны «Ответ по смыслу»
-  if (Array.isArray(v?.questions)) v = v.questions.filter((q: any) => str(q?.question)).map((q: any) => ({ kind: 'kp', text: q.question, ...(str(q.reference) ? { ideal: q.reference } : {}) }))
+  // промпт и порог из api_config / pass_threshold — каждому экрану (можно потом поправить в JSON экрана)
+  if (Array.isArray(v?.questions)) { const pr = str(v.api_config?.system_prompt), pass = v.pass_threshold; v = v.questions.filter((q: any) => str(q?.question)).map((q: any) => ({ kind: 'kp', text: q.question, ...(str(q.reference) ? { ideal: q.reference } : {}), ...(pr ? { prompt: pr } : {}), ...(pass != null ? { pass } : {}) })) }
   const list = Array.isArray(v) ? v : Array.isArray(v?.steps) ? v.steps : v?.kind ? [v] : null
   if (!list?.length || !list.some((o: any) => o?.kind)) return null
   const steps = list.map(stepFrom).filter(Boolean) as Step[]

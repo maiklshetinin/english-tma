@@ -48,16 +48,17 @@ export function errText(status, msg) {
   return m ? m.slice(0, 160) : 'Ошибка ' + status
 }
 
-const SYSTEM = 'Ты проверяешь устный ответ ученика на вопрос (подготовка к собеседованию на Карту поляка, польский язык). '
+/** Промпт по умолчанию; у экрана может быть свой (step.prompt — правится в JSON экрана) */
+export const SYSTEM = 'Ты проверяешь устный ответ ученика на вопрос (подготовка к собеседованию на Карту поляка, польский язык). '
   + 'Оценивай ответ по смыслу относительно эталона (reference), а не по буквальному совпадению слов. Засчитывай синонимы, перефразирование и иной порядок слов, если смысл сохранён. '
   + 'Ответ может быть надиктован — не снижай оценку за мелкие ошибки распознавания речи. Эталон намеренно полный: 60–70 % его смысла — уже хороший ответ. '
   + 'Верни строго JSON: score — целое 0–100 (полнота передачи смысла эталона); missed_points — короткие пункты на русском только о важных фактах эталона, которые не прозвучали (всё ключевое есть — пустой массив); '
   + 'feedback — одно короткое предложение на русском: по смыслу или по польскому языку ответа, доброжелательно.'
 const SCHEMA = { type: 'OBJECT', properties: { score: { type: 'INTEGER' }, missed_points: { type: 'ARRAY', items: { type: 'STRING' } }, feedback: { type: 'STRING' } }, required: ['score', 'missed_points', 'feedback'] }
 
-async function call(key, prompt, json, fetcher = fetch) {
+async function call(key, prompt, json, fetcher = fetch, system = SYSTEM) {
   const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0 } }
-  if (json) { body.systemInstruction = { parts: [{ text: SYSTEM }] }; body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = SCHEMA }
+  if (json) { body.systemInstruction = { parts: [{ text: system }] }; body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = SCHEMA }
   let r
   try { r = await fetcher(API + encodeURIComponent(ai.model) + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) }) }
   catch { const e = new Error('Нет связи с Google'); e.net = true; throw e }
@@ -72,19 +73,23 @@ function mark(x, ok, e) {
   save()
 }
 
-/** Проверка ответа: { score 0–100, missed: [], feedback, ok: score ≥ PASS }. Нет ключей — ошибка с nokey; все не сработали — с текстом последней ошибки */
-export async function checkAnswer({ question, reference, answer }, fetcher = fetch) {
-  const prompt = `Вопрос: ${question}\n\nЭталон (reference): ${reference}\n\nОтвет ученика: ${answer}`
+/** Проверка ответа: { score 0–100, missed: [], feedback, ok: score ≥ порога }. prompt, pass — свои у экрана (нет — по умолчанию).
+ *  Нет ключей — ошибка с nokey; все не сработали — с текстом последней ошибки */
+/** @param {{ question: string, reference: string, answer: string, prompt?: string, pass?: number }} q */
+export async function checkAnswer(q, fetcher = fetch) {
+  const { question, reference, answer, prompt, pass } = q
+  const system = prompt?.trim() || SYSTEM, need = Number.isFinite(pass) ? pass : PASS
+  const text = `Вопрос: ${question}\n\nЭталон (reference): ${reference}\n\nОтвет ученика: ${answer}`
   const list = ai.keys.filter(x => !(x.until > Date.now()))
   if (!ai.keys.length) { const e = new Error('Нет ключа Gemini'); e.nokey = true; throw e }
   if (!list.length) throw new Error('У всех ключей закончилась квота')
   let last = null
   for (const x of list) {
     try {
-      const out = JSON.parse(await call(x.key, prompt, true, fetcher))
+      const out = JSON.parse(await call(x.key, text, true, fetcher, system))
       mark(x, true)
       const score = Math.max(0, Math.min(100, Math.round(Number(out.score) || 0)))
-      return { score, missed: (Array.isArray(out.missed_points) ? out.missed_points : []).map(String).filter(Boolean).slice(0, 8), feedback: String(out.feedback ?? ''), ok: score >= PASS }
+      return { score, missed: (Array.isArray(out.missed_points) ? out.missed_points : []).map(String).filter(Boolean).slice(0, 8), feedback: String(out.feedback ?? ''), ok: score >= need }
     } catch (e) {
       last = e
       if (e instanceof SyntaxError) { mark(x, false, new Error('Gemini ответил не JSON')); continue }

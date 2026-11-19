@@ -66,9 +66,10 @@ await C.put(me, 'k8', { ...course, items: [{ id: 'L', type: 'lesson', title: '',
   ok('найди лишнее: опции, цвет, ответ в пределах', s[0].opts.length === 2 && s[0].opts[0].k === 'y' && !s[0].opts[1].k && s[0].ans === 1 && s[0].mix === false && s[0].note === 'x')
   ok('распредели: до 5 колонок, метка задания учебника, колонка фразы в пределах', s[1].cols.length === 5 && s[1].items[0].c === 1 && s[1].items[1].c === 4 && s[1].hint === false && s[1].bk === 'sort' && s[1].bn === 7 && s[1].bs === 'page' && !('bs' in s[0])) }
 // «Ответ по смыслу» (Karta Polaka): вопрос и эталон сохраняются, лишнее срезается
-await C.put(me, 'k11', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'q1', kind: 'kp', text: 'Kiedy i jak obchodzimy Mikołajki?', ideal: 'Mikołajki obchodzimy szóstego grudnia…', note: 'x', junk: 1 }] }] })
+await C.put(me, 'k11', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'q1', kind: 'kp', text: 'Kiedy i jak obchodzimy Mikołajki?', ideal: 'Mikołajki obchodzimy szóstego grudnia…', prompt: 'Mój prompt', pass: 70, note: 'x', junk: 1 }, { id: 'q2', kind: 'kp', text: 'Q', ideal: 'I', pass: 500 }] }] })
 { const s = ((await C.get('k11')) as any).items[0].steps[0]
-  ok('ответ по смыслу: вопрос и эталон на месте, мусор срезан', s.kind === 'kp' && s.text === 'Kiedy i jak obchodzimy Mikołajki?' && s.ideal === 'Mikołajki obchodzimy szóstego grudnia…' && !('note' in s) && !('junk' in s)) }
+  ok('ответ по смыслу: вопрос и эталон на месте, мусор срезан', s.kind === 'kp' && s.text === 'Kiedy i jak obchodzimy Mikołajki?' && s.ideal === 'Mikołajki obchodzimy szóstego grudnia…' && s.prompt === 'Mój prompt' && s.pass === 70 && !('note' in s) && !('junk' in s))
+  ok('ответ по смыслу: кривой порог не сохраняется', !('pass' in ((await C.get('k11')) as any).items[0].steps[1])) }
 // «Заполни таблицу»: ответ и образец в клетке, строки, регистр — сохраняются; колонки чистятся
 await C.put(me, 'k10', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [
   { id: 't1', kind: 'sort', bk: 'sort', tw: true, rows: 40, cs: true, noEx: 'x', cols: [{ t: '-s', z: 1 }, { t: 'other' }], items: [{ w: 'bag', a: 'bags', c: 0, ex: true }, { w: 'man', a: 'men', c: 1, ex: 'y' }] }] }] })
