@@ -1,9 +1,11 @@
 <script setup>
-// Панель разработчика → «Заходы» (19.11.2026): журнал входов — кто, когда и с чего (server/visits.ts, src/composables/useVisits.js).
+// Панель разработчика → «Логи» (19.11.2026): журнал заходов — кто, когда и с чего (server/visits.ts, src/composables/useVisits.js).
 // Пишется всегда, даже при выключенном учёте активности. Новые сверху, разделители по дням со счётчиком.
 // Строка на высоту кружка: время, аватар, имя, роль, тег «Сайт» / «Telegram», справа устройство. Нажатие — человек в «Активности» за этот день.
 import { ref, computed, watch, onMounted } from 'vue'
-import { request } from '../stores/api'
+import { request, post } from '../stores/api'
+import { ask } from '../composables/useDialog'
+import { showToast } from '../composables/useToast'
 import Avatar from './Avatar.vue'
 import { devtools, devJump } from '../composables/useNetLog'
 
@@ -15,7 +17,7 @@ const span = ref(7), who = ref('all')
 const data = ref(null), busy = ref(false), err = ref('')
 async function load() {
   busy.value = true
-  try { data.value = await request(`/dev/visits?from=${shift(today, -(span.value - 1))}&to=${today}`, undefined, 'Заходы'); err.value = '' } catch (e) { err.value = e.message }
+  try { data.value = await request(`/dev/visits?from=${shift(today, -(span.value - 1))}&to=${today}`, undefined, 'Логи'); err.value = '' } catch (e) { err.value = e.message }
   busy.value = false
 }
 watch(span, load)
@@ -47,13 +49,21 @@ const days = computed(() => {
     return { day, list, sum: `${list.length} ${plural(list.length, 'заход', 'захода', 'заходов')}, ${people} ${plural(people, 'человек', 'человека', 'человек')}` }
   })
 })
+// Очистка (как в «Профиле → Для разработчика»): логи заходов старше 30 / 90 дней или все
+const CLEAN = [[30, 'старше 30 дней'], [90, 'старше 90 дней'], [0, 'все']]
+const cleanDays = ref(90)
+async function clean() {
+  const d = cleanDays.value
+  if (!(await ask(`Очистить логи${d ? ` старше ${d} дней` : ' целиком'}?`, { text: 'Удалённое не вернуть.', ok: 'Очистить', danger: true }))) return
+  try { const r = await post('/dev/logs/clean', { what: 'visits', days: d }, 'Логи'); showToast(`Логи: удалено записей — ${r.deleted}`); load() } catch (e) { showToast(e.message) }
+}
 function open(x) { Object.assign(devJump, { day: x.day, uid: x.uid, n: devJump.n + 1 }); devtools.tab = 'activity' }
 </script>
 
 <template>
   <div class="dvz">
     <div class="hd">
-      <b>Заходы</b>
+      <b>Логи</b>
       <span class="seg" role="tablist" aria-label="Кто">
         <button v-for="[k, t] in [['all', 'Все'], ['teachers', 'Преподаватели'], ['students', 'Ученики']]" :key="k" type="button" :class="{ on: who === k }" @click="who = k">{{ t }}</button>
       </span>
@@ -61,6 +71,11 @@ function open(x) { Object.assign(devJump, { day: x.day, uid: x.uid, n: devJump.n
         <button v-for="n in [7, 30]" :key="n" type="button" :class="{ on: span === n }" @click="span = n">{{ n }} дней</button>
       </span>
       <button type="button" class="rf" :class="{ spin: busy }" title="Обновить" @click="load">↻</button>
+    </div>
+    <div class="cl">
+      <span>Очистить</span>
+      <select v-model.number="cleanDays" aria-label="Что очистить"><option v-for="[d, t] in CLEAN" :key="d" :value="d">{{ t }}</option></select>
+      <button type="button" @click="clean">Очистить</button>
     </div>
     <p v-if="err" class="er">{{ err }}</p>
     <p v-else-if="data && !days.length" class="nt">За эти дни заходов нет (журнал ведётся с 19.11.2026).</p>
@@ -89,6 +104,10 @@ function open(x) { Object.assign(devJump, { day: x.day, uid: x.uid, n: devJump.n
 .seg button { padding: 5px 10px; border: 0; border-radius: 8px; background: none; color: var(--hint); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer } .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12) }
 .rf { width: 30px; height: 30px; border: 0; border-radius: 8px; background: var(--surface); color: var(--hint); font-size: 16px; cursor: pointer } .rf.spin { animation: rf 1s linear infinite } @keyframes rf { to { rotate: 360deg } }
 .nt { margin: 0; font-size: 12px; color: var(--hint) } .er { margin: 0; padding: 10px; border-radius: 10px; background: color-mix(in srgb, #e8453c 10%, transparent); color: #c5221f; font-size: 13px }
+/* очистка — строкой под шапкой, неброско */
+.cl { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 12px; color: var(--hint) } .cl > span { margin-right: auto }
+.cl select { padding: 3px 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
+.cl button { padding: 4px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); color: var(--red-d, #c5221f); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer } .cl button:hover { background: var(--surface) }
 /* журнал: тонкие линии, строка на высоту кружка */
 .vz { width: 100%; border-collapse: collapse; font-size: 13px }
 .vz td { padding: 4px 10px; height: 36px; box-sizing: border-box; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap }

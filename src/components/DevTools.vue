@@ -2,7 +2,7 @@
 // Панель разработчика — как DevTools в Chrome, только у разработчика (App.vue: auth.isDev). Открыть: жучок в углу или Ctrl + `.
 // Пристыкована справа (на узком экране — снизу); край тянется мышкой, приложение при этом сужается, а не перекрывается:
 // #app на время панели становится своим «окном» (position: fixed + transform — фиксированные элементы приложения живут внутри него).
-// Вкладки: Консоль сервера, Нагрузка на базу, Сервер, Заходы (журнал: кто, когда, с чего) и Активность (учёт по людям, 19.11.2026; вкладку «Сеть» убрали 18.11.2026 — дубль Network в Chrome DevTools). Ширина, высота, вкладка — запоминаются.
+// Вкладки: Консоль сервера, Нагрузка на базу, Сервер, Логи (журнал заходов: кто, когда, с чего) и Активность (учёт по людям, 19.11.2026; вкладку «Сеть» убрали 18.11.2026 — дубль Network в Chrome DevTools). Ширина, высота, вкладка — запоминаются.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { devtools } from '../composables/useNetLog'
 import DevConsole from './DevConsole.vue'
@@ -56,7 +56,7 @@ const onKey = (e) => { if ((e.ctrlKey || e.metaKey) && e.code === 'Backquote') {
 onMounted(() => { clamp(); dock(); addEventListener('resize', onResize); addEventListener('keydown', onKey); addEventListener('pointerdown', onDownCapture, true) })
 onBeforeUnmount(() => { st.open && document.getElementById('app')?.classList.remove('dt-docked', 'dt-docked-b'); removeEventListener('resize', onResize); removeEventListener('keydown', onKey); removeEventListener('pointerdown', onDownCapture, true) })
 
-const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['server', 'Сервер'], ['visits', 'Заходы'], ['activity', 'Активность']]
+const TABS = [['console', 'Консоль'], ['usage', 'Нагрузка'], ['server', 'Сервер'], ['visits', 'Логи'], ['activity', 'Активность']]
 
 </script>
 

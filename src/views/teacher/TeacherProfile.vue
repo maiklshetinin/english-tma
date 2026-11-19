@@ -176,7 +176,7 @@ async function ping() {
             <div class="lgc">
               <span>Очистить логи</span>
               <select v-model.number="cleanDays" class="sel" aria-label="Что очистить"><option v-for="[d, t] in CLEAN_OPTS" :key="d" :value="d">{{ t }}</option></select>
-              <button type="button" class="lgb" @click="cleanLogs('visits')">заходы</button>
+              <button type="button" class="lgb" @click="cleanLogs('visits')">логи заходов</button>
               <button type="button" class="lgb" @click="cleanLogs('activity')">учёт</button>
             </div>
           </div>
