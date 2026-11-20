@@ -1,7 +1,7 @@
 // @ts-nocheck — поддельный fetch
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../firebase', () => ({ apiRequest: async () => ({ ok: false, json: async () => ({}) }) }))
-import { stepJson, applyStepJson, type Step } from '../../utils/lesson'
+import { stepJson, applyStepJson, stepsFromJson, type Step } from '../../utils/lesson'
 import { SYSTEM, PASS, DEF, kpCfg, kpFields, fill } from './defaults'
 import { checkDirect, setPick } from '../../utils/kpcheck'
 import { ai } from '../../utils/gemini'
@@ -50,5 +50,13 @@ describe('«Ответ по смыслу»: настройки проверки 
     expect(body.systemInstruction.parts[0].text).toBe(SYSTEM + ' Tylko JSON.')
     expect(body.generationConfig.temperature).toBe(0.3)
     expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'minimal' })
+  })
+
+  it('JSON домашки (tools/kp-json.py): "engine": "api", "model": "live" в корне — все экраны сразу Gemini API · Live; без них — мост', () => {
+    const qs = [{ id: 1, star: true, question: 'Q1', reference: 'A1' }, { id: 2, question: 'Q2', reference: 'A2', model: 'auto' }]
+    const live = stepsFromJson(JSON.stringify({ pass_threshold: 60, engine: 'api', model: 'live', questions: qs }))!.steps
+    expect(live.map((x) => [x.engine, x.model, x.pass])).toEqual([['api', 'live', undefined], ['api', undefined, undefined]])          // у вопроса своя модель: auto — умолчание
+    const bridge = stepsFromJson(JSON.stringify({ pass_threshold: 60, questions: qs }))!.steps
+    expect(bridge.map((x) => [x.engine, x.model])).toEqual([[undefined, undefined], [undefined, undefined]])
   })
 })

@@ -537,10 +537,12 @@ export function stepsFromJson(text: string): { steps: Step[]; bad: number } | nu
   // промпт и порог из api_config / pass_threshold — каждому экрану (можно потом поправить в JSON экрана)
   // 19.11.2026: оформление из домашки — reference_html (оранжевые термины, жирный, курсив, списки) → разметка эталона; star — красная звезда, id — номер
   if (Array.isArray(v?.questions)) {
-    const pr = str(v.api_config?.system_prompt), pass = v.pass_threshold
+    // 20.11.2026: engine / model в корне (или у вопроса) — экраны сразу «· Gemini API» (tools/kp-json.py → json/gemini-live/: "engine": "api", "model": "live")
+    const pr = str(v.api_config?.system_prompt), pass = v.pass_threshold, eng = v.engine, mdl = v.model
     v = v.questions.filter((q: any) => str(q?.question)).map((q: any) => {
       const ideal = str(q.reference_html) ? kpFromHtml(q.reference_html) : str(q.reference)
-      return { kind: 'kp', text: q.question, ...(ideal ? { ideal } : {}), ...(q.star === true ? { star: true } : {}), ...(Number.isInteger(q.id) ? { n: q.id } : {}), ...(pr ? { prompt: pr } : {}), ...(pass != null ? { pass } : {}) }
+      const engine = q.engine ?? eng, model = q.model ?? mdl
+      return { kind: 'kp', text: q.question, ...(ideal ? { ideal } : {}), ...(q.star === true ? { star: true } : {}), ...(Number.isInteger(q.id) ? { n: q.id } : {}), ...(pr ? { prompt: pr } : {}), ...(pass != null ? { pass } : {}), ...(engine != null ? { engine } : {}), ...(model != null ? { model } : {}) }
     })
   }
   const list = Array.isArray(v) ? v : Array.isArray(v?.steps) ? v.steps : v?.kind ? [v] : null
