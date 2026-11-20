@@ -5,7 +5,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import AudioPill from './AudioPill.vue'
 import { VOICES, getVoice, setVoice, speak } from '../utils/tts'
-import { ai } from '../utils/gemini'
+import { ai, addKey, removeKey, moveKey, mask, countToday } from '../utils/gemini'
 import { aiIcon } from '../utils/ai'
 
 const props = defineProps({ text: { type: String, default: '' }, what: { type: String, default: 'вопрос' } })
@@ -19,6 +19,20 @@ const took = ref('')
 const icon = aiIcon('Gemini')
 const noKeys = computed(() => !ai.keys.length)
 
+const GROUPS = [['Женские', VOICES.filter(v => v[1] === 'женский')], ['Мужские', VOICES.filter(v => v[1] === 'мужской')]]
+// ключи — та же таблица, что в профиле: какой сейчас пробуется, квота, запросы за сегодня; можно добавить, поднять, убрать
+const fresh = ref(''), adding = ref(false)
+const hm = (t) => new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+const rows = computed(() => ai.keys.map((x) => {
+  const m = mask(x.key), cur = st.value === 'busy' && step.value?.key === m, wait = x.until > now.value
+  return { key: x.key, m, n: countToday(x), err: x.err, cur,
+    st: cur ? 'cur' : wait ? 'wait' : x.ok === true ? 'ok' : x.ok === false ? 'bad' : 'new',
+    label: cur ? `озвучивает · ${sec.value} с` : wait ? `квота до ${hm(x.until)}` : x.ok === true ? 'работает' : x.ok === false ? 'ошибка' : 'не проверен' }
+}))
+function addK() { if (addKey(fresh.value)) { fresh.value = ''; adding.value = false } }
+let clock = 0
+onMounted(() => { now.value = Date.now(); clock = setInterval(() => { if (st.value !== 'busy') now.value = Date.now() }, 30_000) })
+onBeforeUnmount(() => clearInterval(clock))
 function pickVoice(v) { voice.value = v; setVoice(v) }
 async function go() {
   if (st.value === 'busy' || !txt.value.trim()) return
@@ -59,18 +73,30 @@ const dur = computed(() => (res.value ? res.value.sec.toFixed(1).replace('.', ',
         <label class="lb" for="tts-t">Текст</label>
         <textarea id="tts-t" v-model="txt" rows="3" :readonly="st === 'busy'" spellcheck="false" />
 
-        <div class="lb">Голос</div>
-        <div class="vs">
-          <button v-for="v in VOICES" :key="v[0]" type="button" class="v" :class="{ on: voice === v[0] }" :disabled="st === 'busy'" @click="pickVoice(v[0])">
-            <b>{{ v[0] }}</b><small>{{ v[1] === 'женский' ? '♀' : '♂' }} {{ v[2] }}</small>
-          </button>
+        <div class="vg2">
+          <div v-for="[g, list] in GROUPS" :key="g" class="vgrp">
+            <div class="lb">{{ g }}</div>
+            <div class="vs">
+              <button v-for="v in list" :key="v[0]" type="button" class="v" :class="{ on: voice === v[0] }" :disabled="st === 'busy'" @click="pickVoice(v[0])"><b>{{ v[0] }}</b><small>{{ v[2] }}</small></button>
+            </div>
+          </div>
         </div>
 
-        <div v-if="noKeys" class="msg bad">Нет ключей Gemini. Добавьте ключ в профиле — раздел «Ключи Gemini», и вернитесь сюда.</div>
+        <div class="kh"><span class="lb">Ключи Gemini</span><small>пробуются сверху вниз · кончилась квота — следующий</small><span class="sp" /><button type="button" class="lnk" @click="adding = !adding">{{ adding ? 'Отмена' : '＋ Ключ' }}</button></div>
+        <form v-if="adding" class="kadd" @submit.prevent="addK"><input v-model="fresh" placeholder="AIzaSy…" autocomplete="off" spellcheck="false" aria-label="Новый ключ" /><button type="submit" class="ghost sm" :disabled="!fresh.trim()">Добавить</button><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Получить ключ</a></form>
+        <div v-if="rows.length" class="kt" role="table" aria-label="Ключи Gemini">
+          <div class="kr kth" role="row"><span /><span>Ключ</span><span>Статус</span><span class="num">Сегодня</span><span /></div>
+          <div v-for="(r, i) in rows" :key="r.key" class="kr" :class="r.st" role="row" :title="r.err || ''">
+            <i class="dot" /><span class="mono">{{ r.m }}</span><span class="stt">{{ r.label }}</span><span class="num">{{ r.n }}</span>
+            <span class="act"><button type="button" title="Выше" :disabled="i === 0 || st === 'busy'" @click="moveKey(r.key, -1)">↑</button><button type="button" title="Ниже" :disabled="i === rows.length - 1 || st === 'busy'" @click="moveKey(r.key, 1)">↓</button><button type="button" title="Удалить ключ" :disabled="st === 'busy'" @click="removeKey(r.key)">✕</button></span>
+          </div>
+        </div>
+
+        <div v-if="noKeys" class="msg bad">Нет ключей Gemini — добавьте ключ кнопкой «＋ Ключ».</div>
 
         <div v-if="st === 'busy'" class="prog">
           <span class="spin" /><div><b>Gemini озвучивает… {{ sec }} с</b>
-            <small v-if="step">ключ {{ step.key }}<template v-if="step.n > 1"> · {{ step.i + 1 }} из {{ step.n }}</template></small></div>
+            <small v-if="step">ключ {{ step.key }}<template v-if="step.n > 1"> · попытка {{ step.i + 1 }} из {{ step.n }}</template></small></div>
           <button type="button" class="ghost" @click="stop">Остановить</button>
           <i class="bar" />
         </div>
@@ -92,7 +118,7 @@ const dur = computed(() => (res.value ? res.value.sec.toFixed(1).replace('.', ',
 
 <style scoped>
 .tts-bg { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 16px; background: rgba(10, 14, 20, .5); backdrop-filter: blur(2px) }
-.tts { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; padding: 18px 20px 16px; border-radius: 18px; background: var(--card, #fff); color: var(--text, #1a1a1a); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); font-family: var(--font, system-ui) }
+.tts { width: min(680px, 100%); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; padding: 18px 20px 16px; border-radius: 18px; background: var(--card, #fff); color: var(--text, #1a1a1a); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); font-family: var(--font, system-ui) }
 header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px }
 header img { width: 22px; height: 22px }
 header b { flex: 1; font-size: 17px }
@@ -101,11 +127,35 @@ header b { flex: 1; font-size: 17px }
 .lb { display: block; margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--hint, #777); text-transform: uppercase; letter-spacing: .04em }
 textarea { width: 100%; box-sizing: border-box; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--border, #e3e3e3); border-radius: 12px; background: var(--bg, #fff); color: inherit; font: inherit; font-size: 15px; line-height: 1.45; resize: vertical }
 textarea:focus { outline: none; border-color: #4b8df8; box-shadow: 0 0 0 3px rgba(75, 141, 248, .18) }
-.vs { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; margin-bottom: 14px }
-.v { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border: 1.5px solid var(--border, #e3e3e3); border-radius: 10px; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left }
-.v b { font-size: 13px } .v small { font-size: 11px; color: var(--hint, #888) }
+.vg2 { display: grid; grid-template-columns: 4fr 6fr; gap: 16px; margin-bottom: 16px }
+.vs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px }
+.vgrp:last-child .vs { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+.v { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; padding: 6px 9px; border: 1px solid var(--border, #e3e3e3); border-radius: 9px; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left }
+.v b { font-size: 13px } .v small { font-size: 11px; color: var(--hint, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100% }
 .v:hover:not(:disabled) { border-color: #9bbcf5 }
-.v.on { border-color: #4b8df8; background: rgba(75, 141, 248, .1) }
+.v.on { border-color: #4b8df8; box-shadow: inset 0 0 0 1px #4b8df8; background: rgba(75, 141, 248, .08) }
+.kh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px } .kh .lb { margin: 0 } .kh small { font-size: 11px; color: var(--hint, #999) } .sp { flex: 1 }
+.lnk { border: 0; background: none; padding: 0; color: #2f6fe0; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer }
+.kadd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
+.kadd input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--border, #e3e3e3); border-radius: 8px; background: var(--bg, #fff); color: inherit; font: 12px ui-monospace, Menlo, Consolas, monospace }
+.kadd a { font-size: 12px; color: #2f6fe0; white-space: nowrap }
+.kt { border: 1px solid var(--border, #e6e6e6); border-radius: 10px; overflow: hidden; margin-bottom: 14px; font-size: 12.5px }
+.kr { display: grid; grid-template-columns: 22px minmax(0, 1.2fr) minmax(0, 1.5fr) 56px 76px; align-items: center; height: 32px; padding: 0 6px 0 4px; border-top: 1px solid var(--border, #eee) }
+.kr:first-child { border-top: 0 }
+.kth { height: 26px; background: var(--surface, #f7f7f7); font-size: 10.5px; font-weight: 700; color: var(--hint, #8a8a8a); text-transform: uppercase; letter-spacing: .04em }
+.num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 10px }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.stt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums }
+.dot { justify-self: center; width: 7px; height: 7px; border-radius: 50%; background: #c4c4c4 }
+.kr.ok .dot { background: #2fa36b } .kr.ok .stt { color: #1f8a4c }
+.kr.bad .dot, .kr.wait .dot { background: #e05b5b } .kr.bad .stt, .kr.wait .stt { color: #c53030 }
+.kr.cur { background: rgba(75, 141, 248, .09) } .kr.cur .stt, .kr.cur .mono { color: #2f6fe0 }
+.kr.cur .dot { width: 9px; height: 9px; background: none; border: 2px solid #4b8df8; border-right-color: transparent; animation: s .7s linear infinite; box-sizing: border-box }
+.act { display: flex; justify-content: flex-end; gap: 2px; opacity: .35; transition: opacity .15s } .kr:hover .act { opacity: 1 }
+.act button { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: inherit; font-size: 12px; cursor: pointer }
+.act button:hover:not(:disabled) { background: var(--surface, #f0f0f0) } .act button:disabled { opacity: .3; cursor: default }
+.ghost.sm { height: 32px; padding: 0 12px; font-size: 13px }
+@media (max-width: 560px) { .vg2 { grid-template-columns: 1fr } .kr { grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.2fr) 40px 70px } .kh small { display: none } }
 .prog { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: rgba(75, 141, 248, .1); overflow: hidden; margin-bottom: 12px }
 .prog > div { flex: 1; display: flex; flex-direction: column } .prog small { color: var(--hint, #777); font-size: 12px }
 .prog b { font-variant-numeric: tabular-nums }

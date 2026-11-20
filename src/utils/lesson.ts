@@ -30,7 +30,7 @@ export interface Step {
                                      // «Собери фразу»: фраза (слова через пробел), перевод — в tr, пояснение
   text?: string                                                      // «Подсказка»: текст правила; фразы с переводом и звуком — в opts; «Ответь на вопрос»: вопрос
   ideal?: string                                                     // «Ответ по смыслу»: эталон; оформление как в домашке: **жирный**, ==оранжевый термин==, _курсив_, «• » — пункт (чату уходит без разметки)
-  star?: boolean; n?: number                                         // «Ответ по смыслу»: красная звезда (знать обязательно) и номер вопроса, как в домашке
+  star?: boolean; n?: number; autoplay?: boolean                                         // «Ответ по смыслу»: красная звезда (знать обязательно) и номер вопроса, как в домашке
   look?: 'lines' | 'cards'; plain?: boolean                          // «Ответ по смыслу»: вид (нет — как PDF), эталон без выделений
   prompt?: string; pass?: number                                     // «Ответ по смыслу»: свой промпт для чата и порог зачёта, % (нет — общие, utils/ai.js)
   min?: number                                                       // сколько минут примерно уходит на экран (нет — по типу экрана, KIND_MIN)
@@ -454,6 +454,7 @@ function stepFrom(o: any): Step | null {
   if (o.kind === 'kp' && Number.isInteger(o.n) && o.n > 0 && o.n < 100) s.n = o.n
   if (o.kind === 'kp' && (o.look === 'lines' || o.look === 'cards')) s.look = o.look
   if (o.kind === 'kp' && o.plain === true) s.plain = true
+  if (o.kind === 'kp' && o.autoplay === true) s.autoplay = true
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
       .map((x: any) => ({ w: x.w.trim(), ...(tileHex(x.k) ? { k: tileHex(x.k) } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))

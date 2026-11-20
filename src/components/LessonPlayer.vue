@@ -76,10 +76,10 @@ function setup() {
 }
 const full = (s) => (s.pairs ?? []).filter(p => p.a?.trim() && p.b?.trim())
 
-// звук вопроса / нового слова — сразу при показе экрана (если браузер разрешит)
+// звук вопроса / нового слова — сразу при показе экрана (если браузер разрешит); «Ответ по смыслу» — только с галочкой «Автозвук» (20.11.2026)
 function autoplay() {
   au?.pause(); au = null
-  const s = step.value, a = s?.kind === 'choice' ? (s.ask === 'audio' ? qAudio(s) : '') : ['intro', 'order', 'gap', 'speak'].includes(s?.kind) ? s.audio : ''
+  const s = step.value, a = s?.kind === 'choice' ? (s.ask === 'audio' ? qAudio(s) : '') : ['intro', 'order', 'gap', 'speak'].includes(s?.kind) ? s.audio : s?.kind === 'kp' && s.autoplay ? s.audio : ''
   if (!a || s.video) return
   au = new Audio(src(a, 'audio')); au.play().catch(() => {})
 }

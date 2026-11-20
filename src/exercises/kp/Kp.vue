@@ -81,6 +81,7 @@ function playQ() {
   qAu.play().catch(() => {})
 }
 onBeforeUnmount(() => qAu?.pause())
+function toggleAuto() { if (props.step.autoplay) delete props.step.autoplay; else props.step.autoplay = true; ed.changed() }
 function toggleStar() { if (props.step.star) delete props.step.star; else props.step.star = true; ed.changed() }
 
 const r = computed(() => p.st.ai)                          // { score, missed, feedback } или { error }
@@ -96,7 +97,7 @@ const tick = computed(() => [pt(pass.value / 100, 40), pt(pass.value / 100, 56)]
 
 // «JSON» в правке: экран текстом (как присылает Gemini) — поправили и «Применить»; промпт и порог по умолчанию не сохраняются
 const jsOpen = ref(false), js = ref(''), jsErr = ref('')
-const asJson = () => JSON.stringify({ id: props.step.n ?? null, star: !!props.step.star, look: look.value, marks: !props.step.plain, question: props.step.text ?? '', reference: props.step.ideal ?? '', pass_threshold: pass.value, system_prompt: props.step.prompt || SYSTEM }, null, 2)
+const asJson = () => JSON.stringify({ id: props.step.n ?? null, star: !!props.step.star, autoplay: !!props.step.autoplay, look: look.value, marks: !props.step.plain, question: props.step.text ?? '', reference: props.step.ideal ?? '', pass_threshold: pass.value, system_prompt: props.step.prompt || SYSTEM }, null, 2)
 function jsToggle() { jsOpen.value = !jsOpen.value; if (jsOpen.value) { js.value = asJson(); jsErr.value = '' } }
 function jsApply() {
   let o; try { o = JSON.parse(js.value) } catch { jsErr.value = 'Не JSON — проверьте кавычки и запятые'; return }
@@ -106,6 +107,7 @@ function jsApply() {
   if (typeof o.question === 'string') s.text = o.question
   if (typeof o.reference === 'string') s.ideal = o.reference
   if (o.star === true) s.star = true; else if (o.star === false) delete s.star
+  if (o.autoplay === true) s.autoplay = true; else if (o.autoplay === false) delete s.autoplay
   if (o.look === 'lines' || o.look === 'cards') s.look = o.look; else if (o.look === 'pdf') delete s.look
   if (o.marks === false) s.plain = true; else if (o.marks === true) delete s.plain
   if (Number.isInteger(o.id) && o.id > 0 && o.id < 100) s.n = o.id; else if (o.id === null) delete s.n
@@ -134,7 +136,7 @@ function jsApply() {
         </template>
         <TtsDialog v-if="tts" :text="ttsText" what="вопрос" @close="tts = false" @save="ttsSave" />
       </div>
-      <div class="kg" :class="checked && tier">
+      <div v-if="!p.edit" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
         <svg viewBox="0 0 120 66" role="img" :aria-label="checked ? `Совпадение по смыслу ${r.score} %` : 'Ещё не проверено'">
           <path d="M12 60 A48 48 0 0 1 108 60" class="tr" />
           <path v-if="checked && r.score > 0" :d="arc" class="fl" />
@@ -181,6 +183,7 @@ function jsApply() {
     <span class="kjw">
       <ExTool title="Вид экрана: PDF (как в домашке) → линии → подложки" @click="nextLook">Вид: {{ LOOKS[look] }}</ExTool>
       <ExTool :on="!step.plain" title="Выделения в эталоне: оранжевые термины, жирный, курсив — включить / выключить" @click="toggleMarks">Выделения{{ step.plain ? ' выкл' : ' ✓' }}</ExTool>
+      <ExTool :on="!!step.autoplay" title="Звук вопроса сам играет, когда ученик открывает экран (если вопрос озвучен)" @click="toggleAuto">Автозвук{{ step.autoplay ? ' ✓' : ' выкл' }}</ExTool>
       <ExTool :on="jsOpen" title="Экран текстом: вопрос, эталон, порог и промпт для Gemini" @click="jsToggle">JSON{{ step.prompt || step.pass ? ' ✓' : '' }}</ExTool>
       <span v-if="jsOpen" class="kj" @pointerdown.stop @keydown.stop>
         <small>Этот экран: вопрос, эталон, порог зачёта и промпт для Gemini{{ step.prompt ? ' (свой)' : ' (общий)' }}</small>
