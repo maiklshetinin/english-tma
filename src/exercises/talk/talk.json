@@ -1,0 +1,18 @@
+{
+  "kind": "talk",
+  "title": "Разговор с Gemini",
+  "head": "Поговорите с Gemini голосом",
+  "templates": ["talk"],
+  "fields": {
+    "head": { "type": "text", "label": "Задание" },
+    "text": { "type": "text", "label": "Что ученик делает в разговоре" },
+    "prompt": { "type": "text", "label": "Роль Gemini — видит только ИИ" }
+  },
+  "check": "none",
+  "next": "живой голосовой разговор через Live API ключами преподавателя (браузер); «Продолжить» — сразу, без оценки",
+  "words": [],
+  "skills": { "talk": ["S", "L"] },
+  "min": 5,
+  "shuffle": false,
+  "limits": {}
+}

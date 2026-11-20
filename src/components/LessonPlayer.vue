@@ -69,7 +69,7 @@ function setup() {
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = keep ? idx : shuffle(idx) }
   if (s.kind === 'sort' && s.tw) st.tw = twLayout(s).cols.map(c => Array(c.need).fill(''))          // «Заполни таблицу»: что ученик вписал, по колонкам
   if (s.kind === 'odd' || s.kind === 'sort') { const idx = (s.kind === 'odd' ? s.opts : s.items ?? []).map((_, k) => k); st.order = keep || s.mix === false ? idx : shuffle(idx) }
-  if (s.kind === 'intro' || s.kind === 'tip') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
+  if (s.kind === 'intro' || s.kind === 'tip' || s.kind === 'talk') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
   if (s.kind === 'answer' && s.bk && s.bs === 'page') st.mode = 'write'          // Т4 «Answer the questions about you» — сразу пишем, как в книге
   if (s.kind === 'speak' && props.track) emit('answer', { step: s, ok: null })          // «Повтори» — без оценки, но «Продолжить» — только когда ученик правда что-то сказал (17.11.2026: молчание засчитывалось)          // без оценки — только «встречалось»
   if (!props.single && !props.embedded) autoplay()

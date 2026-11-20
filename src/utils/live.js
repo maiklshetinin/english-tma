@@ -1,0 +1,109 @@
+// Живой разговор с Gemini (Live API, 20.11.2026) — для упражнения «Разговор с Gemini» (exercises/talk).
+// WebSocket прямо из браузера, ключ — из профиля (utils/gemini.js), как у озвучки; у Live-моделей на бесплатном уровне
+// запросы в минуту и в сутки не ограничены (AI Studio → Rate limit), ограничены токены в минуту.
+// Микрофон → PCM 16 бит 16 кГц кусками по 100 мс (realtimeInput.audio); ответ — PCM 24 кГц кусками (serverContent.modelTurn),
+// играет очередью; перебили (serverContent.interrupted) — очередь глушится. Расшифровка обеих сторон — inputTranscription / outputTranscription.
+import { ai } from './gemini'
+const API = 'https://generativelanguage.googleapis.com/v1beta/models'
+const WS = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key='
+const LK = 'tma.live.models'
+const rd = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d } catch { return d } }
+const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* приватный режим */ } }
+const ver = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) ?? [])[1] ?? '0')
+
+/** Live-модели ключа (умеют bidiGenerateContent): новее — выше, «думающие» — ниже. Кэш на сутки */
+export async function liveModels(key, fetcher = fetch) {
+  const c = rd(LK, { at: 0, list: [] })
+  if (c.list.length && Date.now() - c.at < 864e5) return c.list
+  try {
+    const r = await fetcher(API + '?pageSize=1000', { headers: { 'x-goog-api-key': key } })
+    if (!r.ok) return c.list
+    const list = (JSON.parse(await r.text()).models ?? []).filter((m) => (m.supportedGenerationMethods ?? []).includes('bidiGenerateContent'))
+      .map((m) => String(m.name).replace(/^models\//, '')).filter((n) => !/translate|transcribe/i.test(n))
+      .sort((a, b) => (/think/i.test(a) ? 1 : 0) - (/think/i.test(b) ? 1 : 0) || ver(b) - ver(a) || a.length - b.length)
+    if (list.length) wr(LK, { at: Date.now(), list })
+    return list.length ? list : c.list
+  } catch { return c.list }
+}
+export const liveName = (m) => String(m).replace(/^gemini-/, 'Gemini ').replace(/-/g, ' ').replace(/\b(flash|live|native|audio|preview|dialog|lite)\b/g, (x) => x[0].toUpperCase() + x.slice(1))
+
+const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s) }
+const unb64 = (s) => { const t = atob(s), u = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i); return u }
+// обработчик микрофона: копит 100 мс и отдаёт в основной поток (AudioWorklet из строки — без отдельного файла)
+const WORKLET = `class Mic extends AudioWorkletProcessor { constructor() { super(); this.b = new Float32Array(1600); this.n = 0 }
+  process(i) { const c = i[0] && i[0][0]; if (c) for (let k = 0; k < c.length; k++) { this.b[this.n++] = c[k]; if (this.n === 1600) { this.port.postMessage(this.b.slice()); this.n = 0 } } return true } }
+registerProcessor('tma-mic', Mic)`
+
+/** Начать разговор. on: { state(s, info), text(role: 'me'|'ai', chunk), turn(), level(0..1) }.
+ *  state: connecting → live → ended | error. → { stop(), mute(bool) } */
+export function startTalk({ key, model, system, voice, opener, on = {} }) {
+  let ws = null, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
+  const playing = new Set()
+  const say = (s, info) => { if (!done || s === 'ended' || s === 'error') on.state?.(s, info) }
+  function stop(reason = '') {
+    if (done) return; done = true
+    try { ws?.close() } catch { /* уже закрыт */ }
+    mic?.getTracks().forEach((t) => t.stop()); node?.disconnect(); src?.disconnect()
+    playing.forEach((s) => { try { s.stop() } catch { /* */ } }); playing.clear()
+    ctxIn?.close().catch(() => {}); ctxOut?.close().catch(() => {})
+    on.state?.(reason ? 'error' : 'ended', reason)
+  }
+  function play(bytes, rate) {
+    if (!ctxOut) return
+    const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length >> 1), f = new Float32Array(pcm.length)
+    for (let i = 0; i < pcm.length; i++) f[i] = pcm[i] / 32768
+    const buf = ctxOut.createBuffer(1, f.length, rate); buf.copyToChannel(f, 0)
+    const s = ctxOut.createBufferSource(); s.buffer = buf; s.connect(ctxOut.destination)
+    const at = Math.max(ctxOut.currentTime + 0.03, nextAt); s.start(at); nextAt = at + buf.duration
+    playing.add(s); s.onended = () => playing.delete(s)
+  }
+  function hush() { playing.forEach((s) => { try { s.stop() } catch { /* */ } }); playing.clear(); nextAt = 0 }
+  async function startMic() {
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
+    ctxIn = new AudioContext({ sampleRate: 16000 })
+    await ctxIn.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })))
+    src = ctxIn.createMediaStreamSource(mic); node = new AudioWorkletNode(ctxIn, 'tma-mic'); src.connect(node)
+    node.port.onmessage = (e) => {
+      if (done || ws?.readyState !== 1) return
+      const f = e.data; let sum = 0; const pcm = new Int16Array(f.length)
+      for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = muted ? 0 : v * 32767 }
+      on.level?.(muted ? 0 : Math.min(1, Math.sqrt(sum / f.length) * 4))
+      ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64(new Uint8Array(pcm.buffer)), mimeType: 'audio/pcm;rate=16000' } } }))
+    }
+  }
+  say('connecting')
+  ctxOut = new AudioContext({ sampleRate: 24000 })
+  ws = new WebSocket(WS + encodeURIComponent(key))
+  ws.onopen = () => ws.send(JSON.stringify({ setup: {
+    model: 'models/' + model,
+    generationConfig: { responseModalities: ['AUDIO'], ...(voice ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } : {}) },
+    systemInstruction: { parts: [{ text: system }] },
+    inputAudioTranscription: {}, outputAudioTranscription: {},
+  } }))
+  ws.onmessage = async (e) => {
+    let m; try { m = JSON.parse(typeof e.data === 'string' ? e.data : await e.data.text()) } catch { return }
+    if (m.setupComplete) {
+      try { await startMic() } catch (err) { return stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) }
+      say('live')
+      if (opener) ws.send(JSON.stringify({ realtimeInput: { text: opener } }))
+      return
+    }
+    const sc = m.serverContent
+    if (sc) {
+      if (sc.interrupted) hush()
+      for (const p of sc.modelTurn?.parts ?? []) if (p.inlineData?.data) play(unb64(p.inlineData.data), +((p.inlineData.mimeType || '').match(/rate=(\d+)/)?.[1] || 24000))
+      if (sc.inputTranscription?.text) on.text?.('me', sc.inputTranscription.text)
+      if (sc.outputTranscription?.text) on.text?.('ai', sc.outputTranscription.text)
+      if (sc.turnComplete) on.turn?.()
+    }
+    if (m.goAway) on.state?.('live', 'Google скоро закроет разговор (лимит длины сессии)')
+  }
+  ws.onerror = () => {}
+  ws.onclose = (e) => {
+    if (done) return
+    const r = e.reason || ''
+    stop(e.code === 1000 ? '' : /API key|key not valid/i.test(r) ? 'Ключ не принят Google' : /quota|exhaust|limit/i.test(r) ? 'Лимит Live-модели исчерпан — попробуйте другую модель или ключ' : /model|not found|not supported/i.test(r) ? `Модель «${model}» недоступна для разговора: ${r}` : `Соединение закрылось (${e.code})${r ? ': ' + r : ''}`)
+  }
+  return { stop: () => stop(''), mute: (v) => { muted = !!v } }
+}
+export const firstKey = () => ai.keys.find((x) => !(x.until > Date.now()))?.key ?? ai.keys[0]?.key ?? ''
