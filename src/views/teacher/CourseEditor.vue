@@ -924,17 +924,17 @@ function zoomAt(f, cx, cy) {
 }
 const zoomBtn = (f) => { const r = board.value.getBoundingClientRect(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2) }
 // Колесо и тачпад (20.11.2026, тормозило приближение — как в Figma, без Vue на каждом шаге): пока крутят, холст и точки фона
-// двигаются напрямую (live → style), Vue о новом view узнаёт один раз — через 160 мс после последнего шага. Холст в это время
+// двигаются напрямую (lv → style), Vue о новом view узнаёт один раз — через 160 мс после последнего шага. Холст в это время
 // «картинкой» (will-change, класс wheeling), рамки выделения спрятаны; события за кадр копятся и применяются разом
 // холст отдалён (меньше 50 %) — экраны и плитки на ветках эскизами: текст там всё равно не прочесть, а живых плееров — сотни
 // (по два на экран: сам экран и миниатюра на плитке). view.z меняется только после остановки колеса — переключение один раз
 const lite = computed(() => view.z < 0.5)
 const wheeling = ref(false), world = ref(null)
 let wheelT = 0, wheelRaf = 0, wheelOn = false
-const wq = { f: 1, cx: 0, cy: 0, dx: 0, dy: 0 }, live = { x: 0, y: 0, z: 1 }
+const wq = { f: 1, cx: 0, cy: 0, dx: 0, dy: 0 }, lv = { x: 0, y: 0, z: 1 }
 function paintLive() {
-  if (world.value) world.value.style.transform = `translate(${live.x}px, ${live.y}px) scale(${live.z})`
-  if (board.value) { let d = 20 * live.z; while (d < 10) d *= 4; board.value.style.backgroundSize = `${d}px ${d}px`; board.value.style.backgroundPosition = `${live.x}px ${live.y}px` }
+  if (world.value) world.value.style.transform = `translate(${lv.x}px, ${lv.y}px) scale(${lv.z})`
+  if (board.value) { let d = 20 * lv.z; while (d < 10) d *= 4; board.value.style.backgroundSize = `${d}px ${d}px`; board.value.style.backgroundPosition = `${lv.x}px ${lv.y}px` }
 }
 function onWheel(e) {
   e.preventDefault()
@@ -944,18 +944,18 @@ function onWheel(e) {
     // щелчок колёсика мыши (большой шаг) — ±15 %, как в Figma; щипок тачпада (мелкие шаги) — плавно
     wq.f *= Math.abs(dy) >= 40 ? (dy < 0 ? 1.15 : 1 / 1.15) : Math.exp(-dy * 0.01); wq.cx = e.clientX; wq.cy = e.clientY
   } else { wq.dx += dx; wq.dy += dy }
-  if (!wheelOn) { wheelOn = true; Object.assign(live, { x: view.x, y: view.y, z: view.z }); wheeling.value = true }
+  if (!wheelOn) { wheelOn = true; Object.assign(lv, { x: view.x, y: view.y, z: view.z }); wheeling.value = true }
   clearTimeout(wheelT)
-  wheelT = setTimeout(() => { cancelAnimationFrame(wheelRaf); wheelRaf = 0; flushWheel(); wheelOn = false; Object.assign(view, live); wheeling.value = false }, 160)
+  wheelT = setTimeout(() => { cancelAnimationFrame(wheelRaf); wheelRaf = 0; flushWheel(); wheelOn = false; Object.assign(view, lv); wheeling.value = false }, 160)
   if (!wheelRaf) wheelRaf = requestAnimationFrame(() => { wheelRaf = 0; flushWheel() })
 }
 onUpdated(() => { if (wheelOn) paintLive() })          // Vue перерисовал посреди прокрутки — вернуть живое положение (иначе рывок назад)
 function flushWheel() {
   if (wq.f !== 1 && board.value) {
-    const r = board.value.getBoundingClientRect(), z = Math.min(2.5, Math.max(0.15, live.z * wq.f)), k = z / live.z
-    live.x = wq.cx - r.left - (wq.cx - r.left - live.x) * k; live.y = wq.cy - r.top - (wq.cy - r.top - live.y) * k; live.z = z
+    const r = board.value.getBoundingClientRect(), z = Math.min(2.5, Math.max(0.15, lv.z * wq.f)), k = z / lv.z
+    lv.x = wq.cx - r.left - (wq.cx - r.left - lv.x) * k; lv.y = wq.cy - r.top - (wq.cy - r.top - lv.y) * k; lv.z = z
   }
-  live.x -= wq.dx; live.y -= wq.dy
+  lv.x -= wq.dx; lv.y -= wq.dy
   wq.f = 1; wq.dx = 0; wq.dy = 0
   paintLive()
 }
