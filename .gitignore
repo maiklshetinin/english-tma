@@ -5,3 +5,9 @@ dist
 .env.*
 !.env.example
 server/.env
+
+# Домашки Karta Polaka (материалы курса) и JSON из них — только локально, папки остаются (.gitkeep)
+tools/pdf/*
+!tools/pdf/.gitkeep
+tools/json/*
+!tools/json/.gitkeep

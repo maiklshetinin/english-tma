@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """PDF домашки Karta Polaka (курс Марии Кобрыни) → JSON для упражнения «Ответ по смыслу».
 
-Запуск (нужен Python 3 и пакет pymupdf: pip install pymupdf):
+Проще всего: положить PDF в tools/pdf/ и дважды щёлкнуть «Сделать JSON.bat» — готовые JSON появятся в tools/json/.
+Из терминала (нужен Python 3 и пакет pymupdf: pip install pymupdf):
+    python tools/kp-json.py                       # все PDF из tools/pdf/ → tools/json/
     python tools/kp-json.py "ДЗ 6. Пасха.pdf"
     python tools/kp-json.py "ДЗ 5. Рождество.pdf" --lesson "Урок 5. Период рождества"     # если шапка в PDF картинкой
 Рядом с PDF появится «ДЗ 6. Пасха.json» — его вставляют в редактор урока (Ctrl+V на холст или «Вставить JSON»).
@@ -20,10 +22,26 @@ except ImportError:
         sys.exit('Нужен пакет pymupdf: pip install pymupdf')
 
 ap = argparse.ArgumentParser(description='PDF домашки Karta Polaka → JSON «Ответ по смыслу»')
-ap.add_argument('pdf', help='PDF домашки')
+ap.add_argument('pdf', nargs='?', help='PDF домашки (без него — все PDF из tools/pdf/ → tools/json/)')
 ap.add_argument('-o', '--out', help='куда сохранить JSON (по умолчанию — рядом с PDF, то же имя)')
 ap.add_argument('--lesson', help='название урока, если в PDF его нет текстом: «Урок 5. Период рождества»')
 ARGS = ap.parse_args()
+
+if not ARGS.pdf:                                          # пакетный режим: папка pdf/ → папка json/, каждый файл — отдельным запуском
+    import subprocess
+    HERE = os.path.dirname(os.path.abspath(__file__))
+    IN, OUTDIR = os.path.join(HERE, 'pdf'), os.path.join(HERE, 'json')
+    os.makedirs(IN, exist_ok=True); os.makedirs(OUTDIR, exist_ok=True)
+    pdfs = sorted(f for f in os.listdir(IN) if f.lower().endswith('.pdf'))
+    if not pdfs: sys.exit(f'В папке {IN} нет PDF — положите туда домашки и запустите ещё раз')
+    ok = 0
+    for f in pdfs:
+        print(f'\n— {f}')
+        r = subprocess.run([sys.executable, os.path.abspath(__file__), os.path.join(IN, f), '-o', os.path.join(OUTDIR, os.path.splitext(f)[0] + '.json')])
+        ok += r.returncode == 0
+    print(f'\nИтого: готово {ok} из {len(pdfs)} · JSON — в {OUTDIR}')
+    sys.exit(0 if ok == len(pdfs) else 1)
+
 SRC = ARGS.pdf
 if not os.path.exists(SRC): sys.exit(f'Нет файла: {SRC}')
 OUT = ARGS.out or os.path.splitext(SRC)[0] + '.json'
