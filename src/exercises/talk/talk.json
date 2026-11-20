@@ -6,7 +6,16 @@
   "fields": {
     "head": { "type": "text", "label": "Задание" },
     "text": { "type": "text", "label": "Что ученик делает в разговоре" },
-    "prompt": { "type": "text", "label": "Роль Gemini — видит только ИИ" }
+    "prompt": { "type": "text", "label": "Роль Gemini — видит только ИИ (пусто — консул на Карту поляка)" },
+    "lang": { "type": "select", "options": ["pl-PL", "en-US", "es-ES"], "default": "pl-PL", "label": "Язык разговора (ученик может выбрать другой перед разговором)" },
+    "lock": { "type": "text", "label": "Замок языка — перед ролью (пусто — свой у каждого языка)" },
+    "opener": { "type": "text", "label": "Первая реплика модели (пусто — своя у каждого языка)" },
+    "voice": { "type": "text", "default": "Kore", "label": "Голос Gemini" },
+    "model": { "type": "text", "default": "auto", "label": "Live-модель (auto — самая свежая у ключа)" },
+    "silenceMs": { "type": "number", "default": 1200, "min": 200, "max": 5000, "label": "Пауза до «договорил», мс" },
+    "endSens": { "type": "select", "options": ["low", "high"], "default": "low", "label": "Чувствительность конца речи" },
+    "temperature": { "type": "number", "default": null, "min": 0, "max": 2, "label": "Температура (null — как у модели)" },
+    "noiseSuppression": { "type": "bool", "default": false, "label": "Шумодав браузера (режет sz, cz, ś, ć)" }
   },
   "check": "none",
   "next": "живой голосовой разговор через Live API ключами преподавателя (браузер); «Продолжить» — сразу, без оценки",

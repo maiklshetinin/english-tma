@@ -16,6 +16,8 @@
 // Файл в поле image / audio / video: https-ссылка (фото и озвучка карточек), ключ файла курса в S3 (t/…/c/…)
 // или «idb:<id>» — файл пока только в этом браузере (без сервера или до загрузки), на сервер такой не уходит.
 
+import { talkCfg, talkFields, type TalkLang, type EndSens } from '../exercises/talk/defaults'
+
 export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk' | 'stt'
 export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
 export interface SortItem { w: string; c: number; k?: string; a?: string; ex?: boolean }          // «Заполни таблицу» (tw): a — что вписать (bag → bags, варианты через /), ex — образец (зачёркнут в банке, вписан в таблицу)
@@ -37,6 +39,8 @@ export interface Step {
   head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
   tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
   bk?: string; bn?: number; bs?: 'page'                                           // из какого задания учебника (BOOK) — группа «Тест · упражнения Насти»; bn — свой номер задания, как в книге
+  lang?: TalkLang; voice?: string                                    // «Разговор с Gemini» / «Транскрипция»: язык (нет — польский); голос Live-модели (нет — Kore)
+  lock?: string; opener?: string; silenceMs?: number; endSens?: EndSens; temperature?: number; noiseSuppression?: boolean   // «Разговор с Gemini»: замок языка, первая реплика, пауза до «договорил», чувствительность конца речи, температура, шумодав (нет — умолчания, exercises/talk/defaults.ts)
   cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean; tw?: boolean; rows?: number; cs?: boolean; noEx?: boolean   // tw — «Заполни таблицу» (Настя, 18.11.2026): rows — строк, cs — с учётом регистра, noEx — без образцов; «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
 }
 
@@ -422,7 +426,10 @@ export function keepLocalFiles(incoming: Step[] | undefined, local: Step[] | und
 
 // ---------- JSON экранов (17.11.2026): скопировать экран как JSON (образец для ИИ, обмен) и собрать экраны из JSON ----------
 /** Экран → JSON для копирования: без id и без файлов «только в этом браузере» */
-export function stepJson(s: Step): Omit<Step, 'id'> { const { id: _id, ...rest } = stepsOut([s])[0]; return rest }
+export function stepJson(s: Step): Omit<Step, 'id'> {
+  const { id: _id, ...rest } = stepsOut([s])[0]
+  return s.kind === 'talk' ? { ...rest, ...talkCfg(s) } as any : rest          // «Разговор с Gemini»: всё, что уходит в Live-модель, с умолчаниями (20.11.2026); в экран сохраняются только отличия (talkFields)
+}
 /** Правка экрана его JSON-ом (кнопка «{ }» → «Править», 19.11.2026): экран s получает поля из текста, id остаётся.
  *  Файлы, ещё не загруженные на сервер (idb: / blob:), сохраняются, если в JSON то же значение. Ошибка — текст, иначе '' */
 export function applyStepJson(s: Step, text: string): string {
@@ -470,6 +477,9 @@ function stepFrom(o: any): Step | null {
   if (o.kind === 'kp' && (o.look === 'lines' || o.look === 'cards')) s.look = o.look
   if (o.kind === 'kp' && o.plain === true) s.plain = true
   if (o.kind === 'kp' && o.autoplay === true) s.autoplay = true
+  if (o.kind === 'kp' && typeof o.model === 'string' && o.model.trim()) s.model = o.model.trim()          // 20.11.2026: раньше терялась при «Править → Применить»
+  if (o.kind === 'stt' && (o.lang === 'en-US' || o.lang === 'es-ES')) s.lang = o.lang          // польский — умолчание
+  if (o.kind === 'talk') { delete s.prompt; Object.assign(s, talkFields(o)) }          // только отличия от умолчаний (exercises/talk/defaults.ts)
   if (o.kind === 'kp' && (o.engine === 'api' || o.engine === 'live')) s.engine = 'api'          // 'live' («Live (голос)») убран 20.11.2026 — такие экраны идут как «Gemini API»
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))

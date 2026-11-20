@@ -38,7 +38,9 @@ registerProcessor('tma-mic', Mic)`
  *  state: connecting → live → ended | error. → { stop(), mute(bool) } */
 /** tools — объявления функций (Live вызывает их молча, ответ — on.tool(name, args) → объект); micLater — микрофон не сразу (listen());
  *  quiet — не проигрывать голос (расшифровка всё равно идёт). Возврат: { stop, mute, quiet(v), send(text), listen() } */
-export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
+/** silenceMs — пауза до «договорил», endSens — 'low' | 'high' (чувствительность конца речи), temperature — null: как у модели,
+ *  noiseSuppression — шумодав браузера (по умолчанию выкл.: режет sz, cz, ś, ć). Умолчания — как было до 20.11.2026 (kp, kplive) */
+export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
   let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
   const say = (s, info) => { if (!done || s === 'ended' || s === 'error') on.state?.(s, info) }
@@ -62,7 +64,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   }
   function hush() { playing.forEach((s) => { try { s.stop() } catch { /* */ } }); playing.clear(); nextAt = 0 }
   async function startMic() {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true, channelCount: 1 } })          // шумодав браузера режет sz, cz, ś, ć — польскому вредит
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: !!noiseSuppression, autoGainControl: true, channelCount: 1 } })          // шумодав браузера режет sz, cz, ś, ć — польскому вредит
     ctxIn = new AudioContext({ sampleRate: 16000 })
     await ctxIn.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })))
     src = ctxIn.createMediaStreamSource(mic); node = new AudioWorkletNode(ctxIn, 'tma-mic'); src.connect(node)
@@ -78,14 +80,14 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   say('connecting')
   ctxOut = new AudioContext({ sampleRate: 24000 })
   // язык закреплён (20.11.2026: польский слышала плохо — модель сама угадывала язык и с акцентом «слышала» русский):
-  // язык расшифровки и голоса — lang; пауза до «договорил» — 1,2 с (на собеседовании думают посреди фразы).
+  // язык расшифровки и голоса — lang; пауза до «договорил» — silenceMs, по умолчанию 1,2 с (на собеседовании думают посреди фразы).
   // Не приняла настройку (старая модель) — переподключаемся без неё (plain)
   const setup = () => ({ setup: {
     model: 'models/' + model,
-    generationConfig: { responseModalities: ['AUDIO'], speechConfig: { ...(voice ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } : {}), ...(lang && !plain ? { languageCode: lang } : {}) } },
+    generationConfig: { responseModalities: ['AUDIO'], ...(typeof temperature === 'number' ? { temperature } : {}), speechConfig: { ...(voice ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } : {}), ...(lang && !plain ? { languageCode: lang } : {}) } },
     systemInstruction: { parts: [{ text: system }] },
     inputAudioTranscription: lang && !plain ? { languageCodes: [lang] } : {}, outputAudioTranscription: {},
-    ...(plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_LOW', silenceDurationMs: 1200 } } }),
+    ...(plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs } } }),
     ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
   } })
   function connect() {

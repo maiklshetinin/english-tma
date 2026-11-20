@@ -3,6 +3,8 @@
 // По умолчанию — собеседование на Карту поляка: Gemini — консул, спрашивает по-польски, ученик отвечает голосом.
 // В правке: что делает ученик (text), роль Gemini (prompt — видит только ИИ), голос и модель. Ход разговора — расшифровка пузырями.
 // Без оценки: «Продолжить» доступна сразу (как у «Подсказки»).
+// Всё, что уходит в Live-модель (язык, замок языка, первая реплика, пауза, чувствительность, температура, шумодав), — в JSON экрана
+// (кнопка «{ }»), умолчания — defaults.ts (talkCfg); в экране хранятся только отличия (20.11.2026).
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
@@ -14,17 +16,15 @@ import { VOICES } from '../../utils/tts'
 import SpeechReport from '../../components/SpeechReport.vue'
 import { assessSpeech, wavOf } from '../../utils/speech'
 import J from './talk.json'
+import { LANGS, LOCK, OPENER, DEF_PROMPT, talkCfg, talkSystem } from './defaults'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
-const DEF_PROMPT = 'Jesteś konsulem RP. Prowadzisz rozmowę kwalifikacyjną na Kartę Polaka. Mówisz tylko po polsku, spokojnie i życzliwie. ' +
-  'Zadajesz po jednym pytaniu: o historię Polski, tradycje i święta, kulturę, geografię, o polskie korzenie i rodzinę rozmówcy. ' +
-  'Czekasz na odpowiedź. Jeśli odpowiedź jest niepełna — dopytaj. Jeśli rozmówca robi błąd językowy — delikatnie popraw jednym zdaniem i idź dalej. ' +
-  'Po 8–10 pytaniach podziękuj i krótko oceń rozmowę: co było dobrze, co poćwiczyć.'
-const OPENER = 'Dzień dobry. Proszę zacząć rozmowę.'
 const icon = aiIcon('Gemini')
 
 // модели и голос — в правке; модели — из ключа
-const models = ref([]), voice = computed(() => props.step.voice || 'Kore')
+const cfg = computed(() => talkCfg(props.step))          // действующие настройки: свои поля экрана поверх умолчаний
+const models = ref([]), voice = computed(() => cfg.value.voice)
+const lessonModel = computed(() => (cfg.value.model === 'auto' ? '' : cfg.value.model))          // 'auto' — самая свежая Live-модель ключа
 onMounted(async () => { const k = firstKey(); if (k) models.value = await liveModels(k) })
 // модель перед разговором (20.11.2026): в прохождении — свой выбор (запоминается в браузере), по умолчанию — из правки или самая свежая
 const PK = 'tma.live.pick'
@@ -36,15 +36,14 @@ function setVPick(v) { vpick.value = v; try { if (v) localStorage.setItem(VK, v)
 const vName = (n) => { const v = VOICES.find((x) => x[0] === n); return v ? `${v[0]} · ${v[1] === 'женский' ? '♀' : '♂'} ${v[2]}` : n }
 function setPick(v) { pick.value = v; try { if (v) localStorage.setItem(PK, v); else localStorage.removeItem(PK) } catch { /* */ } }
 const think = (m) => /think/i.test(m)
-// язык разговора: расшифровка и голос закреплены, в роль дописывается «собеседник говорит только на этом языке» —
-// иначе Live-модель сама угадывает язык и с акцентом «слышит» русский (20.11.2026)
-const LANGS = { 'pl-PL': 'Польский', 'en-US': 'Английский' }
-const lang = computed(() => (LANGS[props.step.lang] ? props.step.lang : 'pl-PL'))
-const LOCK = {
-  'pl-PL': 'WAŻNE: Rozmówca mówi wyłącznie po polsku, często z rosyjskim lub ukraińskim akcentem i z błędami — to nadal jest polski. Zawsze rozumiej jego wypowiedzi jako polskie i odpowiadaj tylko po polsku. Nie przechodź na inny język. ',
-  'en-US': 'IMPORTANT: The user speaks only English, often with a Russian accent and mistakes — it is still English. Always interpret the speech as English and answer only in English. ',
-}
-const model = computed(() => props.step.model || models.value[0] || '')
+// язык разговора: расшифровка и голос закреплены, перед ролью — «замок» (LOCK): иначе Live-модель сама угадывает язык
+// и с акцентом «слышит» русский (20.11.2026). Перед разговором ученик может выбрать другой язык (запоминается в браузере, как в «Транскрипции»)
+const base = computed(() => cfg.value.lang)
+const LGK = 'tma.talk.lang'
+const mine = ref((() => { try { return localStorage.getItem(LGK) || '' } catch { return '' } })())
+const lang = computed(() => (LANGS[mine.value] ? mine.value : base.value))
+function pickLang(v) { if (st.value === 'live' || st.value === 'connecting') return
+  mine.value = v === base.value ? '' : v; try { if (mine.value) localStorage.setItem(LGK, v); else localStorage.removeItem(LGK) } catch { /* */ } }
 function setF(k, v) { if (v) props.step[k] = v; else delete props.step[k]; ed.changed() }
 
 // разговор
@@ -62,12 +61,14 @@ async function start() {
   err.value = ''; note.value = ''; lines.value = []; resetEval()
   const key = firstKey()
   if (!key) { err.value = 'Нужен ключ Gemini — добавьте его в профиле, раздел «Ключи Gemini»'; return }
-  let m = pick.value || props.step.model
+  let m = pick.value || lessonModel.value
   if (!m) { const l = await liveModels(key); m = l[0] }
   used.value = m
   if (!m) { err.value = 'Google не дал этому ключу ни одной Live-модели'; return }
   usedV.value = vpick.value || voice.value
-  sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: LOCK[lang.value] + (props.step.prompt?.trim() || DEF_PROMPT), opener: lang.value === 'en-US' ? 'Hello. Please start the conversation.' : OPENER, rec: evalOn.value ? onRec : null, on: {
+  const c = cfg.value, l = lang.value, own = l === c.lang          // язык выбран не как в уроке — замок и первая реплика этого языка
+  sess = startTalk({ key, model: m, voice: usedV.value, lang: l, system: talkSystem({ lock: own ? c.lock : LOCK[l], prompt: c.prompt }), opener: own ? c.opener : OPENER[l],
+    silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, rec: evalOn.value ? onRec : null, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
       st.value = s === 'error' ? 'ended' : s
@@ -123,19 +124,19 @@ const hasKeys = computed(() => ai.keys.length > 0)
       <textarea class="tp" :value="step.prompt || ''" :placeholder="DEF_PROMPT" rows="6" spellcheck="false" @pointerdown.stop @keydown.stop @input="setF('prompt', $event.target.value)" />
       <div class="trow" @pointerdown.stop>
         <label>Голос <select :value="voice" @change="setF('voice', $event.target.value === 'Kore' ? '' : $event.target.value)"><option v-for="v in VOICES" :key="v[0]" :value="v[0]">{{ v[0] }} · {{ v[1] === 'женский' ? '♀' : '♂' }} {{ v[2] }}</option></select></label>
-        <label>Язык <select :value="lang" @change="setF('lang', $event.target.value === 'pl-PL' ? '' : $event.target.value)"><option v-for="(t, k) in LANGS" :key="k" :value="k">{{ t }}</option></select></label>
-        <label>Модель <select :value="step.model || ''" @change="setF('model', $event.target.value)"><option value="">авто{{ models[0] ? ' · ' + liveName(models[0]) : '' }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше' : '' }}</option></select></label>
+        <label>Язык <select :value="base" @change="setF('lang', $event.target.value === 'pl-PL' ? '' : $event.target.value)"><option v-for="(t, k) in LANGS" :key="k" :value="k">{{ t }}</option></select></label>
+        <label>Модель <select :value="lessonModel" @change="setF('model', $event.target.value)"><option value="">авто{{ models[0] ? ' · ' + liveName(models[0]) : '' }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше' : '' }}</option></select></label>
       </div>
-      <p class="tn">Речь уходит в модель сырым звуком (без распознавания браузером), язык закреплён. Разговор идёт ключами Gemini из профиля того, кто открыл урок (Live API, без лимита запросов). Лучше в наушниках.</p>
+      <p class="tn">Речь уходит в модель сырым звуком (без распознавания браузером), язык закреплён. Разговор идёт ключами Gemini из профиля того, кто открыл урок (Live API, без лимита запросов). Лучше в наушниках. Все настройки модели (замок языка, первая реплика, пауза, температура, шумодав) — в JSON экрана, кнопка «{ }».</p>
     </template>
 
     <div v-else class="tv" :class="st" @pointerdown.stop>
       <div v-if="st !== 'live' && st !== 'connecting'" class="tm">
-        <label v-if="models.length">Модель <select :value="pick" @change="setPick($event.target.value)"><option value="">{{ step.model ? liveName(step.model) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
-        <label>Голос <select :value="vpick" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice ? ' (из урока)' : '' }}</option>
+        <label v-if="models.length">Модель <select :value="pick" @change="setPick($event.target.value)"><option value="">{{ lessonModel ? liveName(lessonModel) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
+        <label>Голос <select :value="vpick" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice && step.voice !== 'Kore' ? ' (из урока)' : '' }}</option>
           <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup>
           <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup></select></label>
-        <small>язык: {{ LANGS[lang] }}</small>
+        <label>Язык <select :value="lang" @change="pickLang($event.target.value)"><option v-for="(t, k) in LANGS" :key="k" :value="k">{{ t }}{{ k === base ? ' (из урока)' : '' }}</option></select></label>
         <label class="ev"><input type="checkbox" class="sw" :checked="evalOn" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
       </div>
       <div class="tc">
