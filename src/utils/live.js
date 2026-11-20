@@ -36,8 +36,10 @@ registerProcessor('tma-mic', Mic)`
 
 /** Начать разговор. on: { state(s, info), text(role: 'me'|'ai', chunk), turn(), level(0..1) }.
  *  state: connecting → live → ended | error. → { stop(), mute(bool) } */
-export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', on = {} }) {
-  let ws = null, ready = false, plain = false, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
+/** tools — объявления функций (Live вызывает их молча, ответ — on.tool(name, args) → объект); micLater — микрофон не сразу (listen());
+ *  quiet — не проигрывать голос (расшифровка всё равно идёт). Возврат: { stop, mute, quiet(v), send(text), listen() } */
+export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
+  let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
   const say = (s, info) => { if (!done || s === 'ended' || s === 'error') on.state?.(s, info) }
   function stop(reason = '') {
@@ -49,7 +51,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', o
     on.state?.(reason ? 'error' : 'ended', reason)
   }
   function play(bytes, rate) {
-    if (!ctxOut) return
+    if (!ctxOut || hushed) return
     const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length >> 1), f = new Float32Array(pcm.length)
     for (let i = 0; i < pcm.length; i++) f[i] = pcm[i] / 32768
     const buf = ctxOut.createBuffer(1, f.length, rate); buf.copyToChannel(f, 0)
@@ -68,6 +70,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', o
       const f = e.data; let sum = 0; const pcm = new Int16Array(f.length)
       for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = muted ? 0 : v * 32767 }
       on.level?.(muted ? 0 : Math.min(1, Math.sqrt(sum / f.length) * 4))
+      if (rec && !muted && !(ctxOut && ctxOut.currentTime < nextAt + 0.2)) rec(pcm, Math.sqrt(sum / f.length))          // пока звучит Gemini (и 0,2 с после) — не пишем
       ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64(new Uint8Array(pcm.buffer)), mimeType: 'audio/pcm;rate=16000' } } }))
     }
   }
@@ -82,6 +85,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', o
     systemInstruction: { parts: [{ text: system }] },
     inputAudioTranscription: lang && !plain ? { languageCodes: [lang] } : {}, outputAudioTranscription: {},
     ...(plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_LOW', silenceDurationMs: 1200 } } }),
+    ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
   } })
   function connect() {
     ws = new WebSocket(WS + encodeURIComponent(key))
@@ -94,10 +98,14 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', o
     let m; try { m = JSON.parse(typeof e.data === 'string' ? e.data : await e.data.text()) } catch { return }
     if (m.setupComplete) {
       ready = true
-      try { await startMic() } catch (err) { return stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) }
+      if (!micLater) try { await startMic() } catch (err) { return stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) }
       say('live')
       if (opener) ws.send(JSON.stringify({ realtimeInput: { text: opener } }))
       return
+    }
+    if (m.toolCall) {          // функция (оценка и т.п.) — молча: ответ в приложение, модели — «принято»
+      const res = (m.toolCall.functionCalls ?? []).map((fc) => ({ id: fc.id, name: fc.name, response: { result: on.tool?.(fc.name, fc.args ?? {}) ?? { ok: true } } }))
+      if (res.length && ws?.readyState === 1) ws.send(JSON.stringify({ toolResponse: { functionResponses: res } }))
     }
     const sc = m.serverContent
     if (sc) {
@@ -116,7 +124,9 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', o
     stop(e.code === 1000 ? '' : /API key|key not valid/i.test(r) ? 'Ключ не принят Google' : /quota|exhaust|limit/i.test(r) ? 'Лимит Live-модели исчерпан — попробуйте другую модель или ключ' : /model|not found|not supported/i.test(r) ? `Модель «${model}» недоступна для разговора: ${r}` : `Соединение закрылось (${e.code})${r ? ': ' + r : ''}`)
   }
   connect()
-  return { stop: () => stop(''), mute: (v) => { muted = !!v } }
+  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() },
+    send: (text) => { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { text } })) },
+    listen: async () => { if (mic || done) return; try { await startMic() } catch (err) { stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) } } }
 }
 /** Расшифровка речи (20.11.2026, эксперимент): Gemini 3.5 Transcribe Live — только распознавание, без собеседника.
  *  Звук — как в разговоре (PCM 16 кГц кусками по 100 мс). Сервер шлёт interimInputTranscription — черновик, пока говорят

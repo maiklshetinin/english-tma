@@ -48,12 +48,12 @@ const prompt = (lang) => `Ты строгий, но доброжелательн
   'pronunciation_notes — до 4 замечаний по звукам/ударению (по-русски, с примерами слов). strengths — 2–3 сильные стороны, tips — 2–4 конкретных совета, summary — 1–2 предложения итога. Всё по-русски, кроме цитат и исправлений.'
 
 /** → { level, plus, confidence, intelligibility, scores, mistakes, pron, strengths, tips, summary, model, sec, ms } */
-export async function assessSpeech({ blob, sec, transcript, lang = 'pl-PL', model = '', fetcher = fetch }) {
+export async function assessSpeech({ blob, sec, transcript, context = '', lang = 'pl-PL', model = '', fetcher = fetch }) {          // context — реплики собеседника в диалоге (не оцениваются)
   if (sec < MIN_SEC) { const e = new Error(`Мало речи для оценки: ${Math.round(sec)} с — нужно хотя бы ${MIN_SEC} с связного рассказа`); e.short = true; throw e }
   if (!ai.keys.length) throw new Error('Нужен ключ Gemini в профиле')
   const t0 = Date.now(), m = getSpeechPick() || model || (await checkModels(ai.keys[0].key, fetcher))[0] || 'gemini-3.5-flash-lite'
   const body = { systemInstruction: { parts: [{ text: prompt(lang) }] },
-    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: await b64(blob) } }, { text: `Расшифровка:\n${transcript || '(пусто)'}` }] }],
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: await b64(blob) } }, { text: (context ? `Это фрагменты ДИАЛОГА: в записи — только голос ученика. Оценивай только ученика; реплики собеседника — для контекста (понимает ли ученик вопросы, отвечает ли по делу), цитаты — только из реплик ученика.\nРеплики собеседника:\n${context}\n\n` : '') + `Расшифровка речи ученика:\n${transcript || '(пусто)'}` }] }],
     generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA } }
   let last = null
   for (const x of ai.keys) {

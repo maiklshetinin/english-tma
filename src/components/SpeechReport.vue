@@ -6,31 +6,32 @@ import { ref, computed, onMounted } from 'vue'
 import { assessSpeech, wavOf, CRIT, MIN_SEC, LANG_NAME, getSpeechPick, setSpeechPick, checkName } from '../utils/speech'
 import { checkModels, limitOf } from '../utils/kpcheck'
 import { ai } from '../utils/gemini'
-const props = defineProps({ chunks: { type: Array, default: () => [] }, transcript: { type: String, default: '' }, lang: { type: String, default: 'pl-PL' } })
-const st = ref('idle'), err = ref(''), rep = ref(null), models = ref([]), pick = ref(getSpeechPick())
+const props = defineProps({ chunks: { type: Array, default: () => [] }, transcript: { type: String, default: '' }, lang: { type: String, default: 'pl-PL' }, report: { type: Object, default: null }, bare: Boolean })          // report — готовый отчёт (оценка шла в фоне); bare — без кнопки и выбора модели
+const st = ref('idle'), err = ref(''), own = ref(null), models = ref([]), pick = ref(getSpeechPick())
 const sec = computed(() => props.chunks.reduce((a, c) => a + c.length, 0) / 16000)
 onMounted(async () => { if (ai.keys[0]) models.value = await checkModels(ai.keys[0].key) })
 function setPick(v) { pick.value = v; setSpeechPick(v) }
 async function run() {
   if (st.value === 'busy') return
   st.value = 'busy'; err.value = ''
-  try { const { blob, sec: s } = wavOf(props.chunks); rep.value = await assessSpeech({ blob, sec: s, transcript: props.transcript, lang: props.lang }); st.value = 'done' }
-  catch (e) { err.value = e.message; st.value = rep.value ? 'done' : 'idle' }
+  try { const { blob, sec: s } = wavOf(props.chunks); own.value = await assessSpeech({ blob, sec: s, transcript: props.transcript, lang: props.lang }); st.value = 'done' }
+  catch (e) { err.value = e.message; st.value = own.value ? 'done' : 'idle' }
 }
+const rep = computed(() => own.value || props.report)
 const tone = (v) => (v >= 75 ? 'ok' : v >= 50 ? 'mid' : 'low')
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
 </script>
 
 <template>
   <div class="sr" @pointerdown.stop>
-    <div class="srh">
+    <div v-if="!bare" class="srh">
       <small v-if="!rep" class="hint">Для оценки разговорного уровня — говорите своими словами, не читайте текст.</small>
       <button type="button" class="srb" :disabled="st === 'busy' || !chunks.length" @click="run">{{ st === 'busy' ? 'Gemini слушает запись…' : rep ? 'Оценить ещё раз' : 'Оценить речь' }}</button>
       <select class="srm" :value="pick" title="Модель оценки — запоминается в этом браузере" :disabled="st === 'busy'" @change="setPick($event.target.value)">
         <option value="">авто{{ models[0] ? ' · ' + checkName(models[0]) : '' }}</option><option v-for="m in models" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <small>запись {{ fmt(sec) }} · {{ LANG_NAME[lang] }}<template v-if="sec < MIN_SEC"> · нужно от {{ MIN_SEC }} с</template></small>
     </div>
-    <p v-if="err" class="sre">{{ err }}</p>
+    <p v-if="err && !bare" class="sre">{{ err }}</p>
 
     <div v-if="rep" class="srr">
       <div class="srtop">

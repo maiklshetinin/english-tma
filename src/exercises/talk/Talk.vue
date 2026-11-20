@@ -11,6 +11,8 @@ import { startTalk, liveModels, liveName, firstKey } from '../../utils/live'
 import { ai } from '../../utils/gemini'
 import { aiIcon } from '../../utils/ai'
 import { VOICES } from '../../utils/tts'
+import SpeechReport from '../../components/SpeechReport.vue'
+import { assessSpeech, wavOf } from '../../utils/speech'
 import J from './talk.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -57,7 +59,7 @@ function push(role, chunk) {
 }
 async function start() {
   if (st.value === 'connecting' || st.value === 'live') return
-  err.value = ''; note.value = ''; lines.value = []
+  err.value = ''; note.value = ''; lines.value = []; resetEval()
   const key = firstKey()
   if (!key) { err.value = 'Нужен ключ Gemini — добавьте его в профиле, раздел «Ключи Gemini»'; return }
   let m = pick.value || props.step.model
@@ -65,13 +67,13 @@ async function start() {
   used.value = m
   if (!m) { err.value = 'Google не дал этому ключу ни одной Live-модели'; return }
   usedV.value = vpick.value || voice.value
-  sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: LOCK[lang.value] + (props.step.prompt?.trim() || DEF_PROMPT), opener: lang.value === 'en-US' ? 'Hello. Please start the conversation.' : OPENER, on: {
+  sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: LOCK[lang.value] + (props.step.prompt?.trim() || DEF_PROMPT), opener: lang.value === 'en-US' ? 'Hello. Please start the conversation.' : OPENER, rec: evalOn.value ? onRec : null, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
       st.value = s === 'error' ? 'ended' : s
       if (s === 'error') err.value = info
       if (s === 'live') { t0.value = now.value = Date.now(); clearInterval(clock); clock = setInterval(() => { now.value = Date.now() }, 500) }
-      if (s === 'ended' || s === 'error') { clearInterval(clock); level.value = 0; sess = null }
+      if (s === 'ended' || s === 'error') { clearInterval(clock); level.value = 0; sess = null; if (evalOn.value && speechSec.value - sentAt >= 8) sendEval(true) }          // хвост речи — последней оценкой
     },
     text: (role, t) => push(role, t),
     turn: () => { const l = lines.value.at(-1); if (l) l.closed = true },
@@ -80,6 +82,32 @@ async function start() {
   st.value = 'connecting'
 }
 function stop() { sess?.stop() }
+
+// «Оценивать речь» во время разговора (20.11.2026): копится только свой голос (пока Gemini молчит); набралось ещё 20 с речи —
+// в фоне оценка (Flash Lite, вся своя речь с начала, до последних 3 минут) — уровень уточняется; занято — следующая ждёт.
+// После «Завершить» — полный отчёт последней оценки, ничего ждать не надо
+const EK = 'tma.talk.eval', STEP = 20, MAX_SEC = 180
+const evalOn = ref((() => { try { return localStorage.getItem(EK) === '1' } catch { return false } })())
+function setEval(v) { evalOn.value = v; try { localStorage.setItem(EK, v ? '1' : '0') } catch { /* */ } }
+const recA = [], segs = ref([]), speechSec = ref(0)
+let sentAt = 0, evBusy = false
+const lastRep = computed(() => [...segs.value].reverse().find((x) => x.rep)?.rep ?? null)
+function onRec(pcm, rms) {
+  recA.push(pcm); if (rms > 0.015) speechSec.value += pcm.length / 16000
+  if (speechSec.value - sentAt >= STEP) sendEval()
+}
+async function sendEval(final = false) {
+  if (evBusy || !recA.length || (!final && speechSec.value - sentAt < STEP)) return
+  evBusy = true; sentAt = speechSec.value
+  const keep = recA.slice(-Math.round(MAX_SEC * 10)), { blob, sec: s2 } = wavOf(keep)
+  const me = lines.value.filter((l) => l.role === 'me').map((l) => l.t).join(' '), them = lines.value.filter((l) => l.role === 'ai').map((l) => l.t).join('\n')
+  const seg = { n: segs.value.length + 1, at: Math.round(speechSec.value), st: 'sent', rep: null, err: '' }
+  segs.value.push(seg); const S = segs.value.at(-1)
+  try { S.rep = await assessSpeech({ blob, sec: Math.max(s2, 20), transcript: me, context: them, lang: lang.value }); S.st = 'done' }
+  catch (e) { S.st = 'err'; S.err = e.message }
+  finally { evBusy = false; if (speechSec.value - sentAt >= STEP) sendEval() }
+}
+function resetEval() { recA.length = 0; segs.value = []; speechSec.value = 0; sentAt = 0 }
 function mute() { muted.value = !muted.value; sess?.mute(muted.value) }
 onBeforeUnmount(() => { sess?.stop(); clearInterval(clock) })
 const hasKeys = computed(() => ai.keys.length > 0)
@@ -108,6 +136,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
           <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup>
           <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup></select></label>
         <small>язык: {{ LANGS[lang] }}</small>
+        <label class="ev"><input type="checkbox" class="sw" :checked="evalOn" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
       </div>
       <div class="tc">
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ st === 'ended' ? 'Поговорить ещё раз' : 'Начать разговор' }}</button>
@@ -118,6 +147,12 @@ const hasKeys = computed(() => ai.keys.length > 0)
           <button type="button" class="sm red" @click="stop">Завершить</button>
         </template>
       </div>
+      <div v-if="evalOn && (st === 'live' || segs.length)" class="evb">
+        <div class="evh"><b v-if="lastRep" class="lv">≈ {{ lastRep.level }}{{ lastRep.plus ? '+' : '' }}</b><span v-if="lastRep">понятность {{ lastRep.intelligibility }}%</span>
+          <small>ваша речь: {{ Math.round(speechSec) }} с<template v-if="!segs.length"> · первая оценка — после {{ STEP }} с</template></small></div>
+        <div v-if="segs.length" class="evs"><span v-for="g in segs" :key="g.n" class="sg" :class="g.st" :title="g.err">#{{ g.n }} · {{ g.st === 'sent' ? 'отправлено…' : g.st === 'err' ? 'ошибка' : `${g.rep.level}${g.rep.plus ? '+' : ''} · ${g.rep.mistakes.length} ош.` }}</span></div>
+      </div>
+      <SpeechReport v-if="evalOn && st === 'ended' && lastRep" :report="lastRep" bare />
       <p v-if="!hasKeys" class="er">Нужен ключ Gemini — добавьте его в профиле, раздел «Ключи Gemini».</p>
       <p v-if="err" class="er">{{ err }}</p>
       <div v-if="lines.length" ref="box" class="tx">
@@ -137,6 +172,11 @@ const hasKeys = computed(() => ai.keys.length > 0)
 .tv { display: grid; gap: 10px }
 .tm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap } .tm label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--hint) } .tm small { font-size: 12px; color: var(--hint) }
 .tm select { max-width: 260px; height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
+.ev { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer }
+.evb { display: grid; gap: 6px; padding: 8px 12px; border-radius: 12px; background: rgba(75, 141, 248, .07) }
+.evh { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap } .evh .lv { font-size: 18px; color: #2f6fe0 } .evh span { font-size: 13px; font-weight: 700 } .evh small { font-size: 12px; color: var(--hint) }
+.evs { display: flex; flex-wrap: wrap; gap: 4px } .sg { padding: 2px 8px; border-radius: 8px; background: var(--card); font-size: 11.5px; font-weight: 700; color: var(--hint) }
+.sg.sent { color: #2f6fe0 } .sg.done { color: #1f7a4f } .sg.err { color: #b3261e }
 .tc { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 10px 12px; border-radius: 16px; background: var(--surface) }
 .go { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; height: 48px; border: 0; border-radius: 14px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer }
 .go img { width: 22px; height: 22px; background: #fff; border-radius: 6px; padding: 2px } .go:disabled { opacity: .45; cursor: not-allowed }
