@@ -17,7 +17,8 @@ import TtsDialog from '../../components/TtsDialog.vue'
 import { modelName } from '../../utils/tts'
 import { startTranscribe, sttModel, firstKey, startTalk, liveModels, liveName } from '../../utils/live'
 import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/kpcheck'
-import { kpLive } from '../../utils/kplive'
+import { kpLive, kpRec } from '../../utils/kplive'
+import SpeechReport from '../../components/SpeechReport.vue'
 import { ai } from '../../utils/gemini'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
@@ -76,7 +77,9 @@ async function dictate() {
   const key = firstKey(); dicErr.value = ''
   if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
   dic.value = 'connecting'
-  dicS = startTranscribe({ key, model: await sttModel(key), lang: 'pl-PL', on: {
+  // «Live (голос)»: запись ответа копится для проверки (kpRec); начали заново с пустым полем — запись тоже заново
+  const recArr = props.step.engine === 'live' ? (!(p.st.text || '').trim() || !kpRec[props.step.id] ? (kpRec[props.step.id] = []) : kpRec[props.step.id]) : null
+  dicS = startTranscribe({ key, model: await sttModel(key), lang: 'pl-PL', rec: recArr, on: {
     state: (s, info) => {
       if (s === 'live' && info) return
       dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s
@@ -99,6 +102,16 @@ onMounted(async () => { if (api.value && ai.keys[0]) cModels.value = await check
 function pickCheck(v) { cPick.value = v; setPick(v) }
 const cAuto = computed(() => props.step.model || cModels.value[0] || '')
 function setModelF(v) { if (v) props.step.model = v; else delete props.step.model; ed.changed() }
+
+// «Live (голос)» (20.11.2026, отдельный шаблон): Live-модель (общая с «Разговором») и «📊 Уровень языка» — в подвале, запоминаются
+const isLive = computed(() => props.step.engine === 'live')
+const lModels = ref([]), lPick = ref((() => { try { return localStorage.getItem('tma.live.pick') || '' } catch { return '' } })())
+const lLevel = ref((() => { try { return localStorage.getItem('tma.kp.level') === '1' } catch { return false } })())
+onMounted(async () => { if (isLive.value && ai.keys[0]) lModels.value = await liveModels(ai.keys[0].key) })
+function pickLive(v) { lPick.value = v; try { if (v) localStorage.setItem('tma.live.pick', v); else localStorage.removeItem('tma.live.pick') } catch { /* */ } }
+function setLevel(v) { lLevel.value = v; try { localStorage.setItem('tma.kp.level', v ? '1' : '0') } catch { /* */ } }
+const recSec = computed(() => (isLive.value && dic.value !== 'live' ? Math.round((kpRec[props.step.id]?.reduce((a, c) => a + c.length, 0) ?? 0) / 16000) : 0))
+function moreLive() { if (lv.value?.more) return lv.value.more(); lv.value?.stop?.(); discuss() }
 
 // «Обсудить голосом» (Live API): после оценки Gemini голосом разбирает ответ — что упущено, уточняющий вопрос, «попробуйте ещё раз»
 const tk = ref('idle'), tkErr = ref(''), tkLines = ref([]), tkLvl = ref(0), tkModel = ref('')
@@ -240,7 +253,7 @@ function jsApply() {
 
     <div class="kb miss" :class="look">
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
-        <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.live"> Live · {{ lv?.name || by.model }}</template><template v-else-if="by.api"> API · {{ checkName(by.model) }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
+        <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.live"> Live · {{ lv?.name || by.model }}{{ r.voice ? ' · по голосу' : r.live && isLive ? ' · по тексту' : '' }}</template><template v-else-if="by.api"> API · {{ checkName(by.model) }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
       <p v-if="checked && r.note" class="ph kno">{{ r.note }}</p>
       <p v-if="p.edit" class="ph">Пункты от Gemini — после проверки</p>
       <p v-else-if="r?.error" class="ph er">{{ r.error }}</p>
@@ -259,16 +272,22 @@ function jsApply() {
       </div>
       <p v-else class="ph">Откроется после проверки — не подглядывайте</p>
     </div>
-    <div v-if="api && checked && !p.edit && lv" class="kdis" @pointerdown.stop>
+    <div v-if="(api || isLive) && checked && !p.edit && lv" class="kdis" @pointerdown.stop>
       <div class="klv">
-        <button type="button" class="kq" :title="lv.quiet ? 'Включить голос' : 'Заглушить — только текст'" @click="lv.setQuiet(!lv.quiet)">{{ lv.quiet ? '🔇' : '🔊' }}</button>
-        <button v-if="!lv.listening && lv.state === 'live'" type="button" class="kdb" @click="lv.more()"><img v-if="gIcon" :src="gIcon" alt="" />Подробнее — разбор голосом</button>
-        <button v-if="lv.state === 'live'" type="button" class="kq x" title="Закончить разговор" @click="lv.stop()">Завершить</button>
+        <button type="button" class="kqb" :title="lv.quiet ? 'Включить голос' : 'Заглушить — только текст'" @click="lv.setQuiet(!lv.quiet)">{{ lv.quiet ? '🔇' : '🔊' }}</button>
+        <button v-if="!lv.listening && lv.state === 'live'" type="button" class="kdb" @click="moreLive"><img v-if="gIcon" :src="gIcon" alt="" />Подробнее — разбор голосом</button>
+        <button v-if="lv.state === 'live'" type="button" class="kqb x" title="Закончить разговор" @click="lv.stop()">Завершить</button>
         <small>{{ lv.name }}<template v-if="lv.listening && lv.state === 'live'"> · говорите — Gemini слушает</template><template v-if="lv.state === 'ended'"> · разговор закончен</template></small>
       </div>
       <p v-if="lv.err" class="ph er">{{ lv.err }}</p>
       <div v-if="lv.lines.length" ref="lvBox" class="ktx"><div v-for="(l, i) in lv.lines" :key="i" class="kbl" :class="l.role">{{ l.t }}</div></div>
     </div>
+    <div v-if="isLive && checked && !p.edit && (tkLines.length || tk !== 'idle' || tkErr)" class="kdis" @pointerdown.stop>
+      <div class="klv"><button v-if="tk === 'live' || tk === 'connecting'" type="button" class="kqb x" @click="discuss">Завершить разбор</button><small>{{ tk === 'live' ? liveName(tkModel) + ' · говорите — Gemini слушает' : tk === 'connecting' ? 'Подключаюсь…' : '' }}</small></div>
+      <p v-if="tkErr" class="ph er">{{ tkErr }}</p>
+      <div v-if="tkLines.length" class="ktx"><div v-for="(l, i) in tkLines" :key="i" class="kbl" :class="l.role">{{ l.t }}</div></div>
+    </div>
+    <SpeechReport v-if="isLive && checked && r.speech && !p.edit" :report="r.speech" bare />
     <div v-else-if="api && checked && !p.edit" class="kdis" @pointerdown.stop>
       <button type="button" class="kdb" :class="tk" :style="{ '--l': tkLvl }" @click="discuss">
         <img v-if="gIcon" :src="gIcon" alt="" />{{ tk === 'live' ? 'Завершить разбор' : tk === 'connecting' ? 'Подключаюсь…' : tkLines.length ? 'Обсудить ещё раз' : 'Обсудить ответ голосом' }}</button>
@@ -279,6 +298,12 @@ function jsApply() {
   </template>
   <template v-else-if="part === 'fb' && p.st.done && r">
     <small>{{ r.error ? 'Без проверки' : tierT[tier] }}</small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
+  </template>
+  <template v-else-if="part === 'fb' && !p.st.done && !p.edit && isLive">
+    <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini Live
+      <select class="kms" :value="lPick" title="Live-модель — общая с «Разговором с Gemini», запоминается" @change="pickLive($event.target.value)"><option value="">авто{{ lModels[0] ? ' · ' + liveName(lModels[0]) : '' }}</option><option v-for="m in lModels" :key="m" :value="m">{{ liveName(m) }}</option></select>
+      <label class="klev"><input type="checkbox" class="sw" :checked="lLevel" @change="setLevel($event.target.checked)" />📊 Уровень языка</label>
+      <em>{{ recSec ? `запись ответа ${recSec} с — уйдёт голосом` : 'надиктуйте с Gemini — проверка пойдёт по голосу' }}</em></span>
   </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && api">
     <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
@@ -354,8 +379,9 @@ function jsApply() {
 .kbr.api { color: #2f6fe0; flex-wrap: wrap } .kbr.api img { margin: 0 } .kbr.api em { font-style: normal; font-weight: 600; font-size: 12px; color: #3d7a00 } .kbr.api em.off { color: #b3261e }
 .kms { height: 26px; max-width: 230px; padding: 0 4px; border: 1px solid rgba(47, 111, 224, .35); border-radius: 8px; background: #fff; color: #2f6fe0; font: inherit; font-size: 12px; font-weight: 700 } .kms.ed { height: 24px; font-size: 10.5px; max-width: 200px }
 .kno { margin: 4px 0 0; font-size: 12px !important }
+.klev { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: #5a3a1c; cursor: pointer } .klev .sw { transform: scale(.75); margin: 0 -4px }
 .klv { display: flex; align-items: center; gap: 8px; flex-wrap: wrap } .klv small { font-size: 12px; color: #8a6a48 }
-.kq { height: 34px; min-width: 38px; padding: 0 10px; border: 0; border-radius: 17px; background: #f2dab5; color: #5a3a1c; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .kq.x { color: #b3261e }
+.kqb { flex: none; height: 34px; min-width: 38px; padding: 0 12px; border: 0; border-radius: 17px; background: #f2dab5; color: #5a3a1c; font-family: var(--font); font-size: 14px; font-weight: 800; line-height: 1; cursor: pointer } .kqb.x { color: #b3261e }          /* не .kq — это строка вопроса (min-height 84) */
 .kdis { display: grid; gap: 8px; margin-top: 4px }
 .kdb { --l: 0; justify-self: start; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px 0 10px; border: 0; border-radius: 19px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font-family: var(--font); font-size: 13.5px; font-weight: 800; cursor: pointer }
 .kdb img { width: 20px; height: 20px; padding: 2px; border-radius: 6px; background: #fff } .kdb.live { background: #e5484d; box-shadow: 0 0 0 calc(var(--l) * 10px) rgba(229, 72, 77, .22) } .kdb.connecting { opacity: .7 }
