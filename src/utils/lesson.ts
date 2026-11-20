@@ -16,7 +16,7 @@
 // Файл в поле image / audio / video: https-ссылка (фото и озвучка карточек), ключ файла курса в S3 (t/…/c/…)
 // или «idb:<id>» — файл пока только в этом браузере (без сервера или до загрузки), на сервер такой не уходит.
 
-import { talkCfg, talkFields, type TalkLang, type EndSens } from '../exercises/talk/defaults'
+import { talkCfg, talkFields, type EndSens } from '../exercises/talk/defaults'
 
 export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk' | 'stt'
 export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
@@ -39,7 +39,7 @@ export interface Step {
   head?: string                                                      // своё задание вверху экрана вместо стандартного (конструктор упражнений)
   tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
   bk?: string; bn?: number; bs?: 'page'                                           // из какого задания учебника (BOOK) — группа «Тест · упражнения Насти»; bn — свой номер задания, как в книге
-  lang?: TalkLang; voice?: string                                    // «Разговор с Gemini» / «Транскрипция»: язык (нет — польский); голос Live-модели (нет — Kore)
+  lang?: 'pl-PL' | 'en-US' | 'es-ES'; voice?: string                // «Транскрипция»: язык (нет — польский); «Разговор с Gemini»: голос Live-модели (нет — Kore)
   lock?: string; opener?: string; silenceMs?: number; endSens?: EndSens; temperature?: number; noiseSuppression?: boolean   // «Разговор с Gemini»: замок языка, первая реплика, пауза до «договорил», чувствительность конца речи, температура, шумодав (нет — умолчания, exercises/talk/defaults.ts)
   cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean; tw?: boolean; rows?: number; cs?: boolean; noEx?: boolean   // tw — «Заполни таблицу» (Настя, 18.11.2026): rows — строк, cs — с учётом регистра, noEx — без образцов; «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
 }
