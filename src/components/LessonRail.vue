@@ -165,7 +165,7 @@ const watchCard = (el) => { if (el && !cardEls.has(el)) { cardEls.add(el); ro3.o
 const typicalH = computed(() => { const v = Object.values(viewH).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 560 })
 const fixH = (s) => (jsonOn[s.id] ? { height: (viewH[s.id] ?? typicalH.value) + 'px' }
   : isEdit(s) ? { minHeight: (viewH[s.id] ?? typicalH.value) + 'px' }
-  : editH[s.id] ? { minHeight: editH[s.id] + 'px' } : null)
+  : null)          // 20.11.2026: после правки живой экран — снова своей высоты (раньше оставался высотой правки, снизу пустота)
 const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.observe(el); ro2.observe(el) } }
 // ---------- Живая ветка: экраны проходятся прямо здесь, как у ученика ----------
 // Карандаш — экран правится; «Сохранить» — снова живой. Пустой (незаполненный) экран сразу открыт для правки.
