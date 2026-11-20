@@ -20,6 +20,8 @@ import CardImport from '../../components/CardImport.vue'
 import DeckSheet from '../../components/DeckSheet.vue'
 import AudioWave from '../../components/AudioWave.vue'
 import CardEditModal from '../../components/CardEditModal.vue'
+import TtsBatch from '../../components/TtsBatch.vue'
+import { aiIcon } from '../../utils/ai'
 import { useCardMedia, isImg, isAud, isLink, audSrc, imgSrc, forget, removeCard } from '../../composables/useCardMedia'
 import { fetchSheetCsv } from '../../composables/useSheetImport'
 import { cardsFromJson, cardsToTsv, cardJson } from '../../utils/cardsJson'
@@ -158,6 +160,16 @@ async function copyJson() {
   const t = JSON.stringify(deck.value.cards.map(cardJson), null, 2)
   try { await navigator.clipboard.writeText(t); showToast(`Скопировано карточек: ${deck.value.cards.length}`) } catch { showToast('Браузер не дал скопировать', null, 'bad') }
 }
+// Пакетная озвучка колоды (20.11.2026): все слова и примеры — в табличку окна TtsBatch; готовые куски — в карточки, как свой файл
+const ttsOn = ref(false), gIcon = aiIcon('Gemini')
+const ttsItems = computed(() => (deck.value?.cards ?? []).flatMap((c) => [
+  c.front?.trim() ? { key: c.id + ':audio', id: c.id, field: 'audio', label: c.front, kind: 'слово', text: c.front, has: !!c.audio, by: c.audioBy || '' } : null,
+  c.example?.trim() ? { key: c.id + ':exampleAudio', id: c.id, field: 'exampleAudio', label: c.front || '—', kind: 'пример', text: c.example, has: !!c.exampleAudio, by: c.exampleAudioBy || '' } : null,
+].filter(Boolean)))
+async function ttsSaveBatch(list, done) {
+  try { for (const o of list) { const c = deck.value.cards.find((x) => x.id === o.id); if (c && (await attach(c, o.field, o.file))) c[o.field + 'By'] = o.by } }
+  finally { done() }
+}
 const gBusy = ref(false)
 async function fromGoogle() {
   const url = (await askText('Ссылка на Google Таблицу', { text: 'Возьмётся лист, который открыт по ссылке. У таблицы должен быть доступ «Все, у кого есть ссылка».', placeholder: 'https://docs.google.com/spreadsheets/…', ok: 'Загрузить' }))?.trim(); if (!url) return
@@ -207,6 +219,7 @@ const back = () => { const d = deck.value; if (fresh && d && !d.cards.length && 
       <span v-if="deck" class="imx"><button class="ghostb" :disabled="gBusy" @click.stop="impOpen = !impOpen">{{ gBusy ? 'Загружаю…' : 'Импорт' }} ▾</button>
         <span v-if="impOpen" class="pm down" @click.stop><button @click="impOpen = false; chooseSheet()">Файл Excel или CSV</button><button @click="impOpen = false; fromGoogle()">Google Таблица по ссылке</button><button @click="impOpen = false; fromJson()">Вставить JSON</button><button :disabled="!deck.cards.length" @click="impOpen = false; copyJson()">Скопировать колоду JSON</button>
           <small>Или просто перетащите файл на таблицу</small></span></span>
+      <button v-if="deck && deck.cards.length" class="ghostb tts-b" title="Озвучить колоду пачками — Gemini" @click="ttsOn = true"><img v-if="gIcon" :src="gIcon" alt="" />Озвучить</button>
       <button v-if="deck" class="icon-btn" aria-label="Настройки колоды" title="Настройки: новых в день, Google Таблица, удаление" @click="settings = true"><AppIcon name="sliders" :size="18" /></button>
       <button v-if="deck" class="btn sm" @click="addCard"><AppIcon name="plus" :size="16" /> Карточка</button>
       <input ref="sheetPick" type="file" hidden accept=".xlsx,.xls,.csv,.tsv" @change="$event.target.files[0] && startImport($event.target.files[0])" />
@@ -271,6 +284,7 @@ const back = () => { const d = deck.value; if (fresh && d && !d.cards.length && 
       </div>
     </section>
     <!-- Окно правки карточки — общий компонент (components/CardEditModal.vue) -->
+    <TtsBatch v-if="ttsOn && deck" :title="`Озвучить колоду «${deck.title}»`" :items="ttsItems" @close="ttsOn = false" @save="ttsSaveBatch" />
     <CardEditModal v-if="edit && deck" v-model="edit" :deck="deck" :list="shown" />
     <CardImport v-if="importFile && deck" :key="importFile.name + importAuto" :deck="deck" :file="importFile" :auto="importAuto" @close="importFile = null" @done="imported" />
     <DeckSheet v-if="settings && deck" :deck="deck" @close="closeSettings" />
@@ -379,4 +393,5 @@ tr.off td:not(.act) { opacity: .45 }
 .more { display: block; margin: 10px auto; border: 0; border-radius: 10px; padding: 8px 14px; background: var(--surface); font: inherit; font-size: 13px; font-weight: 800; color: var(--blue); cursor: pointer }
 .empty { padding: 30px; text-align: center; color: var(--hint) }
 @media (max-width: 700px) { .tip { display: none } .search { width: 120px } .cnt { display: none } }
+.tts-b { display: inline-flex; align-items: center; gap: 6px } .tts-b img { width: 16px; height: 16px }
 </style>

@@ -65,7 +65,7 @@ export function wavFromResponse(data) {
   if (!part) throw new Error('Gemini не вернул звук — попробуйте ещё раз')
   const rate = +((part.mimeType || '').match(/rate=(\d+)/)?.[1] || 24000), bytes = b64(part.data)
   const pcm = new Int16Array(bytes.buffer, 0, bytes.length >> 1)
-  return { blob: pcmToWav(pcm, rate), sec: pcm.length / rate }
+  return { blob: pcmToWav(pcm, rate), sec: pcm.length / rate, pcm, rate }          // pcm — для нарезки пачки (utils/ttssplit.js)
 }
 
 /** Один запрос одним ключом */
