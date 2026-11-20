@@ -265,12 +265,13 @@ function jsApply() {
     <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
     <div v-else class="ka done">{{ p.st.text }}</div>
     <p v-if="!p.edit && isLive && ans?.draft && !p.st.done" class="kdd">{{ ans.draft }}</p>
+    <p v-if="!p.edit && isLive && !p.st.done" class="knote">ℹ️ Текст в поле — только для вас: Gemini Live оценивает по <b>голосу</b>, текст ей не отправляется. Ответ без голоса (набран или вставлен) — уйдёт текстом.</p>
     <p v-if="!p.edit && isLive && (ansErr || ans?.err) && !p.st.done" class="kdd er">{{ ansErr || ans?.err }}</p>
     <p v-if="!p.edit && (dicDraft || dicErr)" class="kdd" :class="{ er: dicErr && !dicDraft }">{{ dicDraft || dicErr }}</p>
 
     <div class="kb miss" :class="look">
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
-        <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.live"> Live · {{ lv?.name || by.model }}{{ r.voice ? ' · по голосу' : r.live && isLive ? ' · по тексту' : '' }}</template><template v-else-if="by.api"> API · {{ checkName(by.model) }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
+        <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.live"> Live · {{ lv?.name || by.model }}{{ r.voice ? ' · по голосу (текст не отправлялся)' : r.live && isLive ? ' · по тексту (голоса не было)' : '' }}</template><template v-else-if="by.api"> API · {{ checkName(by.model) }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
       <p v-if="checked && r.note" class="ph kno">{{ r.note }}</p>
       <p v-if="p.edit" class="ph">Пункты от Gemini — после проверки</p>
       <p v-else-if="r?.error" class="ph er">{{ r.error }}</p>
@@ -398,6 +399,7 @@ function jsApply() {
 .kbr.api { color: #2f6fe0; flex-wrap: wrap } .kbr.api img { margin: 0 } .kbr.api em { font-style: normal; font-weight: 600; font-size: 12px; color: #3d7a00 } .kbr.api em.off { color: #b3261e }
 .kms { height: 26px; max-width: 230px; padding: 0 4px; border: 1px solid rgba(47, 111, 224, .35); border-radius: 8px; background: #fff; color: #2f6fe0; font: inherit; font-size: 12px; font-weight: 700 } .kms.ed { height: 24px; font-size: 10.5px; max-width: 200px }
 .kno { margin: 4px 0 0; font-size: 12px !important }
+.knote { margin: -4px 2px 0; padding: 5px 10px; border-radius: 8px; background: rgba(163, 92, 240, .07); color: #6b2fb3; font-family: var(--font); font-size: 11.5px; font-weight: 600; line-height: 1.35 } .knote b { font-weight: 800 }
 .kexp { align-self: center; margin: -4px auto 6px; padding: 3px 12px; border: 1.5px dashed #a35cf0; border-radius: 10px; background: rgba(163, 92, 240, .08); color: #6b2fb3; font-family: var(--font); font-size: 12px; font-weight: 800; text-align: center }
 .kbr.lvx { flex-direction: column; align-items: flex-start; gap: 4px; color: #6b2fb3 } .kbr.lvx > small { font-size: 11.5px; font-weight: 600; color: #8a6aa8 }
 .kbr.lvx .tag { padding: 1px 7px; border: 1.5px dashed #a35cf0; border-radius: 8px; font-size: 11px }
