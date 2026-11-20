@@ -36,8 +36,8 @@ registerProcessor('tma-mic', Mic)`
 
 /** Начать разговор. on: { state(s, info), text(role: 'me'|'ai', chunk), turn(), level(0..1) }.
  *  state: connecting → live → ended | error. → { stop(), mute(bool) } */
-export function startTalk({ key, model, system, voice, opener, on = {} }) {
-  let ws = null, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
+export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', on = {} }) {
+  let ws = null, ready = false, plain = false, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
   const say = (s, info) => { if (!done || s === 'ended' || s === 'error') on.state?.(s, info) }
   function stop(reason = '') {
@@ -59,7 +59,7 @@ export function startTalk({ key, model, system, voice, opener, on = {} }) {
   }
   function hush() { playing.forEach((s) => { try { s.stop() } catch { /* */ } }); playing.clear(); nextAt = 0 }
   async function startMic() {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true, channelCount: 1 } })          // шумодав браузера режет sz, cz, ś, ć — польскому вредит
     ctxIn = new AudioContext({ sampleRate: 16000 })
     await ctxIn.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })))
     src = ctxIn.createMediaStreamSource(mic); node = new AudioWorkletNode(ctxIn, 'tma-mic'); src.connect(node)
@@ -73,16 +73,27 @@ export function startTalk({ key, model, system, voice, opener, on = {} }) {
   }
   say('connecting')
   ctxOut = new AudioContext({ sampleRate: 24000 })
-  ws = new WebSocket(WS + encodeURIComponent(key))
-  ws.onopen = () => ws.send(JSON.stringify({ setup: {
+  // язык закреплён (20.11.2026: польский слышала плохо — модель сама угадывала язык и с акцентом «слышала» русский):
+  // язык расшифровки и голоса — lang; пауза до «договорил» — 1,2 с (на собеседовании думают посреди фразы).
+  // Не приняла настройку (старая модель) — переподключаемся без неё (plain)
+  const setup = () => ({ setup: {
     model: 'models/' + model,
-    generationConfig: { responseModalities: ['AUDIO'], ...(voice ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } : {}) },
+    generationConfig: { responseModalities: ['AUDIO'], speechConfig: { ...(voice ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } : {}), ...(lang && !plain ? { languageCode: lang } : {}) } },
     systemInstruction: { parts: [{ text: system }] },
-    inputAudioTranscription: {}, outputAudioTranscription: {},
-  } }))
-  ws.onmessage = async (e) => {
+    inputAudioTranscription: lang && !plain ? { languageCodes: [lang] } : {}, outputAudioTranscription: {},
+    ...(plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_LOW', silenceDurationMs: 1200 } } }),
+  } })
+  function connect() {
+    ws = new WebSocket(WS + encodeURIComponent(key))
+    ws.onopen = () => ws.send(JSON.stringify(setup()))
+    ws.onmessage = onMsg
+    ws.onerror = () => {}
+    ws.onclose = onClose
+  }
+  async function onMsg(e) {
     let m; try { m = JSON.parse(typeof e.data === 'string' ? e.data : await e.data.text()) } catch { return }
     if (m.setupComplete) {
+      ready = true
       try { await startMic() } catch (err) { return stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) }
       say('live')
       if (opener) ws.send(JSON.stringify({ realtimeInput: { text: opener } }))
@@ -98,12 +109,13 @@ export function startTalk({ key, model, system, voice, opener, on = {} }) {
     }
     if (m.goAway) on.state?.('live', 'Google скоро закроет разговор (лимит длины сессии)')
   }
-  ws.onerror = () => {}
-  ws.onclose = (e) => {
+  function onClose(e) {
     if (done) return
     const r = e.reason || ''
+    if (!ready && !plain && e.code !== 1000 && !/API key|key not valid|quota|exhaust/i.test(r)) { plain = true; on.state?.('live', 'модель не приняла настройку языка — без неё'); return connect() }          // старая модель не знает languageCode и т.п.
     stop(e.code === 1000 ? '' : /API key|key not valid/i.test(r) ? 'Ключ не принят Google' : /quota|exhaust|limit/i.test(r) ? 'Лимит Live-модели исчерпан — попробуйте другую модель или ключ' : /model|not found|not supported/i.test(r) ? `Модель «${model}» недоступна для разговора: ${r}` : `Соединение закрылось (${e.code})${r ? ': ' + r : ''}`)
   }
+  connect()
   return { stop: () => stop(''), mute: (v) => { muted = !!v } }
 }
 export const firstKey = () => ai.keys.find((x) => !(x.until > Date.now()))?.key ?? ai.keys[0]?.key ?? ''
