@@ -57,9 +57,9 @@ function setPiece(it, pcm, rate, b) {
   const r = row[it.key]; if (r.url) URL.revokeObjectURL(r.url)
   r.blob = pcmToWav(pcm, rate); r.url = URL.createObjectURL(r.blob); r.sec = pcm.length / rate; r.st = 'done'; r.batch = b; r.err = ''
 }
-function cutBatch(bi) {
+function cutBatch(bi, first = false) {          // first — только что пришла: куски всем её строкам; потом — только тем, кого не переозвучили (↻)
   const B = batches.value[bi], rg = rangesOf(B.info, B.cuts)
-  B.keys.forEach((k, i) => { const it = items.find((x) => x.key === k); if (it && row[k].batch === bi) setPiece(it, B.pcm.slice(rg[i][0], rg[i][1]), B.rate, bi) })
+  B.keys.forEach((k, i) => { const it = items.find((x) => x.key === k); if (it && (first || row[k].batch === bi)) setPiece(it, B.pcm.slice(rg[i][0], rg[i][1]), B.rate, bi) })
 }
 async function start() {
   if (run.on || !picked.value.length) return
@@ -72,9 +72,13 @@ async function start() {
     run.note = `пачка ${i / size.value + 1} из ${Math.ceil(queue.length / size.value)} · ${part.length} фраз`
     try {
       const r = await ask(texts.length > 1 ? batchText(texts) : texts[0], `Пачка ${i / size.value + 1}`)
-      const sp = splitPcm(r.pcm, r.rate, texts)
-      batches.value.push({ keys: part.map((it) => it.key), pcm: r.pcm, rate: r.rate, info: sp.info, cuts: sp.cuts, pk: peaks(r.pcm, 240), model: r.model, voice: voice.value, open: !!sp.guessed, guessed: !!sp.guessed })
-      cutBatch(batches.value.length - 1)
+      let sp
+      try { sp = splitPcm(r.pcm, r.rate, texts) } catch (e) { throw new Error('звук пришёл, но не нарезался: ' + (e?.message || e)) }
+      batches.value.forEach((x) => { x.open = false })
+      batches.value.push({ keys: part.map((it) => it.key), pcm: r.pcm, rate: r.rate, info: sp.info, cuts: sp.cuts, pk: peaks(r.pcm, 240), model: r.model, voice: voice.value, open: true, guessed: !!sp.guessed,
+        url: URL.createObjectURL(pcmToWav(r.pcm, r.rate)), sec: r.pcm.length / r.rate })
+      cutBatch(batches.value.length - 1, true)
+      say(`Пачка ${i / size.value + 1}: нарезано на ${part.length} · ${sp.guessed ? 'паузы не нашлись — по длине текста, проверьте границы' : 'по паузам'}`, sp.guessed ? 'bad' : 'ok')
     } catch (e) {
       if (e.cancel) { part.forEach((it) => { row[it.key].st = 'idle' }); break }
       part.forEach((it) => { row[it.key].st = 'err'; row[it.key].err = e.message })
@@ -84,6 +88,7 @@ async function start() {
     if (i + size.value < queue.length && !stopReq) for (run.wait = 21; run.wait > 0 && !stopReq; run.wait--) await sleep(1000)          // 3 запроса в минуту
   }
   for (const it of queue) if (row[it.key].st === 'queue') row[it.key].st = 'idle'
+  for (const it of queue) if (row[it.key].st === 'busy') { row[it.key].st = 'err'; row[it.key].err = 'кусок звука не получен' }          // страховка: «озвучивается» навсегда не остаётся
   run.on = false; run.wait = 0; run.note = ''
 }
 function stop() { stopReq = true; ac?.abort() }
@@ -96,9 +101,9 @@ async function redo(it) {          // переозвучить одну стро
 // плеер строки
 let au = null
 const playing = ref('')
-function play(k) {
+function play(k, url = row[k]?.url) {          // k — ключ строки или 'b<номер>' — вся пачка
   if (playing.value === k) { au?.pause(); return }
-  au?.pause(); au = new Audio(row[k].url); playing.value = k
+  au?.pause(); au = new Audio(url); playing.value = k
   au.onended = au.onpause = () => { if (playing.value === k) playing.value = '' }
   au.play().catch(() => { playing.value = '' })
 }
@@ -134,7 +139,7 @@ const anyBusy = computed(() => items.some((it) => row[it.key].st === 'busy'))
 const logOpen = ref(true)
 const onKey = (e) => { if (e.key === 'Escape' && !busyClose.value) { e.stopPropagation(); emit('close') } }
 onMounted(() => addEventListener('keydown', onKey, true))
-onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = true; ac?.abort(); clearInterval(tick); au?.pause(); for (const k in row) if (row[k].url) URL.revokeObjectURL(row[k].url) })
+onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = true; ac?.abort(); clearInterval(tick); au?.pause(); for (const k in row) if (row[k].url) URL.revokeObjectURL(row[k].url); batches.value.forEach((b) => b.url && URL.revokeObjectURL(b.url)) })
 </script>
 
 <template>
@@ -176,7 +181,8 @@ onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = t
 
         <div v-if="batches.length" class="bs">
           <div v-for="(B, bi) in batches" :key="bi" class="bb">
-            <button type="button" class="bh" @click="B.open = !B.open">{{ B.open ? '▾' : '▸' }} Пачка {{ bi + 1 }} · {{ B.keys.length }} фраз · {{ modelName(B.model) }} · {{ B.voice }}<em v-if="B.guessed"> · паузы не нашлись — нарезано по длине текста, проверьте границы</em></button>
+            <div class="bhr"><button type="button" class="pl" :class="{ on: playing === 'b' + bi }" :title="'Послушать всю пачку · ' + fmt(B.sec)" @click="play('b' + bi, B.url)"><svg viewBox="0 0 24 24"><path v-if="playing === 'b' + bi" d="M7 5h4v14H7zM13 5h4v14h-4z" /><path v-else d="M8 5v14l11-7z" /></svg></button>
+            <button type="button" class="bh" @click="B.open = !B.open">{{ B.open ? '▾' : '▸' }} Пачка {{ bi + 1 }} · {{ B.keys.length }} фраз · {{ modelName(B.model) }} · {{ B.voice }}<em v-if="B.guessed"> · паузы не нашлись — нарезано по длине текста, проверьте границы</em></button></div>
             <div v-if="B.open" class="wv">
               <s v-for="(v, k) in B.pk" :key="k" :style="{ height: Math.max(6, v * 100) + '%', background: COL[segOf(B, k) % COL.length] }" />
               <i v-for="(c, ci) in B.cuts" :key="ci" class="cut" :style="{ left: (c / B.info.nf) * 100 + '%' }" title="Потяните, чтобы сдвинуть границу" @pointerdown.prevent.stop="dragCut($event, bi, ci)" />
@@ -222,7 +228,7 @@ header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px } he
 .empty { margin: 16px; text-align: center; color: var(--hint, #888) }
 .spin { width: 11px; height: 11px; border: 2px solid #4b8df8; border-right-color: transparent; border-radius: 50%; animation: s .7s linear infinite } @keyframes s { to { transform: rotate(360deg) } }
 .bs { display: grid; gap: 6px; margin-top: 10px; max-height: 30vh; overflow: auto }
-.bh { width: 100%; text-align: left; border: 0; background: var(--surface, #f4f4f4); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--text); cursor: pointer } .bh em { color: #b45309; font-style: normal; font-weight: 600 }
+.bhr { display: flex; align-items: center; gap: 6px } .bh { flex: 1; width: 100%; text-align: left; border: 0; background: var(--surface, #f4f4f4); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--text); cursor: pointer } .bh em { color: #b45309; font-style: normal; font-weight: 600 }
 .wv { position: relative; display: flex; align-items: center; gap: 1px; height: 70px; margin: 6px 4px 0; touch-action: none }
 .wv s { flex: 1; min-width: 1px; border-radius: 2px; text-decoration: none; opacity: .85 }
 .cut { position: absolute; top: -4px; bottom: -4px; width: 22px; margin-left: -11px; cursor: ew-resize; z-index: 2 }
