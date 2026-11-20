@@ -75,6 +75,8 @@ await C.put(me, 'k11', { ...course, items: [{ id: 'L', type: 'lesson', title: ''
 await C.put(me, 'k12', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'g1', kind: 'talk', text: 'Собеседование', prompt: 'Jesteś konsulem', voice: 'Puck', model: 'gemini-3.8-live', junk: 1 }, { id: 'g2', kind: 'talk', voice: 'Pu ck!', model: 'X Y' }] }] })
 { const s = ((await C.get('k12')) as any).items[0].steps
   ok('разговор с Gemini: поля сохраняются, мусор срезан', s[0].kind === 'talk' && s[0].text === 'Собеседование' && s[0].prompt === 'Jesteś konsulem' && s[0].voice === 'Puck' && s[0].model === 'gemini-3.8-live' && !('junk' in s[0]) && !('voice' in s[1]) && !('model' in s[1])) }
+await C.put(me, 'k13', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'z1', kind: 'stt', text: 'Powiedz coś', lang: 'en-US', junk: 1 }] }] })
+{ const s = ((await C.get('k13')) as any).items[0].steps[0]; ok('транскрипция: подсказка и язык сохраняются', s.kind === 'stt' && s.text === 'Powiedz coś' && s.lang === 'en-US' && !('junk' in s)) }
 // «Заполни таблицу»: ответ и образец в клетке, строки, регистр — сохраняются; колонки чистятся
 await C.put(me, 'k10', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [
   { id: 't1', kind: 'sort', bk: 'sort', tw: true, rows: 40, cs: true, noEx: 'x', cols: [{ t: '-s', z: 1 }, { t: 'other' }], items: [{ w: 'bag', a: 'bags', c: 0, ex: true }, { w: 'man', a: 'men', c: 1, ex: 'y' }] }] }] })

@@ -14,6 +14,7 @@ import Odd from './odd/Odd.vue'
 import Sort from './sort/Sort.vue'
 import Kp from './kp/Kp.vue'
 import Talk from './talk/Talk.vue'
+import Stt from './stt/Stt.vue'
 import intro from './intro/intro.json'
 import choice from './choice/choice.json'
 import tip from './tip/tip.json'
@@ -26,6 +27,7 @@ import odd from './odd/odd.json'
 import sort from './sort/sort.json'
 import kp from './kp/kp.json'
 import talk from './talk/talk.json'
+import stt from './stt/stt.json'
 
 export const EX = {
   intro: { ...intro, view: Intro },
@@ -39,7 +41,8 @@ export const EX = {
   odd: { ...odd, view: Odd },
   sort: { ...sort, view: Sort },
   kp: { ...kp, view: Kp },
-  talk: { ...talk, view: Talk },     // «Разговор с Gemini» — живой голосовой диалог, Live API (20.11.2026, эксперимент)          // «Ответ по смыслу» — Karta Polaka, проверяет Gemini (19.11.2026)
+  talk: { ...talk, view: Talk },
+  stt: { ...stt, view: Stt },        // «Транскрипция» — Gemini 3.5 Transcribe Live (20.11.2026, эксперимент)     // «Разговор с Gemini» — живой голосовой диалог, Live API (20.11.2026, эксперимент)          // «Ответ по смыслу» — Karta Polaka, проверяет Gemini (19.11.2026)
 }
 /** Шаблон экрана по его типу (все 11 типов — тут) */
 export const exOf = (s) => (s && EX[s.kind]) || null

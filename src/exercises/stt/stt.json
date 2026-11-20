@@ -1,0 +1,17 @@
+{
+  "kind": "stt",
+  "title": "Транскрипция",
+  "head": "Скажите — и посмотрите, что услышал Gemini",
+  "templates": ["stt"],
+  "fields": {
+    "head": { "type": "text", "label": "Задание" },
+    "text": { "type": "text", "label": "Что сказать (подсказка ученику)" }
+  },
+  "check": "none",
+  "next": "речь сырым звуком уходит в Gemini 3.5 Transcribe Live (Live API, ключи преподавателя), текст появляется на экране; без оценки",
+  "words": [],
+  "skills": { "stt": ["S"] },
+  "min": 2,
+  "shuffle": false,
+  "limits": {}
+}

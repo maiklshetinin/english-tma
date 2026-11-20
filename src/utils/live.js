@@ -118,4 +118,62 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', o
   connect()
   return { stop: () => stop(''), mute: (v) => { muted = !!v } }
 }
+/** Расшифровка речи (20.11.2026, эксперимент): Gemini 3.5 Transcribe Live — только распознавание, без собеседника.
+ *  Звук — как в разговоре (PCM 16 кГц кусками по 100 мс). Сервер шлёт interimInputTranscription — черновик, пока говорят
+ *  (заменяется), и inputTranscription — готовый кусок после паузы (дописывается). Сессия — до 10 минут.
+ *  on: { state(s, info), interim(text), final(text), level(0..1) } → { stop() } */
+export const STT_MODEL = 'gemini-3.5-transcribe-live'
+export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', on = {} }) {
+  let ws = null, mic = null, ctx = null, node = null, src = null, done = false, ready = false
+  function stop(reason = '') {
+    if (done) return; done = true
+    try { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) } catch { /* */ }
+    setTimeout(() => { try { ws?.close() } catch { /* */ } }, 600)          // последние слова успевают прийти
+    mic?.getTracks().forEach((t) => t.stop()); node?.disconnect(); src?.disconnect(); ctx?.close().catch(() => {})
+    on.state?.(reason ? 'error' : 'ended', reason)
+  }
+  async function startMic() {
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true, channelCount: 1 } })
+    ctx = new AudioContext({ sampleRate: 16000 })
+    await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })))
+    src = ctx.createMediaStreamSource(mic); node = new AudioWorkletNode(ctx, 'tma-mic'); src.connect(node)
+    node.port.onmessage = (e) => {
+      if (done || ws?.readyState !== 1) return
+      const f = e.data; let sum = 0; const pcm = new Int16Array(f.length)
+      for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = v * 32767 }
+      on.level?.(Math.min(1, Math.sqrt(sum / f.length) * 4))
+      ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64(new Uint8Array(pcm.buffer)), mimeType: 'audio/pcm;rate=16000' } } }))
+    }
+  }
+  on.state?.('connecting')
+  ws = new WebSocket(WS + encodeURIComponent(key))
+  ws.onopen = () => ws.send(JSON.stringify({ setup: { model: 'models/' + model, generationConfig: { responseModalities: ['TEXT'] }, inputAudioTranscription: { languageCodes: lang ? [lang] : [] } } }))
+  ws.onmessage = async (e) => {
+    let m; try { m = JSON.parse(typeof e.data === 'string' ? e.data : await e.data.text()) } catch { return }
+    if (m.setupComplete) {
+      ready = true
+      try { await startMic() } catch (err) { return stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) }
+      on.state?.('live'); return
+    }
+    const sc = m.serverContent
+    if (sc?.interimInputTranscription?.text != null) on.interim?.(sc.interimInputTranscription.text)
+    if (sc?.inputTranscription?.text) on.final?.(sc.inputTranscription.text)
+    if (m.goAway) on.state?.('live', 'Google скоро закроет сессию — до 10 минут подряд')
+  }
+  ws.onerror = () => {}
+  ws.onclose = (e) => {
+    if (done) return
+    const r = e.reason || ''
+    stop(e.code === 1000 ? '' : /API key|key not valid/i.test(r) ? 'Ключ не принят Google' : /quota|exhaust|limit/i.test(r) ? 'Лимит модели расшифровки исчерпан' : !ready && /model|not found|not supported/i.test(r) ? `Модель «${model}» недоступна этому ключу: ${r}` : `Соединение закрылось (${e.code})${r ? ': ' + r : ''}`)
+  }
+  return { stop: () => stop('') }
+}
+/** Модель расшифровки из списка ключа (если Google назвал её иначе — например, с -preview) */
+export async function sttModel(key, fetcher = fetch) {
+  try {
+    const r = await fetcher(API + '?pageSize=1000', { headers: { 'x-goog-api-key': key } })
+    const list = (JSON.parse(await r.text()).models ?? []).map((m) => String(m.name).replace(/^models\//, '')).filter((n) => /transcribe/i.test(n) && /live/i.test(n))
+    return list.sort((a, b) => ver(b) - ver(a))[0] || STT_MODEL
+  } catch { return STT_MODEL }
+}
 export const firstKey = () => ai.keys.find((x) => !(x.until > Date.now()))?.key ?? ai.keys[0]?.key ?? ''

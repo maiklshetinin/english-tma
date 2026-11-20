@@ -16,7 +16,7 @@
 // Файл в поле image / audio / video: https-ссылка (фото и озвучка карточек), ключ файла курса в S3 (t/…/c/…)
 // или «idb:<id>» — файл пока только в этом браузере (без сервера или до загрузки), на сервер такой не уходит.
 
-export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk'
+export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk' | 'stt'
 export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
 export interface SortItem { w: string; c: number; k?: string; a?: string; ex?: boolean }          // «Заполни таблицу» (tw): a — что вписать (bag → bags, варианты через /), ex — образец (зачёркнут в банке, вписан в таблицу)
 export interface Pair { a: string; b: string }
@@ -71,6 +71,8 @@ export const KINDS: Record<StepKind, { t: string; d: string; c: string; dk: stri
     ic: '<path d="M4 5h12v9H8l-4 3.5z"/><path d="M18.5 3.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/><path d="M7.5 9h5M7.5 11.5h3"/>' },
   talk: { t: 'Разговор с Gemini', d: 'Живой голосовой диалог с ИИ (Live API) — например, собеседование на Карту поляка', c: '#4b8df8', dk: '#2f6fe0', head: 'Поговорите с Gemini голосом',
     ic: '<path d="M4 6h10v7H8l-4 3z"/><path d="M14 10h6v7h-2l-3 2.5V17h-1z"/><path d="M18.5 2.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>' },
+  stt: { t: 'Транскрипция', d: 'Сказать вслух — Gemini пишет текстом, что услышал (Live API)', c: '#2fa36b', dk: '#1f7a4f', head: 'Скажите — и посмотрите, что услышал Gemini',
+    ic: '<rect x="4" y="3" width="5" height="9" rx="2.5"/><path d="M2.5 9.5a4 4 0 0 0 8 0M6.5 14v3"/><path d="M13 7h8M13 11h8M13 15h6M13 19h4"/>' },
   odd: { t: 'Найди лишнее', d: 'Слово, которое не подходит к остальным', c: 'var(--pink, #ec4899)', dk: 'var(--pink-d, #be185d)', head: 'Найдите лишнее слово',
     ic: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="M15 15l3 3M18 15l-3 3"/>' },
 }
@@ -94,7 +96,7 @@ export function tileOf(k: string | undefined, i: number): { bg: string; fg: stri
 export const KIND_LIST = Object.keys(KINDS) as StepKind[]
 
 /** Примерное время экрана по типу, в минутах (как «11 MIN» у урока в Busuu); репетитор может поставить своё */
-export const KIND_MIN: Record<StepKind, number> = { intro: 0.5, choice: 0.5, pairs: 1, order: 1, tip: 1, speak: 1, gap: 0.5, answer: 1.5, sort: 1, odd: 0.5, kp: 2, talk: 5 }
+export const KIND_MIN: Record<StepKind, number> = { intro: 0.5, choice: 0.5, pairs: 1, order: 1, tip: 1, speak: 1, gap: 0.5, answer: 1.5, sort: 1, odd: 0.5, kp: 2, talk: 5, stt: 2 }
 export const MIN_CHOICES = [0.5, 1, 1.5, 2, 3, 5, 10]
 export const stepMin = (s: Step) => (typeof s.min === 'number' && s.min > 0 ? s.min : KIND_MIN[s.kind] ?? 1)
 /** Время урока — только сумма экранов (своё время ставят у экранов), округлённая вверх до минуты (пустой урок — 0) */
@@ -116,6 +118,7 @@ export function newStep(kind: StepKind): Step {
   if (kind === 'answer') return { id: stepId(), kind, text: '', note: '', tr: '' }
   if (kind === 'kp') return { id: stepId(), kind, text: '', ideal: '' }
   if (kind === 'talk') return { id: stepId(), kind, text: '' }
+  if (kind === 'stt') return { id: stepId(), kind, text: '' }
   if (kind === 'odd') return { id: stepId(), kind, opts: [], ans: 0 }
   if (kind === 'sort') return { id: stepId(), kind, cols: [{ t: '' }, { t: '' }], items: [] }
   return { id: stepId(), kind, word: '', tr: '', ex: '', exTr: '' }
@@ -147,6 +150,7 @@ export function fishStep(kind: StepKind): Step {
   if (kind === 'kp') return { id: stepId(), kind, text: 'Kiedy i jak obchodzimy Mikołajki?',
     ideal: 'Mikołajki obchodzimy szóstego grudnia na cześć świętego Mikołaja, biskupa z Miry. W nocy z piątego na szóstego grudnia święty Mikołaj przynosi dzieciom drobne prezenty, na przykład słodycze, zabawki albo książki, i zostawia je w wyczyszczonych butach lub pod poduszką.' }
   if (kind === 'talk') return { id: stepId(), kind, text: 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }
+  if (kind === 'stt') return { id: stepId(), kind, text: 'Расскажите о себе по-польски: 3–4 предложения' }
   if (kind === 'odd') return { id: stepId(), kind, ans: 1, note: 'Coffee — напиток, остальное — еда.', opts: [{ w: 'egg', k: '#fbedb0' }, { w: 'coffee', k: '#cfe6f7' }, { w: 'apple', k: '#cfeccf' }, { w: 'banana', k: '#fbe1c8' }] }
   if (kind === 'sort') return { id: stepId(), kind, cols: [{ t: 'Active voice' }, { t: 'Passive voice' }], items: [
     { w: 'Mike eats an apple', c: 0, k: '#cfeccf' }, { w: 'An apple is eaten by Mike', c: 1, k: '#fbe1c8' }, { w: 'Mike buys apples', c: 0, k: '#fbe1c8' },
@@ -191,6 +195,7 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   // Karta Polaka (19.11.2026): своя вкладка меню; ответ проверяет Gemini по эталону
   { id: 'kp', kind: 'kp', t: 'Ответ по смыслу', d: 'ИИ сверяет с эталоном', make: () => fishStep('kp') },
   { id: 'talk', kind: 'talk', t: 'Разговор с Gemini', d: 'Живой диалог голосом', make: () => fishStep('talk') },          // 20.11.2026, эксперимент: Live API
+  { id: 'stt', kind: 'stt', t: 'Транскрипция', d: 'Сказать — увидеть текст', make: () => fishStep('stt') },          // 20.11.2026, эксперимент: Gemini 3.5 Transcribe Live
   // ---- Тест · упражнения Насти по учебнику (18.11.2026): отдельная группа меню, плашка — как задание в учебнике (BOOK) ----
   { id: 'bkword', kind: 'gap', t: 'Впиши слово', d: 'His, men, идиомы, do/does', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkword', head: 'Write the possessive adjectives', phrase: '(He) [His] father is a doctor.', tr: 'Его отец — врач.', opts: [] }) },
   { id: 'brackets', kind: 'gap', t: 'Раскрой скобки', d: 'Глагол в нужной форме, общее фото', make: () => ({ id: stepId(), kind: 'gap', bk: 'brackets', head: 'Put the verbs into the present simple or the present continuous', image: fish('wave.jpg'), phrase: 'Tom: What [are you doing] (you/do), Tina?', tr: 'Том: Что ты делаешь, Тина?', opts: [] }) },          // диалог — по реплике на экран, фото одно: копия экрана (⧉) его сохраняет
@@ -229,7 +234,7 @@ for (const id of BOOK_TPL) {
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
 /** Цвета тегов — как плашки в меню упражнений (.chip.L … в CourseEditor / LessonRail) */
 export const SKILL_C: Record<string, string> = { L: '#1cb0f6', R: '#a560e8', W: '#ff9600', S: '#58cc02' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], talk: ['S', 'L'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], talk: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
 for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]          // «Учебник 1:1» — те же навыки
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
 export function tplOf(s: Step): string {
@@ -261,6 +266,7 @@ export function stepTitle(s: Step): string {
   if (s.kind === 'answer') return s.text?.trim() || KINDS.answer.t
   if (s.kind === 'kp') return s.text?.trim() || KINDS.kp.t
   if (s.kind === 'talk') return KINDS.talk.t
+  if (s.kind === 'stt') return s.text?.trim() || KINDS.stt.t
   if (s.kind === 'odd') return s.opts?.[s.ans ?? 0]?.w?.trim() || KINDS.odd.t
   if (s.kind === 'sort') return s.cols?.map(c => c.t).filter(Boolean).join(' / ') || KINDS.sort.t
   const n = s.pairs?.filter(p => p.a.trim() && p.b.trim()).length ?? 0
@@ -292,7 +298,7 @@ export function stepIssue(s: Step): string {
   }
   if (s.kind === 'answer') return s.text?.trim() ? '' : 'Нет вопроса'
   if (s.kind === 'kp') return !s.text?.trim() ? 'Нет вопроса' : !s.ideal?.trim() ? 'Нет эталона' : ''
-  if (s.kind === 'talk') return ''          // роль Gemini необязательна — по умолчанию консул на Карту поляка
+  if (s.kind === 'talk' || s.kind === 'stt') return ''          // роль Gemini необязательна — по умолчанию консул на Карту поляка
   if (s.kind === 'odd') { const o = (s.opts ?? []).filter(x => x.w?.trim()); return o.length < 3 ? 'Нужно хотя бы 3 слова' : !s.opts?.[s.ans ?? 0]?.w?.trim() ? 'Не отмечено лишнее' : '' }
   if (s.kind === 'sort') {
     const c = s.cols ?? [], it = (s.items ?? []).filter(x => x.w?.trim())
