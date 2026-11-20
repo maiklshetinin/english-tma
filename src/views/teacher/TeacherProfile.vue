@@ -15,7 +15,7 @@ import { apiFetch, canLogout } from '../../firebase'
 import { useStudentsStore } from '../../stores/students'
 import { useAuthStore } from '../../stores/auth'
 import { live } from '../../composables/useLive'
-import { MY_VER, siteVer, updateAll, reloadNow } from '../../composables/useUpdate'
+import { MY_VER, ver, loadSiteVer, freshVer, isOldVer, updateAll, reloadNow } from '../../composables/useUpdate'
 import { request, post } from '../../stores/api'
 import { devtools } from '../../composables/useNetLog'
 const auth = useAuthStore()
@@ -27,18 +27,18 @@ const noStudents = computed(() => auth.role === 'teacher' && !studentStore.list.
 const switchRole = () => { if (!noStudents.value) auth.setRole(auth.role === 'student' ? 'teacher' : 'student') }
 const busy = ref(false)
 // Разработчик: у кого какая версия сайта открыта (по вкладкам) и «Обновить у всех» (useUpdate.js)
-const site = ref('')
-siteVer().then((v) => { site.value = v || '' })          // 19.11.2026: и у каждого преподавателя — своя версия «свежая / старая»
+const site = computed(() => ver.site)
+loadSiteVer()          // 19.11.2026: и у каждого преподавателя — своя версия «свежая / старая»; логика — useUpdate.js (та же у кружков «Сейчас в приложении»)
 const myOld = computed(() => !!site.value && site.value !== MY_VER)
 // своя строка для преподавателя: из «кто в приложении» (live), а без связи — по этой вкладке
 const myVers = computed(() => { const m = vers.value.find((p) => p.me); return [m ? { ...m, name: 'Вы' } : { uid: 'me', name: 'Вы', photoUrl: auth.user?.photo_url || '', color: '#58cc02', me: true, on: true, tabs: 1, vers: [MY_VER], old: myOld.value }] })
-const fresh = computed(() => site.value || MY_VER)
+const fresh = computed(() => freshVer())
 const vers = computed(() => {
   const by = new Map()
   for (const u of live.users) { const p = by.get(u.uid) ?? { uid: u.uid, name: u.name, photoUrl: u.photo, color: u.color, me: false, vers: new Set(), tabs: 0 }; p.vers.add(u.ver || '?'); p.tabs++; if (u.cid === live.cid) p.me = true; by.set(u.uid, p) }
-  const out = [...by.values()].map((p) => ({ ...p, vers: [...p.vers], on: true, old: [...p.vers].some((v) => v !== fresh.value) }))
+  const out = [...by.values()].map((p) => ({ ...p, vers: [...p.vers], on: true, old: isOldVer([...p.vers]) }))
   // остальные преподаватели (Настя и др.) — всегда, даже не в сети: последняя открытая версия из их записи (users.ver, пишет /me/visit)
-  for (const t of team.value ?? []) if (!by.has(t.uid)) out.push({ uid: t.uid, name: t.name, photoUrl: t.photo, color: '#9aa0a6', me: false, on: false, tabs: 0, at: t.verAt, vers: t.ver ? [t.ver] : [], old: !!t.ver && t.ver !== fresh.value })
+  for (const t of team.value ?? []) if (!by.has(t.uid)) out.push({ uid: t.uid, name: t.name, photoUrl: t.photo, color: '#9aa0a6', me: false, on: false, tabs: 0, at: t.verAt, vers: t.ver ? [t.ver] : [], old: !!t.ver && isOldVer([t.ver]) })
   return out.sort((a, b) => a.me - b.me || b.on - a.on)
 })
 const seen = (t) => { if (!t) return 'не в сети'; const d = new Date(t), hm = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }); return 'не в сети · заходил(а) ' + (d.toDateString() === new Date().toDateString() ? 'сегодня в ' + hm : d.toLocaleDateString('ru', { day: 'numeric', month: 'short' }) + ' в ' + hm) }

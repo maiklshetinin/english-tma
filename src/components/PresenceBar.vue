@@ -10,6 +10,7 @@ import AppIcon from './AppIcon.vue'
 import ThemeToggle from './ThemeToggle.vue'
 import { notesState, unreadCount, toggleChat } from '../composables/useNotes'
 import { useAuthStore } from '../stores/auth'
+import { isOldVer, versOf } from '../composables/useUpdate'
 const auth = useAuthStore()
 const props = defineProps({ inline: Boolean, presence: { type: Boolean, default: true }, theme: Boolean })      // theme — кнопка темы первой (вверху справа)
 const has = computed(() => props.presence && live.on && people.value.length > 0)
@@ -24,6 +25,11 @@ const chatOn = computed(() => !!(notesState.open || notesState.draft))          
 const rootOn = computed(() => has.value || (props.theme && !props.inline))
 watchEffect((onCleanup) => { if (auth.isDev && rootOn.value && !props.inline) {          // в панели редактора курсов «</>» нет — там жук в углу
   devtools.tags++; onCleanup(() => { devtools.tags-- }) } })
+// Старая версия (20.11.2026): та же логика, что в «Профиле → Версии в приложении» (useUpdate.js) — у кого во вкладке открыта
+// сборка не та, что свежая, — оранжевый ↻ на кружке и «старая версия» в списке. Своих запросов нет: версии вкладок сервер и так
+// присылает в presence (ver), а свежая — версия на сайте, если её уже узнал «Профиль», иначе — сборка этой вкладки
+const verOld = (p) => isOldVer(versOf(live.users, p.uid))
+const verTitle = (p) => (verOld(p) ? ' · старая версия, нужно обновить страницу' : '')
 const label = (p) => (p.where === 'courses' ? 'в редакторе курсов' : WHERE[p.where] ? `«${WHERE[p.where]}»` : 'в приложении')
 </script>
 <template>
@@ -42,11 +48,11 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
     <button v-if="!inline" class="nt" :class="{ on: chatOn }" :aria-pressed="chatOn" :title="`Чат${unreadCount ? ' — новых: ' + unreadCount : ''}`" aria-label="Чат" @click="toggleChat(); open = false">
       <AppIcon name="chat" :size="16" /><em v-if="unreadCount">{{ unreadCount }}</em></button>
     <button v-if="auth.isDev && !inline" class="cur tag" :class="{ on: devtools.open }" :aria-pressed="devtools.open" title="Панель разработчика (Ctrl + `)" aria-label="Панель разработчика" @click="devtools.open = !devtools.open">&lt;/&gt;</button>
-    <button class="row" :title="people.map(p => (p.me ? 'Вы' : p.name) + ' — ' + label(p)).join('\n')" @click="open = !open">
-      <span v-for="p in shown" :key="p.uid" class="av" :class="{ ghost: p.me && shared.hidden }" :style="{ '--c': p.color }">
+    <button class="row" :title="people.map(p => (p.me ? 'Вы' : p.name) + ' — ' + label(p) + verTitle(p)).join('\n')" @click="open = !open">
+      <span v-for="p in shown" :key="p.uid" class="aw"><span class="av" :class="{ ghost: p.me && shared.hidden }" :style="{ '--c': p.color }">
         <img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" @error="bad[p.uid] = true" />
         <b v-else :style="{ background: p.color }">{{ ini(p.name) }}</b>
-      </span>
+      </span><i v-if="verOld(p)" class="ob">↻</i></span>
       <span v-if="more" class="av more">+{{ more }}</span>
     </button>
     </template>
@@ -54,8 +60,8 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
     <div v-if="open" class="menu" role="dialog" aria-label="Кто сейчас в приложении">
       <div class="mh">Сейчас в приложении</div>
       <div v-for="p in people" :key="p.uid" class="mi">
-        <span class="av sm" :style="{ '--c': p.color }"><img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" /><b v-else :style="{ background: p.color }">{{ ini(p.name) }}</b></span>
-        <span class="tx"><b>{{ p.name }}<i v-if="p.me"> (вы{{ shared.hidden ? ', невидимка' : '' }})</i><em v-if="p.dev" class="dv">разработчик</em></b><small>{{ label(p) }}<template v-if="p.cids.length > 1"> · {{ p.cids.length }} окна</template></small></span>
+        <span class="aw"><span class="av sm" :style="{ '--c': p.color }"><img v-if="p.photo && !bad[p.uid]" :src="p.photo" alt="" referrerpolicy="no-referrer" /><b v-else :style="{ background: p.color }">{{ ini(p.name) }}</b></span><i v-if="verOld(p)" class="ob">↻</i></span>
+        <span class="tx"><b>{{ p.name }}<i v-if="p.me"> (вы{{ shared.hidden ? ', невидимка' : '' }})</i><em v-if="p.dev" class="dv">разработчик</em></b><small>{{ label(p) }}<template v-if="p.cids.length > 1"> · {{ p.cids.length }} окна</template><template v-if="verOld(p)"> · <em class="ov" title="Открыта не та сборка, что сейчас на сайте — нужно обновить страницу">старая версия</em></template></small></span>
       </div>
     </div>
   </div>
@@ -85,6 +91,9 @@ const label = (p) => (p.where === 'courses' ? 'в редакторе курсо�
 .av:first-child { margin-left: 0 } .av + .av { margin-left: 2px }
 .av img { width: 100%; height: 100%; object-fit: cover } .av b { display: grid; place-items: center; width: 100%; height: 100%; color: #fff; font-size: 13px; font-weight: 900 }
 .av.more { --c: var(--border); font-size: 11px; font-weight: 800; color: var(--hint) }
+.aw { position: relative; display: grid; flex: none } .aw + .aw, .aw + .av { margin-left: 2px }          /* кружок + значок версии (значок — снаружи круга, его не обрезает) */
+.ob { position: absolute; right: -5px; bottom: -5px; z-index: 1; width: 15px; height: 15px; display: grid; place-items: center; border-radius: 50%; background: var(--orange-d, #e08a00); color: #fff; font-size: 10px; font-style: normal; font-weight: 900; line-height: 1; box-shadow: 0 0 0 2px var(--card) }
+.ov { font-style: normal; font-weight: 800; color: var(--orange-d, #c26a00) }
 .bg { position: fixed; inset: 0; z-index: 1 }
 .menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 2; min-width: 220px; padding: 6px; border-radius: 14px; background: var(--card); box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .04) }
 .mh { padding: 6px 8px; font-size: 11px; font-weight: 900; color: var(--hint); text-transform: uppercase; letter-spacing: .3px }

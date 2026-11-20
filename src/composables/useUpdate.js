@@ -13,6 +13,14 @@ export const upd = reactive({ wait: false, ready: false, by: '' })
 export async function siteVer() {
   try { const r = await fetch(`${import.meta.env.BASE_URL}version.json?t=${Date.now()}`, { cache: 'no-store' }); return r.ok ? (await r.json()).commit ?? null : null } catch { return null }
 }
+/** «Свежая / старая» версия — одна логика для «Профиля → Версии в приложении» и кружков «Сейчас в приложении» (PresenceBar, 20.11.2026).
+ *  ver.site — версия на сайте (loadSiteVer), свежая — она (нет файла — своя сборка); старая — хоть одна вкладка не на ней (нет версии — '?', тоже старая) */
+export const ver = reactive({ site: '' })
+export const loadSiteVer = () => siteVer().then((v) => { ver.site = v || '' })
+export const freshVer = () => ver.site || MY_VER
+export const isOldVer = (vers) => vers.some((v) => v !== freshVer())
+/** Версии вкладок человека из «кто в приложении» (live.users) */
+export const versOf = (users, uid) => [...new Set(users.filter((u) => u.uid === uid).map((u) => u.ver || '?'))]
 const quiet = () => document.visibilityState !== 'visible' || idleFor() > 60_000
 let poll = 0, idleT = 0
 function ready() {
