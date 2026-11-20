@@ -17,7 +17,7 @@ import TtsDialog from '../../components/TtsDialog.vue'
 import { modelName } from '../../utils/tts'
 import { startTranscribe, sttModel, firstKey, startTalk, liveModels, liveName } from '../../utils/live'
 import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/kpcheck'
-import { kpLive, kpRec } from '../../utils/kplive'
+import { kpLive, kpRec, openLiveAnswer } from '../../utils/kplive'
 import SpeechReport from '../../components/SpeechReport.vue'
 import { ai } from '../../utils/gemini'
 import J from './kp.json'
@@ -110,7 +110,22 @@ const lLevel = ref((() => { try { return localStorage.getItem('tma.kp.level') ==
 onMounted(async () => { if (isLive.value && ai.keys[0]) lModels.value = await liveModels(ai.keys[0].key) })
 function pickLive(v) { lPick.value = v; try { if (v) localStorage.setItem('tma.live.pick', v); else localStorage.removeItem('tma.live.pick') } catch { /* */ } }
 function setLevel(v) { lLevel.value = v; try { localStorage.setItem('tma.kp.level', v ? '1' : '0') } catch { /* */ } }
-const recSec = computed(() => (isLive.value && dic.value !== 'live' ? Math.round((kpRec[props.step.id]?.reduce((a, c) => a + c.length, 0) ?? 0) / 16000) : 0))
+const recSec = computed(() => (isLive.value ? Math.round((ans.value?.rec?.reduce((a, c) => a + c.length, 0) ?? 0) / 16000) : 0))
+// «🎙 Ответить Gemini» (Live вживую, 20.11.2026): соединение открывается по нажатию, дальше «рация»: говоришь — она слушает и пишет
+// твою речь в поле; «Пауза» — подумать; «Проверить» (подвал) — конец реплики, оценка сразу (LessonPlayer → S.finish)
+const ans = computed(() => (isLive.value ? kpLive[props.step.id] ?? null : null))
+const ansErr = ref('')
+async function liveAnswer() {
+  ansErr.value = ''
+  const S0 = ans.value
+  if (S0 && (S0.state === 'live' || S0.state === 'connecting')) { if (S0.talking) S0.pause(); else if (S0.state === 'live') S0.speak(); return }
+  try {
+    const S = await openLiveAnswer({ question: props.step.text ?? '', reference: props.step.ideal ?? '', prompt: props.step.prompt, pass: props.step.pass }, props.step.id,
+      { onMe: (t) => { if (!p.st.done) p.st.text = ((p.st.text || '') + t).replace(/^\s+/, '') } })
+    const off = watch(() => S.state, (v) => { if (v === 'live') { off(); S.speak() } else if (v === 'ended' || v === 'error') off() }, { immediate: true })
+  } catch (e) { ansErr.value = e.message }
+}
+watch(() => p.st.done, (v) => { if (!v && isLive.value) { kpLive[props.step.id]?.stop?.() } })          // вопрос вернулся (повтор в конце урока) — новый разговор
 function moreLive() { if (lv.value?.more) return lv.value.more(); lv.value?.stop?.(); discuss() }
 
 // «Обсудить голосом» (Live API): после оценки Gemini голосом разбирает ответ — что упущено, уточняющий вопрос, «попробуйте ещё раз»
@@ -243,12 +258,15 @@ function jsApply() {
     </div>
 
     <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
-      <button v-if="!p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy" :title="dic === 'live' ? 'Остановить запись' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
+      <button v-if="!p.edit && !p.st.done && isLive && canDic" type="button" class="kdic" :class="ans?.talking ? 'live' : ans?.state === 'connecting' ? 'connecting' : ''" :style="{ '--l': ans?.level ?? 0 }" :disabled="p.st.busy" :title="ans?.talking ? 'Пауза — подумать (Gemini подождёт)' : 'Отвечать голосом — Gemini слушает, «Проверить» — сразу оценка'" @pointerdown.stop @click="liveAnswer">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ ans?.state === 'connecting' ? 'Подключаюсь…' : ans?.talking ? 'Пауза · говорите' : ans?.state === 'live' ? 'Продолжить' : 'Ответить Gemini' }}</button>
+      <button v-if="!p.edit && !p.st.done && !isLive && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy" :title="dic === 'live' ? 'Остановить запись' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? 'Подключаюсь…' : 'Надиктовать с Gemini' }}</button>
       <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
     <div v-else class="ka done">{{ p.st.text }}</div>
+    <p v-if="!p.edit && isLive && (ansErr || ans?.err) && !p.st.done" class="kdd er">{{ ansErr || ans?.err }}</p>
     <p v-if="!p.edit && (dicDraft || dicErr)" class="kdd" :class="{ er: dicErr && !dicDraft }">{{ dicDraft || dicErr }}</p>
 
     <div class="kb miss" :class="look">
@@ -287,6 +305,8 @@ function jsApply() {
       <p v-if="tkErr" class="ph er">{{ tkErr }}</p>
       <div v-if="tkLines.length" class="ktx"><div v-for="(l, i) in tkLines" :key="i" class="kbl" :class="l.role">{{ l.t }}</div></div>
     </div>
+    <p v-if="isLive && checked && !p.edit && r.speechBusy" class="ph kno">Уровень языка считается (Flash Lite по записи)…</p>
+    <p v-if="isLive && checked && !p.edit && r.speechErr" class="ph er">Уровень языка: {{ r.speechErr }}</p>
     <SpeechReport v-if="isLive && checked && r.speech && !p.edit" :report="r.speech" bare />
     <div v-else-if="api && checked && !p.edit" class="kdis" @pointerdown.stop>
       <button type="button" class="kdb" :class="tk" :style="{ '--l': tkLvl }" @click="discuss">
@@ -303,7 +323,7 @@ function jsApply() {
     <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini Live
       <select class="kms" :value="lPick" title="Live-модель — общая с «Разговором с Gemini», запоминается" @change="pickLive($event.target.value)"><option value="">авто{{ lModels[0] ? ' · ' + liveName(lModels[0]) : '' }}</option><option v-for="m in lModels" :key="m" :value="m">{{ liveName(m) }}</option></select>
       <label class="klev"><input type="checkbox" class="sw" :checked="lLevel" @change="setLevel($event.target.checked)" />📊 Уровень языка</label>
-      <em>{{ recSec ? `запись ответа ${recSec} с — уйдёт голосом` : 'надиктуйте с Gemini — проверка пойдёт по голосу' }}</em></span>
+      <em>{{ ans?.state === 'live' ? `Gemini слушает · ${recSec} с речи · «Проверить» — сразу оценка` : '«Ответить Gemini» — говорите, она слушает и не перебивает' }}</em></span>
   </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && api">
     <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API

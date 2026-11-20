@@ -122,3 +122,55 @@ export async function checkLiveVoice(q, id, { chunks = [], level = false } = {})
 }
 // запись ответа экрана «Live (голос)» — копится диктовкой (Kp.vue), уходит в проверку (LessonPlayer)
 export const kpRec = {}
+
+// ---------- «Live (голос)» вживую (20.11.2026, переделка): соединение открывается по «🎙 Ответить», дальше «рация» —
+// говоришь прямо в Live (она слушает, но не отвечает), «Пауза» — подумать, «Проверить» — «закончил», и модель сразу вызывает
+// submit_grade: она уже всё слышала, ждать нечего. Её расшифровка твоей речи пишется в поле ответа (onMe). Запись копится (rec)
+// — для уровня языка (Flash Lite, параллельно, в LessonPlayer).
+/** Открыть разговор-ответ экрана: → S в kpLive[id] с методами speak(), pause(), finish(text) → Promise<оценка> */
+export async function openLiveAnswer(q, id, { onMe } = {}) {
+  kpLive[id]?.stop?.()
+  const key = firstKey(); if (!key) throw new Error('нет ключей Gemini')
+  const need = Number.isFinite(q.pass) ? q.pass : PASS
+  let model = ''; try { model = localStorage.getItem('tma.live.pick') || '' } catch { /* */ }
+  if (!model) model = (await liveModels(key))[0] || ''
+  if (!model) throw new Error('у ключа нет Live-моделей')
+  let voice = 'Kore'; try { voice = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
+  const rec = []
+  const S = reactive({ lines: [], state: 'connecting', quiet: getQuiet(), talking: false, heard: false, model, name: liveName(model), err: '', level: 0, rec })
+  let waiter = null, t0 = 0
+  const system = (q.prompt?.trim() || SYSTEM) + `\n\nВопрос:\n${q.question}\n\nЭталон:\n${kpPlain(q.reference)}\n\n` +
+    'Ученик отвечает ГОЛОСОМ — его ответ ты слышишь. Пока он говорит — молчи. Когда реплика закончена (или пришёл текст ответа), порядок строго такой: ' +
+    '1) СРАЗУ, ничего не говоря, вызови функцию submit_grade (оценивай по тому, что услышал); 2) потом скажи по-польски 1–2 коротких предложения: что хорошо и чего не хватило; 3) замолчи. ' +
+    'Ученик говорит по-польски с акцентом — это польский.'
+  const sess = startTalk({ key, model, voice, lang: 'pl-PL', system, tools: TOOL, micLater: true, manualVad: true, quiet: S.quiet,
+    rec: (pcm) => { rec.push(pcm) }, on: {
+      state: (s, info) => { if (s === 'live' && info) return; S.state = s; if (s === 'error') { S.err = info; waiter?.no(new Error(info || 'ошибка Live')); waiter = null } },
+      text: (role, t) => { if (role === 'me') { S.heard = true; onMe?.(t); return } const l = S.lines.at(-1); if (l && !l.closed) l.t += t; else S.lines.push({ role, t: t.replace(/^\s+/, ''), closed: false }) },
+      turn: () => { const l = S.lines.at(-1); if (l) l.closed = true },
+      level: (v) => { S.level = S.level * 0.6 + v * 0.4 },
+      tool: (name, a) => {
+        if (name !== 'submit_grade' || !waiter) return { ok: true }
+        const score = clamp(a.score), w = waiter; waiter = null; clearTimeout(w.tm)
+        w.ok({ score, missed: Array.isArray(a.missed_points) ? a.missed_points.map(String).filter(Boolean) : [], feedback: String(a.feedback ?? ''), ok: score >= need,
+          site: 'Gemini', live: true, voice: rec.length > 0, model, ms: Date.now() - t0 })
+        return { ok: true }
+      },
+    } })
+  Object.assign(S, {
+    stop: () => sess.stop(),
+    setQuiet: (v) => { S.quiet = !!v; sess.quiet(S.quiet); try { localStorage.setItem(QK, S.quiet ? '1' : '0') } catch { /* */ } },
+    speak: async () => { S.talking = true; await sess.talkStart() },
+    pause: () => { S.talking = false; sess.talkPause() },
+    /** «Проверить»: конец реплики (или текст, если голоса не было) → оценка */
+    finish: (text) => new Promise((ok, no) => {
+      if (S.state !== 'live') return no(new Error(S.err || 'Live не подключена'))
+      t0 = Date.now(); S.talking = false
+      const tm = setTimeout(() => { if (waiter) { waiter = null; no(new Error('Live не прислала оценку за 20 с')) } }, 20_000)
+      waiter = { ok, no, tm }
+      if (!sess.talkEnd()) sess.send(`Mój odpowiedź (tekst):\n${text || '(pusto)'}\n\nOceń.`)          // голоса не было — ответ текстом
+    }),
+  })
+  kpLive[id] = S
+  return S
+}

@@ -39,7 +39,7 @@ registerProcessor('tma-mic', Mic)`
 /** tools — объявления функций (Live вызывает их молча, ответ — on.tool(name, args) → объект); micLater — микрофон не сразу (listen());
  *  quiet — не проигрывать голос (расшифровка всё равно идёт). Возврат: { stop, mute, quiet(v), send(text), listen() } */
 export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, manualVad = false, on = {} }) {          // manualVad — модель не решает сама, что «договорил»: звук — sendAudio()          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
-  let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
+  let ws = null, ready = false, plain = false, talking = false, actOpen = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
   const say = (s, info) => { if (!done || s === 'ended' || s === 'error') on.state?.(s, info) }
   function stop(reason = '') {
@@ -52,6 +52,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   }
   function play(bytes, rate) {
     if (!ctxOut || hushed) return
+    if (ctxOut.state === 'suspended') ctxOut.resume().catch(() => {})
     const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length >> 1), f = new Float32Array(pcm.length)
     for (let i = 0; i < pcm.length; i++) f[i] = pcm[i] / 32768
     const buf = ctxOut.createBuffer(1, f.length, rate); buf.copyToChannel(f, 0)
@@ -67,6 +68,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
     src = ctxIn.createMediaStreamSource(mic); node = new AudioWorkletNode(ctxIn, 'tma-mic'); src.connect(node)
     node.port.onmessage = (e) => {
       if (done || ws?.readyState !== 1) return
+      if (manualVad && !talking) { on.level?.(0); return }          // «рация»: звук идёт, только пока «говорю»
       const f = e.data; let sum = 0; const pcm = new Int16Array(f.length)
       for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = muted ? 0 : v * 32767 }
       on.level?.(muted ? 0 : Math.min(1, Math.sqrt(sum / f.length) * 4))
@@ -127,6 +129,23 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   connect()
   return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() },
     send: (text) => { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { text } })) },
+    // «рация» вживую: talkStart() — «начал» и микрофон в модель; talkPause() — микрофон молчит (реплика не закончена);
+    // talkEnd() — «закончил»: модель отвечает. Без ручного режима (старая модель) — конец потока
+    talkStart: async () => {
+      if (done || ws?.readyState !== 1) return
+      ctxOut?.resume?.().catch(() => {})          // звук ответа: AudioContext мог создаться без нажатия — будим на нажатии
+      if (!actOpen) { if (manualVad && !plain) ws.send(JSON.stringify({ realtimeInput: { activityStart: {} } })); actOpen = true }
+      talking = true
+      if (!mic) try { await startMic() } catch (err) { stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) }
+    },
+    talkPause: () => { talking = false },
+    talkEnd: () => {
+      talking = false
+      if (ws?.readyState !== 1 || !actOpen) return false
+      actOpen = false
+      ws.send(JSON.stringify({ realtimeInput: manualVad && !plain ? { activityEnd: {} } : { audioStreamEnd: true } }))
+      return true
+    },
     // готовая запись (куски Int16Array 16 кГц) — разом: «начал» → звук секундными кусками → «закончил» (без ручного режима — конец потока)
     sendAudio: (chunks) => {
       if (ws?.readyState !== 1) return false

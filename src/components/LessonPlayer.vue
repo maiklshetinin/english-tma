@@ -16,7 +16,8 @@ import { exOf } from '../exercises'
 import { providePlay, useEdit } from '../exercises/ctx'
 import { checkAnswer } from '../utils/ai'
 import { checkSmart, getPick } from '../utils/kpcheck'
-import { checkLive, checkLiveVoice, kpRec } from '../utils/kplive'
+import { checkLive, checkLiveVoice, kpLive } from '../utils/kplive'
+import { assessSpeech, wavOf } from '../utils/speech'
 import { shuffle, orderParts, gapParts, gapOk, gapList, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -268,9 +269,18 @@ async function aiCheck() {
     const q = { question: s.text ?? '', reference: s.ideal ?? '', answer: st.text, prompt: s.prompt, pass: s.pass }
     if (s.engine === 'live') {          // «Live (голос)» (20.11.2026, тест): запись + текст в Live, без запасных путей
       let lvl = false; try { lvl = localStorage.getItem('tma.kp.level') === '1' } catch { /* */ }
-      const r = await checkLiveVoice(q, s.id, { chunks: kpRec[s.id] ?? [], level: lvl })
+      const S = kpLive[s.id]
+      const r = S?.finish && S.state === 'live' ? await S.finish(st.text) : await checkLiveVoice(q, s.id, { chunks: [], level: false })          // разговор открыт («🎙 Ответить») — оценка сразу; нет — по тексту
       if (step.value !== s) return
-      st.ai = r; verdict(r.ok); return
+      st.ai = r; verdict(r.ok)
+      const rec = S?.rec ?? []
+      if (lvl && rec.length) {          // уровень языка — параллельно, Flash Lite по записи; приходит следом и ничего не держит
+        const { blob, sec } = wavOf(rec)
+        st.ai = { ...st.ai, speechBusy: true }
+        assessSpeech({ blob, sec, transcript: st.text, lang: 'pl-PL' }).then((rep) => { if (step.value === s && st.ai) st.ai = { ...st.ai, speech: rep, speechBusy: false } })
+          .catch((e) => { if (step.value === s && st.ai) st.ai = { ...st.ai, speechErr: e.message, speechBusy: false } })
+      }
+      return
     }
     const viaLive = s.engine === 'api' && (getPick() || s.model) === 'live'          // «Live · голосом» (20.11.2026): не вышло — Flash Lite, потом мост
     const r = viaLive ? await checkLive(q, s.id).catch((e) => checkSmart(q, { model: '' }).then((x) => ({ ...x, note: `Live: ${e.message} — ${x.note ? x.note : 'проверила текстовая модель'}` })))
