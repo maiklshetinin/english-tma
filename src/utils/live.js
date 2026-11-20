@@ -123,7 +123,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', o
  *  (заменяется), и inputTranscription — готовый кусок после паузы (дописывается). Сессия — до 10 минут.
  *  on: { state(s, info), interim(text), final(text), level(0..1) } → { stop() } */
 export const STT_MODEL = 'gemini-3.5-transcribe-live'
-export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', on = {} }) {
+export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = null, on = {} }) {          // rec — массив: сюда же копятся куски звука (Int16Array) — для «Теста речи»
   let ws = null, mic = null, ctx = null, node = null, src = null, done = false, ready = false
   function stop(reason = '') {
     if (done) return; done = true
@@ -142,6 +142,7 @@ export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', on = {
       const f = e.data; let sum = 0; const pcm = new Int16Array(f.length)
       for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = v * 32767 }
       on.level?.(Math.min(1, Math.sqrt(sum / f.length) * 4))
+      rec?.push(pcm)
       ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64(new Uint8Array(pcm.buffer)), mimeType: 'audio/pcm;rate=16000' } } }))
     }
   }

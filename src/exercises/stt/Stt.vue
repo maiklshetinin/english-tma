@@ -9,6 +9,7 @@ import { usePlay, useEdit } from '../ctx'
 import { startTranscribe, sttModel, firstKey, liveName } from '../../utils/live'
 import { ai } from '../../utils/gemini'
 import { aiIcon } from '../../utils/ai'
+import SpeechReport from '../../components/SpeechReport.vue'
 import J from './stt.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -20,11 +21,13 @@ const base = computed(() => (LANGS[props.step.lang] ? props.step.lang : 'pl-PL')
 const LK = 'tma.stt.lang'
 const mine = ref((() => { try { return localStorage.getItem(LK) || '' } catch { return '' } })())
 const lang = computed(() => (LANGS[mine.value] ? mine.value : base.value))
-function pickLang(v) { if (st.value === 'live' || st.value === 'connecting') return; mine.value = v === base.value ? '' : v; try { if (mine.value) localStorage.setItem(LK, v); else localStorage.removeItem(LK) } catch { /* */ } }
+function pickLang(v) { if (st.value === 'live' || st.value === 'connecting') return; if (v !== lang.value && rec.value.length) { fin.value = []; draft.value = ''; rec.value = [] }          // другой язык — запись заново
+  mine.value = v === base.value ? '' : v; try { if (mine.value) localStorage.setItem(LK, v); else localStorage.removeItem(LK) } catch { /* */ } }
 function setLang(v) { if (v === 'pl-PL') delete props.step.lang; else props.step.lang = v; ed.changed() }
 
 const st = ref('idle'), err = ref(''), note = ref(''), fin = ref([]), draft = ref(''), level = ref(0), used = ref(''), t0 = ref(0), now = ref(0)
 let sess = null, clock = 0
+const rec = ref([])          // звук диктовки — для «Теста речи» (копится и при «Говорить дальше», «Очистить» — сначала)
 const box = ref(null)
 const sec = computed(() => { const s = Math.max(0, Math.round((now.value - t0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const text = computed(() => fin.value.join(' ').replace(/\s+/g, ' ').trim())
@@ -36,7 +39,7 @@ async function start() {
   if (!key) { err.value = 'Нужен ключ Gemini — добавьте его в профиле, раздел «Ключи Gemini»'; return }
   st.value = 'connecting'
   used.value = await sttModel(key)
-  sess = startTranscribe({ key, model: used.value, lang: lang.value, on: {
+  sess = startTranscribe({ key, model: used.value, rec: rec.value, lang: lang.value, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
       st.value = s === 'error' ? 'ended' : s
@@ -50,7 +53,7 @@ async function start() {
   } })
 }
 function stop() { sess?.stop() }
-function clear() { fin.value = []; draft.value = '' }
+function clear() { fin.value = []; draft.value = ''; rec.value = [] }
 async function copy() { try { await navigator.clipboard.writeText(text.value); note.value = 'текст скопирован' } catch { /* */ } }
 onBeforeUnmount(() => { sess?.stop(); clearInterval(clock) })
 const hasKeys = computed(() => ai.keys.length > 0)
@@ -81,6 +84,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
       <p v-if="!hasKeys" class="er">Нужен ключ Gemini — добавьте его в профиле, раздел «Ключи Gemini».</p>
       <p v-if="err" class="er">{{ err }}</p>
       <div v-if="text || draft" ref="box" class="out"><span>{{ text }}</span> <i v-if="draft">{{ draft }}</i></div>
+      <SpeechReport v-if="text && st !== 'live' && st !== 'connecting'" :chunks="rec" :transcript="text" :lang="lang" />
       <div v-if="text && st !== 'live' && st !== 'connecting'" class="sb"><button type="button" class="sm" @click="copy">Копировать</button><button type="button" class="sm" @click="clear">Очистить</button><small v-if="note">{{ note }}</small></div>
     </div>
   </template>
