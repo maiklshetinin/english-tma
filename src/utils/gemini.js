@@ -95,7 +95,7 @@ async function withModels(key, fetcher, fn) {
     throw last
   }
 }
-function mark(x, ok, e) {
+export function mark(x, ok, e) {          // экспорт — для озвучки (utils/tts.js): тот же учёт запросов и квоты у ключа
   if (x.day !== today()) { x.day = today(); x.n = 0 }
   x.n++; x.err = ok ? '' : e.message
   if (ok || !(e?.status >= 500)) x.ok = ok                   // 5xx — перегружен Google, ключ рабочий: статус ключа не трогаем

@@ -10,5 +10,5 @@ export const providePlay = (v) => provide(PLAY, v)
 export const usePlay = () => inject(PLAY)
 export const provideEdit = (v) => provide(EDIT, v)
 // заглушка — чтобы шаблон в режиме правки не падал вне редактора (например, в тесте)
-const NOOP = { pick() {}, drop() {}, clear() {}, pct: () => null, changed() {}, cards() {}, canUndo: () => false, undoCard() {}, dropFiles() {} }
+const NOOP = { pick() {}, drop() {}, clear() {}, put() {}, pct: () => null, changed() {}, cards() {}, canUndo: () => false, undoCard() {}, dropFiles() {} }
 export const useEdit = () => inject(EDIT, NOOP)

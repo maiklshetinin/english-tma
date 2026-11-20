@@ -135,6 +135,7 @@ provideEdit({
   pick: (s, kinds, opt = null, as = null) => pick(s, kinds, opt, as),
   drop: (e, s, kinds, opt = null, as = null) => onDrop(e, s, kinds, opt, as),
   clear: (obj, field) => clear(obj, field),
+  put: (s, field, f) => props.putFile(s.id, field, f),          // готовый файл (озвучка Gemini, 20.11.2026)
   pct: (s, field, opt) => pct(s, field, opt),
   changed,
   cards: (s, what) => openPk(s, what),

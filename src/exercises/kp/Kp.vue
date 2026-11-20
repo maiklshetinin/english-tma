@@ -12,7 +12,8 @@ import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
 import { usePlay, useEdit } from '../ctx'
-import { PASS, SYSTEM, bridgeStatus, aiIcon } from '../../utils/ai'
+import { PASS, SYSTEM, bridgeStatus, aiIcon, kpPlain } from '../../utils/ai'
+import TtsDialog from '../../components/TtsDialog.vue'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -65,6 +66,21 @@ const look = computed(() => (LOOKS[props.step.look] ? props.step.look : 'pdf'))
 function nextLook() { const k = Object.keys(LOOKS), n = k[(k.indexOf(look.value) + 1) % k.length]; if (n === 'pdf') delete props.step.look; else props.step.look = n; ed.changed() }
 function toggleMarks() { if (props.step.plain) delete props.step.plain; else props.step.plain = true; ed.changed() }
 const mk = (x) => (props.step.plain ? '' : x.k)          // выделения выключены — всё обычным текстом
+// озвучка вопроса (20.11.2026): в правке — значок Gemini у вопроса → окно (голос, ход, послушать) → «Сохранить в экран» = step.audio;
+// у ученика — кнопка-динамик у вопроса, если звук есть
+const tts = ref(false), gIcon = aiIcon('Gemini')
+const ttsText = computed(() => kpPlain(props.step.text ?? '').trim())
+function ttsSave(f) { ed.put(props.step, 'audio', f) }
+let qAu = null
+const playing = ref(false)
+function playQ() {
+  if (!props.step.audio) return
+  if (qAu && !qAu.paused) { qAu.pause(); return }
+  qAu?.pause(); qAu = new Audio(p.src(props.step.audio, 'audio'))
+  qAu.onplay = () => { playing.value = true }; qAu.onpause = qAu.onended = () => { playing.value = false }
+  qAu.play().catch(() => {})
+}
+onBeforeUnmount(() => qAu?.pause())
 function toggleStar() { if (props.step.star) delete props.step.star; else props.step.star = true; ed.changed() }
 
 const r = computed(() => p.st.ai)                          // { score, missed, feedback } или { error }
@@ -111,6 +127,12 @@ function jsApply() {
           <template #before><span v-if="step.n" class="kqn">{{ step.n }}.</span></template>
           <span v-if="step.n" class="kqn">{{ step.n }}.</span>{{ step.text || '…' }}
         </ExText>
+        <button v-if="step.audio" type="button" class="kau" :class="{ on: playing }" :title="playing ? 'Пауза' : 'Послушать вопрос'" @pointerdown.stop @click.stop="playQ"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg></button>
+        <template v-if="p.edit">
+          <button type="button" class="ktts" :title="step.audio ? 'Озвучить вопрос заново (Gemini)' : 'Озвучить вопрос (Gemini)'" :disabled="!ttsText" @pointerdown.stop @click.stop="tts = true"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span><i v-if="ed.pct(step, 'audio') != null">{{ ed.pct(step, 'audio') }}%</i></button>
+          <button v-if="step.audio" type="button" class="kax" title="Убрать озвучку" @pointerdown.stop @click.stop="ed.clear(step, 'audio')">✕</button>
+        </template>
+        <TtsDialog v-if="tts" :text="ttsText" what="вопрос" @close="tts = false" @save="ttsSave" />
       </div>
       <div class="kg" :class="checked && tier">
         <svg viewBox="0 0 120 66" role="img" :aria-label="checked ? `Совпадение по смыслу ${r.score} %` : 'Ещё не проверено'">
@@ -177,6 +199,14 @@ function jsApply() {
 .kqt :deep(.exf) { background: transparent } .kqn { margin-right: .3em }
 .kst { flex: none; width: 30px; height: 30px; margin: 0 -9px 0 -6px; padding: 0; border: 0; background: none; position: relative; z-index: 1 } button.kst { cursor: pointer }
 .kst svg { display: block; width: 100%; height: 100% } .kst .s1 { fill: #ff3b3b } .kst .s2 { fill: #d10f0f }
+.kau, .ktts, .kax { flex: none; display: grid; place-items: center; margin-left: 6px; padding: 0; border: 0; cursor: pointer; position: relative }
+.kau { width: 34px; height: 34px; border-radius: 50%; background: #f2dab5; color: #8a4b1c }
+.kau svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .kau svg path:first-child { fill: currentColor }
+.kau:hover, .kau.on { background: #e9c99a }
+.ktts { width: 34px; height: 34px; border-radius: 10px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .14) }
+.ktts img { width: 20px; height: 20px } .ktts:hover:not(:disabled) { box-shadow: 0 2px 8px rgba(75, 141, 248, .45) } .ktts:disabled { opacity: .4; cursor: not-allowed }
+.ktts i { position: absolute; bottom: -14px; font-size: 10px; font-style: normal; color: #8a4b1c }
+.kax { width: 22px; height: 22px; border-radius: 50%; background: none; color: #a07a55; font-size: 12px } .kax:hover { background: rgba(0, 0, 0, .06) }
 .kst.off { opacity: .28; filter: grayscale(1) } .kst.off:hover { opacity: .6 }
 .kg { flex: none; display: flex; align-items: center; gap: 8px; width: 178px }
 .kg svg { width: 84px; height: 46px; flex: none; overflow: visible }
