@@ -14,6 +14,7 @@ import { ai } from '../../utils/gemini'
 import { aiIcon } from '../../utils/ai'
 import { VOICES } from '../../utils/tts'
 import SpeechReport from '../../components/SpeechReport.vue'
+import TalkAvatar from './TalkAvatar.vue'
 import { assessSpeech, wavOf } from '../../utils/speech'
 import J from './talk.json'
 import { LANG, DEF_PROMPT, talkCfg, talkSystem } from './defaults'
@@ -78,6 +79,7 @@ async function start() {
   st.value = 'connecting'
 }
 function stop() { sess?.stop() }
+const outLevel = () => sess?.outLevel?.() ?? 0          // громкость голоса Gemini — для персонажа (step.avatar)
 
 // «Оценивать речь» во время разговора (20.11.2026): копится только свой голос (пока Gemini молчит); набралось ещё 20 с речи —
 // в фоне оценка (Flash Lite, вся своя речь с начала, до последних 3 минут) — уровень уточняется; занято — следующая ждёт.
@@ -125,6 +127,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
     </template>
 
     <div v-else class="tv" :class="st" @pointerdown.stop>
+      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" />
       <div v-if="st !== 'live' && st !== 'connecting'" class="tm">
         <label v-if="models.length">Модель <select :value="pick" @change="setPick($event.target.value)"><option value="">{{ lessonModel ? liveName(lessonModel) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
         <label>Голос <select :value="vpick" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice && step.voice !== 'Kore' ? ' (из урока)' : '' }}</option>

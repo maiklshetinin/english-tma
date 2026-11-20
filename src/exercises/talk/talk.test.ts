@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stepJson, applyStepJson, stepsFromJson, type Step } from '../../utils/lesson'
+import { stepJson, applyStepJson, stepsFromJson, tplOf, TEMPLATES, type Step } from '../../utils/lesson'
 import { DEF_PROMPT, LOCK, OPENER, talkCfg, talkFields, talkSystem } from './defaults'
 
 // «Разговор с Gemini» (только польский): JSON экрана показывает всё, что уходит в Live-модель, а в экране хранятся только отличия (20.11.2026)
@@ -33,5 +33,12 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
   it('«Править → Применить» больше не теряет lang у «Транскрипции» и model у «Ответа по смыслу»', () => {
     const r = stepsFromJson(JSON.stringify([{ kind: 'stt', text: 'Hola', lang: 'es-ES' }, { kind: 'kp', text: 'Q', ideal: 'A', model: 'gemini-2.5-flash' }]))!
     expect(r.steps[0].lang).toBe('es-ES'); expect(r.steps[1].model).toBe('gemini-2.5-flash')
+  })
+
+  it('«Разговор с персонажем» (тест): тот же talk с avatar: true — свой шаблон, флаг не теряется при «Применить»', () => {
+    const s = TEMPLATES.find((t) => t.id === 'talkava')!.make() as Step
+    expect(s.kind).toBe('talk'); expect(s.avatar).toBe(true); expect(tplOf(s)).toBe('talkava'); expect(tplOf({ id: 'x', kind: 'talk' })).toBe('talk')
+    expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), silenceMs: 1500 }))).toBe('')
+    expect(s.avatar).toBe(true); expect(s.silenceMs).toBe(1500)
   })
 })

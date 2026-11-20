@@ -41,7 +41,7 @@ registerProcessor('tma-mic', Mic)`
 /** silenceMs — пауза до «договорил», endSens — 'low' | 'high' (чувствительность конца речи), temperature — null: как у модели,
  *  noiseSuppression — шумодав браузера (по умолчанию выкл.: режет sz, cz, ś, ć). Умолчания — как было до 20.11.2026 (kp, kplive) */
 export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
-  let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, node = null, src = null, nextAt = 0, done = false, muted = false
+  let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, outAn = null, outBuf = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
   const say = (s, info) => { if (!done || s === 'ended' || s === 'error') on.state?.(s, info) }
   function stop(reason = '') {
@@ -58,7 +58,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
     const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length >> 1), f = new Float32Array(pcm.length)
     for (let i = 0; i < pcm.length; i++) f[i] = pcm[i] / 32768
     const buf = ctxOut.createBuffer(1, f.length, rate); buf.copyToChannel(f, 0)
-    const s = ctxOut.createBufferSource(); s.buffer = buf; s.connect(ctxOut.destination)
+    const s = ctxOut.createBufferSource(); s.buffer = buf; s.connect(outAn || ctxOut.destination)
     const at = Math.max(ctxOut.currentTime + 0.03, nextAt); s.start(at); nextAt = at + buf.duration
     playing.add(s); s.onended = () => playing.delete(s)
   }
@@ -79,6 +79,8 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   }
   say('connecting')
   ctxOut = new AudioContext({ sampleRate: 24000 })
+  // громкость голоса Gemini — для персонажа (рот по голосу, 20.11.2026): звук идёт через анализатор в динамик, как раньше
+  try { outAn = ctxOut.createAnalyser(); outAn.fftSize = 512; outAn.connect(ctxOut.destination); outBuf = new Float32Array(outAn.fftSize) } catch { outAn = null }
   // язык закреплён (20.11.2026: польский слышала плохо — модель сама угадывала язык и с акцентом «слышала» русский):
   // язык расшифровки и голоса — lang; пауза до «договорил» — silenceMs, по умолчанию 1,2 с (на собеседовании думают посреди фразы).
   // Не приняла настройку (старая модель) — переподключаемся без неё (plain)
@@ -128,7 +130,9 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
     stop(e.code === 1000 ? '' : /API key|key not valid/i.test(r) ? 'Ключ не принят Google' : /quota|exhaust|limit/i.test(r) ? 'Лимит Live-модели исчерпан — попробуйте другую модель или ключ' : /model|not found|not supported/i.test(r) ? `Модель «${model}» недоступна для разговора: ${r}` : `Соединение закрылось (${e.code})${r ? ': ' + r : ''}`)
   }
   connect()
-  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() },
+  /** Громкость голоса Gemini сейчас, 0..1 (нет звука или анализатора — 0) */
+  function outLevel() { if (!outAn || done) return 0; outAn.getFloatTimeDomainData(outBuf); let sum = 0; for (let i = 0; i < outBuf.length; i++) sum += outBuf[i] * outBuf[i]; return Math.min(1, Math.sqrt(sum / outBuf.length) * 5) }
+  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() }, outLevel,
     send: (text) => { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { text } })) },
     listen: async () => { if (mic || done) return; try { await startMic() } catch (err) { stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) } } }
 }

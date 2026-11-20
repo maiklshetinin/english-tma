@@ -2,7 +2,7 @@
   "kind": "talk",
   "title": "Разговор с Gemini",
   "head": "Поговорите с Gemini голосом",
-  "templates": ["talk"],
+  "templates": ["talk", "talkava"],
   "fields": {
     "head": { "type": "text", "label": "Задание" },
     "text": { "type": "text", "label": "Что ученик делает в разговоре" },
@@ -15,12 +15,13 @@
     "silenceMs": { "type": "number", "default": 1200, "min": 200, "max": 5000, "label": "Пауза до «договорил», мс" },
     "endSens": { "type": "select", "options": ["low", "high"], "default": "low", "label": "Чувствительность конца речи" },
     "temperature": { "type": "number", "default": null, "min": 0, "max": 2, "label": "Температура (null — как у модели)" },
+    "avatar": { "type": "bool", "default": false, "label": "Персонаж над разговором (шаблон «Разговор с персонажем», тест)" },
     "noiseSuppression": { "type": "bool", "default": false, "label": "Шумодав браузера (режет sz, cz, ś, ć)" }
   },
   "check": "none",
   "next": "живой голосовой разговор через Live API ключами преподавателя (браузер); «Продолжить» — сразу, без оценки",
   "words": [],
-  "skills": { "talk": ["S", "L"] },
+  "skills": { "talk": ["S", "L"], "talkava": ["S", "L"] },
   "min": 5,
   "shuffle": false,
   "limits": {}

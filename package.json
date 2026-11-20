@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "firebase": "^11.10.0",
+    "lottie-web": "^5.13.0",
     "pinia": "^4.1.0",
     "read-excel-file": "^9.3.13",
     "ts-fsrs": "5.4.2",
