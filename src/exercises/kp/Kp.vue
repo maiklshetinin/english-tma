@@ -14,6 +14,7 @@ import ExTool from '../parts/ExTool.vue'
 import { usePlay, useEdit } from '../ctx'
 import { PASS, SYSTEM, bridgeStatus, aiIcon, kpPlain } from '../../utils/ai'
 import TtsDialog from '../../components/TtsDialog.vue'
+import { modelName } from '../../utils/tts'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -70,7 +71,9 @@ const mk = (x) => (props.step.plain ? '' : x.k)          // выделения �
 // у ученика — кнопка-динамик у вопроса, если звук есть
 const tts = ref(false), gIcon = aiIcon('Gemini')
 const ttsText = computed(() => kpPlain(props.step.text ?? '').trim())
-function ttsSave(f) { ed.put(props.step, 'audio', f) }
+function ttsSave(f, by) { ed.put(props.step, 'audio', f); props.step.audioBy = by; ed.changed() }
+function ttsClear() { delete props.step.audioBy; ed.clear(props.step, 'audio') }
+const byT = computed(() => { const [m, v] = String(props.step.audioBy || '').split('|'); return m && v ? `${modelName(m)} · ${v}` : '' })
 let qAu = null
 const playing = ref(false)
 function playQ() {
@@ -129,12 +132,12 @@ function jsApply() {
           <template #before><span v-if="step.n" class="kqn">{{ step.n }}.</span></template>
           <span v-if="step.n" class="kqn">{{ step.n }}.</span>{{ step.text || '…' }}
         </ExText>
-        <button v-if="step.audio" type="button" class="kau" :class="{ on: playing }" :title="playing ? 'Пауза' : 'Послушать вопрос'" @pointerdown.stop @click.stop="playQ"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg></button>
+        <button v-if="step.audio" type="button" class="kau" :class="{ on: playing }" :title="playing ? 'Пауза' : 'Послушать вопрос' + (byT ? ' — озвучено ' + byT : '')" @pointerdown.stop @click.stop="playQ"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg></button>
         <template v-if="p.edit">
-          <button type="button" class="ktts" :title="step.audio ? 'Озвучить вопрос заново (Gemini)' : 'Озвучить вопрос (Gemini)'" :disabled="!ttsText" @pointerdown.stop @click.stop="tts = true"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span><i v-if="ed.pct(step, 'audio') != null">{{ ed.pct(step, 'audio') }}%</i></button>
-          <button v-if="step.audio" type="button" class="kax" title="Убрать озвучку" @pointerdown.stop @click.stop="ed.clear(step, 'audio')">✕</button>
+          <button type="button" class="ktts" :title="step.audio ? 'Озвучить вопрос заново (Gemini)' + (byT ? ' — сейчас: ' + byT : '') : 'Озвучить вопрос (Gemini)'" :disabled="!ttsText" @pointerdown.stop @click.stop="tts = true"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span><i v-if="ed.pct(step, 'audio') != null">{{ ed.pct(step, 'audio') }}%</i></button>
+          <button v-if="step.audio" type="button" class="kax" title="Убрать озвучку" @pointerdown.stop @click.stop="ttsClear">✕</button>
         </template>
-        <TtsDialog v-if="tts" :text="ttsText" what="вопрос" @close="tts = false" @save="ttsSave" />
+        <TtsDialog v-if="tts" :text="ttsText" what="вопрос" :by="step.audioBy || ''" :has="!!step.audio" @close="tts = false" @save="ttsSave" />
       </div>
       <div v-if="!p.edit && (checked || p.st.busy)" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
         <svg viewBox="0 0 120 66" role="img" :aria-label="checked ? `Совпадение по смыслу ${r.score} %` : 'Ещё не проверено'">

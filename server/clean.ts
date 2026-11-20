@@ -91,6 +91,8 @@ function cleanCard(x: unknown, seen: Set<string>): Card {
     const v = x[k]
     if (typeof v === 'string' && /^\d{1,4}(\.\d{1,2})?\|[a-p]{0,64}$/.test(v)) c[k] = v
   }
+  // чем озвучен звук (Gemini, 20.11.2026): «модель|голос»
+  for (const k of ['audioBy', 'exampleAudioBy'] as const) { const v = x[k]; if (typeof v === 'string' && /^[a-z0-9.-]{3,80}\|[A-Za-z]{2,20}$/.test(v)) c[k] = v }
   if (x.suspended === true) c.suspended = true
   return c
 }

@@ -14,7 +14,7 @@ import { isMediaUrl } from './media.js'
 export interface CoursesDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 export const COURSE_TYPES = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw', 'test', 'tutor', 'reward']
 export const COURSE_ITEMS_MAX = 500, COURSES_MAX = 100
-export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer', 'sort', 'odd', 'kp'], STEPS_MAX = 40
+export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer', 'sort', 'odd', 'kp', 'talk'], STEPS_MAX = 40
 const ID = /^[\w-]{1,64}$/
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
@@ -27,6 +27,7 @@ export interface Course { id: string; title: string; mode: 'wave' | 'line'; prog
 export const INK_MAX = 300, INK_POINTS = 4000, TEMPLATES_MAX = 30          // TEMPLATES_MAX — своих упражнений из конструктора в курсе
 export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 
+export const TTS_BY = /^[a-z0-9.-]{3,80}\|[A-Za-z]{2,20}$/          // «gemini-2.5-flash-preview-tts|Kore»
 export function makeCourses({ db, FieldValue }: CoursesDeps) {
   const col = () => db.collection('courses')
   const checkId = (v: unknown) => { const id = String(v ?? ''); if (!ID.test(id)) throw fail(400, 'bad id'); return id }
@@ -63,7 +64,11 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (kind === 'speak' || kind === 'gap') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)) }
     if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 8).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))          // до 8 — банк слов из учебника (предлоги)
     if (kind === 'answer') { put(o, 'text', str(r.text, 300)); put(o, 'note', str(r.note, 600)); put(o, 'tr', str(r.tr, 300)) }
-    if (kind === 'kp') { put(o, 'text', str(r.text, 300)); put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; if (r.look === 'lines' || r.look === 'cards') o.look = r.look; if (r.plain === true) o.plain = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n } put(o, 'prompt', str(r.prompt, 4000)); const p = Number(r.pass); if (Number.isInteger(p) && p > 0 && p <= 100) o.pass = p }          // свой промпт для Gemini и порог, %          // «Ответ по смыслу»: вопрос и эталон (Gemini сверяет)
+    if (kind === 'kp') { put(o, 'text', str(r.text, 300)); put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; if (r.look === 'lines' || r.look === 'cards') o.look = r.look; if (r.plain === true) o.plain = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n } put(o, 'prompt', str(r.prompt, 4000)); const p = Number(r.pass); if (Number.isInteger(p) && p > 0 && p <= 100) o.pass = p; if (r.autoplay === true) o.autoplay = true }          // свой промпт для Gemini и порог, %          // «Ответ по смыслу»: вопрос и эталон (Gemini сверяет)
+    // чем озвучен звук экрана (Gemini, 20.11.2026): «модель|голос» — показать в редакторе
+    { const by = r.audioBy; if (typeof by === 'string' && TTS_BY.test(by)) o.audioBy = by }
+    // «Разговор с Gemini» (Live API, 20.11.2026, эксперимент): задание, роль ИИ, голос, модель
+    if (kind === 'talk') { put(o, 'text', str(r.text, 300)); put(o, 'prompt', str(r.prompt, 4000)); if (typeof r.voice === 'string' && /^[A-Za-z]{2,20}$/.test(r.voice)) o.voice = r.voice; if (typeof r.model === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.model)) o.model = r.model }
     // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.
     // k — цвет плитки (o/g/y/p/b), mix — перемешивать у ученика, hint — подсказка «Нажмите фразу, затем колонку»
     // цвет плитки — код #rrggbb (19.11.2026); старые буквы — в коды тех же цветов

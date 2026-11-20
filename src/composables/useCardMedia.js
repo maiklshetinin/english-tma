@@ -64,13 +64,13 @@ export function useCardMedia(deck) {
       const old = c[k]
       if (!online) c[k] = URL.createObjectURL(blob)
       else { const key = await send(blob, type, id); c[k] = MEDIA + key }
-      if (k !== 'image') { try { c[k + 'Meta'] = await waveOf(blob) } catch { delete c[k + 'Meta'] } }      // волна и длительность — сразу из файла
+      if (k !== 'image') { delete c[k + 'By']; try { c[k + 'Meta'] = await waveOf(blob) } catch { delete c[k + 'Meta'] } }      // свой файл — уже не «озвучено Gemini» (озвучка ставит это после)      // волна и длительность — сразу из файла
       if (old && old !== c[k]) forget(old)
       return true
     } catch (e) { showToast(/фото маленькое|не удалось открыть/.test(e.message) ? e.message : `Не удалось загрузить ${file.name} (${e.message})`, null, 'bad'); return false }
     finally { delete busy[id] }
   }
-  function clearField(c, k) { forget(c[k]); delete c[k]; delete c[k + 'Meta']; delete info[c.id + k] }
+  function clearField(c, k) { forget(c[k]); delete c[k]; delete c[k + 'Meta']; delete c[k + 'By']; delete info[c.id + k] }
   return { busy, info, attach, clearField }
 }
 

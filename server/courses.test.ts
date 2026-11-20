@@ -66,10 +66,15 @@ await C.put(me, 'k8', { ...course, items: [{ id: 'L', type: 'lesson', title: '',
   ok('найди лишнее: опции, цвет, ответ в пределах', s[0].opts.length === 2 && s[0].opts[0].k === '#fbedb0' && !s[0].opts[1].k && s[0].ans === 1 && s[0].mix === false && s[0].note === 'x')
   ok('распредели: до 5 колонок, метка задания учебника, колонка фразы в пределах', s[1].cols.length === 5 && s[1].items[0].c === 1 && s[1].items[1].c === 4 && s[1].hint === false && s[1].bk === 'sort' && s[1].bn === 7 && s[1].bs === 'page' && !('bs' in s[0])) }
 // «Ответ по смыслу» (Karta Polaka): вопрос и эталон сохраняются, лишнее срезается
-await C.put(me, 'k11', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'q1', kind: 'kp', text: 'Kiedy i jak obchodzimy Mikołajki?', ideal: 'Mikołajki obchodzimy szóstego grudnia…', prompt: 'Mój prompt', pass: 70, star: true, n: 3, look: 'cards', plain: true, note: 'x', junk: 1 }, { id: 'q2', kind: 'kp', text: 'Q', ideal: 'I', pass: 500 }] }] })
+await C.put(me, 'k11', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'q1', kind: 'kp', text: 'Kiedy i jak obchodzimy Mikołajki?', ideal: 'Mikołajki obchodzimy szóstego grudnia…', prompt: 'Mój prompt', pass: 70, star: true, n: 3, look: 'cards', plain: true, autoplay: true, audioBy: 'gemini-2.5-flash-preview-tts|Kore', note: 'x', junk: 1 }, { id: 'q2', kind: 'kp', text: 'Q', ideal: 'I', pass: 500 }] }] })
 { const s = ((await C.get('k11')) as any).items[0].steps[0]
   ok('ответ по смыслу: вопрос и эталон на месте, мусор срезан', s.kind === 'kp' && s.text === 'Kiedy i jak obchodzimy Mikołajki?' && s.ideal === 'Mikołajki obchodzimy szóstego grudnia…' && s.prompt === 'Mój prompt' && s.pass === 70 && s.star === true && s.n === 3 && s.look === 'cards' && s.plain === true && !('note' in s) && !('junk' in s))
+  ok('ответ по смыслу: автозвук и «чем озвучено» сохраняются', ((await C.get('k11')) as any).items[0].steps[0].autoplay === true && ((await C.get('k11')) as any).items[0].steps[0].audioBy === 'gemini-2.5-flash-preview-tts|Kore')
   ok('ответ по смыслу: кривой порог не сохраняется', !('pass' in ((await C.get('k11')) as any).items[0].steps[1])) }
+// «Разговор с Gemini»: задание, роль, голос, модель; кривое — мимо
+await C.put(me, 'k12', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'g1', kind: 'talk', text: 'Собеседование', prompt: 'Jesteś konsulem', voice: 'Puck', model: 'gemini-3.8-live', junk: 1 }, { id: 'g2', kind: 'talk', voice: 'Pu ck!', model: 'X Y' }] }] })
+{ const s = ((await C.get('k12')) as any).items[0].steps
+  ok('разговор с Gemini: поля сохраняются, мусор срезан', s[0].kind === 'talk' && s[0].text === 'Собеседование' && s[0].prompt === 'Jesteś konsulem' && s[0].voice === 'Puck' && s[0].model === 'gemini-3.8-live' && !('junk' in s[0]) && !('voice' in s[1]) && !('model' in s[1])) }
 // «Заполни таблицу»: ответ и образец в клетке, строки, регистр — сохраняются; колонки чистятся
 await C.put(me, 'k10', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [
   { id: 't1', kind: 'sort', bk: 'sort', tw: true, rows: 40, cs: true, noEx: 'x', cols: [{ t: '-s', z: 1 }, { t: 'other' }], items: [{ w: 'bag', a: 'bags', c: 0, ex: true }, { w: 'man', a: 'men', c: 1, ex: 'y' }] }] }] })

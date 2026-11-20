@@ -8,7 +8,7 @@ import { VOICES, getVoice, setVoice, speak, getModel, setModel, ttsModels, known
 import { ai, addKey, removeKey, moveKey, mask, countToday } from '../utils/gemini'
 import { aiIcon } from '../utils/ai'
 
-const props = defineProps({ text: { type: String, default: '' }, what: { type: String, default: 'вопрос' } })
+const props = defineProps({ text: { type: String, default: '' }, what: { type: String, default: 'вопрос' }, by: { type: String, default: '' }, has: Boolean })          // by — чем озвучен звук, который уже есть: «модель|голос»; has — звук есть (может быть свой файл)
 const emit = defineEmits(['close', 'save'])
 const txt = ref(props.text), voice = ref(getVoice())
 const st = ref('idle')                 // idle | busy | done | err
@@ -23,6 +23,7 @@ const model = ref(getModel()), models = ref(knownModels())
 onMounted(async () => { if (ai.keys[0]) { const l = await ttsModels(ai.keys[0].key); if (l.length) { models.value = l; if (!l.includes(model.value)) pickModel(l[0]) } } })
 function pickModel(m) { model.value = m; setModel(m); smpAu?.pause(); loadSaved?.() }
 const modelList = computed(() => (models.value.includes(model.value) ? models.value : [model.value, ...models.value]))
+const cur = computed(() => { const [m, v] = String(props.by || '').split('|'); return m && v ? { model: m, voice: v } : null })
 const GROUPS = [['Женские', VOICES.filter(v => v[1] === 'женский')], ['Мужские', VOICES.filter(v => v[1] === 'мужской')]]
 // ключи — та же таблица, что в профиле: какой сейчас пробуется, квота, запросы за сегодня; можно добавить, поднять, убрать
 const fresh = ref(''), adding = ref(false)
@@ -85,7 +86,7 @@ function stop() { ac?.abort() }
 function save() {
   const t = res.value; if (!t) return
   const f = new File([t.blob], `tts_${t.voice}_${Date.now().toString(36)}.wav`, { type: 'audio/wav' })
-  emit('save', f); close(true)
+  emit('save', f, `${t.model}|${t.voice}`); close(true)
 }
 function close(force = false) { if (st.value === 'busy' && force !== true) return; emit('close') }
 const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); if (st.value === 'busy') stop(); else close() } }
@@ -102,6 +103,11 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey, true); clea
           <button type="button" class="x" title="Закрыть" :disabled="st === 'busy'" @click="close">✕</button>
         </header>
 
+        <div class="now" :class="{ none: !has }">
+          <template v-if="cur">Сейчас в экране: <b>{{ modelName(cur.model) }}</b> · голос <b>{{ cur.voice }}</b></template>
+          <template v-else-if="has">Сейчас в экране: свой звук (не Gemini)</template>
+          <template v-else>Озвучки пока нет</template>
+        </div>
         <label class="lb" for="tts-t">Текст</label>
         <textarea id="tts-t" v-model="txt" rows="3" :readonly="st === 'busy'" spellcheck="false" />
 
@@ -111,10 +117,10 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey, true); clea
 
         <div class="vg2">
           <div v-for="[g, list] in GROUPS" :key="g" class="vgrp">
-            <div class="lb">{{ g }}<span v-if="g === 'Женские'" class="smp">▶ образец:<button v-for="(t, l) in { pl: 'PL', en: 'EN' }" :key="l" type="button" class="lg" :class="{ on: lang === l }" :title="SAMPLES[l]" @click="setLang(l)">{{ t }}</button></span></div>
+            <div class="lb">{{ g }}<span v-if="g === 'Женские'" class="smp">▶ образцы {{ modelName(model) }} · {{ saved.size }} из 10 ·<button v-for="(t, l) in { pl: 'PL', en: 'EN' }" :key="l" type="button" class="lg" :class="{ on: lang === l }" :title="SAMPLES[l]" @click="setLang(l)">{{ t }}</button></span></div>
             <div class="vs">
               <div v-for="v in list" :key="v[0]" class="v" :class="{ on: voice === v[0] }">
-                <button type="button" class="vn" :disabled="st === 'busy'" @click="pickVoice(v[0])"><b>{{ v[0] }}</b><small>{{ v[2] }}</small></button>
+                <button type="button" class="vn" :disabled="st === 'busy'" @click="pickVoice(v[0])"><b>{{ v[0] }}<em v-if="cur && cur.voice === v[0] && cur.model === model" class="cur" title="Этим голосом и этой моделью озвучено сейчас">сейчас</em></b><small>{{ v[2] }}</small></button>
                 <button type="button" class="vp" :class="{ has: saved.has(v[0]), play: smpOn === v[0] }" :disabled="st === 'busy' || (!!smpBusy && smpBusy !== v[0])"
                   :title="saved.has(v[0]) ? 'Образец голоса — из браузера, квоту не тратит' : 'Образец голоса — озвучить один раз (1 запрос), дальше бесплатно'" @click="sample(v[0])">
                   <span v-if="smpBusy === v[0]" class="spin sm" /><svg v-else-if="smpOn === v[0]" viewBox="0 0 24 24"><rect x="7" y="6" width="3.5" height="12" rx="1" /><rect x="13.5" y="6" width="3.5" height="12" rx="1" /></svg><svg v-else viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg>
@@ -184,6 +190,8 @@ textarea:focus { outline: none; border-color: #4b8df8; box-shadow: 0 0 0 3px rgb
 .lb .smp { margin-left: 8px; font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--hint, #999) }
 .out { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px }
 .out small { color: var(--hint, #777); font-size: 12px }
+.now { margin: -6px 0 12px; padding: 7px 12px; border-radius: 10px; background: rgba(75, 141, 248, .08); font-size: 13px; color: var(--text) } .now b { font-weight: 800 } .now.none { background: var(--surface, #f4f4f4); color: var(--hint, #888) }
+.cur { margin-left: 5px; padding: 0 5px; border-radius: 5px; background: #4b8df8; color: #fff; font-size: 9.5px; font-style: normal; font-weight: 800; vertical-align: 1px }
 .mrow { display: flex; align-items: center; gap: 10px; margin-bottom: 14px } .mrow .lb { margin: 0 } .mrow small { font-size: 11px; color: var(--hint, #999) }
 .mrow select { height: 32px; padding: 0 8px; border: 1px solid var(--border, #e3e3e3); border-radius: 8px; background: var(--bg, #fff); color: inherit; font: inherit; font-size: 13px }
 .kh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px } .kh .lb { margin: 0 } .kh small { font-size: 11px; color: var(--hint, #999) } .sp { flex: 1 }

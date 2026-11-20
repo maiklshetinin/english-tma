@@ -8,6 +8,7 @@ import AudioWave from './AudioWave.vue'
 import TtsDialog from './TtsDialog.vue'
 import { aiIcon } from '../utils/ai'
 import { cardJson } from '../utils/cardsJson'
+import { modelName } from '../utils/tts'
 import { showToast } from '../composables/useToast'
 import { useCardMedia, isImg, isAud, isLink, audSrc, imgSrc, removeCard } from '../composables/useCardMedia'
 const props = defineProps({
@@ -44,7 +45,8 @@ function jsApply() {
   jsErr.value = ''; jsOn.value = false; showToast('Карточка обновлена')
 }
 watch(() => props.modelValue, () => { jsOn.value = false })
-function ttsSave(f) { const c = props.deck.cards.find(x => x.id === tts.value?.id); if (c) attach(c, tts.value.k, f) }
+async function ttsSave(f, by) { const k = tts.value?.k, c = props.deck.cards.find(x => x.id === tts.value?.id); if (c && k && (await attach(c, k, f))) c[k + 'By'] = by }
+const byT = (c, k) => { const [m, v] = String(c?.[k + 'By'] || '').split('|'); return m && v ? `${modelName(m)} · ${v}` : '' }
 // Выбрать файл кнопкой
 const pick = ref(null); let pickTo = null
 function choose(c, f) { pickTo = { c, k: f.k }; pick.value.accept = f.kind === 'image' ? 'image/*' : 'audio/*'; pick.value.value = ''; pick.value.click() }
@@ -88,10 +90,10 @@ onMounted(() => addEventListener('keydown', ceKey)); onUnmounted(() => removeEve
         <div class="wrow"><input v-model.trim="ec.front" data-k="front" class="cw" placeholder="слово" :class="{ miss: !ec.front }" />
           <span class="spk2" :class="{ zon: ceZone === 'audio' }" @dragover.prevent.stop="ceZone = 'audio'; ceOver = true" @drop.stop="zoneDrop($event, 'audio')">
             <span v-if="busy[ec.id + 'audio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'audio'] }" /></span>
-            <template v-else-if="ec.audio"><AudioWave :src="audSrc(ec.audio)" :meta="ec.audioMeta || ''" small @meta="ec.audioMeta = $event" /><i v-if="isLink(ec.audio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'audio')">✕</button></template>
+            <template v-else-if="ec.audio"><AudioWave :src="audSrc(ec.audio)" :meta="ec.audioMeta || ''" small :title="byT(ec, 'audio') ? 'Озвучено Gemini: ' + byT(ec, 'audio') : ''" @meta="ec.audioMeta = $event" /><i v-if="isLink(ec.audio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'audio')">✕</button></template>
             <button v-else class="addsnd2" title="Добавить звук — выбрать файл или перетащить сюда" @click="choose(ec, FIELDS[5])"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><b>+</b></button>
           </span>
-          <button class="gtts" :disabled="!ec.front?.trim() || busy[ec.id + 'audio'] != null" :title="ec.front?.trim() ? (ec.audio ? 'Озвучить заново — Gemini' : 'Озвучить — Gemini') : 'Сначала впишите слово'" @click="ttsOpen('audio')"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span></button></div>
+          <button class="gtts" :disabled="!ec.front?.trim() || busy[ec.id + 'audio'] != null" :title="ec.front?.trim() ? (ec.audio ? 'Озвучить заново — Gemini' + (byT(ec, 'audio') ? ' · сейчас: ' + byT(ec, 'audio') : '') : 'Озвучить — Gemini') : 'Сначала впишите слово'" @click="ttsOpen('audio')"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span></button></div>
         <input v-model.trim="ec.back" data-k="back" class="ct" placeholder="перевод" :class="{ miss: !ec.back }" />
         <div class="cph" :class="{ empty: !ec.image, zon: ceZone === 'image' }" @dragover.prevent.stop="ceZone = 'image'; ceOver = true" @drop.stop="zoneDrop($event, 'image')" @click="!ec.image && busy[ec.id + 'image'] == null && choose(ec, FIELDS[4])">
           <span v-if="busy[ec.id + 'image'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'image'] }" />{{ busy[ec.id + 'image'] }}%</span>
@@ -102,12 +104,12 @@ onMounted(() => addEventListener('keydown', ceKey)); onUnmounted(() => removeEve
         <div class="wrow"><textarea v-model.trim="ec.example" data-k="example" class="ce1" rows="2" placeholder="пример" />
           <span class="spk2" :class="{ zon: ceZone === 'exampleAudio' }" @dragover.prevent.stop="ceZone = 'exampleAudio'; ceOver = true" @drop.stop="zoneDrop($event, 'exampleAudio')">
             <span v-if="busy[ec.id + 'exampleAudio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'exampleAudio'] }" /></span>
-            <template v-else-if="ec.exampleAudio"><AudioWave :src="audSrc(ec.exampleAudio)" :meta="ec.exampleAudioMeta || ''" small @meta="ec.exampleAudioMeta = $event" /><i v-if="isLink(ec.exampleAudio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'exampleAudio')">✕</button></template>
+            <template v-else-if="ec.exampleAudio"><AudioWave :src="audSrc(ec.exampleAudio)" :meta="ec.exampleAudioMeta || ''" small :title="byT(ec, 'exampleAudio') ? 'Озвучено Gemini: ' + byT(ec, 'exampleAudio') : ''" @meta="ec.exampleAudioMeta = $event" /><i v-if="isLink(ec.exampleAudio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'exampleAudio')">✕</button></template>
             <button v-else class="addsnd2" title="Добавить звук — выбрать файл или перетащить сюда" @click="choose(ec, FIELDS[6])"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><b>+</b></button>
           </span>
-          <button class="gtts" :disabled="!ec.example?.trim() || busy[ec.id + 'exampleAudio'] != null" :title="ec.example?.trim() ? (ec.exampleAudio ? 'Озвучить заново — Gemini' : 'Озвучить — Gemini') : 'Сначала впишите пример'" @click="ttsOpen('exampleAudio')"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span></button></div>
+          <button class="gtts" :disabled="!ec.example?.trim() || busy[ec.id + 'exampleAudio'] != null" :title="ec.example?.trim() ? (ec.exampleAudio ? 'Озвучить заново — Gemini' + (byT(ec, 'exampleAudio') ? ' · сейчас: ' + byT(ec, 'exampleAudio') : '') : 'Озвучить — Gemini') : 'Сначала впишите пример'" @click="ttsOpen('exampleAudio')"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span></button></div>
         <textarea v-model.trim="ec.exampleTr" data-k="exampleTr" class="ce2" rows="1" placeholder="перевод примера" />
-        <TtsDialog v-if="tts" :text="tts.text" :what="tts.what" @close="tts = null" @save="ttsSave" />
+        <TtsDialog v-if="tts" :text="tts.text" :what="tts.what" :by="ec[tts.k + 'By'] || ''" :has="!!ec[tts.k]" @close="tts = null" @save="ttsSave" />
         <div v-if="ceOver && !ceZone" class="ceov">Отпустите — фото или звук в эту карточку</div>
       </div>
       <button v-if="list.length > 1" class="side r" :disabled="eIdx >= list.length - 1" title="Следующая (→)" @click="step(1)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg></button>
