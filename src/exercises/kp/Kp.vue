@@ -91,6 +91,9 @@ async function dictate() {
   } })
 }
 watch(() => p.st.busy || p.st.done, (v) => { if (v) dicS?.stop() })
+// облачко над полем: пока идёт диктовка (пусто — «…»), или ошибка; длинный черновик — его хвост
+const dicCloud = computed(() => !p.edit && (dic.value === 'live' || !!dicDraft.value || !!dicErr.value))
+const dicShow = computed(() => { const t = dicDraft.value || (dic.value === 'live' ? '…' : dicErr.value); return t.length > 120 ? '…' + t.slice(-120) : t })
 
 // «· Gemini API» (20.11.2026, тест): проверка напрямую (utils/kpcheck.js), мост — запасной. Модель: в правке — у экрана,
 // в подвале перед проверкой — своя в этом браузере (главнее)
@@ -233,9 +236,12 @@ function jsApply() {
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? 'Подключаюсь…' : 'Надиктовать с Gemini' }}</button>
       <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
-    <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
+    <div v-else-if="!p.st.done" class="kaw" :class="{ dic: dicCloud }">
+      <textarea :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
+      <!-- черновик диктовки — облаком поверх низа поля (21.11.2026): раньше строкой под полем — появлялась и пропадала, всё ниже прыгало -->
+      <div v-if="dicCloud" class="kdd" :class="{ er: dicErr && !dicDraft }" aria-live="polite"><small>{{ dicErr && !dicDraft ? 'Диктовка' : 'Gemini слышит' }}</small>{{ dicShow }}</div>
+    </div>
     <div v-else class="ka done">{{ p.st.text }}</div>
-    <p v-if="!p.edit && (dicDraft || dicErr)" class="kdd" :class="{ er: dicErr && !dicDraft }">{{ dicDraft || dicErr }}</p>
 
     <div class="kb miss" :class="look">
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
@@ -341,7 +347,12 @@ function jsApply() {
 .kdic { --l: 0; margin: 0 8px 0 auto; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 0; border-radius: 13px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font-family: var(--font); font-size: 11.5px; font-weight: 800; text-transform: none; letter-spacing: 0; cursor: pointer; white-space: nowrap }
 .kdic svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .kdic.live { background: #e5484d; box-shadow: 0 0 0 calc(var(--l) * 8px) rgba(229, 72, 77, .22); font-variant-numeric: tabular-nums } .kdic.connecting { opacity: .7 } .kdic:disabled { opacity: .4; cursor: default }
-.kdd { margin: -6px 2px 0; font-family: 'PT Serif', Georgia, serif; font-size: 15px; font-style: italic; color: #a08060 } .kdd.er { font-family: var(--font); font-size: 12.5px; font-style: normal; font-weight: 700; color: #b3261e }
+.kaw { position: relative } .kaw.dic .ka { padding-bottom: 66px }          /* поле не меняет высоту — облачко лежит поверх его низа, текст прокручивается выше */
+.kdd { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 2; max-height: 58px; overflow: hidden; padding: 6px 12px 7px; border-radius: 14px; background: #fff; box-shadow: 0 4px 14px rgba(53, 26, 5, .14), 0 0 0 1px #ecd9b8; font-family: 'PT Serif', Georgia, serif; font-size: 14.5px; font-style: italic; line-height: 1.3; color: #6b4a26; pointer-events: none; animation: kdd .18s ease-out }
+.kdd small { display: block; margin-bottom: 1px; font-family: var(--font); font-size: 10.5px; font-style: normal; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #4b8df8 }
+.kdd.er { color: #b3261e; font-family: var(--font); font-size: 12.5px; font-style: normal; font-weight: 700 } .kdd.er small { color: #b3261e }
+@keyframes kdd { from { opacity: 0; transform: translateY(4px) } }
+@media (prefers-reduced-motion: reduce) { .kdd { animation: none } }
 .kl.pdf label, .pdf .kht { padding: 2px 10px; border-radius: 7px; background: #f2dab5; font-family: 'PT Serif', Georgia, serif; font-size: 14px; font-style: italic; font-weight: 700; color: #7b4224; text-transform: none; letter-spacing: 0 }
 /* Б · тонкие линии между частями */
 .kb.lines { padding-top: 12px; border-top: 1px solid #e9cfa6 }
