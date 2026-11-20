@@ -923,15 +923,27 @@ function zoomAt(f, cx, cy) {
   view.x = cx - r.left - (cx - r.left - view.x) * k; view.y = cy - r.top - (cy - r.top - view.y) * k; view.z = z
 }
 const zoomBtn = (f) => { const r = board.value.getBoundingClientRect(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2) }
+// Колесо и тачпад (20.11.2026, тормозило приближение): события за кадр копятся и применяются разом (одна перерисовка на кадр),
+// а пока крутят — холст «картинкой» (will-change, класс wheeling): текст десятков экранов не перерисовывается на каждом шаге;
+// через 160 мс после последнего шага — снова чётко
+const wheeling = ref(false)
+let wheelT = 0, wheelRaf = 0
+const wq = { f: 1, cx: 0, cy: 0, dx: 0, dy: 0 }
 function onWheel(e) {
   e.preventDefault()
   const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1          // строки / страницы → пиксели
   const dx = e.deltaX * k, dy = e.deltaY * k
   if (e.ctrlKey || e.metaKey) {
     // щелчок колёсика мыши (большой шаг) — ±15 %, как в Figma; щипок тачпада (мелкие шаги) — плавно
-    const f = Math.abs(dy) >= 40 ? (dy < 0 ? 1.15 : 1 / 1.15) : Math.exp(-dy * 0.01)
-    zoomAt(f, e.clientX, e.clientY)
-  } else { view.x -= dx; view.y -= dy }
+    wq.f *= Math.abs(dy) >= 40 ? (dy < 0 ? 1.15 : 1 / 1.15) : Math.exp(-dy * 0.01); wq.cx = e.clientX; wq.cy = e.clientY
+  } else { wq.dx += dx; wq.dy += dy }
+  wheeling.value = true; clearTimeout(wheelT); wheelT = setTimeout(() => { wheeling.value = false }, 160)
+  if (!wheelRaf) wheelRaf = requestAnimationFrame(() => {
+    wheelRaf = 0
+    if (wq.f !== 1) zoomAt(wq.f, wq.cx, wq.cy)
+    if (wq.dx || wq.dy) { view.x -= wq.dx; view.y -= wq.dy }
+    wq.f = 1; wq.dx = 0; wq.dy = 0
+  })
 }
 // «Весь курс»: рельс, черновики и сводка — на экране целиком
 function fit(anim = true) {
@@ -1657,7 +1669,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 <template>
   <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
     <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
-    <div ref="board" class="board" :class="{ settling, panning, moving: sd.on, dragging: drag.on && drag.from === 'loose', placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="[dots, tool === 'pen' && !handOn && !noteTool ? { cursor: penCursor } : null]" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @pointerleave="ghost = null" @wheel="onWheel" @contextmenu.prevent="onCtx">
+    <div ref="board" class="board" :class="{ settling, panning, wheeling, moving: sd.on, dragging: drag.on && drag.from === 'loose', placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="[dots, tool === 'pen' && !handOn && !noteTool ? { cursor: penCursor } : null]" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @pointerleave="ghost = null" @wheel="onWheel" @contextmenu.prevent="onCtx">
       <div v-if="settling" class="opening"><i />Открываю курс…</div>
       <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
         <div v-if="noteTool && ghost" class="note ghost" :style="{ left: ghost.x + 'px', top: ghost.y + 'px', background: noteColor }" />
@@ -2206,6 +2218,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .board .world { transition: opacity .18s ease } .board.settling .world { opacity: 0 }      /* и не видно, как строится ряд за рядом — показываем готовым */
 .opening { position: absolute; left: 50%; top: 45%; translate: -50% -50%; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 12px; background: var(--card); box-shadow: 0 4px 18px rgba(0, 0, 0, .1); color: var(--hint); font-size: 13px; font-weight: 700; pointer-events: none }
 .opening i { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--border); border-top-color: #1cb0f6; animation: opr .8s linear infinite } @keyframes opr { to { rotate: 360deg } }
+.board.wheeling .world { will-change: transform } .board.wheeling .world * { pointer-events: none }          /* крутят колесо — холст картинкой (см. onWheel) */
 .board.panning .world { will-change: transform } .board.panning .world * { pointer-events: none }      /* тянем холст: без наведений внутри — каждый кадр дешевле */
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
 .ftree { position: absolute; left: 0; top: 0; z-index: 10000; opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }
