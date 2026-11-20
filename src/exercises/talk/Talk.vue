@@ -127,7 +127,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
     </template>
 
     <div v-else class="tv" :class="st" @pointerdown.stop>
-      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" />
+      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" />
       <div v-if="st !== 'live' && st !== 'connecting'" class="tm">
         <label v-if="models.length">Модель <select :value="pick" @change="setPick($event.target.value)"><option value="">{{ lessonModel ? liveName(lessonModel) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
         <label>Голос <select :value="vpick" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice && step.voice !== 'Kore' ? ' (из урока)' : '' }}</option>
