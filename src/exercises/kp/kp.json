@@ -4,8 +4,7 @@
   "head": "Ответьте устно на вопрос",
   "templates": [
     "kp",
-    "kpapi",
-    "kplive"
+    "kpapi"
   ],
   "fields": {
     "head": {
@@ -29,9 +28,6 @@
       "S"
     ],
     "kpapi": [
-      "S"
-    ],
-    "kplive": [
       "S"
     ]
   },

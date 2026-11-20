@@ -70,7 +70,7 @@ await C.put(me, 'k11', { ...course, items: [{ id: 'L', type: 'lesson', title: ''
 { const s = ((await C.get('k11')) as any).items[0].steps[0]
   ok('ответ по смыслу: вопрос и эталон на месте, мусор срезан', s.kind === 'kp' && s.text === 'Kiedy i jak obchodzimy Mikołajki?' && s.ideal === 'Mikołajki obchodzimy szóstego grudnia…' && s.prompt === 'Mój prompt' && s.pass === 70 && s.star === true && s.n === 3 && s.look === 'cards' && s.plain === true && !('note' in s) && !('junk' in s))
   ok('ответ по смыслу: автозвук и «чем озвучено» сохраняются', ((await C.get('k11')) as any).items[0].steps[0].autoplay === true && ((await C.get('k11')) as any).items[0].steps[0].audioBy === 'gemini-2.5-flash-preview-tts|Kore' && ((await C.get('k11')) as any).items[0].steps[0].engine === 'api' && ((await C.get('k11')) as any).items[0].steps[0].model === 'gemini-3.5-flash-lite')
-  ok('ответ по смыслу · Live (голос): вид проверки сохраняется', ((await C.get('k11')) as any).items[0].steps[1].engine === 'live')
+  ok('ответ по смыслу: старый «Live (голос)» сохраняется как Gemini API', ((await C.get('k11')) as any).items[0].steps[1].engine === 'api')
   ok('ответ по смыслу: кривой порог не сохраняется', !('pass' in ((await C.get('k11')) as any).items[0].steps[1])) }
 // «Разговор с Gemini»: задание, роль, голос, модель; кривое — мимо
 await C.put(me, 'k12', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'g1', kind: 'talk', text: 'Собеседование', prompt: 'Jesteś konsulem', voice: 'Puck', model: 'gemini-3.8-live', junk: 1 }, { id: 'g2', kind: 'talk', voice: 'Pu ck!', model: 'X Y' }] }] })

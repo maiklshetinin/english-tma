@@ -195,7 +195,6 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   // Karta Polaka (19.11.2026): своя вкладка меню; ответ проверяет Gemini по эталону
   { id: 'kp', kind: 'kp', t: 'Ответ по смыслу', d: 'ИИ сверяет с эталоном', make: () => fishStep('kp') },
   { id: 'kpapi', kind: 'kp', t: 'Ответ по смыслу · Gemini API', d: 'Без моста, напрямую · тест', make: () => ({ ...fishStep('kp'), engine: 'api' }) },          // 20.11.2026, эксперимент: utils/kpcheck.js
-  { id: 'kplive', kind: 'kp', t: 'Ответ по смыслу · Live (голос)', d: 'Запись ответа — в Gemini Live · тест', make: () => ({ ...fishStep('kp'), engine: 'live' }) },          // 20.11.2026, отдельно от «API»: utils/kplive.js
   { id: 'talk', kind: 'talk', t: 'Разговор с Gemini', d: 'Живой диалог голосом', make: () => fishStep('talk') },          // 20.11.2026, эксперимент: Live API
   { id: 'stt', kind: 'stt', t: 'Транскрипция', d: 'Сказать — увидеть текст', make: () => fishStep('stt') },          // 20.11.2026, эксперимент: Gemini 3.5 Transcribe Live
   // ---- Тест · упражнения Насти по учебнику (18.11.2026): отдельная группа меню, плашка — как задание в учебнике (BOOK) ----
@@ -236,7 +235,7 @@ for (const id of BOOK_TPL) {
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
 /** Цвета тегов — как плашки в меню упражнений (.chip.L … в CourseEditor / LessonRail) */
 export const SKILL_C: Record<string, string> = { L: '#1cb0f6', R: '#a560e8', W: '#ff9600', S: '#58cc02' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpapi: ['S'], kplive: ['S'], talk: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpapi: ['S'], talk: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
 for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]          // «Учебник 1:1» — те же навыки
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
 export function tplOf(s: Step): string {
@@ -246,8 +245,7 @@ export function tplOf(s: Step): string {
   // а в меню и на ветке — «Собери фразу» и «Повтори слово»
   if (s.kind === 'order') return 'order'
   if (s.kind === 'speak') return 'sayword'
-  if (s.kind === 'kp' && s.engine === 'api') return 'kpapi'
-  if (s.kind === 'kp' && s.engine === 'live') return 'kplive'
+  if (s.kind === 'kp' && (s.engine === 'api' || s.engine === 'live')) return 'kpapi'
   if (s.kind === 'gap') return s.opts?.length ? 'fill' : isWhole(s.phrase) ? 'translate' : hasHint(s.phrase) ? 'brackets' : 'type'
   return s.kind
 }
@@ -472,7 +470,7 @@ function stepFrom(o: any): Step | null {
   if (o.kind === 'kp' && (o.look === 'lines' || o.look === 'cards')) s.look = o.look
   if (o.kind === 'kp' && o.plain === true) s.plain = true
   if (o.kind === 'kp' && o.autoplay === true) s.autoplay = true
-  if (o.kind === 'kp' && (o.engine === 'api' || o.engine === 'live')) s.engine = o.engine
+  if (o.kind === 'kp' && (o.engine === 'api' || o.engine === 'live')) s.engine = 'api'          // 'live' («Live (голос)») убран 20.11.2026 — такие экраны идут как «Gemini API»
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
       .map((x: any) => ({ w: x.w.trim(), ...(tileHex(x.k) ? { k: tileHex(x.k) } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))

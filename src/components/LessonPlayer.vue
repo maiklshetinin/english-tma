@@ -16,8 +16,7 @@ import { exOf } from '../exercises'
 import { providePlay, useEdit } from '../exercises/ctx'
 import { checkAnswer } from '../utils/ai'
 import { checkSmart, getPick } from '../utils/kpcheck'
-import { checkLive, checkLiveVoice, kpLive } from '../utils/kplive'
-import { assessSpeech, wavOf } from '../utils/speech'
+import { checkLive } from '../utils/kplive'
 import { shuffle, orderParts, gapParts, gapOk, gapList, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -248,7 +247,7 @@ const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !st
 // ---- книжные (экспериментальные): «Найди лишнее» и «Распредели по колонкам» ----
 const sortLeft = computed(() => (step.value?.kind !== 'sort' ? 0 : step.value.tw ? st.tw.flat().filter(v => !v.trim()).length : st.order.filter(k => st.place[k] == null).length))
 // «Заполни таблицу» (Настя, 18.11.2026): банк слов, образцы зачёркнуты; ученик вписывает форму в колонку — порядок в колонке не важен
-const canCheck = computed(() => { const k = step.value?.kind; return k === 'kp' ? (!!st.text.trim() || (step.value.engine === 'live' && (kpLive[step.value.id]?.sent ?? 0) > 0.5)) && !st.busy : k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
+const canCheck = computed(() => { const k = step.value?.kind; return k === 'kp' ? !!st.text.trim() && !st.busy : k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
 function sortPick(k) { if (!st.done) st.sel = st.sel === k ? null : k }
 function sortPut(c) { if (st.done || st.sel == null) return; st.place = { ...st.place, [st.sel]: c }; st.sel = null; hapticTick?.() }
 function sortBack(k) { if (st.done) return; const p = { ...st.place }; delete p[k]; st.place = p }
@@ -267,25 +266,10 @@ async function aiCheck() {
   const s = step.value; st.busy = true
   try {
     const q = { question: s.text ?? '', reference: s.ideal ?? '', answer: st.text, prompt: s.prompt, pass: s.pass }
-    if (s.engine === 'live') {          // «Live (голос)» (20.11.2026, тест): запись + текст в Live, без запасных путей
-      let lvl = false; try { lvl = localStorage.getItem('tma.kp.level') === '1' } catch { /* */ }
-      const S = kpLive[s.id]
-      const r = S?.finish && S.state === 'live' ? await S.finish(st.text) : await checkLiveVoice(q, s.id, { chunks: [], level: false })          // разговор открыт («🎙 Ответить») — оценка сразу; нет — по тексту
-      if (step.value !== s) return
-      if (r.voice) st.text = r.heard || ''          // в поле — то, что услышала сама Live (по этому и оценка); облако Transcribe — в r.said
-      st.ai = r; verdict(r.ok)
-      const rec = S?.rec ?? []
-      if (lvl && rec.length) {          // уровень языка — параллельно, Flash Lite по записи; приходит следом и ничего не держит
-        const { blob, sec } = wavOf(rec)
-        st.ai = { ...st.ai, speechBusy: true }
-        assessSpeech({ blob, sec, transcript: st.text, lang: 'pl-PL' }).then((rep) => { if (step.value === s && st.ai) st.ai = { ...st.ai, speech: rep, speechBusy: false } })
-          .catch((e) => { if (step.value === s && st.ai) st.ai = { ...st.ai, speechErr: e.message, speechBusy: false } })
-      }
-      return
-    }
-    const viaLive = s.engine === 'api' && (getPick() || s.model) === 'live'          // «Live · голосом» (20.11.2026): не вышло — Flash Lite, потом мост
+    const isApi = s.engine === 'api' || s.engine === 'live'          // 'live' — убранный «Live (голос)» (20.11.2026): как Gemini API
+    const viaLive = isApi && (getPick() || s.model) === 'live'          // «Live · голосом» (20.11.2026): не вышло — Flash Lite, потом мост
     const r = viaLive ? await checkLive(q, s.id).catch((e) => checkSmart(q, { model: '' }).then((x) => ({ ...x, note: `Live: ${e.message} — ${x.note ? x.note : 'проверила текстовая модель'}` })))
-      : s.engine === 'api' ? await checkSmart(q, { model: s.model }) : await checkAnswer(q)          // «· Gemini API» (20.11.2026, тест) — напрямую, мост — запасной          // свой промпт и порог экрана (JSON экрана) — если есть
+      : isApi ? await checkSmart(q, { model: s.model }) : await checkAnswer(q)          // «· Gemini API» (20.11.2026, тест) — напрямую, мост — запасной          // свой промпт и порог экрана (JSON экрана) — если есть
     if (step.value !== s) return
     st.ai = r; verdict(r.ok)
   } catch (e) {
