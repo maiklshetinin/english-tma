@@ -433,6 +433,7 @@ export function kpFromHtml(h: string) {
   const un = (t: string) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
   return un(h
     .replace(/<b class="acc">([\s\S]*?)<\/b>/g, '==$1==')
+    .replace(/<b class="[^"]*">([\s\S]*?)<\/b>/g, '**$1**')          // красное («nie odprawia się mszy», урок 6) и прочие цветные — жирным
     .replace(/<(b|strong)>([\s\S]*?)<\/\1>/g, '**$2**')
     .replace(/<(i|em)>([\s\S]*?)<\/\1>/g, (_, _t, x) => (/[\p{L}\d]/u.test(x) ? '_' + x + '_' : x))          // курсивные кавычки без букв — просто кавычки
     .replace(/<li>/g, '\n• ').replace(/<\/(p|li|ul)>|<br\s*\/?>/g, '\n').replace(/<[^>]+>/g, ''))

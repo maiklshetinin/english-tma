@@ -76,8 +76,8 @@ describe('«Ответ по смыслу» в уроке', () => {
   })
   it('оформление из домашки: reference_html → разметка, звезда и номер', () => {
     const r = stepsFromJson(JSON.stringify({ questions: [{ id: 5, star: true, question: 'Tradycje?', reference: 'x',
-      reference_html: '<p>Podczas <b>Wigilii</b>:</p><ul><li><b class="acc">Kolędowanie</b>: <i>„</i><b>Cicha noc</b><i>”</i> &amp; <i>(dary)</i></li></ul>' }, { id: 6, question: 'Bez?', reference: 'y' }] }))!
-    expect(r.steps[0]).toMatchObject({ kind: 'kp', n: 5, star: true, ideal: 'Podczas **Wigilii**:\n• ==Kolędowanie==: „**Cicha noc**” & _(dary)_' })
+      reference_html: '<p>Podczas <b>Wigilii</b> <b class="red">nie</b>:</p><ul><li><b class="acc">Kolędowanie</b>: <i>„</i><b>Cicha noc</b><i>”</i> &amp; <i>(dary)</i></li></ul>' }, { id: 6, question: 'Bez?', reference: 'y' }] }))!
+    expect(r.steps[0]).toMatchObject({ kind: 'kp', n: 5, star: true, ideal: 'Podczas **Wigilii** **nie**:\n• ==Kolędowanie==: „**Cicha noc**” & _(dary)_' })
     expect(r.steps[1].star).toBeUndefined(); expect(r.steps[1]).toMatchObject({ n: 6, ideal: 'y' })
   })
 })
