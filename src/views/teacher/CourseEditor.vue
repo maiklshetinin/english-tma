@@ -16,7 +16,7 @@
 import { aiIcon } from '../../utils/ai'
 import { ask, say, askText, dialog } from '../../composables/useDialog'
 import { useAuthStore } from '../../stores/auth'
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, onUpdated } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import BackButton from '../../components/BackButton.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../../firebase'
@@ -923,19 +923,12 @@ function zoomAt(f, cx, cy) {
   view.x = cx - r.left - (cx - r.left - view.x) * k; view.y = cy - r.top - (cy - r.top - view.y) * k; view.z = z
 }
 const zoomBtn = (f) => { const r = board.value.getBoundingClientRect(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2) }
-// Колесо и тачпад (20.11.2026, тормозило приближение — как в Figma, без Vue на каждом шаге): пока крутят, холст и точки фона
-// двигаются напрямую (lv → style), Vue о новом view узнаёт один раз — через 160 мс после последнего шага. Холст в это время
-// «картинкой» (will-change, класс wheeling), рамки выделения спрятаны; события за кадр копятся и применяются разом
-// холст отдалён (меньше 50 %) — экраны и плитки на ветках эскизами: текст там всё равно не прочесть, а живых плееров — сотни
-// (по два на экран: сам экран и миниатюра на плитке). view.z меняется только после остановки колеса — переключение один раз
-const lite = computed(() => view.z < 0.5)
-const wheeling = ref(false), world = ref(null)
-let wheelT = 0, wheelRaf = 0, wheelOn = false
-const wq = { f: 1, cx: 0, cy: 0, dx: 0, dy: 0 }, lv = { x: 0, y: 0, z: 1 }
-function paintLive() {
-  if (world.value) world.value.style.transform = `translate(${lv.x}px, ${lv.y}px) scale(${lv.z})`
-  if (board.value) { let d = 20 * lv.z; while (d < 10) d *= 4; board.value.style.backgroundSize = `${d}px ${d}px`; board.value.style.backgroundPosition = `${lv.x}px ${lv.y}px` }
-}
+// Колесо и тачпад (20.11.2026, тормозило приближение): события за кадр копятся и применяются разом (одна перерисовка на кадр),
+// а пока крутят — холст «картинкой» (will-change, класс wheeling): текст десятков экранов не перерисовывается на каждом шаге;
+// через 160 мс после последнего шага — снова чётко
+const wheeling = ref(false)
+let wheelT = 0, wheelRaf = 0
+const wq = { f: 1, cx: 0, cy: 0, dx: 0, dy: 0 }
 function onWheel(e) {
   e.preventDefault()
   const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1          // строки / страницы → пиксели
@@ -944,20 +937,13 @@ function onWheel(e) {
     // щелчок колёсика мыши (большой шаг) — ±15 %, как в Figma; щипок тачпада (мелкие шаги) — плавно
     wq.f *= Math.abs(dy) >= 40 ? (dy < 0 ? 1.15 : 1 / 1.15) : Math.exp(-dy * 0.01); wq.cx = e.clientX; wq.cy = e.clientY
   } else { wq.dx += dx; wq.dy += dy }
-  if (!wheelOn) { wheelOn = true; Object.assign(lv, { x: view.x, y: view.y, z: view.z }); wheeling.value = true }
-  clearTimeout(wheelT)
-  wheelT = setTimeout(() => { cancelAnimationFrame(wheelRaf); wheelRaf = 0; flushWheel(); wheelOn = false; Object.assign(view, lv); wheeling.value = false }, 160)
-  if (!wheelRaf) wheelRaf = requestAnimationFrame(() => { wheelRaf = 0; flushWheel() })
-}
-onUpdated(() => { if (wheelOn) paintLive() })          // Vue перерисовал посреди прокрутки — вернуть живое положение (иначе рывок назад)
-function flushWheel() {
-  if (wq.f !== 1 && board.value) {
-    const r = board.value.getBoundingClientRect(), z = Math.min(2.5, Math.max(0.15, lv.z * wq.f)), k = z / lv.z
-    lv.x = wq.cx - r.left - (wq.cx - r.left - lv.x) * k; lv.y = wq.cy - r.top - (wq.cy - r.top - lv.y) * k; lv.z = z
-  }
-  lv.x -= wq.dx; lv.y -= wq.dy
-  wq.f = 1; wq.dx = 0; wq.dy = 0
-  paintLive()
+  wheeling.value = true; clearTimeout(wheelT); wheelT = setTimeout(() => { wheeling.value = false }, 160)
+  if (!wheelRaf) wheelRaf = requestAnimationFrame(() => {
+    wheelRaf = 0
+    if (wq.f !== 1) zoomAt(wq.f, wq.cx, wq.cy)
+    if (wq.dx || wq.dy) { view.x -= wq.dx; view.y -= wq.dy }
+    wq.f = 1; wq.dx = 0; wq.dy = 0
+  })
 }
 // «Весь курс»: рельс, черновики и сводка — на экране целиком
 function fit(anim = true) {
@@ -1685,7 +1671,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
     <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
     <div ref="board" class="board" :class="{ settling, panning, wheeling, moving: sd.on, dragging: drag.on && drag.from === 'loose', placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="[dots, tool === 'pen' && !handOn && !noteTool ? { cursor: penCursor } : null]" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @pointerleave="ghost = null" @wheel="onWheel" @contextmenu.prevent="onCtx">
       <div v-if="settling" class="opening"><i />Открываю курс…</div>
-      <div ref="world" class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
+      <div class="world" :style="{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }">
         <div v-if="noteTool && ghost" class="note ghost" :style="{ left: ghost.x + 'px', top: ghost.y + 'px', background: noteColor }" />
         <!-- Рисунки маркером -->
         <svg class="ink"><path v-for="k in doc.ink ?? []" :key="k.id" :d="inkD(k.p)" :stroke="k.c" :stroke-width="k.w" :class="{ on: isM(k.id) }" /><path ref="liveInk" stroke-width="4" /></svg>
@@ -1729,16 +1715,16 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <template v-if="g.x.type === 'unit'"><div class="uh"><b>{{ g.x.title }}<template v-if="g.x.sub">: {{ g.x.sub }}</template></b></div><div class="ubar"><em :style="badge(0)">0%</em></div></template>
               <template v-else><svg viewBox="0 0 24 24" class="ic" v-html="T[g.x.type].ic" /><em class="cap">{{ g.x.title }}<small>{{ T[g.x.type].t }}</small></em></template>
             </div>
-            <LessonRail :lite="lite" v-if="g.x.type !== 'unit'" :item="g.x" :up="g.x.type === 'checkpoint'" :x="g.p.x" :y="g.p.y" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly />
+            <LessonRail v-if="g.x.type !== 'unit'" :item="g.x" :up="g.x.type === 'checkpoint'" :x="g.p.x" :y="g.p.y" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly />
           </div>
         </div>
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
-        <LessonRail :lite="lite" v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :glow="sd.on" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :glow="sd.on" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @json="copyJson" @paste="pasteStep(r.x.id, $event)" :auto="autoCk[r.x.id]" :to-ck="!!ckFor(r.x.id)" @weak="onWeak(r.x, $event)" @unauto="unAuto(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
         <!-- Экраны прямо на доске (унесли с ветки или положили из «Интерактива») -->
-        <LessonRail :lite="lite" v-for="f in freeScreens" :key="'fs' + f.id" :style="layerSt(f.id)" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" :style="layerSt(f.id)" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :moving="sdMoving"
           @copy="copyStep" @json="copyJson" @change="save" @height="railHs[f.id] = $event" @select="selectStep(f.id, $event)" @grab="grabStep" />
         <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
@@ -1759,7 +1745,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="och" :style="{ left: o.ox - 46 + 'px', top: '-170px' }" title="Дважды — открыть этот курс в редакторе" @pointerdown.stop @dblclick.stop="openOther(o.id)"><b>{{ o.title }}</b><small>другой курс · смотреть и копировать экраны · дважды — открыть</small></div>
           <div v-for="c in o.cb" :key="'ocb' + o.id + c.id" class="chapbox still" :class="{ light: c.light, off: c.off }" :style="c.style" @pointerdown.stop="msel = [($event.shiftKey ? msel : []), 'oi:' + o.id + ':' + c.id].flat(); sel = null; selectStep(null, null)" @dblclick.stop="openOther(o.id)" />
           <svg class="rail" :height="o.h"><path :d="o.path" class="r0" /></svg>
-          <LessonRail :lite="lite" v-for="(x, i) in o.items.filter(v => hasRail(v) || railUp(v))" :key="'olr' + o.id + x.id" :item="x" :up="x.type === 'checkpoint'" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
+          <LessonRail v-for="(x, i) in o.items.filter(v => hasRail(v) || railUp(v))" :key="'olr' + o.id + x.id" :item="x" :up="x.type === 'checkpoint'" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
             :sel="opick?.lesson === x.id ? opick.s.id : null" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly
             @copy="copyStep($event, o.id)" @json="copyJson" @select="(sid) => { opick = sid && sid !== 'final' ? { course: o.id, lesson: x.id, s: x.steps.find(v => v.id === sid) } : null; if (sid) selectStep(null, null) }"
             @height="railHs['o' + o.id + x.id] = $event" @focus="showPoint" />
@@ -2233,7 +2219,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .opening { position: absolute; left: 50%; top: 45%; translate: -50% -50%; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 12px; background: var(--card); box-shadow: 0 4px 18px rgba(0, 0, 0, .1); color: var(--hint); font-size: 13px; font-weight: 700; pointer-events: none }
 .opening i { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--border); border-top-color: #1cb0f6; animation: opr .8s linear infinite } @keyframes opr { to { rotate: 360deg } }
 .board.wheeling .world { will-change: transform } .board.wheeling .world * { pointer-events: none }          /* крутят колесо — холст картинкой (см. onWheel) */
-.board.wheeling .selbox, .board.wheeling .mq { visibility: hidden }          /* рамки выделения (в координатах экрана) — до остановки колеса */
 .board.panning .world { will-change: transform } .board.panning .world * { pointer-events: none }      /* тянем холст: без наведений внутри — каждый кадр дешевле */
 .board.moving :deep(.lr *), .board.dragging :deep(.lr *) { transition: none } .board.moving .bead, .board.dragging .bead.loose { transition: transform .12s, opacity .15s }       /* тянем выделение — ветки едут вместе с кружками, без запаздывания */
 .ftree { position: absolute; left: 0; top: 0; z-index: 10000; opacity: .75; pointer-events: none } .ftree * { pointer-events: none !important }

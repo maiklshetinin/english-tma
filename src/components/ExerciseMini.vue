@@ -5,20 +5,17 @@
 // size: 'tray' / 'rail' — 124×156, как в меню «Exercise». Не шаблон экрана (например, «Готовый урок») — стопка карточек.
 import { computed } from 'vue'
 import LessonPlayer from './LessonPlayer.vue'
-import { TEMPLATES, KINDS } from '../utils/lesson'
-// lite (20.11.2026) — эскиз без живого экрана: холст редактора отдалён, мелочь всё равно не видна, а плееров — сотни
-const props = defineProps({ id: { type: String, required: true }, size: { type: String, default: 'tray' }, lite: Boolean })
+import { TEMPLATES } from '../utils/lesson'
+const props = defineProps({ id: { type: String, required: true }, size: { type: String, default: 'tray' } })
 const ALIAS = { spell: 'order', speak: 'sayword' }          // старые id шаблонов
 const bid = computed(() => { const b = props.id.replace(/^pg_/, ''); return ALIAS[b] ?? b })
 const steps = computed(() => { const t = TEMPLATES.find(x => x.id === bid.value); if (!t) return null; const s = t.make(); if (props.id.startsWith('pg_')) s.bs = 'page'; return [s] })
 const resolve = (v, k) => (k === 'image' ? v : '')          // в значке — только картинки
 const small = computed(() => props.size === 'tray' || props.size === 'rail')
-const kc = computed(() => KINDS[steps.value?.[0]?.kind]?.color ?? '#c8c8c8')
 </script>
 
 <template>
-  <span v-if="steps && lite" class="mini xmt sk" :class="size" aria-hidden="true"><i :style="{ background: kc }" /><b /><b /><b /></span>
-  <span v-else-if="steps" class="mini xmt" :class="size" inert aria-hidden="true">
+  <span v-if="steps" class="mini xmt" :class="size" inert aria-hidden="true">
     <span class="sc" :class="{ big: !small }"><LessonPlayer :steps="steps" :resolve="resolve" embedded mini :pct="30" /></span>
   </span>
   <span v-else class="mini" :class="[id, size]"><span class="ms"><i /><i /><i /></span></span>
@@ -29,8 +26,6 @@ const kc = computed(() => KINDS[steps.value?.[0]?.kind]?.color ?? '#c8c8c8')
 /* размер «как в меню Exercise» (CourseEditor → .tray.inter .mini) */
 .mini.tray, .mini.rail { width: 124px; height: 156px; padding: 6px 9px 16px; gap: 4px; overflow: hidden }
 /* экран — как карточка на ветке урока (460 px), уменьшенный; высотой во весь значок: подвал с кнопкой — внизу, лишнее уходит под него */
-.mini.sk { display: flex !important; flex-direction: column; gap: 9px; padding: 14px 12px !important }          /* эскиз (lite) */
-.mini.sk i { height: 22px; border-radius: 6px; opacity: .85 } .mini.sk b { height: 9px; border-radius: 5px; background: #e6e6e6 } .mini.sk b:last-child { width: 60% }
 .mini.xmt { display: block; padding: 0 !important; overflow: hidden; pointer-events: none; user-select: none }
 .sc { position: absolute; left: 0; top: 0; width: 460px; height: calc(154px * 460 / 122); transform: scale(calc(122 / 460)); transform-origin: 0 0 }
 .sc.big { height: calc(102px * 460 / 148); transform: scale(calc(148 / 460)) }
