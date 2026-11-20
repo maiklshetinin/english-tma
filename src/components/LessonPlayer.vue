@@ -15,7 +15,8 @@ import { keyOf } from '../utils/review'
 import { exOf } from '../exercises'
 import { providePlay, useEdit } from '../exercises/ctx'
 import { checkAnswer } from '../utils/ai'
-import { checkSmart } from '../utils/kpcheck'
+import { checkSmart, getPick } from '../utils/kpcheck'
+import { checkLive } from '../utils/kplive'
 import { shuffle, orderParts, gapParts, gapOk, gapList, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -265,7 +266,9 @@ async function aiCheck() {
   const s = step.value; st.busy = true
   try {
     const q = { question: s.text ?? '', reference: s.ideal ?? '', answer: st.text, prompt: s.prompt, pass: s.pass }
-    const r = s.engine === 'api' ? await checkSmart(q, { model: s.model }) : await checkAnswer(q)          // «· Gemini API» (20.11.2026, тест) — напрямую, мост — запасной          // свой промпт и порог экрана (JSON экрана) — если есть
+    const viaLive = s.engine === 'api' && (getPick() || s.model) === 'live'          // «Live · голосом» (20.11.2026): не вышло — Flash Lite, потом мост
+    const r = viaLive ? await checkLive(q, s.id).catch((e) => checkSmart(q, { model: '' }).then((x) => ({ ...x, note: `Live: ${e.message} — ${x.note ? x.note : 'проверила текстовая модель'}` })))
+      : s.engine === 'api' ? await checkSmart(q, { model: s.model }) : await checkAnswer(q)          // «· Gemini API» (20.11.2026, тест) — напрямую, мост — запасной          // свой промпт и порог экрана (JSON экрана) — если есть
     if (step.value !== s) return
     st.ai = r; verdict(r.ok)
   } catch (e) {

@@ -41,9 +41,12 @@ function block(key, model, ms) { const q = rd(QK, {}), now = Date.now(); for (co
 const SCHEMA = { type: 'OBJECT', properties: { score: { type: 'INTEGER' }, missed_points: { type: 'ARRAY', items: { type: 'STRING' } }, feedback: { type: 'STRING' } }, required: ['score', 'missed_points', 'feedback'] }
 const WAIT = 30_000
 
-async function once(key, model, prompt, user, fetcher, schema = true) {
+// «Размышления» (20.11.2026): модели 3.x по умолчанию думают перед ответом — проверка шла ~30 с. Для сверки с эталоном не нужно:
+// 3.x — thinkingLevel 'minimal', 2.x — thinkingBudget 0. Модель не знает такой настройки (400 про thinking) — повтор без неё
+const think = (m) => (/gemini-2\./.test(m) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' })
+async function once(key, model, prompt, user, fetcher, schema = true, thinkOff = true) {
   const body = { systemInstruction: { parts: [{ text: prompt }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { responseMimeType: 'application/json', ...(schema ? { responseSchema: SCHEMA } : {}) } }
+    generationConfig: { responseMimeType: 'application/json', ...(schema ? { responseSchema: SCHEMA } : {}), ...(thinkOff ? { thinkingConfig: think(model) } : {}) } }
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), WAIT)
   let r
   try { r = await fetcher(`${API}/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), ...(ac ? { signal: ac.signal } : {}) }) }
@@ -60,7 +63,8 @@ async function once(key, model, prompt, user, fetcher, schema = true) {
 export async function checkDirect(q, { model = '', fetcher = fetch } = {}) {
   const t0 = Date.now(), need = Number.isFinite(q.pass) ? q.pass : PASS
   if (!ai.keys.length) { const e = new Error('нет ключей Gemini'); e.nokeys = true; throw e }
-  const m = getPick() || model || (await checkModels(ai.keys[0].key, fetcher))[0] || CHECK_DEFAULT          // свой выбор в браузере (подвал экрана) — главнее экрана
+  const own = (v) => (v && v !== 'live' ? v : '')          // 'live' — проверка голосовой моделью (utils/kplive.js), тут — запасная текстовая
+  const m = own(getPick()) || own(model) || (await checkModels(ai.keys[0].key, fetcher))[0] || CHECK_DEFAULT          // свой выбор в браузере (подвал экрана) — главнее экрана
   const prompt = (q.prompt?.trim() || SYSTEM) + ' Ответь только JSON: {"score": число 0–100, "missed_points": ["…"], "feedback": "…"}.'
   const user = `Вопрос:\n${q.question}\n\nЭталон:\n${kpPlain(q.reference)}\n\nОтвет ученика:\n${q.answer}`
   const now = Date.now(), keys = ai.keys.filter((x) => !(quota(x.key, m) > now))
@@ -69,7 +73,11 @@ export async function checkDirect(q, { model = '', fetcher = fetch } = {}) {
   for (const x of keys) {
     try {
       let o
-      try { o = await once(x.key, m, prompt, user, fetcher) } catch (e) { if (e.status === 400 && /schema|responseSchema|response_schema/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, false); else throw e }          // модель без схемы — просто JSON
+      try { o = await once(x.key, m, prompt, user, fetcher) } catch (e) {
+        if (e.status === 400 && /think/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, true, false)          // без настройки «размышлений»
+        else if (e.status === 400 && /schema|responseSchema|response_schema/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, false)          // модель без схемы — просто JSON
+        else throw e
+      }
       mark(x, true)
       const score = Math.max(0, Math.min(100, Math.round(Number(o?.score) || 0)))
       const missed = Array.isArray(o?.missed_points) ? o.missed_points.map(String).filter(Boolean) : Array.isArray(o?.missed) ? o.missed.map(String) : []
