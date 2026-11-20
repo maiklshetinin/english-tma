@@ -3,9 +3,37 @@
 // Ключи — те же, что в профиле (utils/gemini.js): сверху вниз, кончилась квота (429) — ключ откладывается до времени,
 // которое назвал Google, и сразу пробуется следующий. Любая другая ошибка — сразу наверх (менять ключ бессмысленно).
 // Запрос идёт прямо из браузера преподавателя; ученику достаётся готовый файл экрана.
-import { ai, mark, retryMs, errText, mask } from './gemini'
+import { ai, mark, retryMs, errText, mask, listModels } from './gemini'
 
 export const TTS_MODEL = 'gemini-2.5-flash-preview-tts'
+// Модели озвучки (20.11.2026): у бесплатного проекта у КАЖДОЙ TTS-модели свой лимит (3 в минуту, 10 в сутки, сброс в 9:00 по Варшаве),
+// поэтому модель выбирается в окне, а квота помнится отдельно для пары «ключ + модель». Список — из ключа (что Google ему отдаёт).
+const MK = 'tma.tts.model', LK2 = 'tma.tts.models', QK = 'tma.tts.quota'
+const rd = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d } catch { return d } }
+const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* приватный режим */ } }
+export const getModel = () => rd(MK, TTS_MODEL)
+export const setModel = (m) => wr(MK, m)
+export const knownModels = () => rd(LK2, { at: 0, list: [] }).list
+const ver = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) ?? [])[1] ?? '0')
+/** «gemini-3.8-flash-tts» → «Gemini 3.8 Flash TTS» */
+export const modelName = (m) => String(m).replace(/^gemini-/, 'Gemini ').replace(/-preview/, ' preview').replace(/-/g, ' ').replace(/\btts\b/i, 'TTS').replace(/\b(flash|pro|lite)\b/g, (x) => x[0].toUpperCase() + x.slice(1))
+/** TTS-модели, которые видит ключ: новее — выше, Lite и Pro — ниже Flash. Кэш на сутки */
+export async function ttsModels(key, fetcher = fetch, force = false) {
+  const c = rd(LK2, { at: 0, list: [] })
+  if (!force && c.list.length && Date.now() - c.at < 864e5) return c.list
+  const list = (await listModels(key, fetcher).catch(() => [])).filter((n) => /tts/i.test(n))
+    .sort((a, b) => (/lite|pro/i.test(a) ? 1 : 0) - (/lite|pro/i.test(b) ? 1 : 0) || ver(b) - ver(a) || a.length - b.length)
+  if (list.length) wr(LK2, { at: Date.now(), list })
+  return list.length ? list : c.list
+}
+/** Квота «ключ + модель»: до какого времени (мс) отдыхает */
+export const quotaUntil = (key, model) => rd(QK, {})[key + '|' + model] ?? 0
+function block(key, model, ms) { const q = rd(QK, {}), now = Date.now(); for (const k of Object.keys(q)) if (q[k] < now) delete q[k]; q[key + '|' + model] = now + ms; wr(QK, q) }
+/** До 9:00 по Варшаве (= полночь в Калифорнии) — когда Google обнуляет суточный лимит */
+export function untilReset(now = Date.now()) {
+  const pt = new Date(new Date(now).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })), next = new Date(pt); next.setHours(24, 0, 30, 0)
+  return next - pt
+}
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
 export const WAIT = 90_000                                  // длинный текст Google озвучивает десятки секунд
 export const VOICES = [
@@ -41,46 +69,47 @@ export function wavFromResponse(data) {
 }
 
 /** Один запрос одним ключом */
-async function once(key, text, voice, fetcher, signal) {
+async function once(key, text, voice, fetcher, signal, model = TTS_MODEL) {
   const body = { contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } }
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), WAIT)
   const stop = () => ac?.abort(); signal?.addEventListener?.('abort', stop)
   let r
-  try { r = await fetcher(API + TTS_MODEL + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), ...(ac ? { signal: ac.signal } : {}) }) }
+  try { r = await fetcher(API + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), ...(ac ? { signal: ac.signal } : {}) }) }
   catch {
     if (signal?.aborted) { const e = new Error('Остановлено'); e.cancel = true; throw e }
     if (ac?.signal.aborted) { const e = new Error(`Gemini не ответил за ${WAIT / 1000} с — попробуйте ещё раз`); e.status = 504; throw e }
     const e = new Error('Нет связи с Google'); e.net = true; throw e
   } finally { clearTimeout(tm); signal?.removeEventListener?.('abort', stop) }
   const raw = await r.text()
-  if (!r.ok) { let msg = raw; try { msg = JSON.parse(raw).error?.message ?? raw } catch { /* не JSON */ } const e = new Error(errText(r.status, msg, TTS_MODEL)); e.status = r.status; e.wait = retryMs(raw); throw e }
+  if (!r.ok) { let msg = raw; try { msg = JSON.parse(raw).error?.message ?? raw } catch { /* не JSON */ } const e = new Error(errText(r.status, msg, model)); e.status = r.status; e.wait = retryMs(raw); throw e }
   return JSON.parse(raw)
 }
 
 /** Озвучить текст: ключи по очереди. onStep({ key: 'AIzaSy…1234', i, n }) — какой ключ сейчас пробуется (для окна прогресса).
- *  → { blob, sec, key } */
-export async function speak(text, voice = getVoice(), { fetcher = fetch, signal, onStep } = {}) {
+ *  Кончилась квота (429) — эта пара «ключ + модель» отдыхает (сколько сказал Google, иначе до 9:00), пробуется следующий ключ.
+ *  → { blob, sec, key, model } */
+export async function speak(text, voice = getVoice(), { fetcher = fetch, signal, onStep, model = getModel() } = {}) {
   const t = String(text ?? '').trim()
   if (!t) throw new Error('Нечего озвучивать — текст пустой')
-  if (!ai.keys.length) { const e = new Error('Нет ключей Gemini — добавьте в профиле, раздел «Ключи Gemini»'); e.nokeys = true; throw e }
-  const now = Date.now(), free = ai.keys.filter(x => !(x.until > now))
+  if (!ai.keys.length) { const e = new Error('Нет ключей Gemini — добавьте ключ'); e.nokeys = true; throw e }
+  const now = Date.now(), free = ai.keys.filter((x) => !(quotaUntil(x.key, model) > now))
   if (!free.length) {
-    const soon = Math.min(...ai.keys.map(x => x.until)), e = new Error(`Квота закончилась на всех ключах (${ai.keys.length}) — ближайший освободится в ${new Date(soon).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`)
-    e.quota = true; throw e
+    const soon = Math.min(...ai.keys.map((x) => quotaUntil(x.key, model))), e = new Error(`У модели ${modelName(model)} кончился лимит на всех ключах (${ai.keys.length}) — освободится в ${new Date(soon).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}. Можно выбрать другую модель — у неё свой лимит`)
+    e.quota = true; e.until = soon; throw e
   }
   let last = null
   for (let i = 0; i < free.length; i++) {
     const x = free[i]
     onStep?.({ key: mask(x.key), i, n: free.length })
-    try { const data = await once(x.key, t, voice, fetcher, signal); mark(x, true); return { ...wavFromResponse(data), key: mask(x.key) } }
+    try { const data = await once(x.key, t, voice, fetcher, signal, model); mark(x, true); return { ...wavFromResponse(data), key: mask(x.key), model } }
     catch (e) {
       if (e.cancel) throw e
+      if (e.status === 429) { block(x.key, model, e.wait > 0 && e.wait < 120e3 ? e.wait : untilReset()); x.err = `лимит ${modelName(model)}`; last = e; continue }   // ключ рабочий — лимит у этой модели
       if (e.status) mark(x, false, e)
-      if (e.status !== 429) throw e
-      last = e
+      throw e
     }
   }
-  const e = new Error(last?.message === 'Квота закончилась' ? `Квота закончилась на всех ключах (${free.length})` : last?.message || 'Не удалось озвучить'); e.quota = true; throw e
+  const e = new Error(`У модели ${modelName(model)} кончился лимит на всех ключах (${free.length}). Можно выбрать другую модель — у неё свой лимит`); e.quota = true; throw e
 }
 
 // ---------- Образцы голосов (20.11.2026): одна и та же фраза каждым голосом, озвучивается один раз и хранится в этом браузере

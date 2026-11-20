@@ -1,6 +1,6 @@
 // @ts-nocheck — тест с поддельным fetch
 import { describe, it, expect, beforeEach } from 'vitest'
-import { speak, pcmToWav, wavFromResponse, TTS_MODEL } from './tts'
+import { speak, pcmToWav, wavFromResponse, TTS_MODEL, quotaUntil, untilReset } from './tts'
 import { ai } from './gemini'
 
 const pcmB64 = () => { const a = new Int16Array([0, 1000, -1000, 0]); return Buffer.from(a.buffer).toString('base64') }
@@ -28,9 +28,11 @@ describe('tts', () => {
     expect(JSON.parse(calls[1].o.body).generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Puck')
     expect(calls[1].o.headers['x-goog-api-key']).toBe('BBBBBBBBBBBBBBBB2222')
     expect(r.blob.type).toBe('audio/wav')
-    expect(ai.keys[0].until).toBeGreaterThan(Date.now() + 3600e3)
+    expect(quotaUntil('AAAAAAAAAAAAAAAA1111', TTS_MODEL)).toBeGreaterThan(Date.now())
+    expect(ai.keys[0].ok).not.toBe(false)
     expect(ai.keys[1].ok).toBe(true)
   })
+  it('до сброса лимита (9:00 по Варшаве) — не больше суток', () => { const ms = untilReset(); expect(ms).toBeGreaterThan(0); expect(ms).toBeLessThanOrEqual(864e5 + 60e3) })
   it('другая ошибка — сразу наверх, второй ключ не трогаем', async () => {
     ai.keys = [{ key: 'AAAAAAAAAAAAAAAA1111', ok: null, until: 0, n: 0 }, { key: 'BBBBBBBBBBBBBBBB2222', ok: null, until: 0, n: 0 }]
     let n = 0

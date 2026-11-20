@@ -4,7 +4,7 @@
 // Запрос — ключами преподавателя из профиля (utils/tts.js), прямо из браузера.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import AudioPill from './AudioPill.vue'
-import { VOICES, getVoice, setVoice, speak, SAMPLES, getSampleLang, setSampleLang, sampleGet, samplePut, sampleKeys } from '../utils/tts'
+import { VOICES, getVoice, setVoice, speak, getModel, setModel, ttsModels, knownModels, modelName, quotaUntil, SAMPLES, getSampleLang, setSampleLang, sampleGet, samplePut, sampleKeys } from '../utils/tts'
 import { ai, addKey, removeKey, moveKey, mask, countToday } from '../utils/gemini'
 import { aiIcon } from '../utils/ai'
 
@@ -18,15 +18,20 @@ const sec = computed(() => ((now.value - t0.value) / 1000).toFixed(1).replace('.
 const icon = aiIcon('Gemini')
 const noKeys = computed(() => !ai.keys.length)
 
+// модель озвучки: список — из первого ключа (кэш на сутки); у каждой модели свой суточный лимит
+const model = ref(getModel()), models = ref(knownModels())
+onMounted(async () => { if (ai.keys[0]) { const l = await ttsModels(ai.keys[0].key); if (l.length) { models.value = l; if (!l.includes(model.value)) pickModel(l[0]) } } })
+function pickModel(m) { model.value = m; setModel(m); smpAu?.pause(); loadSaved?.() }
+const modelList = computed(() => (models.value.includes(model.value) ? models.value : [model.value, ...models.value]))
 const GROUPS = [['Женские', VOICES.filter(v => v[1] === 'женский')], ['Мужские', VOICES.filter(v => v[1] === 'мужской')]]
 // ключи — та же таблица, что в профиле: какой сейчас пробуется, квота, запросы за сегодня; можно добавить, поднять, убрать
 const fresh = ref(''), adding = ref(false)
 const hm = (t) => new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 const rows = computed(() => ai.keys.map((x) => {
-  const m = mask(x.key), cur = st.value === 'busy' && step.value?.key === m, wait = x.until > now.value
+  const m = mask(x.key), cur = st.value === 'busy' && step.value?.key === m, qu = quotaUntil(x.key, model.value), wait = qu > now.value
   return { key: x.key, m, n: countToday(x), err: x.err, cur,
     st: cur ? 'cur' : wait ? 'wait' : x.ok === true ? 'ok' : x.ok === false ? 'bad' : 'new',
-    label: cur ? `озвучивает · ${sec.value} с` : wait ? `квота до ${hm(x.until)}` : x.ok === true ? 'работает' : x.ok === false ? 'ошибка' : 'не проверен' }
+    label: cur ? `озвучивает · ${sec.value} с` : wait ? `лимит модели до ${hm(qu)}` : x.ok === true ? 'работает' : x.ok === false ? 'ошибка' : 'не проверен' }
 }))
 function addK() { if (addKey(fresh.value)) { fresh.value = ''; adding.value = false } }
 let clock = 0
@@ -38,7 +43,7 @@ function pickVoice(v) { voice.value = v; setVoice(v) }
 // фраза образца — по-польски или по-английски (у каждой свои образцы); язык угадывается по тексту, выбор запоминается
 const saved = ref(new Set()), smpBusy = ref(''), smpOn = ref(''), lang = ref(getSampleLang(props.text))
 const phrase = computed(() => SAMPLES[lang.value])
-const loadSaved = () => sampleKeys(phrase.value).then((v) => { saved.value = new Set(v) })
+const loadSaved = () => sampleKeys(phrase.value + '|' + model.value).then((v) => { saved.value = new Set(v) })
 function setLang(l) { if (smpBusy.value) return; smpAu?.pause(); lang.value = l; setSampleLang(l); loadSaved() }
 let smpAu = null
 onMounted(loadSaved)
@@ -46,11 +51,11 @@ async function sample(v) {
   if (smpBusy.value || st.value === 'busy') return
   if (smpOn.value === v) { smpAu?.pause(); return }
   smpAu?.pause(); document.querySelectorAll('.tts .out audio').forEach((a) => a.pause())
-  const ph = phrase.value
+  const ph = phrase.value + '|' + model.value
   let b = await sampleGet(v, ph)
   if (!b) {
     smpBusy.value = v; err.value = null
-    try { b = (await speak(ph, v)).blob; await samplePut(v, b, ph); if (ph === phrase.value) saved.value = new Set([...saved.value, v]) }
+    try { b = (await speak(phrase.value, v, { model: model.value })).blob; await samplePut(v, b, ph); if (ph === phrase.value + '|' + model.value) saved.value = new Set([...saved.value, v]) }
     catch (e) { err.value = e; return } finally { smpBusy.value = '' }
   }
   const u = URL.createObjectURL(b)
@@ -68,7 +73,7 @@ async function go() {
   tm = setInterval(() => { now.value = Date.now() }, 100)
   ac = new AbortController()
   try {
-    const r = await speak(txt.value, voice.value, { signal: ac.signal, onStep: (x) => { step.value = x } })
+    const r = await speak(txt.value, voice.value, { model: model.value, signal: ac.signal, onStep: (x) => { step.value = x } })
     if (res.value) URL.revokeObjectURL(res.value.url)
     res.value = { ...r, voice: voice.value, url: URL.createObjectURL(r.blob), took: sec.value, dur: r.sec.toFixed(1).replace('.', ',') + ' с' }; st.value = 'done'
   } catch (e) {
@@ -99,6 +104,10 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey, true); clea
 
         <label class="lb" for="tts-t">Текст</label>
         <textarea id="tts-t" v-model="txt" rows="3" :readonly="st === 'busy'" spellcheck="false" />
+
+        <div class="mrow"><label class="lb" for="tts-m">Модель</label>
+          <select id="tts-m" :value="model" :disabled="st === 'busy' || !!smpBusy" @change="pickModel($event.target.value)"><option v-for="m in modelList" :key="m" :value="m">{{ modelName(m) }}</option></select>
+          <small>у каждой модели свой лимит: 10 в сутки, 3 в минуту</small></div>
 
         <div class="vg2">
           <div v-for="[g, list] in GROUPS" :key="g" class="vgrp">
@@ -136,7 +145,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey, true); clea
         <div v-else-if="st === 'err'" class="msg bad"><b>Не получилось.</b> {{ err?.message }}</div>
         <div v-if="res && st !== 'busy'" class="out">
           <AudioPill :key="res.url" :src="res.url" autoplay />
-          <small>{{ res.dur }} · голос {{ res.voice }} · ответ за {{ res.took }} с · ключ {{ res.key }}</small>
+          <small>{{ res.dur }} · {{ modelName(res.model) }} · голос {{ res.voice }} · ответ за {{ res.took }} с · ключ {{ res.key }}</small>
         </div>
 
         <footer>
@@ -175,6 +184,8 @@ textarea:focus { outline: none; border-color: #4b8df8; box-shadow: 0 0 0 3px rgb
 .lb .smp { margin-left: 8px; font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--hint, #999) }
 .out { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px }
 .out small { color: var(--hint, #777); font-size: 12px }
+.mrow { display: flex; align-items: center; gap: 10px; margin-bottom: 14px } .mrow .lb { margin: 0 } .mrow small { font-size: 11px; color: var(--hint, #999) }
+.mrow select { height: 32px; padding: 0 8px; border: 1px solid var(--border, #e3e3e3); border-radius: 8px; background: var(--bg, #fff); color: inherit; font: inherit; font-size: 13px }
 .kh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px } .kh .lb { margin: 0 } .kh small { font-size: 11px; color: var(--hint, #999) } .sp { flex: 1 }
 .lnk { border: 0; background: none; padding: 0; color: #2f6fe0; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer }
 .kadd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
