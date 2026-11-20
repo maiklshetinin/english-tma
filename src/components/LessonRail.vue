@@ -272,7 +272,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <div v-if="lite && !jsonOn[s.id] && !isEdit(s) && sel !== s.id" class="sk" :style="{ height: (viewH[s.id] ?? typicalH) + 'px', '--kc': KINDS[s.kind]?.color ?? '#c8c8c8' }">
         <span class="skh">{{ s.bk ? tplTitle(s) : KINDS[s.kind]?.t }}</span>
         <b class="skt">{{ skText(s) }}</b>
-        <i /><i /><i /><i class="skl" />
+        <i class="skb" /><i class="ska" /><i class="skg" />
       </div>
       <div v-else-if="jsonOn[s.id]" class="jv" :class="jsonTheme" @pointerdown.stop>
         <div class="jtop"><small>JSON экрана</small><span class="jsp" />
@@ -393,10 +393,13 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .line.glow line { stroke: #cfe8ff } .line.glow.hot line { stroke: #7cc4ff; filter: drop-shadow(0 0 6px rgba(13, 153, 255, .55)) } .line.glow line.done { stroke: #1fbe78 }
 .node.done { background: #1fbe78; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px #9be6c4 }
 /* текущий экран на ветке — без пульсации (07.11): в редакторе «дышит» только текущий урок на рельсе */
-.sk { display: flex; flex-direction: column; gap: 22px; padding: 34px 32px; box-sizing: border-box; overflow: hidden; background: color-mix(in srgb, var(--kc) 7%, #fff) }          /* эскиз экрана при отдалении */
-.sk .skh { align-self: flex-start; padding: 10px 22px; border-radius: 14px; background: var(--kc); color: #fff; font-size: 30px; font-weight: 800 }
-.sk .skt { font-size: 44px; line-height: 1.2; font-weight: 800; color: #3c3c3c; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
-.sk i { display: block; height: 26px; border-radius: 13px; background: #ececec } .sk i.skl { width: 55% }
+.sk { display: flex; flex-direction: column; gap: 40px; padding: 48px 44px; box-sizing: border-box; overflow: hidden; background: color-mix(in srgb, var(--kc) 6%, #fff) }          /* эскиз экрана при отдалении: заполнен на всю высоту, как живой */
+.sk .skh { align-self: flex-start; max-width: 100%; padding: 14px 30px; border-radius: 20px; background: var(--kc); color: #fff; font-size: 44px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box }
+.sk .skt { flex: none; font-size: 68px; line-height: 1.18; font-weight: 800; color: #3c3c3c; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden }
+.sk i { display: block; flex: none }
+.sk .skb { flex: 1 1 0; min-height: 0; background: repeating-linear-gradient(to bottom, #e6e6e6 0 30px, transparent 30px 74px); -webkit-mask: linear-gradient(to right, #000 78%, transparent 96%); mask: linear-gradient(to right, #000 78%, transparent 96%) }   /* строки текста — сколько влезет */
+.sk .ska { height: 180px; border: 6px solid #dcdcdc; border-radius: 28px; background: #fff }   /* поле ответа */
+.sk .skg { height: 96px; border-radius: 28px; background: var(--kc) }                           /* кнопка */
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
 .card.editing { border-color: #8cc8ff; box-shadow: 0 0 0 1px #8cc8ff, 0 2px 12px rgba(0, 0, 0, .06) }          /* правка — сплошная голубая рамка (пунктир раздражал, 17.11.2026) */
 .card.fixh { min-height: 0 } .card.fixh.editing { overflow: visible } .card.fixh .jv pre { max-height: none; min-height: 0 }      /* JSON и правка — высотой с живой экран (fixH), лишнее — прокруткой внутри */
