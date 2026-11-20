@@ -13,8 +13,14 @@ import J from './stt.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
 const icon = aiIcon('Gemini')
-const LANGS = { 'pl-PL': 'Польский', 'en-US': 'Английский' }
-const lang = computed(() => (LANGS[props.step.lang] ? props.step.lang : 'pl-PL'))
+// языки (20.11.2026): по умолчанию — из правки урока, в прохождении можно переключить (запоминается в браузере); три языка: польский, английский, испанский
+const LANGS = { 'pl-PL': 'Польский', 'en-US': 'Английский', 'es-ES': 'Испанский' }
+const SHORT = { 'pl-PL': 'PL', 'en-US': 'EN', 'es-ES': 'ES' }
+const base = computed(() => (LANGS[props.step.lang] ? props.step.lang : 'pl-PL'))
+const LK = 'tma.stt.lang'
+const mine = ref((() => { try { return localStorage.getItem(LK) || '' } catch { return '' } })())
+const lang = computed(() => (LANGS[mine.value] ? mine.value : base.value))
+function pickLang(v) { if (st.value === 'live' || st.value === 'connecting') return; mine.value = v === base.value ? '' : v; try { if (mine.value) localStorage.setItem(LK, v); else localStorage.removeItem(LK) } catch { /* */ } }
 function setLang(v) { if (v === 'pl-PL') delete props.step.lang; else props.step.lang = v; ed.changed() }
 
 const st = ref('idle'), err = ref(''), note = ref(''), fin = ref([]), draft = ref(''), level = ref(0), used = ref(''), t0 = ref(0), now = ref(0)
@@ -56,11 +62,14 @@ const hasKeys = computed(() => ai.keys.length > 0)
     <ExText v-model="step.text" tag="p" class="sk" ph="Например: расскажите о себе по-польски — 3–4 предложения" multi>{{ step.text || 'Скажите что-нибудь по-польски' }}</ExText>
 
     <div v-if="p.edit" class="srow" @pointerdown.stop>
-      <label>Язык <select :value="lang" @change="setLang($event.target.value)"><option v-for="(t, k) in LANGS" :key="k" :value="k">{{ t }}</option></select></label>
+      <label>Язык <select :value="base" @change="setLang($event.target.value)"><option v-for="(t, k) in LANGS" :key="k" :value="k">{{ t }}</option></select></label>
       <p class="sn">Речь уходит в Gemini 3.5 Transcribe Live сырым звуком, ключами из профиля. До 10 минут подряд.</p>
     </div>
 
     <div v-else class="sv" :class="st" @pointerdown.stop>
+      <div class="sl" role="radiogroup" aria-label="Язык речи">
+        <button v-for="(t, k) in SHORT" :key="k" type="button" role="radio" :aria-checked="lang === k" class="lc" :class="{ on: lang === k }" :disabled="st === 'live' || st === 'connecting'" :title="LANGS[k] + (k === base ? ' — язык урока' : '')" @click="pickLang(k)">{{ t }}</button>
+      </div>
       <div class="sc">
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ text ? 'Говорить дальше' : 'Начать — говорите' }}</button>
         <template v-else>
@@ -83,6 +92,9 @@ const hasKeys = computed(() => ai.keys.length > 0)
 .srow select { height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
 .sn { margin: 0; font-size: 11.5px; font-weight: 600; color: var(--hint) }
 .sv { display: grid; gap: 10px }
+.sl { display: flex; flex-wrap: wrap; gap: 6px }
+.lc { min-width: 40px; height: 30px; padding: 0 10px; border: 1.5px solid var(--border); border-radius: 15px; background: var(--card); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer }
+.lc.on { border-color: #4b8df8; background: rgba(75, 141, 248, .12); color: #2f6fe0 } .lc:disabled:not(.on) { opacity: .4; cursor: default }
 .sc { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 10px 12px; border-radius: 16px; background: var(--surface) }
 .go { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; height: 48px; border: 0; border-radius: 14px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer }
 .go img { width: 22px; height: 22px; background: #fff; border-radius: 6px; padding: 2px } .go:disabled { opacity: .45; cursor: not-allowed }
