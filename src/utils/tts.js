@@ -69,18 +69,17 @@ export function wavFromResponse(data) {
 }
 
 /** Один запрос одним ключом */
-async function once(key, text, voice, fetcher, signal, model = TTS_MODEL) {
+async function once(key, text, voice, fetcher, signal, model = TTS_MODEL, wait = WAIT) {
   const body = { contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } }
-  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), WAIT)
+  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), wait)
   const stop = () => ac?.abort(); signal?.addEventListener?.('abort', stop)
-  let r
-  try { r = await fetcher(API + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), ...(ac ? { signal: ac.signal } : {}) }) }
+  let r, raw          // таймаут — на весь ответ (заголовки + тело), не только на заголовки
+  try { r = await fetcher(API + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), ...(ac ? { signal: ac.signal } : {}) }); raw = await r.text() }
   catch {
     if (signal?.aborted) { const e = new Error('Остановлено'); e.cancel = true; throw e }
-    if (ac?.signal.aborted) { const e = new Error(`Gemini не ответил за ${WAIT / 1000} с — попробуйте ещё раз`); e.status = 504; throw e }
+    if (ac?.signal.aborted) { const e = new Error(`Gemini не ответил за ${Math.round(wait / 1000)} с`); e.status = 504; throw e }
     const e = new Error('Нет связи с Google'); e.net = true; throw e
   } finally { clearTimeout(tm); signal?.removeEventListener?.('abort', stop) }
-  const raw = await r.text()
   if (!r.ok) { let msg = raw; try { msg = JSON.parse(raw).error?.message ?? raw } catch { /* не JSON */ } const e = new Error(errText(r.status, msg, model)); e.status = r.status; e.wait = retryMs(raw); throw e }
   return JSON.parse(raw)
 }
@@ -88,7 +87,7 @@ async function once(key, text, voice, fetcher, signal, model = TTS_MODEL) {
 /** Озвучить текст: ключи по очереди. onStep({ key: 'AIzaSy…1234', i, n }) — какой ключ сейчас пробуется (для окна прогресса).
  *  Кончилась квота (429) — эта пара «ключ + модель» отдыхает (сколько сказал Google, иначе до 9:00), пробуется следующий ключ.
  *  → { blob, sec, key, model } */
-export async function speak(text, voice = getVoice(), { fetcher = fetch, signal, onStep, model = getModel() } = {}) {
+export async function speak(text, voice = getVoice(), { fetcher = fetch, signal, onStep, model = getModel(), wait = WAIT } = {}) {
   const t = String(text ?? '').trim()
   if (!t) throw new Error('Нечего озвучивать — текст пустой')
   if (!ai.keys.length) { const e = new Error('Нет ключей Gemini — добавьте ключ'); e.nokeys = true; throw e }
@@ -101,9 +100,10 @@ export async function speak(text, voice = getVoice(), { fetcher = fetch, signal,
   for (let i = 0; i < free.length; i++) {
     const x = free[i]
     onStep?.({ key: mask(x.key), i, n: free.length })
-    try { const data = await once(x.key, t, voice, fetcher, signal, model); mark(x, true); return { ...wavFromResponse(data), key: mask(x.key), model } }
+    try { const data = await once(x.key, t, voice, fetcher, signal, model, wait); mark(x, true); return { ...wavFromResponse(data), key: mask(x.key), model } }
     catch (e) {
       if (e.cancel) throw e
+      onStep?.({ key: mask(x.key), i, n: free.length, fail: e.message, status: e.status || 0 })          // для журнала: чем кончилась попытка
       if (e.status === 429) { block(x.key, model, e.wait > 0 && e.wait < 120e3 ? e.wait : untilReset()); x.err = `лимит ${modelName(model)}`; last = e; continue }   // ключ рабочий — лимит у этой модели
       if (e.status) mark(x, false, e)
       throw e

@@ -74,7 +74,7 @@ async function go() {
   tm = setInterval(() => { now.value = Date.now() }, 100)
   ac = new AbortController()
   try {
-    const r = await speak(txt.value, voice.value, { model: model.value, signal: ac.signal, onStep: (x) => { step.value = x } })
+    const r = await speak(txt.value, voice.value, { model: model.value, signal: ac.signal, onStep: (x) => { if (!x.fail) step.value = x } })
     if (res.value) URL.revokeObjectURL(res.value.url)
     res.value = { ...r, voice: voice.value, url: URL.createObjectURL(r.blob), took: sec.value, dur: r.sec.toFixed(1).replace('.', ',') + ' с' }; st.value = 'done'
   } catch (e) {

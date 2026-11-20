@@ -10,6 +10,7 @@ import { VOICES, getVoice, setVoice, speak, getModel, setModel, ttsModels, known
 import { batchText, splitPcm, rangesOf, peaks } from '../utils/ttssplit'
 import { ai } from '../utils/gemini'
 import VoicePicker from './VoicePicker.vue'
+import KeyTable from './KeyTable.vue'
 import { aiIcon } from '../utils/ai'
 
 const props = defineProps({ title: { type: String, default: 'Озвучить' }, items: { type: Array, required: true } })
@@ -31,7 +32,26 @@ const nReq = computed(() => Math.ceil(picked.value.length / size.value))
 // пачки
 const batches = ref([])            // { keys, pcm, rate, info, cuts, pk, model, voice, open }
 let stopReq = false
-const run = reactive({ on: false, wait: 0, note: '', err: '' })
+const run = reactive({ on: false, wait: 0, note: '', err: '', key: '', sec: 0 })
+// журнал (20.11.2026): что отправлено, каким ключом, чем кончилось — чтобы зависание или ошибку было видно, а не гадать
+const LIMIT = 180          // пачка — длинный звук, Google озвучивает её дольше одной фразы; дольше 3 минут — обрываем, ошибка в журнал
+const log = ref([])
+const hms = () => new Date().toLocaleTimeString('ru-RU')
+const say = (txt, kind = '') => { log.value.push({ t: hms(), txt, kind }); if (log.value.length > 60) log.value.shift() }
+let ac = null, tick = 0
+function ask(text, what) {          // один запрос speak с секундомером, текущим ключом и записью в журнал
+  ac = new AbortController(); run.sec = 0; run.key = ''
+  clearInterval(tick); tick = setInterval(() => { run.sec++ }, 1000)
+  const t0 = Date.now()
+  return speak(text, voice.value, { model: model.value, signal: ac.signal, wait: LIMIT * 1000,
+    onStep: (x) => {
+      if (x.fail) say(`${what}: ключ ${x.key} — ${x.status ? x.status + ' · ' : ''}${x.fail}${x.status === 429 && x.i + 1 < x.n ? ' → следующий ключ' : ''}`, 'bad')
+      else { run.key = x.key; run.sec = Math.round((Date.now() - t0) / 1000); say(`${what}: отправлено · ключ ${x.key}${x.n > 1 ? ` (${x.i + 1} из ${x.n})` : ''} · ${modelName(model.value)} · ${voice.value}`) }
+    } })
+    .then((r) => { say(`${what}: готово за ${Math.round((Date.now() - t0) / 1000)} с · ${fmt(r.pcm.length / r.rate)} звука`, 'ok'); return r })
+    .catch((e) => { if (e.cancel) say(`${what}: остановлено`); else if (!e.status || e.quota || e.nokeys) say(`${what}: ${e.message}`, 'bad'); throw e })
+    .finally(() => { clearInterval(tick); run.key = ''; ac = null })
+}
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))
 function setPiece(it, pcm, rate, b) {
   const r = row[it.key]; if (r.url) URL.revokeObjectURL(r.url)
@@ -51,11 +71,12 @@ async function start() {
     part.forEach((it) => { row[it.key].st = 'busy' })
     run.note = `пачка ${i / size.value + 1} из ${Math.ceil(queue.length / size.value)} · ${part.length} фраз`
     try {
-      const r = await speak(texts.length > 1 ? batchText(texts) : texts[0], voice.value, { model: model.value })
+      const r = await ask(texts.length > 1 ? batchText(texts) : texts[0], `Пачка ${i / size.value + 1}`)
       const sp = splitPcm(r.pcm, r.rate, texts)
       batches.value.push({ keys: part.map((it) => it.key), pcm: r.pcm, rate: r.rate, info: sp.info, cuts: sp.cuts, pk: peaks(r.pcm, 240), model: r.model, voice: voice.value, open: !!sp.guessed, guessed: !!sp.guessed })
       cutBatch(batches.value.length - 1)
     } catch (e) {
+      if (e.cancel) { part.forEach((it) => { row[it.key].st = 'idle' }); break }
       part.forEach((it) => { row[it.key].st = 'err'; row[it.key].err = e.message })
       run.err = e.message
       if (e.quota || e.nokeys || e.status === 400 || e.status === 403) break          // лимит или ключ — дальше без толку
@@ -65,12 +86,12 @@ async function start() {
   for (const it of queue) if (row[it.key].st === 'queue') row[it.key].st = 'idle'
   run.on = false; run.wait = 0; run.note = ''
 }
-function stop() { stopReq = true }
+function stop() { stopReq = true; ac?.abort() }
 async function redo(it) {          // переозвучить одну строку отдельным запросом
   if (run.on || row[it.key].st === 'busy') return
   row[it.key].st = 'busy'
-  try { const r = await speak(it.text.trim(), voice.value, { model: model.value }); setPiece(it, r.pcm, r.rate, -1); row[it.key].by = `${r.model}|${voice.value}` }
-  catch (e) { row[it.key].st = 'err'; row[it.key].err = e.message }
+  try { const r = await ask(it.text.trim(), `«${it.text.trim().slice(0, 24)}»`); setPiece(it, r.pcm, r.rate, -1); row[it.key].by = `${r.model}|${voice.value}` }
+  catch (e) { row[it.key].st = e.cancel ? 'idle' : 'err'; row[it.key].err = e.message }
 }
 // плеер строки
 let au = null
@@ -109,9 +130,11 @@ async function save() {
 }
 const fmt = (s) => (s ? s.toFixed(1).replace('.', ',') + ' с' : '')
 const busyClose = computed(() => run.on || saving.value)
+const anyBusy = computed(() => items.some((it) => row[it.key].st === 'busy'))
+const logOpen = ref(true)
 const onKey = (e) => { if (e.key === 'Escape' && !busyClose.value) { e.stopPropagation(); emit('close') } }
 onMounted(() => addEventListener('keydown', onKey, true))
-onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = true; au?.pause(); for (const k in row) if (row[k].url) URL.revokeObjectURL(row[k].url) })
+onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = true; ac?.abort(); clearInterval(tick); au?.pause(); for (const k in row) if (row[k].url) URL.revokeObjectURL(row[k].url) })
 </script>
 
 <template>
@@ -126,6 +149,7 @@ onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = t
           <label>Пачка <select v-model.number="size" :disabled="run.on"><option v-for="n in [5, 10, 15]" :key="n" :value="n">по {{ n }}</option></select></label>
           <label class="chk"><input v-model="onlyNew" type="checkbox" class="sw" />только без звука</label>
         </div>
+        <KeyTable :model="model" :cur="run.key" :sec="run.sec" :busy="run.on || anyBusy" />
         <p class="hint">Одна пачка — один запрос (у модели 10 в сутки, 3 в минуту). Отмечено {{ picked.length }} → {{ nReq }} {{ nReq === 1 ? 'запрос' : nReq < 5 ? 'запроса' : 'запросов' }}.</p>
 
         <div class="tbl">
@@ -162,8 +186,12 @@ onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = t
         </div>
 
         <p v-if="run.err" class="er">{{ run.err }}</p>
+        <details v-if="log.length" class="lg" :open="logOpen" @toggle="logOpen = $event.target.open">
+          <summary>Журнал · {{ log.length }} <em v-if="log.some((l) => l.kind === 'bad')">· есть ошибки</em></summary>
+          <ol><li v-for="(l, k) in log.slice().reverse()" :key="log.length - k" :class="l.kind"><time>{{ l.t }}</time>{{ l.txt }}</li></ol>
+        </details>
         <footer>
-          <small v-if="run.on">{{ run.note }}<template v-if="run.wait"> · пауза {{ run.wait }} с</template></small>
+          <small v-if="run.on">{{ run.note }}<template v-if="run.wait"> · пауза {{ run.wait }} с</template><template v-else-if="run.key"> · ключ {{ run.key }} · ждём ответа {{ run.sec }} из {{ LIMIT }} с</template></small>
           <span class="sp" />
           <button v-if="run.on" type="button" class="ghost" @click="stop">Стоп</button>
           <button v-else type="button" class="pri" :disabled="!picked.length || !ai.keys.length" @click="start">Озвучить выбранные ({{ picked.length }})</button>
@@ -200,6 +228,9 @@ header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px } he
 .cut { position: absolute; top: -4px; bottom: -4px; width: 22px; margin-left: -11px; cursor: ew-resize; z-index: 2 }
 .cut::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: var(--text, #222); opacity: .6 } .cut::after { content: ''; position: absolute; left: 6px; top: 50%; margin-top: -12px; width: 10px; height: 24px; border-radius: 5px; background: var(--text, #222); opacity: .8 }
 .bn { margin: 4px 4px 0; font-size: 11.5px; font-weight: 700 }
+.lg { margin-top: 8px; font-size: 12px } .lg summary { cursor: pointer; font-weight: 800; color: var(--hint, #777) } .lg summary em { color: #c53030; font-style: normal }
+.lg ol { list-style: none; margin: 4px 0 0; padding: 6px 8px; max-height: 110px; overflow: auto; border-radius: 8px; background: var(--surface, #f6f6f6); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.5 }
+.lg li.bad { color: #c53030 } .lg li.ok { color: #1f8a4c } .lg time { color: var(--hint, #999); margin-right: 8px }
 footer { display: flex; align-items: center; gap: 8px; margin-top: 12px } footer small { font-size: 12.5px; color: #2f6fe0; font-weight: 700 }
 .pri, .ghost { height: 40px; padding: 0 16px; border: 0; border-radius: 12px; font: inherit; font-weight: 800; cursor: pointer } .pri { background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff } .pri.g { background: #2fa36b } .ghost { background: var(--surface, #f1f1f1); color: inherit }
 .pri:disabled { opacity: .45; cursor: not-allowed }
