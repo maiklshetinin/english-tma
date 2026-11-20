@@ -4,7 +4,7 @@
 // Запрос — ключами преподавателя из профиля (utils/tts.js), прямо из браузера.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import AudioPill from './AudioPill.vue'
-import { VOICES, getVoice, setVoice, speak } from '../utils/tts'
+import { VOICES, getVoice, setVoice, speak, SAMPLE, sampleGet, samplePut, sampleKeys } from '../utils/tts'
 import { ai, addKey, removeKey, moveKey, mask, countToday } from '../utils/gemini'
 import { aiIcon } from '../utils/ai'
 
@@ -12,10 +12,9 @@ const props = defineProps({ text: { type: String, default: '' }, what: { type: S
 const emit = defineEmits(['close', 'save'])
 const txt = ref(props.text), voice = ref(getVoice())
 const st = ref('idle')                 // idle | busy | done | err
-const err = ref(null), step = ref(null), res = ref(null), url = ref(''), t0 = ref(0), now = ref(0)
+const err = ref(null), step = ref(null), t0 = ref(0), now = ref(0)
 let ac = null, tm = 0
 const sec = computed(() => ((now.value - t0.value) / 1000).toFixed(1).replace('.', ','))
-const took = ref('')
 const icon = aiIcon('Gemini')
 const noKeys = computed(() => !ai.keys.length)
 
@@ -34,15 +33,39 @@ let clock = 0
 onMounted(() => { now.value = Date.now(); clock = setInterval(() => { if (st.value !== 'busy') now.value = Date.now() }, 30_000) })
 onBeforeUnmount(() => clearInterval(clock))
 function pickVoice(v) { voice.value = v; setVoice(v) }
+
+// образцы голосов: ▶ у голоса — одна фраза этим голосом; первый раз озвучивается (1 запрос), потом играет из браузера
+const saved = ref(new Set()), smpBusy = ref(''), smpOn = ref('')
+let smpAu = null
+onMounted(() => sampleKeys().then((v) => { saved.value = new Set(v) }))
+async function sample(v) {
+  if (smpBusy.value || st.value === 'busy') return
+  if (smpOn.value === v) { smpAu?.pause(); return }
+  smpAu?.pause(); document.querySelectorAll('.tts .out audio').forEach((a) => a.pause())
+  let b = await sampleGet(v)
+  if (!b) {
+    smpBusy.value = v; err.value = null
+    try { b = (await speak(SAMPLE, v)).blob; await samplePut(v, b); saved.value = new Set([...saved.value, v]) }
+    catch (e) { err.value = e; return } finally { smpBusy.value = '' }
+  }
+  const u = URL.createObjectURL(b)
+  smpAu = new Audio(u); smpOn.value = v
+  smpAu.onended = smpAu.onpause = () => { if (smpOn.value === v) smpOn.value = ''; URL.revokeObjectURL(u) }
+  smpAu.play().catch(() => { smpOn.value = '' })
+}
+
+// результат: один; «Ещё раз» — заново (сравнивать голоса — образцами ▶, они бесплатные)
+const res = ref(null)
 async function go() {
-  if (st.value === 'busy' || !txt.value.trim()) return
+  if (st.value === 'busy' || smpBusy.value || !txt.value.trim()) return
+  smpAu?.pause()
   st.value = 'busy'; err.value = null; step.value = null; t0.value = now.value = Date.now()
   tm = setInterval(() => { now.value = Date.now() }, 100)
   ac = new AbortController()
   try {
     const r = await speak(txt.value, voice.value, { signal: ac.signal, onStep: (x) => { step.value = x } })
-    if (url.value) URL.revokeObjectURL(url.value)
-    res.value = { ...r, voice: voice.value }; url.value = URL.createObjectURL(r.blob); took.value = sec.value; st.value = 'done'
+    if (res.value) URL.revokeObjectURL(res.value.url)
+    res.value = { ...r, voice: voice.value, url: URL.createObjectURL(r.blob), took: sec.value, dur: r.sec.toFixed(1).replace('.', ',') + ' с' }; st.value = 'done'
   } catch (e) {
     if (e.cancel) { st.value = res.value ? 'done' : 'idle'; return }
     err.value = e; st.value = 'err'
@@ -50,15 +73,14 @@ async function go() {
 }
 function stop() { ac?.abort() }
 function save() {
-  if (!res.value) return
-  const f = new File([res.value.blob], `tts_${voice.value}_${Date.now().toString(36)}.wav`, { type: 'audio/wav' })
+  const t = res.value; if (!t) return
+  const f = new File([t.blob], `tts_${t.voice}_${Date.now().toString(36)}.wav`, { type: 'audio/wav' })
   emit('save', f); close(true)
 }
 function close(force = false) { if (st.value === 'busy' && force !== true) return; emit('close') }
 const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); if (st.value === 'busy') stop(); else close() } }
 onMounted(() => window.addEventListener('keydown', onKey, true))
-onBeforeUnmount(() => { window.removeEventListener('keydown', onKey, true); clearInterval(tm); ac?.abort(); if (url.value) URL.revokeObjectURL(url.value) })
-const dur = computed(() => (res.value ? res.value.sec.toFixed(1).replace('.', ',') + ' с' : ''))
+onBeforeUnmount(() => { window.removeEventListener('keydown', onKey, true); clearInterval(tm); ac?.abort(); smpAu?.pause(); if (res.value) URL.revokeObjectURL(res.value.url) })
 </script>
 
 <template>
@@ -75,9 +97,15 @@ const dur = computed(() => (res.value ? res.value.sec.toFixed(1).replace('.', ',
 
         <div class="vg2">
           <div v-for="[g, list] in GROUPS" :key="g" class="vgrp">
-            <div class="lb">{{ g }}</div>
+            <div class="lb">{{ g }}<small v-if="g === 'Женские'" class="smp">▶ — образец «{{ SAMPLE.slice(0, 22) }}…»</small></div>
             <div class="vs">
-              <button v-for="v in list" :key="v[0]" type="button" class="v" :class="{ on: voice === v[0] }" :disabled="st === 'busy'" @click="pickVoice(v[0])"><b>{{ v[0] }}</b><small>{{ v[2] }}</small></button>
+              <div v-for="v in list" :key="v[0]" class="v" :class="{ on: voice === v[0] }">
+                <button type="button" class="vn" :disabled="st === 'busy'" @click="pickVoice(v[0])"><b>{{ v[0] }}</b><small>{{ v[2] }}</small></button>
+                <button type="button" class="vp" :class="{ has: saved.has(v[0]), play: smpOn === v[0] }" :disabled="st === 'busy' || (!!smpBusy && smpBusy !== v[0])"
+                  :title="saved.has(v[0]) ? 'Образец голоса — из браузера, квоту не тратит' : 'Образец голоса — озвучить один раз (1 запрос), дальше бесплатно'" @click="sample(v[0])">
+                  <span v-if="smpBusy === v[0]" class="spin sm" /><svg v-else-if="smpOn === v[0]" viewBox="0 0 24 24"><rect x="7" y="6" width="3.5" height="12" rx="1" /><rect x="13.5" y="6" width="3.5" height="12" rx="1" /></svg><svg v-else viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -102,13 +130,13 @@ const dur = computed(() => (res.value ? res.value.sec.toFixed(1).replace('.', ',
         </div>
         <div v-else-if="st === 'err'" class="msg bad"><b>Не получилось.</b> {{ err?.message }}</div>
         <div v-if="res && st !== 'busy'" class="out">
-          <AudioPill :key="url" :src="url" autoplay />
-          <small>{{ dur }} · голос {{ res.voice }} · ответ за {{ took }} с · ключ {{ res.key }}</small>
+          <AudioPill :key="res.url" :src="res.url" autoplay />
+          <small>{{ res.dur }} · голос {{ res.voice }} · ответ за {{ res.took }} с · ключ {{ res.key }}</small>
         </div>
 
         <footer>
-          <button v-if="res && st !== 'busy'" type="button" class="ghost" :disabled="noKeys" @click="go">Ещё раз</button>
-          <button v-else type="button" class="pri" :disabled="st === 'busy' || noKeys || !txt.trim()" @click="go">{{ st === 'err' ? 'Попробовать ещё раз' : 'Озвучить' }}</button>
+          <button v-if="res && st !== 'busy'" type="button" class="ghost" :disabled="noKeys" @click="go">Ещё раз · {{ voice }}</button>
+          <button v-else type="button" class="pri" :disabled="st === 'busy' || !!smpBusy || noKeys || !txt.trim()" @click="go">{{ st === 'err' ? 'Попробовать ещё раз' : 'Озвучить' }}</button>
           <button v-if="res && st !== 'busy'" type="button" class="pri" @click="save">Сохранить в экран</button>
         </footer>
       </div>
@@ -130,10 +158,17 @@ textarea:focus { outline: none; border-color: #4b8df8; box-shadow: 0 0 0 3px rgb
 .vg2 { display: grid; grid-template-columns: 4fr 6fr; gap: 16px; margin-bottom: 16px }
 .vs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px }
 .vgrp:last-child .vs { grid-template-columns: repeat(3, minmax(0, 1fr)) }
-.v { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; padding: 6px 9px; border: 1px solid var(--border, #e3e3e3); border-radius: 9px; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left }
-.v b { font-size: 13px } .v small { font-size: 11px; color: var(--hint, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100% }
-.v:hover:not(:disabled) { border-color: #9bbcf5 }
+.v { display: flex; align-items: stretch; min-width: 0; border: 1px solid var(--border, #e3e3e3); border-radius: 9px; overflow: hidden }
 .v.on { border-color: #4b8df8; box-shadow: inset 0 0 0 1px #4b8df8; background: rgba(75, 141, 248, .08) }
+.vn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 4px 6px 9px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left }
+.vn b { font-size: 13px } .vn small { font-size: 11px; color: var(--hint, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100% }
+.v:hover:not(.on) { border-color: #9bbcf5 }
+.vp { flex: none; width: 26px; display: grid; place-items: center; padding: 0; border: 0; background: none; color: #b5b5b5; cursor: pointer }
+.vp svg { width: 13px; height: 13px; fill: currentColor } .vp.has { color: #4b8df8 } .vp.play { color: #2f6fe0 } .vp:hover:not(:disabled) { background: rgba(75, 141, 248, .12) } .vp:disabled { opacity: .35; cursor: default }
+.spin.sm { width: 11px; height: 11px; border-width: 2px }
+.lb .smp { margin-left: 8px; font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--hint, #999) }
+.out { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px }
+.out small { color: var(--hint, #777); font-size: 12px }
 .kh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px } .kh .lb { margin: 0 } .kh small { font-size: 11px; color: var(--hint, #999) } .sp { flex: 1 }
 .lnk { border: 0; background: none; padding: 0; color: #2f6fe0; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer }
 .kadd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
@@ -165,8 +200,6 @@ textarea:focus { outline: none; border-color: #4b8df8; box-shadow: 0 0 0 3px rgb
 @keyframes b { from { left: -35% } to { left: 100% } }
 .msg { padding: 10px 14px; border-radius: 12px; font-size: 14px; margin-bottom: 12px; line-height: 1.4 }
 .msg.bad { background: rgba(224, 70, 70, .1); color: #c53030 }
-.out { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px }
-.out small { color: var(--hint, #777); font-size: 12px }
 footer { display: flex; justify-content: flex-end; gap: 8px }
 .pri, .ghost { height: 40px; padding: 0 18px; border: 0; border-radius: 12px; font: inherit; font-weight: 700; cursor: pointer }
 .pri { background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff }

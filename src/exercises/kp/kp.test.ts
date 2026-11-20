@@ -69,7 +69,7 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     const w = mount(host(st, log))
     await w.findAll('.cf .ext').at(-1)!.trigger('click')
     const o = JSON.parse((w.find('.kjt').element as HTMLTextAreaElement).value)
-    expect(o).toEqual({ id: null, star: false, look: 'pdf', marks: true, question: step.text, reference: step.ideal, pass_threshold: 60, system_prompt: SYSTEM })
+    expect(o).toEqual({ id: null, star: false, autoplay: false, look: 'pdf', marks: true, question: step.text, reference: step.ideal, pass_threshold: 60, system_prompt: SYSTEM })
     await w.find('.kjt').setValue(JSON.stringify({ ...o, pass_threshold: 70, system_prompt: 'Bądź surowy.' })); await w.find('.kjo').trigger('click')
     expect(st.prompt).toBe('Bądź surowy.'); expect(st.pass).toBe(70); expect(log).toContain('changed'); expect(w.find('.kj').exists()).toBe(false)
     await w.findAll('.cf .ext').at(-1)!.trigger('click'); await w.find('.kjt').setValue('{ сломано'); await w.find('.kjo').trigger('click')
@@ -114,7 +114,7 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
       el0.value = 'Adwent to czas oczekiwania'          // вставили напрямую, события нет
       expect(w.find('.foot .go').attributes('disabled')).toBeDefined()
       await vi.advanceTimersByTimeAsync(600); await w.vm.$nextTick()
-      expect(w.find('.foot .go').attributes('disabled')).toBeUndefined(); expect(w.find('.kl span').text()).toBe('4 слова')
+      expect(w.find('.foot .go').attributes('disabled')).toBeUndefined(); expect(w.find('.kl span').text()).toBe('4 слова · зачёт от 60%')
     } finally { vi.useRealTimers() }
   })
   it('вид и выделения: по умолчанию PDF с выделениями; «линии», «подложки», без выделений — простой текст', async () => {

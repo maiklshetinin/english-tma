@@ -136,18 +136,18 @@ function jsApply() {
         </template>
         <TtsDialog v-if="tts" :text="ttsText" what="вопрос" @close="tts = false" @save="ttsSave" />
       </div>
-      <div v-if="!p.edit" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
+      <div v-if="!p.edit && (checked || p.st.busy)" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
         <svg viewBox="0 0 120 66" role="img" :aria-label="checked ? `Совпадение по смыслу ${r.score} %` : 'Ещё не проверено'">
           <path d="M12 60 A48 48 0 0 1 108 60" class="tr" />
           <path v-if="checked && r.score > 0" :d="arc" class="fl" />
           <path :d="`M${tick[0][0]} ${tick[0][1]} L${tick[1][0]} ${tick[1][1]}`" class="tk" />
           <line x1="60" y1="60" :x2="needle[0]" :y2="needle[1]" class="nd" /><circle cx="60" cy="60" r="5" class="nd" />
         </svg>
-        <div class="kgv"><b>{{ p.st.busy ? '…' : checked ? r.score + '%' : '—' }}</b><span :class="checked && 'bdg'">{{ p.st.busy ? 'проверяю' : checked ? tierT[tier] : `зачёт от ${pass}%` }}</span></div>
+        <div class="kgv"><b>{{ p.st.busy ? '…' : checked ? r.score + '%' : '—' }}</b><span >{{ p.st.busy ? 'проверяю' : tierT[tier] }}</span></div>
       </div>
     </div>
 
-    <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label><span>{{ p.edit ? '' : words }}</span></div>
+    <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label><span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
     <div v-else class="ka done">{{ p.st.text }}</div>
@@ -211,14 +211,14 @@ function jsApply() {
 .ktts i { position: absolute; bottom: -14px; font-size: 10px; font-style: normal; color: #8a4b1c }
 .kax { width: 22px; height: 22px; border-radius: 50%; background: none; color: #a07a55; font-size: 12px } .kax:hover { background: rgba(0, 0, 0, .06) }
 .kst.off { opacity: .28; filter: grayscale(1) } .kst.off:hover { opacity: .6 }
-.kg { flex: none; display: flex; align-items: center; gap: 8px; width: 178px }
-.kg svg { width: 84px; height: 46px; flex: none; overflow: visible }
-.kg .tr { fill: none; stroke: #f0d6ae; stroke-width: 11; stroke-linecap: round }
-.kg .fl { fill: none; stroke: #ff9600; stroke-width: 11; stroke-linecap: round } .kg.ok .fl { stroke: #58cc02 } .kg.low .fl { stroke: #ff4b4b }
-.kg .tk { stroke: #8a6a48; stroke-width: 1.6 } .kg .nd { stroke: #4b4b4b; fill: #4b4b4b; stroke-width: 3; stroke-linecap: round }
-.kgv { display: grid; gap: 3px; font-family: var(--font) } .kgv b { font-size: 24px; font-weight: 800; line-height: 1; color: #4b4b4b }
-.kgv span { justify-self: start; font-size: 11.5px; font-weight: 700; color: #6b5a48; white-space: nowrap }
-.kgv .bdg { padding: 2px 8px; border-radius: 99px; background: #fff0d0; color: #8a5200 } .ok .kgv .bdg { background: #d7ffb8; color: #3d7a00 } .low .kgv .bdg { background: #ffdfe0; color: #b3261e }
+.kg { flex: none; align-self: flex-start; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 58px; margin-left: 6px; padding: 4px 0 5px; border-radius: 10px; background: #fff0d0 }          /* итог проверки — маленькой плашкой в углу (20.11.2026), до проверки её нет */
+.kg.ok { background: #d7ffb8 } .kg.low { background: #ffdfe0 }
+.kg svg { width: 38px; height: 21px; flex: none; overflow: visible }
+.kg .tr { fill: none; stroke: rgba(0, 0, 0, .1); stroke-width: 13; stroke-linecap: round }
+.kg .fl { fill: none; stroke: #ff9600; stroke-width: 13; stroke-linecap: round } .kg.ok .fl { stroke: #58cc02 } .kg.low .fl { stroke: #ff4b4b }
+.kg .tk { stroke: #8a6a48; stroke-width: 3 } .kg .nd { stroke: #4b4b4b; fill: #4b4b4b; stroke-width: 5; stroke-linecap: round }
+.kgv { display: flex; flex-direction: column; align-items: center; font-family: var(--font) } .kgv b { font-size: 14px; font-weight: 800; line-height: 1.1; color: #4b4b4b }
+.kgv span { font-size: 9.5px; font-weight: 800; color: #8a5200; white-space: nowrap } .ok .kgv span { color: #3d7a00 } .low .kgv span { color: #b3261e }
 .kl { display: flex; justify-content: space-between; margin-bottom: -8px; font-family: var(--font); font-size: 12px; font-weight: 800; color: #6b5a48; text-transform: uppercase; letter-spacing: .3px } .kl span { font-weight: 600; text-transform: none; letter-spacing: 0 }
 /* поле ответа и тот же ответ после проверки — одной высоты: ниже ничего не съезжает */
 .ka { display: block; width: 100%; height: 132px; box-sizing: border-box; margin: 0; padding: 11px 13px; border: 1px solid #e3c79c; border-radius: 12px; background: transparent;
