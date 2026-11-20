@@ -22,6 +22,7 @@ import AudioWave from '../../components/AudioWave.vue'
 import CardEditModal from '../../components/CardEditModal.vue'
 import { useCardMedia, isImg, isAud, isLink, audSrc, imgSrc, forget, removeCard } from '../../composables/useCardMedia'
 import { fetchSheetCsv } from '../../composables/useSheetImport'
+import { cardsFromJson, cardsToTsv, cardJson } from '../../utils/cardsJson'
 
 const route = useRoute(), router = useRouter()
 const decks = useDecksStore()
@@ -143,6 +144,20 @@ function undoImport() { const s = lastImport.value?.snapshot; if (s) deck.value.
 function remapImport() { const f = lastImport.value?.fileObj; undoImport(); if (f) startImport(f, false) }
 // Google Таблица по ссылке: сервер забирает её как CSV (GET /sheets/csv; у таблицы должен быть доступ «Все, у кого есть ссылка»),
 // дальше — то же окно импорта. Берётся лист из ссылки (#gid=…), без него — первый.
+// JSON (20.11.2026): вставить карточки JSON-ом (например, ответ нейросети) — в то же окно импорта; скопировать колоду JSON-ом
+async function fromJson() {
+  const t = await askText('Карточки из JSON', { multi: true, text: 'Вставьте JSON: [{ "front": "слово", "back": "перевод", "example": "…", "exampleTr": "…" }]. Можно ответ нейросети целиком — лишний текст отбросится.', placeholder: '[\n  { "front": "apple", "back": "яблоко", "example": "I eat an apple.", "exampleTr": "Я ем яблоко." }\n]', ok: 'Добавить' })
+  if (!t?.trim()) return
+  const { cards, skipped } = cardsFromJson(t)
+  if (!cards) return showToast('Не нашёл JSON — проверьте скобки и кавычки', null, 'bad')
+  if (!cards.length) return showToast('В JSON нет карточек со словом и переводом', null, 'bad')
+  if (skipped) showToast(`Пропущено без слова или перевода: ${skipped}`)
+  startImport(new File([cardsToTsv(cards)], 'JSON.tsv', { type: 'text/tab-separated-values' }))
+}
+async function copyJson() {
+  const t = JSON.stringify(deck.value.cards.map(cardJson), null, 2)
+  try { await navigator.clipboard.writeText(t); showToast(`Скопировано карточек: ${deck.value.cards.length}`) } catch { showToast('Браузер не дал скопировать', null, 'bad') }
+}
 const gBusy = ref(false)
 async function fromGoogle() {
   const url = (await askText('Ссылка на Google Таблицу', { text: 'Возьмётся лист, который открыт по ссылке. У таблицы должен быть доступ «Все, у кого есть ссылка».', placeholder: 'https://docs.google.com/spreadsheets/…', ok: 'Загрузить' }))?.trim(); if (!url) return
@@ -190,7 +205,7 @@ const back = () => { const d = deck.value; if (fresh && d && !d.cards.length && 
       <span class="sp" />
       <label v-if="deck && cards.length > 15" class="search"><AppIcon name="search" :size="16" /><input v-model="q" placeholder="Найти слово" /></label>
       <span v-if="deck" class="imx"><button class="ghostb" :disabled="gBusy" @click.stop="impOpen = !impOpen">{{ gBusy ? 'Загружаю…' : 'Импорт' }} ▾</button>
-        <span v-if="impOpen" class="pm down" @click.stop><button @click="impOpen = false; chooseSheet()">Файл Excel или CSV</button><button @click="impOpen = false; fromGoogle()">Google Таблица по ссылке</button>
+        <span v-if="impOpen" class="pm down" @click.stop><button @click="impOpen = false; chooseSheet()">Файл Excel или CSV</button><button @click="impOpen = false; fromGoogle()">Google Таблица по ссылке</button><button @click="impOpen = false; fromJson()">Вставить JSON</button><button :disabled="!deck.cards.length" @click="impOpen = false; copyJson()">Скопировать колоду JSON</button>
           <small>Или просто перетащите файл на таблицу</small></span></span>
       <button v-if="deck" class="icon-btn" aria-label="Настройки колоды" title="Настройки: новых в день, Google Таблица, удаление" @click="settings = true"><AppIcon name="sliders" :size="18" /></button>
       <button v-if="deck" class="btn sm" @click="addCard"><AppIcon name="plus" :size="16" /> Карточка</button>

@@ -7,6 +7,7 @@ watch(() => dialog.open, (v) => { if (v) nextTick(() => (dialog.kind === 'text' 
 const onKey = (e) => {
   if (!dialog.open) return
   if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeDialog(false) }
+  if (e.key === 'Enter' && dialog.multi && !(e.ctrlKey || e.metaKey)) return          // большое поле: Enter — новая строка
   if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); closeDialog(true) }
 }
 onMounted(() => addEventListener('keydown', onKey, true)); onUnmounted(() => removeEventListener('keydown', onKey, true))
@@ -15,10 +16,11 @@ onMounted(() => addEventListener('keydown', onKey, true)); onUnmounted(() => rem
 <template>
   <Transition name="dlg">
     <div v-if="dialog.open" class="dov" @pointerdown.self="closeDialog(false)">
-      <div class="dlg" role="alertdialog" aria-modal="true" :aria-label="dialog.title">
+      <div class="dlg" :class="{ wide: dialog.multi }" role="alertdialog" aria-modal="true" :aria-label="dialog.title">
         <h3>{{ dialog.title }}</h3>
         <p v-if="dialog.text">{{ dialog.text }}</p>
-        <input v-if="dialog.kind === 'text'" ref="input" v-model="dialog.value" class="din" :placeholder="dialog.placeholder" />
+ <textarea v-if="dialog.kind === 'text' && dialog.multi" ref="input" v-model="dialog.value" class="din ta" rows="10" spellcheck="false" :placeholder="dialog.placeholder" />
+        <input v-else-if="dialog.kind === 'text'" ref="input" v-model="dialog.value" class="din" :placeholder="dialog.placeholder" />
         <div class="dbtns">
           <button v-if="dialog.kind !== 'say'" class="btn" @click="closeDialog(false)">{{ dialog.cancel }}</button>
           <button ref="okBtn" class="btn" :class="dialog.danger ? 'danger' : 'primary'" @click="closeDialog(true)">{{ dialog.ok }}</button>
@@ -34,6 +36,7 @@ onMounted(() => addEventListener('keydown', onKey, true)); onUnmounted(() => rem
 h3 { margin: 0 0 6px; font-size: 17px; font-weight: 800; line-height: 1.3 }
 p { margin: 0 0 4px; font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--hint) }
 .din { width: 100%; box-sizing: border-box; margin: 10px 0 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); font: inherit; font-size: 15px; color: var(--text); outline: none }
+.dlg.wide { width: min(620px, 100%) } .din.ta { resize: vertical; min-height: 180px; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace }
 .din:focus { border-color: var(--blue) }
 .dbtns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px }
 .dbtns .btn { padding: 10px 18px; font-size: 15px }

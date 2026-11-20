@@ -6,17 +6,17 @@
 // Enter — главная кнопка, Esc и нажатие мимо — отмена.
 import { reactive } from 'vue'
 
-export const dialog = reactive({ open: false, kind: 'ask', title: '', text: '', ok: 'OK', cancel: 'Отмена', danger: false, value: '', placeholder: '', resolve: null })
+export const dialog = reactive({ open: false, kind: 'ask', title: '', text: '', ok: 'OK', cancel: 'Отмена', danger: false, value: '', placeholder: '', multi: false, resolve: null })
 
 function show(opts) {
   if (dialog.open) dialog.resolve?.(dialog.kind === 'text' ? null : false)       // новое окно закрывает прежнее как «отмену»
-  return new Promise((resolve) => Object.assign(dialog, { cancel: 'Отмена', danger: false, value: '', placeholder: '', title: '', ...opts, open: true, resolve }))
+  return new Promise((resolve) => Object.assign(dialog, { cancel: 'Отмена', danger: false, value: '', placeholder: '', title: '', multi: false, ...opts, open: true, resolve }))
 }
 // Вопрос «да / нет». Короткий текст становится заголовком, подробности — вторым параметром или opts.text.
 export const ask = (title, opts = {}) => show({ kind: 'ask', title, ok: opts.ok ?? 'OK', ...opts })
 // Сообщение с одной кнопкой
 export const say = (title, opts = {}) => show({ kind: 'say', title, ok: opts.ok ?? 'Понятно', ...opts })
-// Строка текста; null — отмена
+// Строка текста; null — отмена. multi: true — большое поле (вставить JSON), Enter — новая строка, Ctrl+Enter — готово
 export const askText = (title, opts = {}) => show({ kind: 'text', title, ok: opts.ok ?? 'Готово', ...opts })
 
 export function closeDialog(yes) {

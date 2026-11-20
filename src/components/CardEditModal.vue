@@ -2,11 +2,12 @@
 // Окно правки карточки — одно на всё приложение (таблица карточек, карточка во время учёбы, просмотр колоды).
 // Как карточка у ученика: всё правится прямо на ней; фото и звук — перетащить на карточку (или на своё место) или нажать.
 // Листать — большие стрелки по бокам или ← → (если открыто из списка), Esc — закрыть.
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
 import AudioWave from './AudioWave.vue'
 import TtsDialog from './TtsDialog.vue'
 import { aiIcon } from '../utils/ai'
+import { cardJson } from '../utils/cardsJson'
 import { showToast } from '../composables/useToast'
 import { useCardMedia, isImg, isAud, isLink, audSrc, imgSrc, removeCard } from '../composables/useCardMedia'
 const props = defineProps({
@@ -26,6 +27,23 @@ const { busy, attach, clearField } = useCardMedia(() => props.deck)
 // озвучка Gemini (20.11.2026): у слова и у примера — значок Gemini → окно озвучки → готовый звук в карточку (как свой файл)
 const tts = ref(null), gIcon = aiIcon('Gemini')            // { k: 'audio' | 'exampleAudio', text, what, id }
 function ttsOpen(k) { const c = ec.value; if (!c) return; const t = k === 'audio' ? c.front : c.example; if (t?.trim()) tts.value = { k, text: t.trim(), what: k === 'audio' ? 'слово' : 'пример', id: c.id } }
+// JSON карточки (20.11.2026): «{ }» в шапке — карточка текстом: скопировать, поправить, «Применить»
+const jsOn = ref(false), js = ref(''), jsErr = ref('')
+function jsToggle() { jsOn.value = !jsOn.value; if (jsOn.value) { js.value = JSON.stringify(cardJson(ec.value), null, 2); jsErr.value = '' } }
+async function jsCopy() { try { await navigator.clipboard.writeText(js.value); showToast('JSON карточки скопирован') } catch { showToast('Браузер не дал скопировать', null, 'bad') } }
+function jsApply() {
+  let o; try { o = JSON.parse(js.value) } catch { jsErr.value = 'Не JSON — проверьте кавычки и запятые'; return }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) { jsErr.value = 'Нужен объект { … } одной карточки'; return }
+  const c = ec.value
+  if (!String(o.front ?? '').trim() || !String(o.back ?? '').trim()) { jsErr.value = 'Нужны front (слово) и back (перевод)'; return }
+  for (const k of ['front', 'back', 'example', 'exampleTr']) { const v = typeof o[k] === 'string' ? o[k].trim() : ''; if (v) c[k] = v; else delete c[k] }
+  for (const k of ['image', 'audio', 'exampleAudio']) {           // файлы: свой оставить, чужая ссылка — только https; убрали из JSON — убрать с карточки
+    const v = typeof o[k] === 'string' ? o[k].trim() : ''
+    if (!v) { if (c[k]) clearField(c, k) } else if (v !== c[k] && /^https:\/\//.test(v)) c[k] = v
+  }
+  jsErr.value = ''; jsOn.value = false; showToast('Карточка обновлена')
+}
+watch(() => props.modelValue, () => { jsOn.value = false })
 function ttsSave(f) { const c = props.deck.cards.find(x => x.id === tts.value?.id); if (c) attach(c, tts.value.k, f) }
 // Выбрать файл кнопкой
 const pick = ref(null); let pickTo = null
@@ -59,8 +77,14 @@ onMounted(() => addEventListener('keydown', ceKey)); onUnmounted(() => removeEve
         <div class="ceh"><small v-if="list.length > 1">{{ eIdx + 1 }} из {{ list.length }}</small><span class="sp" />
           <button class="hb" :class="{ on: ec.suspended }" :title="ec.suspended ? 'Скрыта от учеников — вернуть' : 'Скрыть от учеников'" @click="ec.suspended ? delete ec.suspended : (ec.suspended = true)">
             <svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /><path v-if="ec.suspended" d="M4 4l16 16" /></svg></button>
+          <button class="hb js" :class="{ on: jsOn }" title="JSON карточки — скопировать или поправить" @click="jsToggle">{ }</button>
           <button class="hb red" title="Удалить карточку" @click="del"><AppIcon name="trash" :size="22" /></button>
           <button class="hb" title="Закрыть (Esc)" @click="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button></div>
+        <div v-if="jsOn" class="cjs" @keydown.stop>
+          <textarea v-model="js" rows="9" spellcheck="false" aria-label="JSON карточки" />
+          <p v-if="jsErr" class="cjr">{{ jsErr }}</p>
+          <div class="cjb"><button class="btn sm" @click="jsCopy">Копировать</button><span class="sp" /><button class="btn sm" @click="jsOn = false">Отмена</button><button class="btn sm primary" @click="jsApply">Применить</button></div>
+        </div>
         <div class="wrow"><input v-model.trim="ec.front" data-k="front" class="cw" placeholder="слово" :class="{ miss: !ec.front }" />
           <span class="spk2" :class="{ zon: ceZone === 'audio' }" @dragover.prevent.stop="ceZone = 'audio'; ceOver = true" @drop.stop="zoneDrop($event, 'audio')">
             <span v-if="busy[ec.id + 'audio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'audio'] }" /></span>
@@ -102,6 +126,9 @@ onMounted(() => addEventListener('keydown', ceKey)); onUnmounted(() => removeEve
 .ceh { display: flex; align-items: center; gap: 4px; margin: 0 -6px 4px 0 } .ceh .sp { flex: 1 } .ceh small { font-size: 13px; font-weight: 800; color: var(--hint-2) }
 .hb { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: none; color: var(--hint); cursor: pointer }
 .hb svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.hb.js { font: 800 14px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: -1px }
+.cjs { display: grid; gap: 6px; margin: 2px 0 8px } .cjs textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: 12.5px/1.45 ui-monospace, Menlo, Consolas, monospace; resize: vertical }
+.cjr { margin: 0; font-size: 13px; font-weight: 700; color: var(--red-d) } .cjb { display: flex; gap: 6px } .cjb .sp { flex: 1 }
 .hb:hover { background: var(--surface); color: var(--text) } .hb.red:hover { background: var(--red-l); color: var(--red-d) } .hb.on { color: var(--orange-d); background: #fff4d6 }
 .ce input, .ce textarea { margin: 0; width: 100%; border: 0; border-radius: 12px; background: none; text-align: center; padding: 4px 8px; resize: none; font-family: inherit; line-height: 1.3; outline: none; transition: background .1s }
 .ce input:hover, .ce textarea:hover { background: var(--surface) } .ce input:focus, .ce textarea:focus { background: var(--blue-l) }
