@@ -27,6 +27,11 @@ onMounted(async () => { const k = firstKey(); if (k) models.value = await liveMo
 // модель перед разговором (20.11.2026): в прохождении — свой выбор (запоминается в браузере), по умолчанию — из правки или самая свежая
 const PK = 'tma.live.pick'
 const pick = ref((() => { try { return localStorage.getItem(PK) || '' } catch { return '' } })())
+// голос перед разговором — так же: свой выбор в браузере, по умолчанию — из правки (20.11.2026)
+const VK = 'tma.live.voice'
+const vpick = ref((() => { try { return localStorage.getItem(VK) || '' } catch { return '' } })())
+function setVPick(v) { vpick.value = v; try { if (v) localStorage.setItem(VK, v); else localStorage.removeItem(VK) } catch { /* */ } }
+const vName = (n) => { const v = VOICES.find((x) => x[0] === n); return v ? `${v[0]} · ${v[1] === 'женский' ? '♀' : '♂'} ${v[2]}` : n }
 function setPick(v) { pick.value = v; try { if (v) localStorage.setItem(PK, v); else localStorage.removeItem(PK) } catch { /* */ } }
 const think = (m) => /think/i.test(m)
 // язык разговора: расшифровка и голос закреплены, в роль дописывается «собеседник говорит только на этом языке» —
@@ -41,7 +46,7 @@ const model = computed(() => props.step.model || models.value[0] || '')
 function setF(k, v) { if (v) props.step[k] = v; else delete props.step[k]; ed.changed() }
 
 // разговор
-const used = ref(''), st = ref('idle'), err = ref(''), note = ref(''), lines = ref([]), level = ref(0), muted = ref(false), t0 = ref(0), now = ref(0)
+const used = ref(''), usedV = ref(''), st = ref('idle'), err = ref(''), note = ref(''), lines = ref([]), level = ref(0), muted = ref(false), t0 = ref(0), now = ref(0)
 let sess = null, clock = 0
 const box = ref(null)
 const sec = computed(() => { const s = Math.max(0, Math.round((now.value - t0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
@@ -59,7 +64,8 @@ async function start() {
   if (!m) { const l = await liveModels(key); m = l[0] }
   used.value = m
   if (!m) { err.value = 'Google не дал этому ключу ни одной Live-модели'; return }
-  sess = startTalk({ key, model: m, voice: voice.value, lang: lang.value, system: LOCK[lang.value] + (props.step.prompt?.trim() || DEF_PROMPT), opener: lang.value === 'en-US' ? 'Hello. Please start the conversation.' : OPENER, on: {
+  usedV.value = vpick.value || voice.value
+  sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: LOCK[lang.value] + (props.step.prompt?.trim() || DEF_PROMPT), opener: lang.value === 'en-US' ? 'Hello. Please start the conversation.' : OPENER, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
       st.value = s === 'error' ? 'ended' : s
@@ -96,15 +102,18 @@ const hasKeys = computed(() => ai.keys.length > 0)
     </template>
 
     <div v-else class="tv" :class="st" @pointerdown.stop>
-      <div v-if="st !== 'live' && st !== 'connecting' && models.length" class="tm">
-        <label>Модель <select :value="pick" @change="setPick($event.target.value)"><option value="">{{ step.model ? liveName(step.model) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
+      <div v-if="st !== 'live' && st !== 'connecting'" class="tm">
+        <label v-if="models.length">Модель <select :value="pick" @change="setPick($event.target.value)"><option value="">{{ step.model ? liveName(step.model) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
+        <label>Голос <select :value="vpick" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice ? ' (из урока)' : '' }}</option>
+          <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup>
+          <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup></select></label>
         <small>язык: {{ LANGS[lang] }}</small>
       </div>
       <div class="tc">
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ st === 'ended' ? 'Поговорить ещё раз' : 'Начать разговор' }}</button>
         <template v-else>
           <span class="orb" :style="{ '--l': level }"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></span>
-          <div class="ts"><b>{{ st === 'connecting' ? 'Подключаюсь к Gemini…' : muted ? 'Микрофон выключен' : 'Говорите — Gemini слушает' }}</b><small v-if="st === 'live'">{{ sec }} · {{ liveName(used) }}<template v-if="note"> · {{ note }}</template></small></div>
+          <div class="ts"><b>{{ st === 'connecting' ? 'Подключаюсь к Gemini…' : muted ? 'Микрофон выключен' : 'Говорите — Gemini слушает' }}</b><small v-if="st === 'live'">{{ sec }} · {{ liveName(used) }} · {{ usedV }}<template v-if="note"> · {{ note }}</template></small></div>
           <button v-if="st === 'live'" type="button" class="sm" :class="{ on: muted }" @click="mute">{{ muted ? 'Включить микрофон' : 'Пауза' }}</button>
           <button type="button" class="sm red" @click="stop">Завершить</button>
         </template>
@@ -127,7 +136,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
 .tn { margin: 4px 0 0; font-size: 11.5px; font-weight: 600; color: var(--hint) }
 .tv { display: grid; gap: 10px }
 .tm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap } .tm label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--hint) } .tm small { font-size: 12px; color: var(--hint) }
-.tm select { max-width: 320px; height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
+.tm select { max-width: 260px; height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
 .tc { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 10px 12px; border-radius: 16px; background: var(--surface) }
 .go { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; height: 48px; border: 0; border-radius: 14px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer }
 .go img { width: 22px; height: 22px; background: #fff; border-radius: 6px; padding: 2px } .go:disabled { opacity: .45; cursor: not-allowed }
