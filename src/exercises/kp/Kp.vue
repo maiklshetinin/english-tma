@@ -15,6 +15,8 @@ import { usePlay, useEdit } from '../ctx'
 import { PASS, SYSTEM, bridgeStatus, aiIcon, kpPlain } from '../../utils/ai'
 import TtsDialog from '../../components/TtsDialog.vue'
 import { modelName } from '../../utils/tts'
+import { startTranscribe, sttModel, firstKey } from '../../utils/live'
+import { ai } from '../../utils/gemini'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -60,6 +62,33 @@ onMounted(() => { if (ta.value) ta.value.value = p.st.text || ''; syncTm = setIn
 watch(() => p.st.text, (v) => { if (ta.value && ta.value.value !== (v || '')) ta.value.value = v || '' })
 watch(ta, (el) => { if (el) el.value = p.st.text || '' }, { flush: 'sync' })          // поле появилось заново (повтор вопроса) — со своим текстом
 onBeforeUnmount(() => clearInterval(syncTm))
+// «Надиктовать с Gemini» (20.11.2026): речь сырым звуком — в Gemini 3.5 Transcribe Live (польский закреплён), готовые куски
+// дописываются в поле ответа, черновик — серым под полем. Поле остаётся обычным: можно вставить текст или надиктовать по-старому
+const dic = ref('idle'), dicDraft = ref(''), dicErr = ref(''), dicLvl = ref(0), dicT0 = ref(0), dicNow = ref(0)
+let dicS = null, dicTm = 0
+const canDic = computed(() => ai.keys.length > 0)
+const dicSec = computed(() => { const s = Math.max(0, Math.round((dicNow.value - dicT0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
+const addText = (t) => { const x = String(t || '').trim(); if (x && !p.st.done) p.st.text = ((p.st.text || '').trim() + ' ' + x).trim() }
+async function dictate() {
+  if (dic.value === 'live' || dic.value === 'connecting') { dicS?.stop(); return }
+  const key = firstKey(); dicErr.value = ''
+  if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
+  dic.value = 'connecting'
+  dicS = startTranscribe({ key, model: await sttModel(key), lang: 'pl-PL', on: {
+    state: (s, info) => {
+      if (s === 'live' && info) return
+      dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s
+      if (s === 'error') dicErr.value = info
+      if (s === 'live') { dicT0.value = dicNow.value = Date.now(); clearInterval(dicTm); dicTm = setInterval(() => { dicNow.value = Date.now() }, 500) }
+      if (s === 'ended' || s === 'error') { clearInterval(dicTm); dicLvl.value = 0; dicS = null; addText(dicDraft.value); dicDraft.value = '' }
+    },
+    interim: (t) => { dicDraft.value = t },
+    final: (t) => { addText(t); dicDraft.value = '' },
+    level: (v) => { dicLvl.value = dicLvl.value * 0.6 + v * 0.4 },
+  } })
+}
+watch(() => p.st.busy || p.st.done, (v) => { if (v) dicS?.stop() })
+onBeforeUnmount(() => { dicS?.stop(); clearInterval(dicTm) })
 // вид экрана (19.11.2026): pdf — как домашка (подписи на подложке, без рамок; по умолчанию), lines — тонкие линии между частями,
 // cards — мягкие подложки; step.plain — эталон без выделений (просто абзацы). Меняются кнопками в подвале правки
 const LOOKS = { pdf: 'PDF', lines: 'линии', cards: 'подложки' }
@@ -150,10 +179,14 @@ function jsApply() {
       </div>
     </div>
 
-    <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label><span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
+    <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
+      <button v-if="!p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy" :title="dic === 'live' ? 'Остановить запись' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? 'Подключаюсь…' : 'Надиктовать с Gemini' }}</button>
+      <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
     <div v-else class="ka done">{{ p.st.text }}</div>
+    <p v-if="!p.edit && (dicDraft || dicErr)" class="kdd" :class="{ er: dicErr && !dicDraft }">{{ dicDraft || dicErr }}</p>
 
     <div class="kb miss" :class="look">
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
@@ -232,6 +265,10 @@ function jsApply() {
 .kb { padding: 0; border: 0; border-radius: 0; overflow: visible }          /* 19.11.2026: без пунктирных рамок и прокрутки — блок высотой с текст */
 /* А · PDF: подписи — на подложке, как «Ответы» в домашке */
 .kl.pdf { margin-bottom: -4px; align-items: center }
+.kdic { --l: 0; margin: 0 8px 0 auto; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 0; border-radius: 13px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font-family: var(--font); font-size: 11.5px; font-weight: 800; text-transform: none; letter-spacing: 0; cursor: pointer; white-space: nowrap }
+.kdic svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
+.kdic.live { background: #e5484d; box-shadow: 0 0 0 calc(var(--l) * 8px) rgba(229, 72, 77, .22); font-variant-numeric: tabular-nums } .kdic.connecting { opacity: .7 } .kdic:disabled { opacity: .4; cursor: default }
+.kdd { margin: -6px 2px 0; font-family: 'PT Serif', Georgia, serif; font-size: 15px; font-style: italic; color: #a08060 } .kdd.er { font-family: var(--font); font-size: 12.5px; font-style: normal; font-weight: 700; color: #b3261e }
 .kl.pdf label, .pdf .kht { padding: 2px 10px; border-radius: 7px; background: #f2dab5; font-family: 'PT Serif', Georgia, serif; font-size: 14px; font-style: italic; font-weight: 700; color: #7b4224; text-transform: none; letter-spacing: 0 }
 /* Б · тонкие линии между частями */
 .kb.lines { padding-top: 12px; border-top: 1px solid #e9cfa6 }
