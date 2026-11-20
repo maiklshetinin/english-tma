@@ -13,7 +13,7 @@ const props = defineProps({ state: { type: String, default: 'idle' }, out: { typ
 const box = ref(null), wrap = ref(null), ok = ref(true), mode = ref('hi')
 const SRC = import.meta.env.BASE_URL + 'talk/avatar.tgs?v=' + __APP_COMMIT__          // ?v= — новая сборка не возьмёт старый файл из кэша
 const CALM = 100, THINK = [100, 120], HI = [0, 90], MOUTH_HI = [12, 84]          // кадры стикера
-let anim = null, raf = 0, mo = null, mc = null, lvl = 0, sway = 0, open = null, openAt = 0, dead = false, talkAt = 0, listenAt = 0
+let anim = null, raf = 0, mo = null, mc = null, lvl = 0, sway = 0, open = null, dead = false, talkAt = 0, listenAt = 0
 
 async function load() {
   if (typeof DecompressionStream === 'undefined' || typeof fetch === 'undefined') throw new Error('нет распаковки')
@@ -27,7 +27,7 @@ async function load() {
 }
 /** Спокойная поза: сначала сбросить кусок анимации — иначе lottie считает кадр от его начала (после «думает» персонаж пропадал) */
 const calm = () => { anim.resetSegments(true); anim.goToAndStop(CALM, true) }
-function mouth(v) { if (v === open) return; open = v; openAt = performance.now(); if (mo) mo.style.display = v ? '' : 'none'; if (mc) mc.style.display = v ? 'none' : '' }
+function mouth(v) { if (v === open) return; open = v; if (mo) mo.style.display = v ? '' : 'none'; if (mc) mc.style.display = v ? 'none' : '' }
 /** Перейти в состояние: hi / bye — машет один раз; think — рука к волосам; idle / talk / listen — спокойная поза */
 function go(m) {
   if (!anim || m === mode.value && m !== 'hi' && m !== 'bye') return
@@ -42,13 +42,13 @@ function tick() {
   if (dead || !anim) return
   const now = performance.now()
   if (props.state === 'live') {
-    lvl = lvl * 0.6 + (props.out?.() || 0) * 0.4          // громкость сглажена — без рывков
+    lvl = lvl * 0.45 + (props.out?.() || 0) * 0.55
     if (lvl > 0.12) talkAt = now
     if (props.inp > 0.12) listenAt = now
     const want = now - talkAt < 600 ? 'talk' : now - listenAt < 900 ? 'listen' : 'idle'          // паузы короче — состояние держится, не дёргается
     if (mode.value !== 'hi' || anim.isPaused) go(want)
   } else lvl = 0
-  if (mode.value === 'talk') { const held = now - openAt; mouth(open ? !(lvl < 0.06 && held > 110) : lvl > 0.14 && held > 80) }          // рот — слогами: открыт ≥ 110 мс, закрыт ≥ 80 мс, гистерезис по громкости
+  if (mode.value === 'talk') mouth(open ? lvl > 0.06 : lvl > 0.14)          // гистерезис — рот не дрожит на тихих звуках (21.11.2026: с удержанием слогов выходило замедленно — убрано)
   else if (mode.value === 'hi' || mode.value === 'bye') { const f = anim.currentFrame + HI[0]; mouth(f >= MOUTH_HI[0] && f < MOUTH_HI[1]) }
   else mouth(false)
   sway += ((mode.value === 'talk' ? Math.min(lvl, 0.6) : 0) - sway) * 0.04          // покачивание — медленно догоняет голос (21.11.2026: шло прямо за громкостью и дёргалось)
@@ -71,7 +71,7 @@ onBeforeUnmount(() => { dead = true; cancelAnimationFrame(raf); anim?.destroy() 
 <style scoped>
 .avw { display: grid; place-items: center; margin-bottom: -4px; pointer-events: none }
 .avb { animation: br 3.6s ease-in-out infinite } @keyframes br { 50% { translate: 0 -2px; scale: 1.012 } }
-.ava { width: 180px; height: 180px; transition: transform .35s ease }
+.ava { width: 140px; height: 140px; transition: transform .35s ease }          /* 21.11.2026: меньше — чату больше места */
 .ava.listen { transform: rotate(-4deg) translateX(-6px) }
 .ava.think { transform: rotate(2deg) translateY(-3px) }
 @media (prefers-reduced-motion: reduce) { .avb { animation: none } }

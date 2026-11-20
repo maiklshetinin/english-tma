@@ -5,7 +5,7 @@
 // Без оценки: «Продолжить» доступна сразу (как у «Подсказки»).
 // Только польский. Всё, что уходит в Live-модель (роль, замок языка, первая реплика, пауза, чувствительность, температура, шумодав), — в JSON экрана
 // (кнопка «{ }»), умолчания — defaults.ts (talkCfg); в экране хранятся только отличия (20.11.2026).
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import { usePlay, useEdit } from '../ctx'
@@ -18,24 +18,23 @@ import TalkAvatar from './TalkAvatar.vue'
 import { assessSpeech, wavOf } from '../../utils/speech'
 import J from './talk.json'
 import { LANG, DEF_PROMPT, talkCfg, talkSystem } from './defaults'
+import { tp, setPick, setVoice as setVPick, setEval, loadModels } from './prefs'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
 const icon = aiIcon('Gemini')
 
 // модели и голос — в правке; модели — из ключа
 const cfg = computed(() => talkCfg(props.step))          // действующие настройки: свои поля экрана поверх умолчаний
-const models = ref([]), voice = computed(() => cfg.value.voice)
+const models = computed(() => tp.models), voice = computed(() => cfg.value.voice)
 const lessonModel = computed(() => (cfg.value.model === 'auto' ? '' : cfg.value.model))          // 'auto' — самая свежая Live-модель ключа
-onMounted(async () => { const k = firstKey(); if (k) models.value = await liveModels(k) })
-// модель перед разговором (20.11.2026): в прохождении — свой выбор (запоминается в браузере), по умолчанию — из правки или самая свежая
-const PK = 'tma.live.pick'
-const pick = ref((() => { try { return localStorage.getItem(PK) || '' } catch { return '' } })())
-// голос перед разговором — так же: свой выбор в браузере, по умолчанию — из правки (20.11.2026)
-const VK = 'tma.live.voice'
-const vpick = ref((() => { try { return localStorage.getItem(VK) || '' } catch { return '' } })())
-function setVPick(v) { vpick.value = v; try { if (v) localStorage.setItem(VK, v); else localStorage.removeItem(VK) } catch { /* */ } }
+onMounted(() => { loadModels() })
+// модель и голос перед разговором (20.11.2026): свой выбор ученика (запоминается в браузере), по умолчанию — из правки или самая свежая.
+// 21.11.2026: выбираются в подвале (part="fb"), «Оценивать речь» — вверху экрана; состояние общее — prefs.js
+const pick = computed(() => tp.pick), vpick = computed(() => tp.voice)
+// надписи на «таблетках» подвала — коротко (список под ними — полный)
+const pickName = computed(() => liveName(pick.value || lessonModel.value || models.value[0] || ''))
+const vShort = computed(() => { const n = vpick.value || voice.value, v = VOICES.find((x) => x[0] === n); return v ? `${n} ${v[1] === 'женский' ? '♀' : '♂'}` : n })
 const vName = (n) => { const v = VOICES.find((x) => x[0] === n); return v ? `${v[0]} · ${v[1] === 'женский' ? '♀' : '♂'} ${v[2]}` : n }
-function setPick(v) { pick.value = v; try { if (v) localStorage.setItem(PK, v); else localStorage.removeItem(PK) } catch { /* */ } }
 const think = (m) => /think/i.test(m)
 // язык разговора — польский: расшифровка и голос закреплены, перед ролью — «замок» (lock): иначе Live-модель сама угадывает язык
 // и с акцентом «слышит» русский (20.11.2026)
@@ -45,16 +44,28 @@ function setF(k, v) { if (v) props.step[k] = v; else delete props.step[k]; ed.ch
 // разговор
 const used = ref(''), usedV = ref(''), st = ref('idle'), err = ref(''), note = ref(''), lines = ref([]), level = ref(0), muted = ref(false), t0 = ref(0), now = ref(0)
 let sess = null, clock = 0
+const busy = computed(() => st.value === 'live' || st.value === 'connecting')
+watch(busy, (v) => { if (v) tp.busy[props.step.id] = true; else delete tp.busy[props.step.id] })          // подвал: пока идёт разговор, модель и голос не меняются
 const box = ref(null)
 const sec = computed(() => { const s = Math.max(0, Math.round((now.value - t0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 function push(role, chunk) {
   const last = lines.value.at(-1)
   if (last && last.role === role && !last.closed) last.t += chunk; else lines.value.push({ role, t: chunk.replace(/^\s+/, ''), closed: false })
-  nextTick(() => { if (box.value) box.value.scrollTop = box.value.scrollHeight })
+  if (atEnd.value) nextTick(() => toEnd(false))          // как в Telegram: внизу — новые реплики прокручивают чат сами; отмотали вверх — не дёргаем, есть «↓»
 }
+// чат как в Telegram (21.11.2026): тонкая полоска прокрутки — только пока мышь над чатом или его крутят (гаснет через секунду),
+// верх растворяется; отмотали вверх — круглая «↓» внизу справа
+const atEnd = ref(true), scrolling = ref(false)
+let scT = 0
+function onScroll() {
+  const b = box.value; if (!b) return
+  atEnd.value = b.scrollHeight - b.scrollTop - b.clientHeight < 40
+  scrolling.value = true; clearTimeout(scT); scT = setTimeout(() => { scrolling.value = false }, 1000)
+}
+function toEnd(smooth = true) { const b = box.value; if (b) { b.scrollTo({ top: b.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); atEnd.value = true } }
 async function start() {
   if (st.value === 'connecting' || st.value === 'live') return
-  err.value = ''; note.value = ''; lines.value = []; resetEval()
+  err.value = ''; note.value = ''; lines.value = []; atEnd.value = true; resetEval()
   const key = firstKey()
   if (!key) { err.value = 'Нужен ключ Gemini — добавьте его в профиле, раздел «Ключи Gemini»'; return }
   let m = pick.value || lessonModel.value
@@ -84,9 +95,8 @@ const outLevel = () => sess?.outLevel?.() ?? 0          // громкость г
 // «Оценивать речь» во время разговора (20.11.2026): копится только свой голос (пока Gemini молчит); набралось ещё 20 с речи —
 // в фоне оценка (Flash Lite, вся своя речь с начала, до последних 3 минут) — уровень уточняется; занято — следующая ждёт.
 // После «Завершить» — полный отчёт последней оценки, ничего ждать не надо
-const EK = 'tma.talk.eval', STEP = 20, MAX_SEC = 180
-const evalOn = ref((() => { try { return localStorage.getItem(EK) === '1' } catch { return false } })())
-function setEval(v) { evalOn.value = v; try { localStorage.setItem(EK, v ? '1' : '0') } catch { /* */ } }
+const STEP = 20, MAX_SEC = 180
+const evalOn = computed(() => tp.eval)
 const recA = [], segs = ref([]), speechSec = ref(0)
 let sentAt = 0, evBusy = false
 const lastRep = computed(() => [...segs.value].reverse().find((x) => x.rep)?.rep ?? null)
@@ -107,7 +117,7 @@ async function sendEval(final = false) {
 }
 function resetEval() { recA.length = 0; segs.value = []; speechSec.value = 0; sentAt = 0 }
 function mute() { muted.value = !muted.value; sess?.mute(muted.value) }
-onBeforeUnmount(() => { sess?.stop(); clearInterval(clock) })
+onBeforeUnmount(() => { sess?.stop(); clearInterval(clock); clearTimeout(scT); delete tp.busy[props.step.id] })
 const hasKeys = computed(() => ai.keys.length > 0)
 </script>
 
@@ -115,6 +125,14 @@ const hasKeys = computed(() => ai.keys.length > 0)
   <template v-if="part === 'body'">
     <ExHead :step="step" :def="J.head" />
     <ExText v-model="step.text" tag="p" class="tk" ph="Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски" multi>{{ step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }}</ExText>
+    <div v-if="!p.edit" class="thd" @pointerdown.stop>          <!-- вверху (21.11.2026): голос и «Оценивать речь»; пока идёт разговор — не меняются -->
+      <label class="ev" :class="{ off: busy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="busy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
+      <label class="pill" :class="{ off: busy }" title="Голос Gemini — запоминается в этом браузере">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
+        <select :value="vpick" :disabled="busy" aria-label="Голос" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice && step.voice !== 'Kore' ? ' (из урока)' : '' }}</option>
+          <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup>
+          <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup></select></label>
+    </div>
 
     <template v-if="p.edit">
       <label class="tl">Роль Gemini <small>видит только ИИ · пусто — консул на Карту поляка</small></label>
@@ -128,13 +146,6 @@ const hasKeys = computed(() => ai.keys.length > 0)
 
     <div v-else class="tv" :class="st" @pointerdown.stop>
       <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" />
-      <div v-if="st !== 'live' && st !== 'connecting'" class="tm">
-        <label v-if="models.length">Модель <select :value="pick" @change="setPick($event.target.value)"><option value="">{{ lessonModel ? liveName(lessonModel) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
-        <label>Голос <select :value="vpick" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice && step.voice !== 'Kore' ? ' (из урока)' : '' }}</option>
-          <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup>
-          <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup></select></label>
-        <label class="ev"><input type="checkbox" class="sw" :checked="evalOn" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
-      </div>
       <div class="tc">
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ st === 'ended' ? 'Поговорить ещё раз' : 'Начать разговор' }}</button>
         <template v-else>
@@ -152,11 +163,20 @@ const hasKeys = computed(() => ai.keys.length > 0)
       <SpeechReport v-if="evalOn && st === 'ended' && lastRep" :report="lastRep" bare />
       <p v-if="!hasKeys" class="er">Нужен ключ Gemini — добавьте его в профиле, раздел «Ключи Gemini».</p>
       <p v-if="err" class="er">{{ err }}</p>
-      <div v-if="lines.length" ref="box" class="tx">
-        <div v-for="(l, i) in lines" :key="i" class="b" :class="l.role">{{ l.t }}</div>
+      <div v-if="lines.length" class="txw">
+        <div ref="box" class="tx" :class="{ sc: scrolling }" @scroll.passive="onScroll">
+          <div v-for="(l, i) in lines" :key="i" class="b" :class="l.role">{{ l.t }}</div>
+        </div>
+        <button v-if="!atEnd" type="button" class="tdn" aria-label="Вниз, к новым репликам" @click="toEnd()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
       </div>
     </div>
   </template>
+  <!-- подвал (21.11.2026): модель — «таблеткой» слева от «Продолжить»; пока идёт разговор — не меняется (голос — вверху) -->
+  <div v-else-if="part === 'fb' && !p.edit" class="tf" @pointerdown.stop>
+    <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" title="Модель разговора — запоминается в этом браузере">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg><span class="pv">{{ pickName }}</span>
+      <select :value="pick" :disabled="tp.busy[step.id]" aria-label="Модель" @change="setPick($event.target.value)"><option value="">{{ lessonModel ? liveName(lessonModel) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
+  </div>
 </template>
 
 <style scoped>
@@ -167,9 +187,17 @@ const hasKeys = computed(() => ai.keys.length > 0)
 .trow select { max-width: 190px; height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
 .tn { margin: 4px 0 0; font-size: 11.5px; font-weight: 600; color: var(--hint) }
 .tv { display: grid; gap: 10px }
-.tm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap } .tm label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--hint) } .tm small { font-size: 12px; color: var(--hint) }
-.tm select { max-width: 260px; height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
-.ev { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer }
+.ev { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer }
+.thd { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin: -4px 0 8px }          /* вверху под заданием: «Оценивать речь» слева, голос справа */
+.ev.off { opacity: .5; cursor: default }
+/* «таблетки» (21.11.2026): голос — вверху, модель — в подвале */
+.tf { display: flex; gap: 6px; min-width: 0 }          /* в одну строку: таблетка — по ширине своей надписи */
+.pill { position: relative; flex: 0 1 auto; display: inline-flex; align-items: center; min-width: 0; height: 30px; padding: 0 22px 0 9px; border: 1px solid #d6e4fb; border-radius: 15px; background: #f3f7ff; color: #2f6fe0; cursor: pointer }
+.pill::after { content: ''; position: absolute; right: 10px; top: 11px; width: 5px; height: 5px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); pointer-events: none }
+.pill svg { flex: none; width: 13px; height: 13px; margin-right: 4px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
+.pill .pv { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; font-weight: 800 }
+.pill select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; font-size: 16px; cursor: pointer }          /* список — прозрачный поверх таблетки: ширина не зависит от длинных пунктов */
+.pill:focus-within { box-shadow: 0 0 0 2px rgba(47, 111, 224, .35) } .pill.off { opacity: .5; cursor: default } .pill.off select { cursor: default }
 .evb { display: grid; gap: 6px; padding: 8px 12px; border-radius: 12px; background: rgba(75, 141, 248, .07) }
 .evh { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap } .evh .lv { font-size: 18px; color: #2f6fe0 } .evh span { font-size: 13px; font-weight: 700 } .evh small { font-size: 12px; color: var(--hint) }
 .evs { display: flex; flex-wrap: wrap; gap: 4px } .sg { padding: 2px 8px; border-radius: 8px; background: var(--card); font-size: 11.5px; font-weight: 700; color: var(--hint) }
@@ -183,8 +211,17 @@ const hasKeys = computed(() => ai.keys.length > 0)
 .ts { flex: 1; min-width: 0; display: flex; flex-direction: column } .ts b { font-size: 14px } .ts small { font-size: 12px; color: var(--hint); font-variant-numeric: tabular-nums }
 .sm { flex: none; height: 34px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer } .sm.on { background: #fff4d6 } .sm.red { color: var(--red-d) }
 .er { margin: 0; font-size: 13px; font-weight: 700; color: var(--red-d) }
-.tx { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow: auto; padding: 2px }
-.b { max-width: 85%; padding: 8px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4; white-space: pre-wrap }
+.txw { position: relative }
+.tx { display: flex; flex-direction: column; gap: 5px; max-height: max(340px, 52vh); overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px 4px 2px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px);          /* верх растворяется */
+  scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color .3s }
+.tx:hover, .tx.sc { scrollbar-color: rgba(0, 0, 0, .28) transparent }          /* полоска — только пока мышь над чатом или его крутят */
+.tx::-webkit-scrollbar { width: 6px } .tx::-webkit-scrollbar-track { background: transparent } .tx::-webkit-scrollbar-thumb { border-radius: 3px; background: transparent }
+.tx:hover::-webkit-scrollbar-thumb, .tx.sc::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .28) }
+.tdn { position: absolute; right: 10px; bottom: 8px; width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--card); color: var(--hint); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); cursor: pointer; animation: tdn .18s ease-out }
+.tdn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round } .tdn:hover { color: var(--text) }
+@keyframes tdn { from { opacity: 0; transform: scale(.8) } } @media (prefers-reduced-motion: reduce) { .tdn { animation: none } }
+.b { max-width: 82%; padding: 7px 11px; border-radius: 14px; font-size: 14px; line-height: 1.4; white-space: pre-wrap }
 .b.ai { align-self: flex-start; background: rgba(75, 141, 248, .12); border-bottom-left-radius: 4px }
 .b.me { align-self: flex-end; background: var(--green-l, #d7ffb8); border-bottom-right-radius: 4px }
 </style>
