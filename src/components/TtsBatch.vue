@@ -9,6 +9,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { VOICES, getVoice, setVoice, speak, getModel, setModel, ttsModels, knownModels, modelName, pcmToWav } from '../utils/tts'
 import { batchText, splitPcm, rangesOf, peaks } from '../utils/ttssplit'
 import { ai } from '../utils/gemini'
+import VoicePicker from './VoicePicker.vue'
 import { aiIcon } from '../utils/ai'
 
 const props = defineProps({ title: { type: String, default: 'Озвучить' }, items: { type: Array, required: true } })
@@ -16,7 +17,6 @@ const emit = defineEmits(['close', 'save'])
 const icon = aiIcon('Gemini')
 const voice = ref(getVoice()), model = ref(getModel()), models = ref(knownModels()), size = ref(10), onlyNew = ref(true)
 onMounted(async () => { if (ai.keys[0]) { const l = await ttsModels(ai.keys[0].key); if (l.length) { models.value = l; if (!l.includes(model.value)) { model.value = l[0]; setModel(l[0]) } } } })
-const GROUPS = [['Женские', VOICES.filter((v) => v[1] === 'женский')], ['Мужские', VOICES.filter((v) => v[1] === 'мужской')]]
 
 // строки
 const items = props.items.map((x) => ({ ...x }))          // снимок на момент открытия окна
@@ -120,9 +120,9 @@ onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = t
       <div class="tb" role="dialog" aria-modal="true" :aria-label="title">
         <header><img v-if="icon" :src="icon" alt="" /><b>{{ title }}</b><span class="sp" /><button type="button" class="x" :disabled="busyClose" title="Закрыть" @click="emit('close')">✕</button></header>
 
+        <VoicePicker :model-value="voice" :model="model" :text="items[0]?.text || ''" :disabled="run.on" @update:model-value="(v) => { voice = v; setVoice(v) }" />
         <div class="ctl">
-          <label>Голос <select v-model="voice" :disabled="run.on" @change="setVoice(voice)"><optgroup v-for="[g, l] in GROUPS" :key="g" :label="g"><option v-for="v in l" :key="v[0]" :value="v[0]">{{ v[0] }} · {{ v[2] }}</option></optgroup></select></label>
-          <label>Модель <select v-model="model" :disabled="run.on" @change="setModel(model)"><option v-for="m in (models.includes(model) ? models : [model, ...models])" :key="m" :value="m">{{ modelName(m) }}</option></select></label>
+          <label>Модель <select v-model="model" :disabled="run.on" @change="setModel(model)"><option v-for="m in (models.includes(model) ? models : [model, ...models])" :key="m" :value="m">{{ modelName(m) }}{{ /pro/i.test(m) ? ' — нет в бесплатном' : '' }}</option></select></label>
           <label>Пачка <select v-model.number="size" :disabled="run.on"><option v-for="n in [5, 10, 15]" :key="n" :value="n">по {{ n }}</option></select></label>
           <label class="chk"><input v-model="onlyNew" type="checkbox" class="sw" />только без звука</label>
         </div>
@@ -179,7 +179,7 @@ onBeforeUnmount(() => { removeEventListener('keydown', onKey, true); stopReq = t
 .tb { width: min(920px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-sizing: border-box; padding: 16px 18px 14px; border-radius: 18px; background: var(--card, #fff); color: var(--text, #1a1a1a); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); font-family: var(--font, system-ui) }
 header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px } header img { width: 22px; height: 22px } header b { font-size: 17px } .sp { flex: 1 }
 .x { border: 0; background: none; color: var(--hint, #888); font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 8px }
-.ctl { display: flex; flex-wrap: wrap; gap: 12px; align-items: center } .ctl label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--hint, #777) }
+.ctl { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center } .ctl label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--hint, #777) }
 .ctl select { height: 32px; padding: 0 6px; border: 1px solid var(--border, #e3e3e3); border-radius: 8px; background: var(--bg, #fff); color: var(--text); font: inherit; font-size: 13px; max-width: 220px } .chk { color: var(--text) !important }
 .hint { margin: 6px 0 8px; font-size: 12px; color: var(--hint, #888) }
 .tbl { flex: 1; min-height: 120px; overflow: auto; border: 1px solid var(--border, #e6e6e6); border-radius: 12px; font-size: 13px }
