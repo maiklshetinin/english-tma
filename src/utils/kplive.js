@@ -4,7 +4,7 @@
 // развёрнутый разбор, микрофон включается, можно отвечать голосом. Нет оценки за 15 с — ошибка (плеер уходит в Flash Lite, потом мост).
 // Состояние разговора экрана — kpLive[id экрана] (его показывает Kp.vue).
 import { reactive } from 'vue'
-import { startTalk, liveModels, liveName, firstKey } from './live'
+import { startTalk, liveModels, liveName, firstKey, startTranscribe, sttModel } from './live'
 import { kpPlain, SYSTEM, PASS } from './ai'
 
 export const kpLive = reactive({})
@@ -127,26 +127,32 @@ export const kpRec = {}
 // говоришь прямо в Live (она слушает, но не отвечает), «Пауза» — подумать, «Проверить» — «закончил», и модель сразу вызывает
 // submit_grade: она уже всё слышала, ждать нечего. Её расшифровка твоей речи пишется в поле ответа (onMe). Запись копится (rec)
 // — для уровня языка (Flash Lite, параллельно, в LessonPlayer).
-/** Открыть разговор-ответ экрана: → S в kpLive[id] с методами speak(), pause(), finish(text) → Promise<оценка> */
+/** Открыть разговор-ответ экрана: → S в kpLive[id] с методами speak(), pause(), finish(text) → Promise<оценка>.
+ *  Пока ученик говорит, параллельно идёт Transcribe Live — текст сразу в поле (onMe — готовые куски, S.draft — черновик);
+ *  Gemini Live в это время слушает тот же голос (для оценки). Видно: S.ws — состояние WebSocket, S.sent — сколько секунд звука ушло в Live */
 export async function openLiveAnswer(q, id, { onMe } = {}) {
   kpLive[id]?.stop?.()
   const key = firstKey(); if (!key) throw new Error('нет ключей Gemini')
   const need = Number.isFinite(q.pass) ? q.pass : PASS
-  let model = ''; try { model = localStorage.getItem('tma.live.pick') || '' } catch { /* */ }
-  if (!model) model = (await liveModels(key))[0] || ''
+  const model = (await liveModels(key))[0] || ''          // одна модель — самая свежая Live (20.11.2026: без выбора, тест)
   if (!model) throw new Error('у ключа нет Live-моделей')
   let voice = 'Kore'; try { voice = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
   const rec = []
-  const S = reactive({ lines: [], state: 'connecting', quiet: getQuiet(), talking: false, heard: false, model, name: liveName(model), err: '', level: 0, rec })
-  let waiter = null, t0 = 0
+  const S = reactive({ lines: [], state: 'connecting', ws: 'открывается…', quiet: getQuiet(), talking: false, model, name: liveName(model), err: '', level: 0, rec, sent: 0, draft: '', tr: 'нет' })
+  let waiter = null, t0 = 0, tr = null
   const system = (q.prompt?.trim() || SYSTEM) + `\n\nВопрос:\n${q.question}\n\nЭталон:\n${kpPlain(q.reference)}\n\n` +
     'Ученик отвечает ГОЛОСОМ — его ответ ты слышишь. Пока он говорит — молчи. Когда реплика закончена (или пришёл текст ответа), порядок строго такой: ' +
     '1) СРАЗУ, ничего не говоря, вызови функцию submit_grade (оценивай по тому, что услышал); 2) потом скажи по-польски 1–2 коротких предложения: что хорошо и чего не хватило; 3) замолчи. ' +
     'Ученик говорит по-польски с акцентом — это польский.'
   const sess = startTalk({ key, model, voice, lang: 'pl-PL', system, tools: TOOL, micLater: true, manualVad: true, quiet: S.quiet,
-    rec: (pcm) => { rec.push(pcm) }, on: {
-      state: (s, info) => { if (s === 'live' && info) return; S.state = s; if (s === 'error') { S.err = info; waiter?.no(new Error(info || 'ошибка Live')); waiter = null } },
-      text: (role, t) => { if (role === 'me') { S.heard = true; onMe?.(t); return } const l = S.lines.at(-1); if (l && !l.closed) l.t += t; else S.lines.push({ role, t: t.replace(/^\s+/, ''), closed: false }) },
+    rec: (pcm) => { rec.push(pcm); S.sent += pcm.length / 16000 }, on: {
+      state: (s, info) => {
+        if (s === 'live' && info) return
+        S.state = s; S.ws = s === 'live' ? 'открыт' : s === 'connecting' ? 'открывается…' : s === 'error' ? 'ошибка' : 'закрыт'
+        if (s === 'error') { S.err = info; waiter?.no(new Error(info || 'ошибка Live')); waiter = null }
+        if (s === 'ended' || s === 'error') tr?.stop()
+      },
+      text: (role, t) => { if (role === 'me') return; const l = S.lines.at(-1); if (l && !l.closed) l.t += t; else S.lines.push({ role, t: t.replace(/^\s+/, ''), closed: false }) },          // свою речь в поле пишет Transcribe
       turn: () => { const l = S.lines.at(-1); if (l) l.closed = true },
       level: (v) => { S.level = S.level * 0.6 + v * 0.4 },
       tool: (name, a) => {
@@ -157,18 +163,28 @@ export async function openLiveAnswer(q, id, { onMe } = {}) {
         return { ok: true }
       },
     } })
+  async function startTr() {
+    if (tr) return
+    S.tr = 'подключается…'
+    tr = startTranscribe({ key, model: await sttModel(key), lang: 'pl-PL', on: {
+      state: (s, info) => { S.tr = s === 'live' ? 'пишет' : s === 'connecting' ? 'подключается…' : s === 'error' ? 'ошибка: ' + info : 'остановлена'; if (s === 'ended' || s === 'error') tr = null },
+      interim: (t) => { S.draft = t }, final: (t) => { onMe?.(t); S.draft = '' },
+    } })
+  }
   Object.assign(S, {
-    stop: () => sess.stop(),
+    stop: () => { sess.stop(); tr?.stop() },
     setQuiet: (v) => { S.quiet = !!v; sess.quiet(S.quiet); try { localStorage.setItem(QK, S.quiet ? '1' : '0') } catch { /* */ } },
-    speak: async () => { S.talking = true; await sess.talkStart() },
-    pause: () => { S.talking = false; sess.talkPause() },
+    speak: async () => { S.talking = true; tr?.hold(false); startTr(); await sess.talkStart() },
+    pause: () => { S.talking = false; sess.talkPause(); tr?.hold(true) },
     /** «Проверить»: конец реплики (или текст, если голоса не было) → оценка */
     finish: (text) => new Promise((ok, no) => {
       if (S.state !== 'live') return no(new Error(S.err || 'Live не подключена'))
       t0 = Date.now(); S.talking = false
+      const t = tr; tr = null; if (t) setTimeout(() => t.stop(), 400)          // последние слова расшифровки успевают прийти
+      if (S.draft) { onMe?.(S.draft); S.draft = '' }
       const tm = setTimeout(() => { if (waiter) { waiter = null; no(new Error('Live не прислала оценку за 20 с')) } }, 20_000)
       waiter = { ok, no, tm }
-      if (!sess.talkEnd()) sess.send(`Mój odpowiedź (tekst):\n${text || '(pusto)'}\n\nOceń.`)          // голоса не было — ответ текстом
+      if (!sess.talkEnd()) sess.send(`Moja odpowiedź (tekst):\n${text || '(pusto)'}\n\nOceń.`)          // голоса не было — ответ текстом
     }),
   })
   kpLive[id] = S

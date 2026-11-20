@@ -167,6 +167,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
  *  on: { state(s, info), interim(text), final(text), level(0..1) } → { stop() } */
 export const STT_MODEL = 'gemini-3.5-transcribe-live'
 export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = null, on = {} }) {          // rec — массив: сюда же копятся куски звука (Int16Array) — для «Теста речи»
+  let held = false
   let ws = null, mic = null, ctx = null, node = null, src = null, done = false, ready = false
   function stop(reason = '') {
     if (done) return; done = true
@@ -181,7 +182,7 @@ export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = 
     await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })))
     src = ctx.createMediaStreamSource(mic); node = new AudioWorkletNode(ctx, 'tma-mic'); src.connect(node)
     node.port.onmessage = (e) => {
-      if (done || ws?.readyState !== 1) return
+      if (done || ws?.readyState !== 1 || held) return          // «Пауза» в «Live (голос)» — не шлём
       const f = e.data; let sum = 0; const pcm = new Int16Array(f.length)
       for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = v * 32767 }
       on.level?.(Math.min(1, Math.sqrt(sum / f.length) * 4))
@@ -210,7 +211,7 @@ export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = 
     const r = e.reason || ''
     stop(e.code === 1000 ? '' : /API key|key not valid/i.test(r) ? 'Ключ не принят Google' : /quota|exhaust|limit/i.test(r) ? 'Лимит модели расшифровки исчерпан' : !ready && /model|not found|not supported/i.test(r) ? `Модель «${model}» недоступна этому ключу: ${r}` : `Соединение закрылось (${e.code})${r ? ': ' + r : ''}`)
   }
-  return { stop: () => stop('') }
+  return { stop: () => stop(''), hold: (v) => { held = !!v } }
 }
 /** Модель расшифровки из списка ключа (если Google назвал её иначе — например, с -preview) */
 export async function sttModel(key, fetcher = fetch) {

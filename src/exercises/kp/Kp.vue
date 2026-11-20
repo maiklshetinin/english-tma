@@ -105,10 +105,7 @@ function setModelF(v) { if (v) props.step.model = v; else delete props.step.mode
 
 // «Live (голос)» (20.11.2026, отдельный шаблон): Live-модель (общая с «Разговором») и «📊 Уровень языка» — в подвале, запоминаются
 const isLive = computed(() => props.step.engine === 'live')
-const lModels = ref([]), lPick = ref((() => { try { return localStorage.getItem('tma.live.pick') || '' } catch { return '' } })())
 const lLevel = ref((() => { try { return localStorage.getItem('tma.kp.level') === '1' } catch { return false } })())
-onMounted(async () => { if (isLive.value && ai.keys[0]) lModels.value = await liveModels(ai.keys[0].key) })
-function pickLive(v) { lPick.value = v; try { if (v) localStorage.setItem('tma.live.pick', v); else localStorage.removeItem('tma.live.pick') } catch { /* */ } }
 function setLevel(v) { lLevel.value = v; try { localStorage.setItem('tma.kp.level', v ? '1' : '0') } catch { /* */ } }
 const recSec = computed(() => (isLive.value ? Math.round((ans.value?.rec?.reduce((a, c) => a + c.length, 0) ?? 0) / 16000) : 0))
 // «🎙 Ответить Gemini» (Live вживую, 20.11.2026): соединение открывается по нажатию, дальше «рация»: говоришь — она слушает и пишет
@@ -121,7 +118,7 @@ async function liveAnswer() {
   if (S0 && (S0.state === 'live' || S0.state === 'connecting')) { if (S0.talking) S0.pause(); else if (S0.state === 'live') S0.speak(); return }
   try {
     const S = await openLiveAnswer({ question: props.step.text ?? '', reference: props.step.ideal ?? '', prompt: props.step.prompt, pass: props.step.pass }, props.step.id,
-      { onMe: (t) => { if (!p.st.done) p.st.text = ((p.st.text || '') + t).replace(/^\s+/, '') } })
+      { onMe: (t) => addText(t) })
     const off = watch(() => S.state, (v) => { if (v === 'live') { off(); S.speak() } else if (v === 'ended' || v === 'error') off() }, { immediate: true })
   } catch (e) { ansErr.value = e.message }
 }
@@ -231,6 +228,7 @@ function jsApply() {
 <template>
   <template v-if="part === 'body'">
     <ExHead :step="step" :def="J.head" />
+    <div v-if="isLive" class="kexp">🧪 Тест · ответ голосом прямо в Gemini Live</div>
     <div class="kq">
       <div class="kqw">
         <button v-if="p.edit" type="button" class="kst" :class="{ off: !step.star }" :title="step.star ? 'Обязательный вопрос (звезда) — убрать' : 'Сделать обязательным (красная звезда)'" @click="toggleStar"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 50L38.4 3.4L35.4 37.8Z" class="s1" /><path d="M50 50L38.4 3.4L57.1 32.4Z" class="s2" /><path d="M50 50L90.7 24.6L57.1 32.4Z" class="s1" /><path d="M50 50L90.7 24.6L69.0 51.3Z" class="s2" /><path d="M50 50L86.8 80.9L69.0 51.3Z" class="s1" /><path d="M50 50L86.8 80.9L54.6 68.4Z" class="s2" /><path d="M50 50L32.0 94.5L54.6 68.4Z" class="s1" /><path d="M50 50L32.0 94.5L33.9 60.1Z" class="s2" /><path d="M50 50L2.1 46.7L33.9 60.1Z" class="s1" /><path d="M50 50L2.1 46.7L35.4 37.8Z" class="s2" /></svg></button>
@@ -266,6 +264,7 @@ function jsApply() {
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
     <div v-else class="ka done">{{ p.st.text }}</div>
+    <p v-if="!p.edit && isLive && ans?.draft && !p.st.done" class="kdd">{{ ans.draft }}</p>
     <p v-if="!p.edit && isLive && (ansErr || ans?.err) && !p.st.done" class="kdd er">{{ ansErr || ans?.err }}</p>
     <p v-if="!p.edit && (dicDraft || dicErr)" class="kdd" :class="{ er: dicErr && !dicDraft }">{{ dicDraft || dicErr }}</p>
 
@@ -320,10 +319,10 @@ function jsApply() {
     <small>{{ r.error ? 'Без проверки' : tierT[tier] }}</small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
   </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && isLive">
-    <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini Live
-      <select class="kms" :value="lPick" title="Live-модель — общая с «Разговором с Gemini», запоминается" @change="pickLive($event.target.value)"><option value="">авто{{ lModels[0] ? ' · ' + liveName(lModels[0]) : '' }}</option><option v-for="m in lModels" :key="m" :value="m">{{ liveName(m) }}</option></select>
+    <span class="kbr lvx" @pointerdown.stop><span class="tag">🧪 тест</span><img v-if="gIcon" :src="gIcon" alt="" />Gemini Live<small v-if="ans">{{ ans.name }}</small>
       <label class="klev"><input type="checkbox" class="sw" :checked="lLevel" @change="setLevel($event.target.checked)" />📊 Уровень языка</label>
-      <em>{{ ans?.state === 'live' ? `Gemini слушает · ${recSec} с речи · «Проверить» — сразу оценка` : '«Ответить Gemini» — говорите, она слушает и не перебивает' }}</em></span>
+      <em v-if="ans" class="st"><b :class="{ ok: ans.ws === 'открыт', bad: ans.ws === 'ошибка' || ans.ws === 'закрыт' }">WebSocket: {{ ans.ws }}</b> · звук в Live: {{ Math.round(ans.sent) }} с · расшифровка: {{ ans.tr }}</em>
+      <em v-else>«Ответить Gemini» — откроется WebSocket, говорите: она слушает и не перебивает</em></span>
   </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && api">
     <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
@@ -399,6 +398,10 @@ function jsApply() {
 .kbr.api { color: #2f6fe0; flex-wrap: wrap } .kbr.api img { margin: 0 } .kbr.api em { font-style: normal; font-weight: 600; font-size: 12px; color: #3d7a00 } .kbr.api em.off { color: #b3261e }
 .kms { height: 26px; max-width: 230px; padding: 0 4px; border: 1px solid rgba(47, 111, 224, .35); border-radius: 8px; background: #fff; color: #2f6fe0; font: inherit; font-size: 12px; font-weight: 700 } .kms.ed { height: 24px; font-size: 10.5px; max-width: 200px }
 .kno { margin: 4px 0 0; font-size: 12px !important }
+.kexp { align-self: center; margin: -4px auto 6px; padding: 3px 12px; border: 1.5px dashed #a35cf0; border-radius: 10px; background: rgba(163, 92, 240, .08); color: #6b2fb3; font-family: var(--font); font-size: 12px; font-weight: 800; text-align: center }
+.kbr.lvx { flex-direction: column; align-items: flex-start; gap: 4px; color: #6b2fb3 } .kbr.lvx > small { font-size: 11.5px; font-weight: 600; color: #8a6aa8 }
+.kbr.lvx .tag { padding: 1px 7px; border: 1.5px dashed #a35cf0; border-radius: 8px; font-size: 11px }
+.kbr.lvx .st { font-style: normal; font-size: 11.5px; font-weight: 600; color: #6b5a48 } .kbr.lvx .st b.ok { color: #1f7a4f } .kbr.lvx .st b.bad { color: #b3261e }
 .klev { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: #5a3a1c; cursor: pointer } .klev .sw { transform: scale(.75); margin: 0 -4px }
 .klv { display: flex; align-items: center; gap: 8px; flex-wrap: wrap } .klv small { font-size: 12px; color: #8a6a48 }
 .kqb { flex: none; height: 34px; min-width: 38px; padding: 0 12px; border: 0; border-radius: 17px; background: #f2dab5; color: #5a3a1c; font-family: var(--font); font-size: 14px; font-weight: 800; line-height: 1; cursor: pointer } .kqb.x { color: #b3261e }          /* не .kq — это строка вопроса (min-height 84) */
