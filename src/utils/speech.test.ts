@@ -15,11 +15,13 @@ describe('«Тест речи»', () => {
   it('звук и расшифровка — в запросе; выдуманные цитаты отбрасываются', async () => {
     const { blob, sec } = wavOf([new Int16Array(16000 * 25)])
     let body
-    const r = await assessSpeech({ blob, sec, transcript: 'Mój babcia była Polką, mieszkam w Warszawie.', model: 'gemini-3.5-flash-lite', fetcher: async (_u, o) => { body = JSON.parse(o.body); return gen({ level: 'A2', level_plus: true, confidence: 70, intelligibility: 81, scores: { vocabulary: 60, grammar: 55, coherence: 70, fluency: 65, pronunciation: 72 },
+    const r = await assessSpeech({ blob, sec, transcript: 'Mój babcia była Polką, mieszkam w Warszawie.', model: 'gemini-3.5-flash-lite', fetcher: async (_u, o) => { body = JSON.parse(o.body); return gen({ level: 'A2', level_plus: true, confidence: 95, read_aloud: false, intelligibility: 81, scores: { vocabulary: 60, grammar: 55, coherence: 70, fluency: 65, pronunciation: 72 },
       mistakes: [{ quote: 'Mój babcia', fix: 'Moja babcia', why: 'babcia — женский род' }, { quote: 'byłem w Krakowie', fix: '…', why: 'выдумано' }], strengths: ['a'], tips: ['b'], summary: 'ok' }) } })
     expect(body.contents[0].parts[0].inlineData.mimeType).toBe('audio/wav')
     expect(body.generationConfig.responseMimeType).toBe('application/json')
-    expect(r).toMatchObject({ level: 'A2', plus: true, intelligibility: 81, dropped: 1 })
+    expect(r).toMatchObject({ level: 'A2', plus: true, intelligibility: 81, dropped: 1, read: false })
+    expect(r.confidence).toBeLessThanOrEqual(70)          // 25 с записи — уверенность не выше 70
+    expect(body.systemInstruction.parts[0].text).toMatch(/ЧТЕНИЕ/)
     expect(r.mistakes.map((m) => m.fix)).toEqual(['Moja babcia'])
   })
 })

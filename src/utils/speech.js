@@ -30,8 +30,9 @@ const SCHEMA = { type: 'OBJECT', properties: {
   scores: { type: 'OBJECT', properties: Object.fromEntries(Object.keys(CRIT).map((k) => [k, { type: 'INTEGER' }])), required: Object.keys(CRIT) },
   mistakes: { type: 'ARRAY', items: { type: 'OBJECT', properties: { quote: { type: 'STRING' }, fix: { type: 'STRING' }, why: { type: 'STRING' } }, required: ['quote', 'fix', 'why'] } },
   pronunciation_notes: { type: 'ARRAY', items: { type: 'STRING' } },
+  read_aloud: { type: 'BOOLEAN' }, read_reason: { type: 'STRING' },
   strengths: { type: 'ARRAY', items: { type: 'STRING' } }, tips: { type: 'ARRAY', items: { type: 'STRING' } }, summary: { type: 'STRING' },
-}, required: ['level', 'confidence', 'intelligibility', 'scores', 'mistakes', 'strengths', 'tips', 'summary'] }
+}, required: ['level', 'read_aloud', 'confidence', 'intelligibility', 'scores', 'mistakes', 'strengths', 'tips', 'summary'] }
 
 const prompt = (lang) => `Ты строгий, но доброжелательный экзаменатор по устной речи (${LANG_NAME[lang] || 'польский'} язык), оцениваешь по шкале CEFR. ` +
   'Тебе дана ЗАПИСЬ голоса ученика и её автоматическая расшифровка. Слушай запись: беглость, паузы, темп, произношение и ударение оценивай по звуку, ' +
@@ -39,7 +40,10 @@ const prompt = (lang) => `Ты строгий, но доброжелательн
   'Описания уровней: A1 — отдельные заученные фразы; A2 — простые предложения о себе и быте, частые ошибки; B1 — связный рассказ об опыте и планах, ошибки не мешают пониманию; ' +
   'B2 — развёрнутые аргументированные ответы, разнообразный словарь, редкие ошибки; C1 — свободно, точно, гибко. Не завышай: модели склонны льстить — оценивай как на экзамене. ' +
   'Акцент сам по себе не снижает оценку, если речь понятна носителю. ' +
-  'intelligibility — 0–100: насколько легко носитель поймёт речь (100 — без усилий). scores — 0–100 по каждому критерию. confidence — 0–100: насколько уверен в уровне (мало речи — низкая). ' +
+  'ЧТЕНИЕ: определи по звуку, читает ли ученик готовый текст или говорит заученное (ровный темп, интонация чтения, нет пауз на подбор слов, нет самоисправлений, книжная лексика, слишком гладко) — тогда read_aloud = true, ' +
+  'read_reason — коротко по-русски, по каким признакам; и помни: при чтении уровень показывает сложность ТЕКСТА, а не разговорную речь — оценивай словарь и грамматику осторожно и снизь confidence. ' +
+  'УВЕРЕННОСТЬ (confidence) будь честным: запись меньше 60 с — не выше 70; чтение или заученное — не выше 50; 85 и выше — только для длинной (2+ минуты) спонтанной речи. ' +
+    'intelligibility — 0–100: насколько легко носитель поймёт речь (100 — без усилий). scores — 0–100 по каждому критерию. confidence — 0–100: насколько уверен в уровне (мало речи — низкая). ' +
   'mistakes — до 8 реальных ошибок: quote — ДОСЛОВНО фрагмент из расшифровки, fix — как правильно, why — коротко по-русски почему. Не выдумывай ошибок, которых нет. ' +
   'pronunciation_notes — до 4 замечаний по звукам/ударению (по-русски, с примерами слов). strengths — 2–3 сильные стороны, tips — 2–4 конкретных совета, summary — 1–2 предложения итога. Всё по-русски, кроме цитат и исправлений.'
 
@@ -67,10 +71,11 @@ export async function assessSpeech({ blob, sec, transcript, lang = 'pl-PL', mode
     let o; try { o = JSON.parse(JSON.parse(raw).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '') } catch { last = new Error('Модель ответила не JSON — попробуйте ещё раз'); continue }
     const tn = norm(transcript), clamp = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)))
     const mistakes = (o.mistakes ?? []).filter((x2) => x2?.quote && norm(x2.quote) && tn.includes(norm(x2.quote))).slice(0, 8)          // цитаты только из того, что правда сказано
-    return { level: String(o.level || '?'), plus: !!o.level_plus, confidence: clamp(o.confidence), intelligibility: clamp(o.intelligibility),
+    const cap = o.read_aloud ? 50 : sec < 60 ? 70 : sec < 120 ? 85 : 100          // уверенность — не выше, чем позволяет запись (модели её завышают)
+    return { level: String(o.level || '?'), plus: !!o.level_plus, confidence: Math.min(cap, clamp(o.confidence)), intelligibility: clamp(o.intelligibility),
       scores: Object.fromEntries(Object.keys(CRIT).map((k) => [k, clamp(o.scores?.[k])])), mistakes, dropped: (o.mistakes?.length ?? 0) - mistakes.length,
       pron: (o.pronunciation_notes ?? []).map(String).slice(0, 4), strengths: (o.strengths ?? []).map(String).slice(0, 3), tips: (o.tips ?? []).map(String).slice(0, 4),
-      summary: String(o.summary ?? ''), model: m, key: mask(x.key), sec, ms: Date.now() - t0 }
+      summary: String(o.summary ?? ''), read: !!o.read_aloud, readWhy: String(o.read_reason ?? ''), model: m, key: mask(x.key), sec, ms: Date.now() - t0 }
   }
   throw last || new Error('Не удалось оценить')
 }
