@@ -15,7 +15,8 @@ import { usePlay, useEdit } from '../ctx'
 import { PASS, SYSTEM, bridgeStatus, aiIcon, kpPlain } from '../../utils/ai'
 import TtsDialog from '../../components/TtsDialog.vue'
 import { modelName } from '../../utils/tts'
-import { startTranscribe, sttModel, firstKey } from '../../utils/live'
+import { startTranscribe, sttModel, firstKey, startTalk, liveModels, liveName } from '../../utils/live'
+import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/kpcheck'
 import { ai } from '../../utils/gemini'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
@@ -51,7 +52,7 @@ const loadBridge = () => bridgeStatus().then((b) => { bridge.value = b }).catch(
 let brTm = 0
 onMounted(() => { if (p.edit) return; loadBridge(); if (props.part === 'fb') brTm = setInterval(() => { if (!p.st.done) loadBridge() }, 15_000) })
 onBeforeUnmount(() => clearInterval(brTm))
-const by = computed(() => (checked.value && r.value.site ? { t: 'проверил', sites: [r.value.site], sec: Number.isFinite(r.value.ms) ? (r.value.ms / 1000).toFixed(1).replace('.', ',') + ' с' : '' } : null))
+const by = computed(() => (checked.value && r.value.site ? { t: 'проверил', api: !!r.value.api, model: r.value.model, sites: [r.value.site], sec: Number.isFinite(r.value.ms) ? (r.value.ms / 1000).toFixed(1).replace('.', ',') + ' с' : '' } : null))
 // 19.11.2026: программы диктовки вставляют текст в поле напрямую, без события input — v-model этого не видит («0 слов»,
 // «Проверить» серая), а Vue при любой перерисовке ещё и стирал такой текст (value он переписывает всегда). Поэтому поле без привязки:
 // своё значение пишем в него, только когда текст поменялся в данных (watch), и сверяем поле само: при нажатиях, вставке, уходе фокуса и раз в полсекунды
@@ -88,6 +89,47 @@ async function dictate() {
   } })
 }
 watch(() => p.st.busy || p.st.done, (v) => { if (v) dicS?.stop() })
+
+// «· Gemini API» (20.11.2026, тест): проверка напрямую (utils/kpcheck.js), мост — запасной. Модель: в правке — у экрана,
+// в подвале перед проверкой — своя в этом браузере (главнее)
+const api = computed(() => props.step.engine === 'api')
+const cModels = ref([]), cPick = ref(getPick())
+onMounted(async () => { if (api.value && ai.keys[0]) cModels.value = await checkModels(ai.keys[0].key) })
+function pickCheck(v) { cPick.value = v; setPick(v) }
+const cAuto = computed(() => props.step.model || cModels.value[0] || '')
+function setModelF(v) { if (v) props.step.model = v; else delete props.step.model; ed.changed() }
+
+// «Обсудить голосом» (Live API): после оценки Gemini голосом разбирает ответ — что упущено, уточняющий вопрос, «попробуйте ещё раз»
+const tk = ref('idle'), tkErr = ref(''), tkLines = ref([]), tkLvl = ref(0), tkModel = ref('')
+let tkS = null
+const tkBox = ref(null)
+function tkPush(role, chunk) {
+  const l = tkLines.value.at(-1)
+  if (l && l.role === role && !l.closed) l.t += chunk; else tkLines.value.push({ role, t: chunk.replace(/^\s+/, ''), closed: false })
+  setTimeout(() => { if (tkBox.value) tkBox.value.scrollTop = tkBox.value.scrollHeight }, 0)
+}
+async function discuss() {
+  if (tk.value === 'live' || tk.value === 'connecting') { tkS?.stop(); return }
+  const key = firstKey(); tkErr.value = ''
+  if (!key) { tkErr.value = 'Нужен ключ Gemini в профиле'; return }
+  tk.value = 'connecting'; tkLines.value = []
+  let m = ''; try { m = localStorage.getItem('tma.live.pick') || '' } catch { /* */ }
+  if (!m) m = (await liveModels(key))[0] || ''
+  if (!m) { tk.value = 'idle'; tkErr.value = 'Google не дал ключу Live-модели'; return }
+  let v = 'Kore'; try { v = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
+  tkModel.value = m
+  const sys = 'Jesteś życzliwym nauczycielem polskiego. Uczeń przygotowuje się do rozmowy na Kartę Polaka. Mów po polsku, prosto i niezbyt szybko; ' +
+    'jeśli uczeń poprosi po rosyjsku — możesz krótko wyjaśnić po rosyjsku. Rozmówca mówi po polsku z akcentem — to nadal polski.\n' +
+    `Pytanie: ${props.step.text ?? ''}\nWzorcowa odpowiedź: ${kpPlain(props.step.ideal ?? '')}\nOdpowiedź ucznia: ${p.st.text ?? ''}\n` +
+    `Ocena: ${r.value?.score ?? '?'}%. Czego zabrakło: ${(r.value?.missed ?? []).join('; ') || 'nic ważnego'}.\n` +
+    'Najpierw w 2–3 zdaniach powiedz, co było dobrze i czego zabrakło. Potem zadaj jedno pytanie pomocnicze i poproś, żeby uczeń odpowiedział jeszcze raz, pełniej. ' +
+    'Po jego odpowiedzi krótko ją oceń i, jeśli trzeba, popraw błędy językowe jednym zdaniem.'
+  tkS = startTalk({ key, model: m, voice: v, lang: 'pl-PL', system: sys, opener: 'Proszę omówić moją odpowiedź.', on: {
+    state: (s2, info) => { if (s2 === 'live' && info) return; tk.value = s2 === 'error' || s2 === 'ended' ? 'idle' : s2; if (s2 === 'error') tkErr.value = info; if (s2 === 'ended' || s2 === 'error') { tkS = null; tkLvl.value = 0 } },
+    text: tkPush, turn: () => { const l = tkLines.value.at(-1); if (l) l.closed = true }, level: (x) => { tkLvl.value = tkLvl.value * 0.6 + x * 0.4 },
+  } })
+}
+onBeforeUnmount(() => tkS?.stop())
 onBeforeUnmount(() => { dicS?.stop(); clearInterval(dicTm) })
 // вид экрана (19.11.2026): pdf — как домашка (подписи на подложке, без рамок; по умолчанию), lines — тонкие линии между частями,
 // cards — мягкие подложки; step.plain — эталон без выделений (просто абзацы). Меняются кнопками в подвале правки
@@ -190,7 +232,8 @@ function jsApply() {
 
     <div class="kb miss" :class="look">
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
-        <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
+        <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.api"> API · {{ checkName(by.model) }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
+      <p v-if="checked && r.note" class="ph kno">{{ r.note }}</p>
       <p v-if="p.edit" class="ph">Пункты от Gemini — после проверки</p>
       <p v-else-if="r?.error" class="ph er">{{ r.error }}</p>
       <ul v-else-if="checked && r.missed.length"><li v-for="(m, k) in r.missed" :key="k">{{ m }}</li></ul>
@@ -208,9 +251,21 @@ function jsApply() {
       </div>
       <p v-else class="ph">Откроется после проверки — не подглядывайте</p>
     </div>
+    <div v-if="api && checked && !p.edit" class="kdis" @pointerdown.stop>
+      <button type="button" class="kdb" :class="tk" :style="{ '--l': tkLvl }" @click="discuss">
+        <img v-if="gIcon" :src="gIcon" alt="" />{{ tk === 'live' ? 'Завершить разбор' : tk === 'connecting' ? 'Подключаюсь…' : tkLines.length ? 'Обсудить ещё раз' : 'Обсудить ответ голосом' }}</button>
+      <small v-if="tk === 'live'">{{ liveName(tkModel) }} · говорите — Gemini слушает</small>
+      <p v-if="tkErr" class="ph er">{{ tkErr }}</p>
+      <div v-if="tkLines.length" ref="tkBox" class="ktx"><div v-for="(l, i) in tkLines" :key="i" class="kbl" :class="l.role">{{ l.t }}</div></div>
+    </div>
   </template>
   <template v-else-if="part === 'fb' && p.st.done && r">
     <small>{{ r.error ? 'Без проверки' : tierT[tier] }}</small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
+  </template>
+  <template v-else-if="part === 'fb' && !p.st.done && !p.edit && api">
+    <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
+      <select class="kms" :value="cPick" title="Модель проверки — запоминается в этом браузере" @change="pickCheck($event.target.value)"><option value="">{{ cAuto ? checkName(cAuto) + (step.model ? ' (из урока)' : ' · авто') : 'авто' }}</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
+      <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
   </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && bridge">
     <span class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
@@ -219,6 +274,7 @@ function jsApply() {
     <span class="kjw">
       <ExTool title="Вид экрана: PDF (как в домашке) → линии → подложки" @click="nextLook">Вид: {{ LOOKS[look] }}</ExTool>
       <ExTool :on="!step.plain" title="Выделения в эталоне: оранжевые термины, жирный, курсив — включить / выключить" @click="toggleMarks">Выделения{{ step.plain ? ' выкл' : ' ✓' }}</ExTool>
+      <select v-if="api" class="kms ed" :value="step.model || ''" title="Модель проверки у этого экрана (Gemini API)" @pointerdown.stop @change="setModelF($event.target.value)"><option value="">Модель: авто{{ cModels[0] ? ' · ' + checkName(cModels[0]) : '' }}</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <ExTool :on="!!step.autoplay" title="Звук вопроса сам играет, когда ученик открывает экран (если вопрос озвучен)" @click="toggleAuto">Автозвук{{ step.autoplay ? ' ✓' : ' выкл' }}</ExTool>
       <ExTool :on="jsOpen" title="Экран текстом: вопрос, эталон, порог и промпт для Gemini" @click="jsToggle">JSON{{ step.prompt || step.pass ? ' ✓' : '' }}</ExTool>
       <span v-if="jsOpen" class="kj" @pointerdown.stop @keydown.stop>
@@ -277,6 +333,16 @@ function jsApply() {
 .kh { display: flex; align-items: center; gap: 4px; font-family: var(--font); font-size: 12px; font-weight: 800; color: #6b5a48; text-transform: uppercase; letter-spacing: .3px }
 .kby { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #8a6a48 } .kby img { width: 15px; height: 15px; object-fit: contain }
 /* подвал до проверки: с кем мост */
+.kbr.api { color: #2f6fe0; flex-wrap: wrap } .kbr.api img { margin: 0 } .kbr.api em { font-style: normal; font-weight: 600; font-size: 12px; color: #3d7a00 } .kbr.api em.off { color: #b3261e }
+.kms { height: 26px; max-width: 230px; padding: 0 4px; border: 1px solid rgba(47, 111, 224, .35); border-radius: 8px; background: #fff; color: #2f6fe0; font: inherit; font-size: 12px; font-weight: 700 } .kms.ed { height: 24px; font-size: 10.5px; max-width: 200px }
+.kno { margin: 4px 0 0; font-size: 12px !important }
+.kdis { display: grid; gap: 8px; margin-top: 4px }
+.kdb { --l: 0; justify-self: start; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px 0 10px; border: 0; border-radius: 19px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font-family: var(--font); font-size: 13.5px; font-weight: 800; cursor: pointer }
+.kdb img { width: 20px; height: 20px; padding: 2px; border-radius: 6px; background: #fff } .kdb.live { background: #e5484d; box-shadow: 0 0 0 calc(var(--l) * 10px) rgba(229, 72, 77, .22) } .kdb.connecting { opacity: .7 }
+.kdis small { font-size: 12px; color: #8a6a48 }
+.ktx { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow: auto }
+.kbl { max-width: 88%; padding: 7px 11px; border-radius: 13px; font-family: var(--font); font-size: 14px; line-height: 1.4; white-space: pre-wrap }
+.kbl.ai { align-self: flex-start; background: rgba(75, 141, 248, .14); border-bottom-left-radius: 4px } .kbl.me { align-self: flex-end; background: #d7ffb8; border-bottom-right-radius: 4px }
 .kbr { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #3d7a00 } .kbr.off { color: #b3261e }
 .kbr i { width: 8px; height: 8px; border-radius: 50%; background: currentColor } .kbr img { width: 16px; height: 16px; margin-left: 4px; object-fit: contain }
 .kb ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-family: 'PT Serif', Georgia, serif; font-size: 15px; line-height: 1.35; color: #351a05 }

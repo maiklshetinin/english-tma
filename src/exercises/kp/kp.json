@@ -3,7 +3,8 @@
   "title": "Ответ по смыслу",
   "head": "Ответьте устно на вопрос",
   "templates": [
-    "kp"
+    "kp",
+    "kpapi"
   ],
   "fields": {
     "head": {
@@ -24,6 +25,9 @@
   "words": [],
   "skills": {
     "kp": [
+      "S"
+    ],
+    "kpapi": [
       "S"
     ]
   },

@@ -532,7 +532,7 @@ const XGROUPS_STD = (() => {
     { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
-  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'talk', 'stt'])          // kp — на своей вкладке «Karta Polaka»
+  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpapi', 'talk', 'stt'])          // kp — на своей вкладке «Karta Polaka»
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
@@ -545,7 +545,7 @@ const XGROUPS_BOOK = [
 // «Как в учебнике» (18.11.2026) — те же 8 типов, но вид максимально как страница учебника (bs: 'page'); Настины остаются отдельной вкладкой
 const XGROUPS_PAGE = XGROUPS_BOOK.map(g => ({ ...g, k: 'p' + g.k, items: g.ids.map(id => TPL.find(v => v.id === 'pg_' + id)).filter(Boolean) }))
 // «Karta Polaka» (19.11.2026) — упражнения курса к собеседованию: ответ своими словами, проверяет Gemini по эталону
-const XGROUPS_KP = [{ k: 'S', t: 'Ответ по смыслу', d: 'проверяет ИИ по эталону', items: TPL.filter(v => v.id === 'kp') }, { k: 'S', t: 'Разговор с Gemini', d: 'живой диалог голосом · эксперимент', items: TPL.filter(v => v.id === 'talk') }, { k: 'S', t: 'Транскрипция', d: 'сказать — увидеть текст · эксперимент', items: TPL.filter(v => v.id === 'stt') }]
+const XGROUPS_KP = [{ k: 'S', t: 'Ответ по смыслу', d: 'проверяет ИИ по эталону', items: TPL.filter(v => v.id === 'kp') }, { k: 'S', t: 'Ответ по смыслу · Gemini API', d: 'напрямую, без моста · тест', items: TPL.filter(v => v.id === 'kpapi') }, { k: 'S', t: 'Разговор с Gemini', d: 'живой диалог голосом · эксперимент', items: TPL.filter(v => v.id === 'talk') }, { k: 'S', t: 'Транскрипция', d: 'сказать — увидеть текст · эксперимент', items: TPL.filter(v => v.id === 'stt') }]
 const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'kp', t: 'Karta Polaka', exp: true }]
 const trayTab = ref((() => { try { const v = localStorage.getItem('ce.trayTab'); return TRAY_TABS.some(b => b.k === v) ? v : 'app' } catch { return 'app' } })())          // была вкладка «Мои» (конструктор убран 18.11.2026) — откроется «Как в Busuu»
 watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })
