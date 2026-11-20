@@ -31,6 +31,7 @@ const props = defineProps({
   hot: { type: Boolean, default: false },
   up: { type: Boolean, default: false },
   glow: { type: Boolean, default: false },                 // тянут Exercise — ветки уроков подсвечены (куда можно положить); та, над которой держим (hot), — ярче                   // ветка вверх (чекпоинт в конце главы): экраны над линией, низом к ней                  // тянут Exercise к этому пустому уроку — плашка «Exercise» оживает
+  lite: Boolean,                                          // холст отдалён (20.11.2026): экраны — эскизами, без живых плееров (их сотни — тормозило приближение)
   moving: { type: Object, default: null },                 // экраны, которые сейчас тащат (редактор курса): { ids, dx, dy } — едут за курсором в полный размер                                      // соседний курс («Все курсы»): только смотреть, проходить и копировать                                      // есть скопированный экран — показать «Вставить»
 })
 const emit = defineEmits(['change', 'select', 'play', 'add', 'height', 'focus', 'copy', 'json', 'paste', 'grab', 'weak', 'unauto'])
@@ -160,6 +161,8 @@ const viewH = reactive({})
 const editH = reactive({})
 const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.target.dataset; if (!d.id) continue; if (d.view === '1') viewH[d.id] = e.target.offsetHeight; else if (d.edit === '1') editH[d.id] = e.target.offsetHeight } })
 const cardEls = new WeakSet()
+// текст для эскиза: вопрос, фраза или слово экрана, без [скобок] и разметки
+const skText = (s) => String(s.text || s.phrase || s.word || s.head || '').replace(/\[([^\]/]*)[^\]]*\]/g, '$1').replace(/\*\*|==|_/g, '').slice(0, 90)
 const watchCard = (el) => { if (el && !cardEls.has(el)) { cardEls.add(el); ro3.observe(el) } }
 const typicalH = computed(() => { const v = Object.values(viewH).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 560 })
 const fixH = (s) => (jsonOn[s.id] ? { height: (viewH[s.id] ?? typicalH.value) + 'px' }
@@ -245,7 +248,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <template v-if="!free"><span class="stem" /><template v-if="up"><span class="node" :class="{ done: i < run.at, now: i === run.at }" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s)">{{ i < run.at ? '✓' : i + 1 }}</span></template></template>
       <span v-if="!free && !up" class="rmi" :class="{ done: i < run.at, now: i === run.at }" :style="tileStyle(s)" title="Тяните вдоль ветки, чтобы переставить" @pointerdown.stop="emit('select', s.id); readonly || down($event, s, true)">
         <i class="rnum">{{ i < run.at ? '✓' : i + 1 }}</i>
-        <ExerciseMini :id="tplOf(s)" size="tray" />
+        <ExerciseMini :id="tplOf(s)" size="tray" :lite="lite" />
         <small :title="tplTitle(s) + ' — ' + tplDesc(s)"><b>{{ tplTitle(s) }}</b><span>{{ tplDesc(s) }}</span></small>      <!-- одна высота у всех плиток: название — в строку, описание — не больше 2 строк -->
         <!-- навыки — прямо на линии ветки; у экранов без навыков (знакомство, подсказка) на линии — точка -->
         <span class="rskl"><template v-if="skillsOf(s).length"><i v-for="k in skillsOf(s)" :key="k" class="rchip" :class="k">{{ SKILL_T[k] }}</i></template><i v-else class="rdot" /></span>
@@ -265,7 +268,13 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: jsonOn[s.id] || isEdit(s) }]" :data-id="s.id" :data-view="jsonOn[s.id] || isEdit(s) ? 0 : 1" :data-edit="!jsonOn[s.id] && isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
       <!-- JSON экрана (кнопка «{ }») — вместо живого экрана, в той же карточке -->
-      <div v-if="jsonOn[s.id]" class="jv" :class="jsonTheme" @pointerdown.stop>
+      <!-- холст отдалён — эскиз: цвет и название упражнения, крупно — текст экрана, полоски вместо строк; высота — как у живого -->
+      <div v-if="lite && !jsonOn[s.id] && !isEdit(s) && sel !== s.id" class="sk" :style="{ height: (viewH[s.id] ?? typicalH) + 'px', '--kc': KINDS[s.kind]?.color ?? '#c8c8c8' }">
+        <span class="skh">{{ s.bk ? tplTitle(s) : KINDS[s.kind]?.t }}</span>
+        <b class="skt">{{ skText(s) }}</b>
+        <i /><i /><i /><i class="skl" />
+      </div>
+      <div v-else-if="jsonOn[s.id]" class="jv" :class="jsonTheme" @pointerdown.stop>
         <div class="jtop"><small>JSON экрана</small><span class="jsp" />
           <button class="jt" :title="jsonTheme === 'dark' ? 'Светлый код' : 'Тёмный код'" @click="flipTheme">
             <svg v-if="jsonTheme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>
@@ -384,6 +393,10 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .line.glow line { stroke: #cfe8ff } .line.glow.hot line { stroke: #7cc4ff; filter: drop-shadow(0 0 6px rgba(13, 153, 255, .55)) } .line.glow line.done { stroke: #1fbe78 }
 .node.done { background: #1fbe78; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px #9be6c4 }
 /* текущий экран на ветке — без пульсации (07.11): в редакторе «дышит» только текущий урок на рельсе */
+.sk { display: flex; flex-direction: column; gap: 22px; padding: 34px 32px; box-sizing: border-box; overflow: hidden; background: color-mix(in srgb, var(--kc) 7%, #fff) }          /* эскиз экрана при отдалении */
+.sk .skh { align-self: flex-start; padding: 10px 22px; border-radius: 14px; background: var(--kc); color: #fff; font-size: 30px; font-weight: 800 }
+.sk .skt { font-size: 44px; line-height: 1.2; font-weight: 800; color: #3c3c3c; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.sk i { display: block; height: 26px; border-radius: 13px; background: #ececec } .sk i.skl { width: 55% }
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
 .card.editing { border-color: #8cc8ff; box-shadow: 0 0 0 1px #8cc8ff, 0 2px 12px rgba(0, 0, 0, .06) }          /* правка — сплошная голубая рамка (пунктир раздражал, 17.11.2026) */
 .card.fixh { min-height: 0 } .card.fixh.editing { overflow: visible } .card.fixh .jv pre { max-height: none; min-height: 0 }      /* JSON и правка — высотой с живой экран (fixH), лишнее — прокруткой внутри */

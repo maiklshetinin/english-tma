@@ -926,6 +926,9 @@ const zoomBtn = (f) => { const r = board.value.getBoundingClientRect(); zoomAt(f
 // Колесо и тачпад (20.11.2026, тормозило приближение — как в Figma, без Vue на каждом шаге): пока крутят, холст и точки фона
 // двигаются напрямую (live → style), Vue о новом view узнаёт один раз — через 160 мс после последнего шага. Холст в это время
 // «картинкой» (will-change, класс wheeling), рамки выделения спрятаны; события за кадр копятся и применяются разом
+// холст отдалён (меньше 50 %) — экраны и плитки на ветках эскизами: текст там всё равно не прочесть, а живых плееров — сотни
+// (по два на экран: сам экран и миниатюра на плитке). view.z меняется только после остановки колеса — переключение один раз
+const lite = computed(() => view.z < 0.5)
 const wheeling = ref(false), world = ref(null)
 let wheelT = 0, wheelRaf = 0, wheelOn = false
 const wq = { f: 1, cx: 0, cy: 0, dx: 0, dy: 0 }, live = { x: 0, y: 0, z: 1 }
@@ -1726,16 +1729,16 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <template v-if="g.x.type === 'unit'"><div class="uh"><b>{{ g.x.title }}<template v-if="g.x.sub">: {{ g.x.sub }}</template></b></div><div class="ubar"><em :style="badge(0)">0%</em></div></template>
               <template v-else><svg viewBox="0 0 24 24" class="ic" v-html="T[g.x.type].ic" /><em class="cap">{{ g.x.title }}<small>{{ T[g.x.type].t }}</small></em></template>
             </div>
-            <LessonRail v-if="g.x.type !== 'unit'" :item="g.x" :up="g.x.type === 'checkpoint'" :x="g.p.x" :y="g.p.y" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly />
+            <LessonRail :lite="lite" v-if="g.x.type !== 'unit'" :item="g.x" :up="g.x.type === 'checkpoint'" :x="g.p.x" :y="g.p.y" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly />
           </div>
         </div>
         <!-- Вторые рельсы: экраны уроков, вправо от урока -->
-        <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :glow="sd.on" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail :lite="lite" v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :glow="sd.on" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @json="copyJson" @paste="pasteStep(r.x.id, $event)" :auto="autoCk[r.x.id]" :to-ck="!!ckFor(r.x.id)" @weak="onWeak(r.x, $event)" @unauto="unAuto(r.x.id, $event)"
           @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
         <!-- Экраны прямо на доске (унесли с ветки или положили из «Интерактива») -->
-        <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" :style="layerSt(f.id)" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
+        <LessonRail :lite="lite" v-for="f in freeScreens" :key="'fs' + f.id" :style="layerSt(f.id)" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :moving="sdMoving"
           @copy="copyStep" @json="copyJson" @change="save" @height="railHs[f.id] = $event" @select="selectStep(f.id, $event)" @grab="grabStep" />
         <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
@@ -1756,7 +1759,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <div class="och" :style="{ left: o.ox - 46 + 'px', top: '-170px' }" title="Дважды — открыть этот курс в редакторе" @pointerdown.stop @dblclick.stop="openOther(o.id)"><b>{{ o.title }}</b><small>другой курс · смотреть и копировать экраны · дважды — открыть</small></div>
           <div v-for="c in o.cb" :key="'ocb' + o.id + c.id" class="chapbox still" :class="{ light: c.light, off: c.off }" :style="c.style" @pointerdown.stop="msel = [($event.shiftKey ? msel : []), 'oi:' + o.id + ':' + c.id].flat(); sel = null; selectStep(null, null)" @dblclick.stop="openOther(o.id)" />
           <svg class="rail" :height="o.h"><path :d="o.path" class="r0" /></svg>
-          <LessonRail v-for="(x, i) in o.items.filter(v => hasRail(v) || railUp(v))" :key="'olr' + o.id + x.id" :item="x" :up="x.type === 'checkpoint'" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
+          <LessonRail :lite="lite" v-for="(x, i) in o.items.filter(v => hasRail(v) || railUp(v))" :key="'olr' + o.id + x.id" :item="x" :up="x.type === 'checkpoint'" :x="o.ox + o.L[o.items.indexOf(x)].x" :y="o.L[o.items.indexOf(x)].y"
             :sel="opick?.lesson === x.id ? opick.s.id : null" :to-world="toWorld" :resolve="resolveRef" :put-file="noop" :drop-files="noop" readonly
             @copy="copyStep($event, o.id)" @json="copyJson" @select="(sid) => { opick = sid && sid !== 'final' ? { course: o.id, lesson: x.id, s: x.steps.find(v => v.id === sid) } : null; if (sid) selectStep(null, null) }"
             @height="railHs['o' + o.id + x.id] = $event" @focus="showPoint" />
