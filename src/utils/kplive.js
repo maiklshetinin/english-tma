@@ -138,15 +138,18 @@ export async function openLiveAnswer(q, id, { onMe } = {}) {
   if (!model) throw new Error('у ключа нет Live-моделей')
   let voice = 'Kore'; try { voice = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
   const rec = []
-  const S = reactive({ lines: [], state: 'connecting', ws: 'открывается…', quiet: getQuiet(), talking: false, model, name: liveName(model), err: '', level: 0, rec, sent: 0, draft: '', tr: 'нет', warn: '' })
-  // черновик на «Паузе» сразу уходит в поле (flush) — а Google потом может прислать тот же кусок готовым или продолжить его
-  // черновиком: уже записанные слова отрезаем (cut), чтобы в поле ничего не задвоилось. Не польский (кириллица) — в поле не пускаем
+  const S = reactive({ lines: [], state: 'connecting', ws: 'открывается…', quiet: getQuiet(), talking: false, model, name: liveName(model), err: '', level: 0, rec, sent: 0, draft: '', said: '', heard: '', tr: 'нет', warn: '' })
+  // 20.11.2026: два текста. said + draft — «облако» над полем: расшифровка Transcribe Live, только для ученика (Gemini её не получает).
+  // heard — расшифровка самой Gemini Live (что она услышала; по этому и оценка) — после «Проверить» встаёт в поле ответа, чтобы
+  // ошибку распознавания было видно. На «Паузе» черновик облака закрепляется (flush); тот же кусок, пришедший потом готовым или
+  // продолжением черновика, не задваивается (cut). Кириллица в облако не идёт
   let flushed = []
   const W = (t) => String(t || '').trim().split(/\s+/).filter(Boolean)
   const nw = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
   const cut = (t, eat) => { const tw = W(t); let k = 0; while (k < tw.length && k < flushed.length && nw(tw[k]) === nw(flushed[k])) k++; if (eat) flushed = flushed.slice(k); return tw.slice(k).join(' ') }
   const cyr = (t) => /[\u0400-\u04FF]/.test(t)
-  const flush = () => { const d = S.draft.trim(); S.draft = ''; if (d) { flushed.push(...W(d)); onMe?.(d) } }
+  const add = (t) => { S.said = (S.said + ' ' + t).trim(); onMe?.(t) }
+  const flush = () => { const d = S.draft.trim(); S.draft = ''; if (d) { flushed.push(...W(d)); add(d) } }
   let waiter = null, t0 = 0, tr = null
   const system = (q.prompt?.trim() || SYSTEM) + `\n\nВопрос:\n${q.question}\n\nЭталон:\n${kpPlain(q.reference)}\n\n` +
     'Ученик отвечает ГОЛОСОМ — его ответ ты слышишь. Пока он говорит — молчи. Когда реплика закончена (или пришёл текст ответа), порядок строго такой: ' +
@@ -160,14 +163,19 @@ export async function openLiveAnswer(q, id, { onMe } = {}) {
         if (s === 'error') { S.err = info; waiter?.no(new Error(info || 'ошибка Live')); waiter = null }
         if (s === 'ended' || s === 'error') tr?.stop()
       },
-      text: (role, t) => { if (role === 'me') return; const l = S.lines.at(-1); if (l && !l.closed) l.t += t; else S.lines.push({ role, t: t.replace(/^\s+/, ''), closed: false }) },          // свою речь в поле пишет Transcribe
+      text: (role, t) => { if (role === 'me') { S.heard += t; return } const l = S.lines.at(-1); if (l && !l.closed) l.t += t; else S.lines.push({ role, t: t.replace(/^\s+/, ''), closed: false }) },          // 'me' — что услышала сама Live (heard)
       turn: () => { const l = S.lines.at(-1); if (l) l.closed = true },
       level: (v) => { S.level = S.level * 0.6 + v * 0.4 },
       tool: (name, a) => {
         if (name !== 'submit_grade' || !waiter) return { ok: true }
         const score = clamp(a.score), w = waiter; waiter = null; clearTimeout(w.tm)
-        w.ok({ score, missed: Array.isArray(a.missed_points) ? a.missed_points.map(String).filter(Boolean) : [], feedback: String(a.feedback ?? ''), ok: score >= need,
-          site: 'Gemini', live: true, voice: rec.length > 0, model, ms: Date.now() - t0 })
+        const res = { score, missed: Array.isArray(a.missed_points) ? a.missed_points.map(String).filter(Boolean) : [], feedback: String(a.feedback ?? ''), ok: score >= need,
+          site: 'Gemini', live: true, voice: rec.length > 0, model, ms: Date.now() - t0, said: S.said }
+        // расшифровка Live своей речи ученика может прийти чуть позже вызова функции — ждём, пока перестанет расти (до 3 с)
+        let last = -1, n = 0
+        const done = () => { res.heard = (S.heard || '').replace(/\s+/g, ' ').trim() || (res.voice ? '' : w.text || ''); w.ok(res) }
+        const poll = () => { if (S.heard.length === last && (S.heard || n >= 10)) return done(); last = S.heard.length; if (++n >= 10) return done(); setTimeout(poll, 300) }
+        if (!res.voice) done(); else poll()
         return { ok: true }
       },
     } })
@@ -177,7 +185,7 @@ export async function openLiveAnswer(q, id, { onMe } = {}) {
     tr = startTranscribe({ key, model: await sttModel(key), lang: 'pl-PL', on: {
       state: (s, info) => { S.tr = s === 'live' ? 'пишет' : s === 'connecting' ? 'подключается…' : s === 'error' ? 'ошибка: ' + info : 'остановлена'; if (s === 'ended' || s === 'error') tr = null },
       interim: (t) => { if (cyr(t)) { S.warn = 'Расшифровка ушла не в польский — этот кусок в поле не пишу. Голос Gemini Live всё равно слышит'; return } S.warn = ''; S.draft = cut(t, false) },
-      final: (t) => { S.draft = ''; if (cyr(t)) { S.warn = 'Кусок расшифровался не по-польски — в поле не попал'; return } const x = cut(t, true); if (x) onMe?.(x) },
+      final: (t) => { S.draft = ''; if (cyr(t)) { S.warn = 'Кусок расшифровался не по-польски — в поле не попал'; return } const x = cut(t, true); if (x) add(x) },
     } })
   }
   Object.assign(S, {
@@ -192,7 +200,7 @@ export async function openLiveAnswer(q, id, { onMe } = {}) {
       const t = tr; tr = null; if (t) setTimeout(() => t.stop(), 400)          // последние слова расшифровки успевают прийти
       flush()
       const tm = setTimeout(() => { if (waiter) { waiter = null; no(new Error('Live не прислала оценку за 20 с')) } }, 20_000)
-      waiter = { ok, no, tm }
+      waiter = { ok, no, tm, text }
       if (!sess.talkEnd()) sess.send(`Moja odpowiedź (tekst):\n${text || '(pusto)'}\n\nOceń.`)          // голоса не было — ответ текстом
     }),
   })

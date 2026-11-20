@@ -272,6 +272,7 @@ async function aiCheck() {
       const S = kpLive[s.id]
       const r = S?.finish && S.state === 'live' ? await S.finish(st.text) : await checkLiveVoice(q, s.id, { chunks: [], level: false })          // разговор открыт («🎙 Ответить») — оценка сразу; нет — по тексту
       if (step.value !== s) return
+      if (r.voice) st.text = r.heard || ''          // в поле — то, что услышала сама Live (по этому и оценка); облако Transcribe — в r.said
       st.ai = r; verdict(r.ok)
       const rec = S?.rec ?? []
       if (lvl && rec.length) {          // уровень языка — параллельно, Flash Lite по записи; приходит следом и ничего не держит

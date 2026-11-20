@@ -7,7 +7,7 @@
 // а «JSON» в подвале — весь экран текстом: вопрос, эталон, порог и промпт для Gemini (свой у этого экрана; для теста промпта).
 // 19.11.2026: точь-в-точь как в ответах домашки — номер и вопрос на подложке #f2dab5, красная гранёная звезда у обязательных (step.star),
 // в эталоне оранжевые термины, жирный, курсив, абзацы с отступом и пункты (разметка: ==термин==, **жирный**, _курсив_, «• »).
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
@@ -118,18 +118,12 @@ async function liveAnswer() {
   if (S0 && (S0.state === 'live' || S0.state === 'connecting')) { if (S0.talking) S0.pause(); else if (S0.state === 'live') S0.speak(); return }
   try {
     const S = await openLiveAnswer({ question: props.step.text ?? '', reference: props.step.ideal ?? '', prompt: props.step.prompt, pass: props.step.pass }, props.step.id,
-      { onMe: (t) => { if (lvBase != null) { p.st.text = lvBase; lvBase = null } addText(t) } })          // готовый кусок вместо черновика
+      {})          // расшифровка — в облаке над полем (S.said + S.draft), в поле после «Проверить» — что услышала Live
     const off = watch(() => S.state, (v) => { if (v === 'live') { off(); S.speak() } else if (v === 'ended' || v === 'error') off() }, { immediate: true })
   } catch (e) { ansErr.value = e.message }
 }
-// черновик Live пишется прямо в поле (20.11.2026): поле = готовый текст + черновик; готовый кусок (onMe) заменяет черновик
-let lvBase = null
-watch(() => ans.value?.draft ?? '', (d) => {
-  if (p.st.done) return
-  if (lvBase == null) { if (!d) return; lvBase = p.st.text || '' }
-  p.st.text = (lvBase.trim() + ' ' + d).trim()
-  if (!d) lvBase = null
-})
+const cloudEl = ref(null)
+watch(() => (ans.value?.said ?? '') + (ans.value?.draft ?? ''), () => nextTick(() => { const el = cloudEl.value; if (el) el.scrollTop = el.scrollHeight }))
 watch(() => p.st.done, (v) => { if (!v && isLive.value) { kpLive[props.step.id]?.stop?.() } })          // вопрос вернулся (повтор в конце урока) — новый разговор
 function moreLive() { if (lv.value?.more) return lv.value.more(); lv.value?.stop?.(); discuss() }
 
@@ -269,11 +263,17 @@ function jsApply() {
       <button v-if="!p.edit && !p.st.done && !isLive && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy" :title="dic === 'live' ? 'Остановить запись' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? 'Подключаюсь…' : 'Надиктовать с Gemini' }}</button>
       <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
+    <div v-if="!p.edit && isLive && !p.st.done && (ans?.talking || ans?.said || ans?.draft)" class="kcloud" aria-live="polite">
+      <b>🎧 Расшифровка — для вас<i v-if="ans?.talking" class="kcd" /></b>
+      <p ref="cloudEl">{{ ans?.said }} <span>{{ ans?.draft }}</span><em v-if="!ans?.said && !ans?.draft">говорите — слова появятся здесь…</em></p>
+    </div>
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
-    <div v-else class="ka done">{{ p.st.text }}</div>
+    <div v-else class="ka done">{{ p.st.text }}<em v-if="r?.live && r?.voice && !p.st.text" class="kph">Gemini Live не прислала расшифровку</em></div>
+    <div v-if="!p.edit && p.st.done && r?.live && r?.voice" class="kheard">🎧 В поле — как вас <b>услышала Gemini Live</b>: по этому тексту она и оценивала
+      <details v-if="r.said"><summary>сравнить с расшифровкой из облака</summary><p>{{ r.said }}</p></details></div>
     <p v-if="!p.edit && isLive && ans?.warn && !p.st.done" class="kdd er">{{ ans.warn }}</p>
-    <p v-if="!p.edit && isLive && !p.st.done" class="knote">ℹ️ Текст в поле (расшифровка вашей речи) — только для вас: Gemini Live оценивает по <b>голосу</b>, текст ей не отправляется. Ответ без голоса (набран или вставлен) — уйдёт текстом.</p>
+    <p v-if="!p.edit && isLive && !p.st.done" class="knote">ℹ️ Облако — расшифровка для вас, Gemini её не получает: Live оценивает по <b>голосу</b>. После «Проверить» в поле встанет то, что <b>услышала сама Live</b>. Ответ без голоса (набран в поле) — уйдёт текстом.</p>
     <p v-if="!p.edit && isLive && (ansErr || ans?.err) && !p.st.done" class="kdd er">{{ ansErr || ans?.err }}</p>
     <p v-if="!p.edit && (dicDraft || dicErr)" class="kdd" :class="{ er: dicErr && !dicDraft }">{{ dicDraft || dicErr }}</p>
 
@@ -407,6 +407,14 @@ function jsApply() {
 .kbr.api { color: #2f6fe0; flex-wrap: wrap } .kbr.api img { margin: 0 } .kbr.api em { font-style: normal; font-weight: 600; font-size: 12px; color: #3d7a00 } .kbr.api em.off { color: #b3261e }
 .kms { height: 26px; max-width: 230px; padding: 0 4px; border: 1px solid rgba(47, 111, 224, .35); border-radius: 8px; background: #fff; color: #2f6fe0; font: inherit; font-size: 12px; font-weight: 700 } .kms.ed { height: 24px; font-size: 10.5px; max-width: 200px }
 .kno { margin: 4px 0 0; font-size: 12px !important }
+.kcloud { position: relative; margin: 0 0 -2px; padding: 8px 12px 10px; border-radius: 14px; background: #fff; border: 1px solid rgba(163, 92, 240, .25); box-shadow: 0 6px 18px rgba(75, 50, 120, .12) }
+.kcloud::after { content: ''; position: absolute; left: 28px; bottom: -7px; width: 12px; height: 12px; background: #fff; border-right: 1px solid rgba(163, 92, 240, .25); border-bottom: 1px solid rgba(163, 92, 240, .25); transform: rotate(45deg) }
+.kcloud b { display: flex; align-items: center; gap: 6px; font-family: var(--font); font-size: 11px; font-weight: 800; color: #6b2fb3; text-transform: uppercase; letter-spacing: .03em }
+.kcd { width: 7px; height: 7px; border-radius: 50%; background: #e5484d; animation: kcd 1s ease-in-out infinite } @keyframes kcd { 50% { opacity: .25 } }
+.kcloud p { margin: 4px 0 0; max-height: 96px; overflow: auto; font-family: 'PT Serif', Georgia, serif; font-size: 16px; line-height: 1.4; color: #3a2a1a } .kcloud p span { color: #a08060; font-style: italic } .kcloud p em { color: #a08060 }
+.kheard { margin: -4px 2px 0; padding: 5px 10px; border-radius: 8px; background: rgba(47, 163, 107, .08); color: #1f6f47; font-family: var(--font); font-size: 11.5px; font-weight: 600; line-height: 1.4 } .kheard b { font-weight: 800 }
+.kheard summary { cursor: pointer; color: #6b5a48; margin-top: 2px } .kheard details p { margin: 3px 0 0; font-family: 'PT Serif', Georgia, serif; font-size: 14px; font-style: italic; color: #6b5a48 }
+.kph { color: #b3261e; font-size: 13px }
 .knote { margin: -4px 2px 0; padding: 5px 10px; border-radius: 8px; background: rgba(163, 92, 240, .07); color: #6b2fb3; font-family: var(--font); font-size: 11.5px; font-weight: 600; line-height: 1.35 } .knote b { font-weight: 800 }
 .kexp { align-self: center; margin: -4px auto 6px; padding: 3px 12px; border: 1.5px dashed #a35cf0; border-radius: 10px; background: rgba(163, 92, 240, .08); color: #6b2fb3; font-family: var(--font); font-size: 12px; font-weight: 800; text-align: center }
 .kbr.lvx { flex-direction: column; align-items: flex-start; gap: 4px; color: #6b2fb3 } .kbr.lvx > small { font-size: 11.5px; font-weight: 600; color: #8a6aa8 }
