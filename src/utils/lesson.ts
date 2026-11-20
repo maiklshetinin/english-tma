@@ -148,7 +148,7 @@ export function fishStep(kind: StepKind): Step {
   if (kind === 'gap') return { id: stepId(), kind, phrase: 'I’m fine, thanks. And [you]?', tr: 'Хорошо, спасибо. А ты?', audio: fish('and-you.mp3'), opts: [] }
   if (kind === 'answer') return { id: stepId(), kind, text: 'What’s your name?', note: 'Начни с «My name’s…» или «I’m…»', tr: 'My name’s Anna.', image: fish('wave.jpg') }
   if (kind === 'kp') return { id: stepId(), kind, text: 'Kiedy i jak obchodzimy Mikołajki?',
-    ideal: 'Mikołajki obchodzimy szóstego grudnia na cześć świętego Mikołaja, biskupa z Miry. W nocy z piątego na szóstego grudnia święty Mikołaj przynosi dzieciom drobne prezenty, na przykład słodycze, zabawki albo książki, i zostawia je w wyczyszczonych butach lub pod poduszką.' }
+    ideal: '==Mikołajki== obchodzimy **6 grudnia** na cześć świętego Mikołaja, biskupa z Miry, który czynił cuda.\nTego dnia dzieci otrzymują ==drobne prezenty==, które zazwyczaj są ukrywane pod poduszką, w butach lub specjalnych skarpetach – najczęściej są to słodycze, zabawki lub książki.' }          // «рыба» — с оформлением, как в домашке (20.11.2026)
   if (kind === 'talk') return { id: stepId(), kind, text: 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }
   if (kind === 'stt') return { id: stepId(), kind, text: 'Расскажите о себе по-польски: 3–4 предложения' }
   if (kind === 'odd') return { id: stepId(), kind, ans: 1, note: 'Coffee — напиток, остальное — еда.', opts: [{ w: 'egg', k: '#fbedb0' }, { w: 'coffee', k: '#cfe6f7' }, { w: 'apple', k: '#cfeccf' }, { w: 'banana', k: '#fbe1c8' }] }

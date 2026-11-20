@@ -361,5 +361,6 @@ function jsApply() {
 @media (min-width: 900px) {
   .lp:not(.embedded):not(.single) .kqt, .lp:not(.embedded):not(.single) .kr { font-size: 20px }
   .lp:not(.embedded):not(.single) .ka { height: 150px; font-size: 18px }
+  .lp:not(.embedded):not(.single) .ka.done { height: auto }          /* 20.11.2026: высота 150 перебивала «после проверки — по тексту», длинный ответ наезжал на «Не прозвучало» */
 }
 </style>
