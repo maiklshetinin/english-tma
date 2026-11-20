@@ -8,16 +8,17 @@
 // и покачивание в такт; говорит ученик (inp — громкость микрофона) — наклон головы, «слушает»; после «Завершить» — машет «пока».
 // Не загрузился (нет файла, старый браузер без DecompressionStream) — персонажа просто нет, разговор работает.
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { prepSticker } from './sticker'
 const props = defineProps({ state: { type: String, default: 'idle' }, out: { type: Function, default: null }, inp: { type: Number, default: 0 } })
 const box = ref(null), wrap = ref(null), ok = ref(true), mode = ref('hi')
-const SRC = import.meta.env.BASE_URL + 'talk/avatar.tgs'
+const SRC = import.meta.env.BASE_URL + 'talk/avatar.tgs?v=' + __APP_COMMIT__          // ?v= — новая сборка не возьмёт старый файл из кэша
 const CALM = 100, THINK = [100, 120], HI = [0, 90], MOUTH_HI = [12, 84]          // кадры стикера
 let anim = null, raf = 0, mo = null, mc = null, lvl = 0, open = null, dead = false, talkAt = 0, listenAt = 0
 
 async function load() {
   if (typeof DecompressionStream === 'undefined' || typeof fetch === 'undefined') throw new Error('нет распаковки')
   const r = await fetch(SRC); if (!r.ok || !r.body) throw new Error('нет файла')
-  const data = JSON.parse(await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text())
+  const data = prepSticker(JSON.parse(await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text()))
   const { default: lottie } = await import('lottie-web/build/player/lottie_light')
   if (dead) return
   anim = lottie.loadAnimation({ container: box.value, renderer: 'svg', loop: false, autoplay: false, animationData: data, rendererSettings: { preserveAspectRatio: 'xMidYMid meet' } })
