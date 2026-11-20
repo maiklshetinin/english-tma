@@ -82,3 +82,28 @@ export async function speak(text, voice = getVoice(), { fetcher = fetch, signal,
   }
   const e = new Error(last?.message === 'Квота закончилась' ? `Квота закончилась на всех ключах (${free.length})` : last?.message || 'Не удалось озвучить'); e.quota = true; throw e
 }
+
+// ---------- Образцы голосов (20.11.2026): одна и та же фраза каждым голосом, озвучивается один раз и хранится в этом браузере
+// (IndexedDB), чтобы сравнивать голоса сколько угодно, не тратя квоту ----------
+export const SAMPLES = { pl: 'Dzień dobry! Proszę opowiedzieć o polskich tradycjach świątecznych.', en: 'Hello! Today we are going to talk about your favourite hobbies and weekend plans.' }
+export const SAMPLE = SAMPLES.pl
+const LK = 'tma.tts.sampleLang'
+export const getSampleLang = (text = '') => { try { const v = localStorage.getItem(LK); if (v in SAMPLES) return v } catch { /* нет */ } return /[ąćęłńóśźż]/i.test(text) || !/[a-z]/i.test(text) ? 'pl' : 'en' }
+export const setSampleLang = (v) => { try { localStorage.setItem(LK, v) } catch { /* приватный режим */ } }
+const DB = 'tma-tts', ST = 'samples'
+function db() {
+  return new Promise((ok, no) => {
+    if (typeof indexedDB === 'undefined') return no(new Error('нет IndexedDB'))
+    const r = indexedDB.open(DB, 1)
+    r.onupgradeneeded = () => r.result.createObjectStore(ST)
+    r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error)
+  })
+}
+async function op(mode, fn) {
+  const d = await db()
+  return new Promise((ok, no) => { const t = d.transaction(ST, mode), q = fn(t.objectStore(ST)); t.oncomplete = () => ok(q?.result); t.onerror = () => no(t.error) })
+}
+const sk = (voice, phrase) => voice + '|' + phrase
+export const sampleGet = (voice, phrase = SAMPLE) => op('readonly', (s) => s.get(sk(voice, phrase))).catch(() => null)
+export const samplePut = (voice, blob, phrase = SAMPLE) => op('readwrite', (s) => s.put(blob, sk(voice, phrase))).catch(() => {})
+export const sampleKeys = (phrase = SAMPLE) => op('readonly', (s) => s.getAllKeys()).then((ks) => (ks ?? []).filter((k) => String(k).endsWith('|' + phrase)).map((k) => String(k).split('|')[0])).catch(() => [])

@@ -4,7 +4,7 @@
 // Запрос — ключами преподавателя из профиля (utils/tts.js), прямо из браузера.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import AudioPill from './AudioPill.vue'
-import { VOICES, getVoice, setVoice, speak, SAMPLE, sampleGet, samplePut, sampleKeys } from '../utils/tts'
+import { VOICES, getVoice, setVoice, speak, SAMPLES, getSampleLang, setSampleLang, sampleGet, samplePut, sampleKeys } from '../utils/tts'
 import { ai, addKey, removeKey, moveKey, mask, countToday } from '../utils/gemini'
 import { aiIcon } from '../utils/ai'
 
@@ -35,17 +35,22 @@ onBeforeUnmount(() => clearInterval(clock))
 function pickVoice(v) { voice.value = v; setVoice(v) }
 
 // образцы голосов: ▶ у голоса — одна фраза этим голосом; первый раз озвучивается (1 запрос), потом играет из браузера
-const saved = ref(new Set()), smpBusy = ref(''), smpOn = ref('')
+// фраза образца — по-польски или по-английски (у каждой свои образцы); язык угадывается по тексту, выбор запоминается
+const saved = ref(new Set()), smpBusy = ref(''), smpOn = ref(''), lang = ref(getSampleLang(props.text))
+const phrase = computed(() => SAMPLES[lang.value])
+const loadSaved = () => sampleKeys(phrase.value).then((v) => { saved.value = new Set(v) })
+function setLang(l) { if (smpBusy.value) return; smpAu?.pause(); lang.value = l; setSampleLang(l); loadSaved() }
 let smpAu = null
-onMounted(() => sampleKeys().then((v) => { saved.value = new Set(v) }))
+onMounted(loadSaved)
 async function sample(v) {
   if (smpBusy.value || st.value === 'busy') return
   if (smpOn.value === v) { smpAu?.pause(); return }
   smpAu?.pause(); document.querySelectorAll('.tts .out audio').forEach((a) => a.pause())
-  let b = await sampleGet(v)
+  const ph = phrase.value
+  let b = await sampleGet(v, ph)
   if (!b) {
     smpBusy.value = v; err.value = null
-    try { b = (await speak(SAMPLE, v)).blob; await samplePut(v, b); saved.value = new Set([...saved.value, v]) }
+    try { b = (await speak(ph, v)).blob; await samplePut(v, b, ph); if (ph === phrase.value) saved.value = new Set([...saved.value, v]) }
     catch (e) { err.value = e; return } finally { smpBusy.value = '' }
   }
   const u = URL.createObjectURL(b)
@@ -97,7 +102,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey, true); clea
 
         <div class="vg2">
           <div v-for="[g, list] in GROUPS" :key="g" class="vgrp">
-            <div class="lb">{{ g }}<small v-if="g === 'Женские'" class="smp">▶ — образец «{{ SAMPLE.slice(0, 22) }}…»</small></div>
+            <div class="lb">{{ g }}<span v-if="g === 'Женские'" class="smp">▶ образец:<button v-for="(t, l) in { pl: 'PL', en: 'EN' }" :key="l" type="button" class="lg" :class="{ on: lang === l }" :title="SAMPLES[l]" @click="setLang(l)">{{ t }}</button></span></div>
             <div class="vs">
               <div v-for="v in list" :key="v[0]" class="v" :class="{ on: voice === v[0] }">
                 <button type="button" class="vn" :disabled="st === 'busy'" @click="pickVoice(v[0])"><b>{{ v[0] }}</b><small>{{ v[2] }}</small></button>
@@ -166,6 +171,7 @@ textarea:focus { outline: none; border-color: #4b8df8; box-shadow: 0 0 0 3px rgb
 .vp { flex: none; width: 26px; display: grid; place-items: center; padding: 0; border: 0; background: none; color: #b5b5b5; cursor: pointer }
 .vp svg { width: 13px; height: 13px; fill: currentColor } .vp.has { color: #4b8df8 } .vp.play { color: #2f6fe0 } .vp:hover:not(:disabled) { background: rgba(75, 141, 248, .12) } .vp:disabled { opacity: .35; cursor: default }
 .spin.sm { width: 11px; height: 11px; border-width: 2px }
+.lg { margin-left: 4px; padding: 1px 6px; border: 1px solid var(--border, #ddd); border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer } .lg.on { border-color: #4b8df8; background: rgba(75, 141, 248, .12); color: #2f6fe0 }
 .lb .smp { margin-left: 8px; font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--hint, #999) }
 .out { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px }
 .out small { color: var(--hint, #777); font-size: 12px }

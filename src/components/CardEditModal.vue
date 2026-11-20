@@ -5,6 +5,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppIcon from './AppIcon.vue'
 import AudioWave from './AudioWave.vue'
+import TtsDialog from './TtsDialog.vue'
+import { aiIcon } from '../utils/ai'
 import { showToast } from '../composables/useToast'
 import { useCardMedia, isImg, isAud, isLink, audSrc, imgSrc, removeCard } from '../composables/useCardMedia'
 const props = defineProps({
@@ -21,6 +23,10 @@ const step = (d) => { const n = list.value[eIdx.value + d]; if (n) emit('update:
 const del = async () => { if (await removeCard(props.deck, ec.value)) close() }
 const FIELDS = [null, null, null, null, { k: 'image', kind: 'image' }, { k: 'audio', kind: 'audio' }, { k: 'exampleAudio', kind: 'audio' }]
 const { busy, attach, clearField } = useCardMedia(() => props.deck)
+// озвучка Gemini (20.11.2026): у слова и у примера — значок Gemini → окно озвучки → готовый звук в карточку (как свой файл)
+const tts = ref(null), gIcon = aiIcon('Gemini')            // { k: 'audio' | 'exampleAudio', text, what, id }
+function ttsOpen(k) { const c = ec.value; if (!c) return; const t = k === 'audio' ? c.front : c.example; if (t?.trim()) tts.value = { k, text: t.trim(), what: k === 'audio' ? 'слово' : 'пример', id: c.id } }
+function ttsSave(f) { const c = props.deck.cards.find(x => x.id === tts.value?.id); if (c) attach(c, tts.value.k, f) }
 // Выбрать файл кнопкой
 const pick = ref(null); let pickTo = null
 function choose(c, f) { pickTo = { c, k: f.k }; pick.value.accept = f.kind === 'image' ? 'image/*' : 'audio/*'; pick.value.value = ''; pick.value.click() }
@@ -60,7 +66,8 @@ onMounted(() => addEventListener('keydown', ceKey)); onUnmounted(() => removeEve
             <span v-if="busy[ec.id + 'audio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'audio'] }" /></span>
             <template v-else-if="ec.audio"><AudioWave :src="audSrc(ec.audio)" :meta="ec.audioMeta || ''" small @meta="ec.audioMeta = $event" /><i v-if="isLink(ec.audio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'audio')">✕</button></template>
             <button v-else class="addsnd2" title="Добавить звук — выбрать файл или перетащить сюда" @click="choose(ec, FIELDS[5])"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><b>+</b></button>
-          </span></div>
+          </span>
+          <button class="gtts" :disabled="!ec.front?.trim() || busy[ec.id + 'audio'] != null" :title="ec.front?.trim() ? (ec.audio ? 'Озвучить заново — Gemini' : 'Озвучить — Gemini') : 'Сначала впишите слово'" @click="ttsOpen('audio')"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span></button></div>
         <input v-model.trim="ec.back" data-k="back" class="ct" placeholder="перевод" :class="{ miss: !ec.back }" />
         <div class="cph" :class="{ empty: !ec.image, zon: ceZone === 'image' }" @dragover.prevent.stop="ceZone = 'image'; ceOver = true" @drop.stop="zoneDrop($event, 'image')" @click="!ec.image && busy[ec.id + 'image'] == null && choose(ec, FIELDS[4])">
           <span v-if="busy[ec.id + 'image'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'image'] }" />{{ busy[ec.id + 'image'] }}%</span>
@@ -73,8 +80,10 @@ onMounted(() => addEventListener('keydown', ceKey)); onUnmounted(() => removeEve
             <span v-if="busy[ec.id + 'exampleAudio'] != null" class="up"><i :style="{ '--p': busy[ec.id + 'exampleAudio'] }" /></span>
             <template v-else-if="ec.exampleAudio"><AudioWave :src="audSrc(ec.exampleAudio)" :meta="ec.exampleAudioMeta || ''" small @meta="ec.exampleAudioMeta = $event" /><i v-if="isLink(ec.exampleAudio)" class="lk" title="Звук по ссылке"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></i><button class="xx" title="Убрать звук" @click="clearField(ec, 'exampleAudio')">✕</button></template>
             <button v-else class="addsnd2" title="Добавить звук — выбрать файл или перетащить сюда" @click="choose(ec, FIELDS[6])"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><b>+</b></button>
-          </span></div>
+          </span>
+          <button class="gtts" :disabled="!ec.example?.trim() || busy[ec.id + 'exampleAudio'] != null" :title="ec.example?.trim() ? (ec.exampleAudio ? 'Озвучить заново — Gemini' : 'Озвучить — Gemini') : 'Сначала впишите пример'" @click="ttsOpen('exampleAudio')"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span></button></div>
         <textarea v-model.trim="ec.exampleTr" data-k="exampleTr" class="ce2" rows="1" placeholder="перевод примера" />
+        <TtsDialog v-if="tts" :text="tts.text" :what="tts.what" @close="tts = null" @save="ttsSave" />
         <div v-if="ceOver && !ceZone" class="ceov">Отпустите — фото или звук в эту карточку</div>
       </div>
       <button v-if="list.length > 1" class="side r" :disabled="eIdx >= list.length - 1" title="Следующая (→)" @click="step(1)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg></button>
@@ -99,6 +108,8 @@ onMounted(() => addEventListener('keydown', ceKey)); onUnmounted(() => removeEve
 .ce input::placeholder, .ce textarea::placeholder { color: var(--hint-2); font-weight: 600 }
 .cw { font-size: 28px; font-weight: 900 } .ct { font-size: 19px; font-weight: 800; color: var(--blue) } .ce .miss { background: #fff1f1 }
 .ce1 { font-size: 16px; font-weight: 700 } .ce2 { font-size: 14px; font-weight: 600; color: var(--hint) }
+.gtts { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: var(--card); box-shadow: 0 1px 4px rgba(0, 0, 0, .15); cursor: pointer }
+.gtts img { width: 17px; height: 17px } .gtts:hover:not(:disabled) { box-shadow: 0 2px 8px rgba(75, 141, 248, .45) } .gtts:disabled { opacity: .35; cursor: not-allowed }
 .wrow { display: flex; align-items: center; gap: 6px } .wrow > :first-child { flex: 1; min-width: 0 }
 .spk2 { position: relative; flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: 150px; border-radius: 12px; padding: 2px }
 .spk2 .aw { width: 116px } .spk2 .lk { position: static }
