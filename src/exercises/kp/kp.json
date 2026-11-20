@@ -18,6 +18,62 @@
     "ideal": {
       "type": "text",
       "label": "Эталон ответа — с ним Gemini сверяет ответ ученика"
+    },
+    "prompt": {
+      "type": "text",
+      "label": "Как оценивать — промпт проверки (мост, Gemini API, Live); пусто — общий (SYSTEM)"
+    },
+    "pass": {
+      "type": "number",
+      "default": 60,
+      "min": 1,
+      "max": 100,
+      "label": "Порог зачёта, %"
+    },
+    "model": {
+      "type": "text",
+      "default": "auto",
+      "label": "· Gemini API: модель проверки (auto — свежая Flash Lite, live — голосом)"
+    },
+    "format": {
+      "type": "text",
+      "label": "· Gemini API: требование к ответу модели (JSON) — дописывается к промпту"
+    },
+    "message": {
+      "type": "text",
+      "label": "· Gemini API: сообщение модели — шаблон с {question} {reference} {answer}"
+    },
+    "temperature": {
+      "type": "number",
+      "default": null,
+      "min": 0,
+      "max": 2,
+      "label": "· Gemini API: температура (null — как у модели)"
+    },
+    "thinking": {
+      "type": "bool",
+      "default": false,
+      "label": "· Gemini API: размышления модели (false — выключены, быстрее)"
+    },
+    "livePrompt": {
+      "type": "text",
+      "label": "· проверка голосом (model: live): как вести себя после оценки — дописывается к промпту"
+    },
+    "liveAsk": {
+      "type": "text",
+      "label": "· проверка голосом: просьба оценить — после сообщения"
+    },
+    "liveMore": {
+      "type": "text",
+      "label": "· проверка голосом: «Подробнее — разбор голосом»"
+    },
+    "discussPrompt": {
+      "type": "text",
+      "label": "· «Обсудить ответ голосом»: роль — шаблон с {question} {reference} {answer} {score} {missed}"
+    },
+    "discussOpener": {
+      "type": "text",
+      "label": "· «Обсудить ответ голосом»: первая реплика"
     }
   },
   "check": "button",

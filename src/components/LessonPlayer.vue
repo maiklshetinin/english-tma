@@ -17,6 +17,7 @@ import { providePlay, useEdit } from '../exercises/ctx'
 import { checkAnswer } from '../utils/ai'
 import { checkSmart, getPick } from '../utils/kpcheck'
 import { checkLive } from '../utils/kplive'
+import { kpCfg } from '../exercises/kp/defaults'
 import { shuffle, orderParts, gapParts, gapOk, gapList, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -265,7 +266,7 @@ function checkAny() {
 async function aiCheck() {
   const s = step.value; st.busy = true
   try {
-    const q = { question: s.text ?? '', reference: s.ideal ?? '', answer: st.text, prompt: s.prompt, pass: s.pass }
+    const q = { question: s.text ?? '', reference: s.ideal ?? '', answer: st.text, prompt: s.prompt, pass: s.pass, cfg: kpCfg(s) }          // cfg — все настройки моделей проверки (JSON экрана, exercises/kp/defaults.ts)
     const isApi = s.engine === 'api' || s.engine === 'live'          // 'live' — убранный «Live (голос)» (20.11.2026): как Gemini API
     const viaLive = isApi && (getPick() || s.model) === 'live'          // «Live · голосом» (20.11.2026): не вышло — Flash Lite, потом мост
     const r = viaLive ? await checkLive(q, s.id).catch((e) => checkSmart(q, { model: '' }).then((x) => ({ ...x, note: `Live: ${e.message} — ${x.note ? x.note : 'проверила текстовая модель'}` })))

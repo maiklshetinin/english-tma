@@ -5,7 +5,8 @@
 // Состояние разговора экрана — kpLive[id экрана] (его показывает Kp.vue).
 import { reactive } from 'vue'
 import { startTalk, liveModels, liveName, firstKey } from './live'
-import { kpPlain, SYSTEM, PASS } from './ai'
+import { kpPlain } from './ai'
+import { kpCfg, fill } from '../exercises/kp/defaults'
 
 export const kpLive = reactive({})
 const QK = 'tma.kp.quiet'
@@ -19,18 +20,16 @@ const TOOL = [{ name: 'submit_grade', description: 'Выставить оцен�
 export async function checkLive(q, id) {
   kpLive[id]?.stop?.()
   const key = firstKey(); if (!key) throw new Error('нет ключей Gemini')
-  const t0 = Date.now(), need = Number.isFinite(q.pass) ? q.pass : PASS
+  const c = q.cfg ?? kpCfg({ prompt: q.prompt, pass: q.pass })          // настройки экрана: livePrompt, message, liveAsk, liveMore
+  const t0 = Date.now(), need = Number.isFinite(q.pass) ? q.pass : c.pass
   let model = ''; try { model = localStorage.getItem('tma.live.pick') || '' } catch { /* */ }
   if (!model) model = (await liveModels(key))[0] || ''
   if (!model) throw new Error('у ключа нет Live-моделей')
   let voice = 'Kore'; try { voice = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
   const S = reactive({ lines: [], state: 'connecting', quiet: getQuiet(), listening: false, model, name: liveName(model), err: '' })
   const push = (role, chunk) => { const l = S.lines.at(-1); if (l && l.role === role && !l.closed) l.t += chunk; else S.lines.push({ role, t: chunk.replace(/^\s+/, ''), closed: false }) }
-  const system = (q.prompt?.trim() || SYSTEM) + '\n\nТы проверяешь ответ голосом. Порядок строго такой: 1) СРАЗУ, ничего не говоря, вызови функцию submit_grade. ' +
-    '2) Потом скажи по-польски 1–2 коротких предложения: что хорошо и чего не хватило. 3) Замолчи и жди. ' +
-    'Если ученик попросит подробнее — разбери ответ подробно по-польски (простым языком), задай один наводящий вопрос и попроси ответить ещё раз полнее; новую попытку оцени коротко. ' +
-    'Ученик говорит по-польски с акцентом — это польский; если он попросит по-русски — можно коротко пояснить по-русски.'
-  const data = `Вопрос:\n${q.question}\n\nЭталон:\n${kpPlain(q.reference)}\n\nОтвет ученика:\n${q.answer}\n\nOceń moją odpowiedź.`
+  const system = (q.prompt?.trim() || c.prompt) + '\n\n' + c.livePrompt.trim()
+  const data = fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer }) + '\n\n' + c.liveAsk.trim()
   return new Promise((ok, no) => {
     let got = false
     const tm = setTimeout(() => { if (!got) { got = true; sess.stop(); no(new Error('Live не прислала оценку за 15 с')) } }, 15_000)
@@ -48,7 +47,7 @@ export async function checkLive(q, id) {
     Object.assign(S, {
       stop: () => sess.stop(),
       setQuiet: (v) => { S.quiet = !!v; sess.quiet(S.quiet); try { localStorage.setItem(QK, S.quiet ? '1' : '0') } catch { /* */ } },
-      more: async () => { if (S.quiet) S.setQuiet(false); sess.send('Proszę omówić moją odpowiedź szczegółowo.'); S.listening = true; await sess.listen() },
+      more: async () => { if (S.quiet) S.setQuiet(false); sess.send(c.liveMore); S.listening = true; await sess.listen() },
     })
     kpLive[id] = S
   })

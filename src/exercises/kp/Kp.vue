@@ -18,6 +18,7 @@ import { modelName } from '../../utils/tts'
 import { startTranscribe, sttModel, firstKey, startTalk, liveModels, liveName } from '../../utils/live'
 import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/kpcheck'
 import { kpLive } from '../../utils/kplive'
+import { kpCfg, fill } from './defaults'
 import { ai } from '../../utils/gemini'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
@@ -121,13 +122,9 @@ async function discuss() {
   if (!m) { tk.value = 'idle'; tkErr.value = 'Google не дал ключу Live-модели'; return }
   let v = 'Kore'; try { v = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
   tkModel.value = m
-  const sys = 'Jesteś życzliwym nauczycielem polskiego. Uczeń przygotowuje się do rozmowy na Kartę Polaka. Mów po polsku, prosto i niezbyt szybko; ' +
-    'jeśli uczeń poprosi po rosyjsku — możesz krótko wyjaśnić po rosyjsku. Rozmówca mówi po polsku z akcentem — to nadal polski.\n' +
-    `Pytanie: ${props.step.text ?? ''}\nWzorcowa odpowiedź: ${kpPlain(props.step.ideal ?? '')}\nOdpowiedź ucznia: ${p.st.text ?? ''}\n` +
-    `Ocena: ${r.value?.score ?? '?'}%. Czego zabrakło: ${(r.value?.missed ?? []).join('; ') || 'nic ważnego'}.\n` +
-    'Najpierw w 2–3 zdaniach powiedz, co było dobrze i czego zabrakło. Potem zadaj jedno pytanie pomocnicze i poproś, żeby uczeń odpowiedział jeszcze raz, pełniej. ' +
-    'Po jego odpowiedzi krótko ją oceń i, jeśli trzeba, popraw błędy językowe jednym zdaniem.'
-  tkS = startTalk({ key, model: m, voice: v, lang: 'pl-PL', system: sys, opener: 'Proszę omówić moją odpowiedź.', on: {
+  const c = kpCfg(props.step)          // промпт разбора и первая реплика — из JSON экрана (exercises/kp/defaults.ts)
+  const sys = fill(c.discussPrompt, { question: props.step.text ?? '', reference: kpPlain(props.step.ideal ?? ''), answer: p.st.text ?? '', score: r.value?.score ?? '?', missed: (r.value?.missed ?? []).join('; ') || 'nic ważnego' })
+  tkS = startTalk({ key, model: m, voice: v, lang: 'pl-PL', system: sys, opener: c.discussOpener, on: {
     state: (s2, info) => { if (s2 === 'live' && info) return; tk.value = s2 === 'error' || s2 === 'ended' ? 'idle' : s2; if (s2 === 'error') tkErr.value = info; if (s2 === 'ended' || s2 === 'error') { tkS = null; tkLvl.value = 0 } },
     text: tkPush, turn: () => { const l = tkLines.value.at(-1); if (l) l.closed = true }, level: (x) => { tkLvl.value = tkLvl.value * 0.6 + x * 0.4 },
   } })

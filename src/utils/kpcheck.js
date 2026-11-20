@@ -3,7 +3,8 @@
 // { score, missed_points, feedback }. Ключи — из профиля (utils/gemini.js), по очереди; кончилась квота (429) — пара
 // «ключ + модель» отдыхает, следующий ключ. Не вышло совсем (нет ключей, квота, сеть) — проверка уходит через мост, как раньше.
 import { ai, mark, retryMs, errText, mask } from './gemini'
-import { kpPlain, SYSTEM, PASS, checkAnswer } from './ai'
+import { kpPlain, checkAnswer } from './ai'
+import { kpCfg, fill } from '../exercises/kp/defaults'
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models'
 const MK = 'tma.kp.models', PK = 'tma.kp.model', QK = 'tma.kp.quota'
@@ -44,9 +45,9 @@ const WAIT = 30_000
 // «Размышления» (20.11.2026): модели 3.x по умолчанию думают перед ответом — проверка шла ~30 с. Для сверки с эталоном не нужно:
 // 3.x — thinkingLevel 'minimal', 2.x — thinkingBudget 0. Модель не знает такой настройки (400 про thinking) — повтор без неё
 const think = (m) => (/gemini-2\./.test(m) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' })
-async function once(key, model, prompt, user, fetcher, schema = true, thinkOff = true) {
+async function once(key, model, prompt, user, fetcher, schema = true, thinkOff = true, temperature = null) {
   const body = { systemInstruction: { parts: [{ text: prompt }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { responseMimeType: 'application/json', ...(schema ? { responseSchema: SCHEMA } : {}), ...(thinkOff ? { thinkingConfig: think(model) } : {}) } }
+    generationConfig: { responseMimeType: 'application/json', ...(typeof temperature === 'number' ? { temperature } : {}), ...(schema ? { responseSchema: SCHEMA } : {}), ...(thinkOff ? { thinkingConfig: think(model) } : {}) } }
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), WAIT)
   let r
   try { r = await fetcher(`${API}/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), ...(ac ? { signal: ac.signal } : {}) }) }
@@ -59,23 +60,26 @@ async function once(key, model, prompt, user, fetcher, schema = true, thinkOff =
   return o
 }
 
-/** Проверка напрямую. → { score, missed, feedback, ok, site: 'Gemini', api: true, model, key, ms } */
+/** Проверка напрямую. q.cfg — настройки экрана (kpCfg: формат, шаблон, температура, размышления); нет — умолчания.
+ *  → { score, missed, feedback, ok, site: 'Gemini', api: true, model, key, ms } */
 export async function checkDirect(q, { model = '', fetcher = fetch } = {}) {
-  const t0 = Date.now(), need = Number.isFinite(q.pass) ? q.pass : PASS
+  const c = q.cfg ?? kpCfg({ prompt: q.prompt, pass: q.pass })
+  const t0 = Date.now(), need = Number.isFinite(q.pass) ? q.pass : c.pass
   if (!ai.keys.length) { const e = new Error('нет ключей Gemini'); e.nokeys = true; throw e }
   const own = (v) => (v && v !== 'live' ? v : '')          // 'live' — проверка голосовой моделью (utils/kplive.js), тут — запасная текстовая
   const m = own(getPick()) || own(model) || (await checkModels(ai.keys[0].key, fetcher))[0] || CHECK_DEFAULT          // свой выбор в браузере (подвал экрана) — главнее экрана
-  const prompt = (q.prompt?.trim() || SYSTEM) + ' Ответь только JSON: {"score": число 0–100, "missed_points": ["…"], "feedback": "…"}.'
-  const user = `Вопрос:\n${q.question}\n\nЭталон:\n${kpPlain(q.reference)}\n\nОтвет ученика:\n${q.answer}`
+  const prompt = (q.prompt?.trim() || c.prompt) + ' ' + c.format.trim()
+  const user = fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer })
+  const thinkOff = !c.thinking, temp = c.temperature
   const now = Date.now(), keys = ai.keys.filter((x) => !(quota(x.key, m) > now))
   if (!keys.length) { const e = new Error(`у ${checkName(m)} кончился лимит на всех ключах`); e.quota = true; throw e }
   let last = null
   for (const x of keys) {
     try {
       let o
-      try { o = await once(x.key, m, prompt, user, fetcher) } catch (e) {
-        if (e.status === 400 && /think/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, true, false)          // без настройки «размышлений»
-        else if (e.status === 400 && /schema|responseSchema|response_schema/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, false)          // модель без схемы — просто JSON
+      try { o = await once(x.key, m, prompt, user, fetcher, true, thinkOff, temp) } catch (e) {
+        if (e.status === 400 && /think/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, true, false, temp)          // без настройки «размышлений»
+        else if (e.status === 400 && /schema|responseSchema|response_schema/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, false, thinkOff, temp)          // модель без схемы — просто JSON
         else throw e
       }
       mark(x, true)
