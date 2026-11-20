@@ -248,7 +248,7 @@ const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !st
 // ---- книжные (экспериментальные): «Найди лишнее» и «Распредели по колонкам» ----
 const sortLeft = computed(() => (step.value?.kind !== 'sort' ? 0 : step.value.tw ? st.tw.flat().filter(v => !v.trim()).length : st.order.filter(k => st.place[k] == null).length))
 // «Заполни таблицу» (Настя, 18.11.2026): банк слов, образцы зачёркнуты; ученик вписывает форму в колонку — порядок в колонке не важен
-const canCheck = computed(() => { const k = step.value?.kind; return k === 'kp' ? !!st.text.trim() && !st.busy : k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
+const canCheck = computed(() => { const k = step.value?.kind; return k === 'kp' ? (!!st.text.trim() || (step.value.engine === 'live' && (kpLive[step.value.id]?.sent ?? 0) > 0.5)) && !st.busy : k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
 function sortPick(k) { if (!st.done) st.sel = st.sel === k ? null : k }
 function sortPut(c) { if (st.done || st.sel == null) return; st.place = { ...st.place, [st.sel]: c }; st.sel = null; hapticTick?.() }
 function sortBack(k) { if (st.done) return; const p = { ...st.place }; delete p[k]; st.place = p }

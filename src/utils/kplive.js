@@ -138,12 +138,20 @@ export async function openLiveAnswer(q, id, { onMe } = {}) {
   if (!model) throw new Error('у ключа нет Live-моделей')
   let voice = 'Kore'; try { voice = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
   const rec = []
-  const S = reactive({ lines: [], state: 'connecting', ws: 'открывается…', quiet: getQuiet(), talking: false, model, name: liveName(model), err: '', level: 0, rec, sent: 0, draft: '', tr: 'нет' })
+  const S = reactive({ lines: [], state: 'connecting', ws: 'открывается…', quiet: getQuiet(), talking: false, model, name: liveName(model), err: '', level: 0, rec, sent: 0, draft: '', tr: 'нет', warn: '' })
+  // черновик на «Паузе» сразу уходит в поле (flush) — а Google потом может прислать тот же кусок готовым или продолжить его
+  // черновиком: уже записанные слова отрезаем (cut), чтобы в поле ничего не задвоилось. Не польский (кириллица) — в поле не пускаем
+  let flushed = []
+  const W = (t) => String(t || '').trim().split(/\s+/).filter(Boolean)
+  const nw = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+  const cut = (t, eat) => { const tw = W(t); let k = 0; while (k < tw.length && k < flushed.length && nw(tw[k]) === nw(flushed[k])) k++; if (eat) flushed = flushed.slice(k); return tw.slice(k).join(' ') }
+  const cyr = (t) => /[\u0400-\u04FF]/.test(t)
+  const flush = () => { const d = S.draft.trim(); S.draft = ''; if (d) { flushed.push(...W(d)); onMe?.(d) } }
   let waiter = null, t0 = 0, tr = null
   const system = (q.prompt?.trim() || SYSTEM) + `\n\nВопрос:\n${q.question}\n\nЭталон:\n${kpPlain(q.reference)}\n\n` +
     'Ученик отвечает ГОЛОСОМ — его ответ ты слышишь. Пока он говорит — молчи. Когда реплика закончена (или пришёл текст ответа), порядок строго такой: ' +
     '1) СРАЗУ, ничего не говоря, вызови функцию submit_grade (оценивай по тому, что услышал); 2) потом скажи по-польски 1–2 коротких предложения: что хорошо и чего не хватило; 3) замолчи. ' +
-    'Ученик говорит по-польски с акцентом — это польский.'
+    'Ученик говорит по-польски с акцентом — это польский. Язык разговора — ТОЛЬКО польский: говори только по-польски, даже если слышишь русские слова; на русский не переходи.'
   const sess = startTalk({ key, model, voice, lang: 'pl-PL', system, tools: TOOL, micLater: true, manualVad: true, quiet: S.quiet,
     rec: (pcm) => { rec.push(pcm); S.sent += pcm.length / 16000 }, on: {
       state: (s, info) => {
@@ -168,20 +176,21 @@ export async function openLiveAnswer(q, id, { onMe } = {}) {
     S.tr = 'подключается…'
     tr = startTranscribe({ key, model: await sttModel(key), lang: 'pl-PL', on: {
       state: (s, info) => { S.tr = s === 'live' ? 'пишет' : s === 'connecting' ? 'подключается…' : s === 'error' ? 'ошибка: ' + info : 'остановлена'; if (s === 'ended' || s === 'error') tr = null },
-      interim: (t) => { S.draft = t }, final: (t) => { onMe?.(t); S.draft = '' },
+      interim: (t) => { if (cyr(t)) { S.warn = 'Расшифровка ушла не в польский — этот кусок в поле не пишу. Голос Gemini Live всё равно слышит'; return } S.warn = ''; S.draft = cut(t, false) },
+      final: (t) => { S.draft = ''; if (cyr(t)) { S.warn = 'Кусок расшифровался не по-польски — в поле не попал'; return } const x = cut(t, true); if (x) onMe?.(x) },
     } })
   }
   Object.assign(S, {
     stop: () => { sess.stop(); tr?.stop() },
     setQuiet: (v) => { S.quiet = !!v; sess.quiet(S.quiet); try { localStorage.setItem(QK, S.quiet ? '1' : '0') } catch { /* */ } },
     speak: async () => { S.talking = true; tr?.hold(false); startTr(); await sess.talkStart() },
-    pause: () => { S.talking = false; sess.talkPause(); tr?.hold(true) },
+    pause: () => { S.talking = false; sess.talkPause(); tr?.hold(true); flush() },          // черновик — сразу в поле
     /** «Проверить»: конец реплики (или текст, если голоса не было) → оценка */
     finish: (text) => new Promise((ok, no) => {
       if (S.state !== 'live') return no(new Error(S.err || 'Live не подключена'))
       t0 = Date.now(); S.talking = false
       const t = tr; tr = null; if (t) setTimeout(() => t.stop(), 400)          // последние слова расшифровки успевают прийти
-      if (S.draft) { onMe?.(S.draft); S.draft = '' }
+      flush()
       const tm = setTimeout(() => { if (waiter) { waiter = null; no(new Error('Live не прислала оценку за 20 с')) } }, 20_000)
       waiter = { ok, no, tm }
       if (!sess.talkEnd()) sess.send(`Moja odpowiedź (tekst):\n${text || '(pusto)'}\n\nOceń.`)          // голоса не было — ответ текстом

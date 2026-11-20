@@ -118,10 +118,18 @@ async function liveAnswer() {
   if (S0 && (S0.state === 'live' || S0.state === 'connecting')) { if (S0.talking) S0.pause(); else if (S0.state === 'live') S0.speak(); return }
   try {
     const S = await openLiveAnswer({ question: props.step.text ?? '', reference: props.step.ideal ?? '', prompt: props.step.prompt, pass: props.step.pass }, props.step.id,
-      { onMe: (t) => addText(t) })
+      { onMe: (t) => { if (lvBase != null) { p.st.text = lvBase; lvBase = null } addText(t) } })          // готовый кусок вместо черновика
     const off = watch(() => S.state, (v) => { if (v === 'live') { off(); S.speak() } else if (v === 'ended' || v === 'error') off() }, { immediate: true })
   } catch (e) { ansErr.value = e.message }
 }
+// черновик Live пишется прямо в поле (20.11.2026): поле = готовый текст + черновик; готовый кусок (onMe) заменяет черновик
+let lvBase = null
+watch(() => ans.value?.draft ?? '', (d) => {
+  if (p.st.done) return
+  if (lvBase == null) { if (!d) return; lvBase = p.st.text || '' }
+  p.st.text = (lvBase.trim() + ' ' + d).trim()
+  if (!d) lvBase = null
+})
 watch(() => p.st.done, (v) => { if (!v && isLive.value) { kpLive[props.step.id]?.stop?.() } })          // вопрос вернулся (повтор в конце урока) — новый разговор
 function moreLive() { if (lv.value?.more) return lv.value.more(); lv.value?.stop?.(); discuss() }
 
@@ -264,8 +272,8 @@ function jsApply() {
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <textarea v-else-if="!p.st.done" :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
     <div v-else class="ka done">{{ p.st.text }}</div>
-    <p v-if="!p.edit && isLive && ans?.draft && !p.st.done" class="kdd">{{ ans.draft }}</p>
-    <p v-if="!p.edit && isLive && !p.st.done" class="knote">ℹ️ Текст в поле — только для вас: Gemini Live оценивает по <b>голосу</b>, текст ей не отправляется. Ответ без голоса (набран или вставлен) — уйдёт текстом.</p>
+    <p v-if="!p.edit && isLive && ans?.warn && !p.st.done" class="kdd er">{{ ans.warn }}</p>
+    <p v-if="!p.edit && isLive && !p.st.done" class="knote">ℹ️ Текст в поле (расшифровка вашей речи) — только для вас: Gemini Live оценивает по <b>голосу</b>, текст ей не отправляется. Ответ без голоса (набран или вставлен) — уйдёт текстом.</p>
     <p v-if="!p.edit && isLive && (ansErr || ans?.err) && !p.st.done" class="kdd er">{{ ansErr || ans?.err }}</p>
     <p v-if="!p.edit && (dicDraft || dicErr)" class="kdd" :class="{ er: dicErr && !dicDraft }">{{ dicDraft || dicErr }}</p>
 
