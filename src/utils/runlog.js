@@ -12,7 +12,10 @@ export const newRun = (now = Date.now()) => now.toString(36) + Math.random().toS
 /**
  * @param {{ itemId: string, n: number, send: (body: object) => void, now?: () => number, timer?: { set: Function, clear: Function } }} o
  */
-export function makeRunLog({ itemId, n, send, now = Date.now, timer = { set: setTimeout, clear: clearTimeout } }) {
+// таймер — обёртками: setTimeout, вызванный как метод своего объекта (timer.set(...)), в браузере падает «Illegal invocation» —
+// из-за этого журнал не писался вовсе (21.11.2026; в тестах на Node не видно)
+const TIMER = { set: (f, ms) => setTimeout(f, ms), clear: (t) => clearTimeout(t) }
+export function makeRunLog({ itemId, n, send, now = Date.now, timer = TIMER }) {
   const run = newRun(now()), at = now(), steps = {}
   let cur = null, since = at, fin = false, dirty = false, t = null
   const entry = (id) => (steps[id] ??= { ok: null, ms: 0, t: 0 })
