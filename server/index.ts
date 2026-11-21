@@ -302,6 +302,10 @@ app.post('/courses/:id/run/reset', requireUser, requireTeacher, wrap(async (req,
 app.get('/my/courses', requireUser, wrap(async (req, res) => res.json(await learn.myList(req.user))))
 app.get('/my/courses/:id', requireUser, wrap(async (req, res) => res.json(await learn.myCourse(req.user, req.params.id))))
 app.post('/my/courses/:id/done', requireUser, wrap(async (req, res) => res.json(await learn.done(req.user, req.params.id, req.body))))      // { itemId, ok, all, sec }
+// Журнал заходов в уроки (learn.ts): пишется по ходу урока — { run, itemId, at, sec, n, fin, steps: { <экран>: { ok, sec, t, x?, sc? } } }
+app.post('/my/courses/:id/log', requireUser, wrap(async (req, res) => res.json(await learn.log(req.user, req.params.id, req.body))))
+app.post('/courses/:id/run/log', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.teacherLog(req.user, req.params.id, req.body))))
+app.get('/progress/log', requireUser, wrap(async (req, res) => res.json(await learn.runLogs(req.user, req.query.studentId))))      // ?studentId= — преподаватель смотрит ученика
 app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(), storage: storage.ready })))
 app.get('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.get(req.params.id))))
 app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.put(req.user.uid, req.params.id, req.body))))

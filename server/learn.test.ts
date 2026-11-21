@@ -83,7 +83,33 @@ ok('преподаватель: сброс своего прохождения',
   ok('непройденных уроков нет', !st.lessons.some((x) => x.id === 'b'))
   ok('преподаватель — уроки ученика; ученик чужие — 403', (await L.lessonsDone({ uid: 'tg:1', role: 'teacher' }, 's1')).lessons.length === st.lessons.length && (await code(L.lessonsDone(petya, 's1'))) === 403)
   ok('преподаватель без ученика — своё прохождение (пусто)', (await L.lessonsDone({ uid: 'tg:1', role: 'teacher' })).lessons.length === 0) }
+// --- журнал заходов в уроки (по ходу урока, и незаконченный) ---
+await L.assign('k1', { studentId: 's1', on: true })
+{ const base = { run: 'run0001', itemId: 'a', at: 900, sec: 30, n: 2 }
+  await L.log(masha, 'k1', { ...base, steps: { s1: { ok: false, sec: 12, t: 2, x: '  b  ' }, чужой: { ok: true, sec: 1, t: 1 } } })
+  let d = store.get('lessonLogs/s1_run0001')
+  ok('журнал: заход записан до конца урока, чужие экраны отброшены', d && !d.fin && d.ok === 0 && d.all === 1 && d.steps.s1.x === 'b' && !('чужой' in d.steps))
+  await L.log(masha, 'k1', { ...base, fin: true, steps: { s1: { ok: true, sec: 15, t: 3 } } })
+  await L.log(masha, 'k1', { ...base, steps: { s1: { ok: true, sec: 15, t: 3 } } })
+  d = store.get('lessonLogs/s1_run0001')
+  ok('журнал: та же пачка ещё раз — перезапись, законченный назад не «в процессе»', d.fin === true && d.ok === 1 && d.steps.s1.t === 3)
+  await L.log(masha, 'k1', { run: 'run0002', itemId: 'a', at: 950, sec: 5, n: 2, steps: {} })
+  ok('журнал: плохой run / задание / время / экраны — 400', (await code(L.log(masha, 'k1', { ...base, run: 'x' }))) === 400 && (await code(L.log(masha, 'k1', { ...base, itemId: 'u1' }))) === 400
+    && (await code(L.log(masha, 'k1', { ...base, at: 999999 }))) === 400 && (await code(L.log(masha, 'k1', { ...base, steps: [] }))) === 400 && (await code(L.log(masha, 'k1', { ...base, steps: { s1: { sec: -1 } } }))) === 400)
+  ok('журнал: чужой курс — 404', (await code(L.log(petya, 'k1', base))) === 404)
+  const { runs } = await L.runLogs(masha)
+  ok('журнал: новые сверху, номер попытки, названия, экраны урока по порядку (не дошёл — без ok)', runs.length === 2 && runs[0].run === 'run0002' && runs[0].try === 2 && runs[1].try === 1
+    && runs[0].title === 'Урок 1' && runs[0].courseTitle.startsWith('A1') && runs[0].unit === 'Chapter 1' && runs[1].steps[0].id === 's1' && runs[1].steps[0].ok === true && runs[1].steps[0].w === 'a' && runs[0].steps[0].ok === undefined && !('who' in runs[0]))
+  ok('журнал: преподаватель видит ученика, ученик чужой — 403', (await L.runLogs(teacher, 's1')).runs.length === 2 && (await code(L.runLogs(petya, 's1'))) === 403)
+  await L.teacherLog(teacher, 'k1', { ...base, run: 'trun0001' })
+  ok('журнал: преподаватель пишет своё, у ученика не видно', (await L.runLogs(teacher)).runs.length === 1 && (await L.runLogs(masha)).runs.length === 2)
+  await L.teacherReset(teacher, 'k1')
+  ok('журнал: сброс своего прохождения стирает и журнал', (await L.runLogs(teacher)).runs.length === 0)
+  await L.reset('s1', { what: 'course', courseId: 'k1' })
+  ok('журнал: сброс курса ученика — журнал курса удалён', (await L.runLogs(masha)).runs.length === 0)
+  await L.log(masha, 'k1', base) }
 await L.reset('s1', { what: 'all' })
+ok('сброс всего: журнал тоже', !store.has('lessonLogs/s1_run0001'))
 ok('сброс всего: прохождение и словарь ученика удалены', !store.has('courseProgress/s1') && !store.has('review/s1'))
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nall passed')

@@ -5,6 +5,9 @@
 //  • Ученик видит только назначенные ему курсы и только их файлы; пишет только свой прогресс. Преподаватель видит прогресс любого ученика.
 //  • Преподаватель проходит любой курс («Как видит ученик») по тем же правилам, что ученик: по порядку, ошибки уходят
 //    в чекпоинт, прогресс хранится (courseProgress/teacher_<uid>, как словарь Review) и сбрасывается кнопкой.
+//  • Журнал (21.11.2026): каждый заход в урок — отдельная запись lessonLogs/<кто>_<run>: какие экраны пройдены, верно / ошибка / без оценки,
+//    сколько секунд, с какой попытки и что ответил. Пишется по ходу урока (пачкой раз в несколько секунд и при закрытии), поэтому видно и
+//    незаконченный урок. Читается во вкладке Review «Журнал» — по дням: сколько уроков, сколько минут, результат каждого.
 import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './errors.js'
 import { makeAccess } from './access.js'
@@ -25,6 +28,21 @@ const stepBrief = (s: Record<string, unknown>): StepBrief => {
   if (s.audio || s.video) o.m = 1
   return o
 }
+/** Журнал: экран в одном заходе — ok: верно / ошибка / null без оценки (разговор, «Повтори», интро), sec — сколько пробыл,
+ *  t — сколько раз отвечал (ошибся — экран вернётся в конце урока), x — что ответил (текст), sc — балл ИИ «Ответа по смыслу» */
+export interface StepLog { ok: boolean | null; sec: number; t: number; x?: string; sc?: number }
+export interface RunLog { who: string; course: string; item: string; run: string; at: number; upd: number; sec: number; ok: number; all: number; n: number; fin: boolean; steps: Record<string, StepLog> }
+/** Заход в журнале для экрана «Журнал»: + названия, номер попытки и экраны по порядку урока (не дошёл — без ok) */
+export interface RunView extends Omit<RunLog, 'who' | 'steps'> { courseTitle: string; title: string; type: string; unit: string; try: number; steps: (Partial<StepLog> & { id: string; kind: string; w: string })[] }
+const RUN_RE = /^[A-Za-z0-9]{6,32}$/, LOG_MAX = 400
+const plain = (v: unknown) => String(v ?? '').replace(/<[^>]*>/g, ' ').replace(/[*_{}[\]]/g, '').replace(/\s+/g, ' ').trim()
+/** короткая подпись экрана в журнале: слово, фраза, вопрос — что есть */
+const stepLabel = (s: Record<string, unknown>) => {
+  for (const k of ['word', 'phrase', 'text']) { const t = plain(s[k]); if (t) return t.slice(0, 90) }
+  if (Array.isArray(s.opts)) { const o = s.opts[s.kind === 'choice' ? Number(s.ans ?? 0) : 0] as { w?: unknown } | undefined; if (plain(o?.w)) return plain(o?.w).slice(0, 90) }
+  if (Array.isArray(s.pairs)) return (s.pairs as { a?: unknown }[]).map((p) => plain(p.a)).filter(Boolean).join(', ').slice(0, 90)
+  return ''
+}
 export interface LearnDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'>; get: (id: unknown) => Promise<Course & { assigned?: string[] }>; filesOf: (c: Course) => string[]; now?: () => number }
 
 const tasksOf = (c: Pick<Course, 'items'>) => c.items.filter((x) => x.type !== 'unit')
@@ -43,6 +61,49 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
     return c
   }
   const runsOf = async (sid: string): Promise<Record<string, CourseRun>> => (await progress().doc(sid).get()).data()?.c ?? {}
+  const logs = () => db.collection('lessonLogs')
+  /** чей прогресс смотрим: свой; преподаватель с studentId — ученика, без — своё прохождение (teacher_<uid>) */
+  const whoOf = async (user: TokenUser, studentId?: unknown) => studentId != null && studentId !== ''
+    ? (user.role === 'teacher' ? cleanId(studentId, 'student id') : (() => { throw fail(403, 'forbidden') })())
+    : user.role === 'teacher' ? `teacher_${user.uid}` : await me(user)
+  /** стереть журнал who (весь или одного курса) — вместе со сбросом прогресса */
+  async function dropLogs(who: string, course?: string) {
+    const docs = (await logs().where('who', '==', who).get()).docs.filter((d) => !course || d.data().course === course)
+    for (let i = 0; i < docs.length; i += 400) { const b = db.batch(); docs.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit() }
+  }
+
+  /** Записать заход в урок в журнал (весь заход целиком — повтор той же пачки ничего не портит) */
+  async function writeLog(who: string, c: Course, input: unknown): Promise<{ ok: true }> {
+    const b = (input ?? {}) as Record<string, unknown>
+    const runId = String(b.run ?? ''); if (!RUN_RE.test(runId)) throw fail(400, 'bad run')
+    const itemId = String(b.itemId ?? ''), item = tasksOf(c).find((x) => x.id === itemId)
+    if (!item) throw fail(400, 'bad item')
+    const t = now(), at = Number(b.at)
+    if (!Number.isInteger(at) || at <= 0 || at > t + 60_000) throw fail(400, 'bad at')
+    const raw = b.steps ?? {}
+    if (typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).length > LOG_MAX) throw fail(400, 'bad steps')
+    const known = new Set(c.items.flatMap((x) => ((x as { steps?: { id?: string }[] }).steps ?? []).map((s) => String(s.id))))      // чекпоинт собран из экранов других уроков
+    const steps: Record<string, StepLog> = {}
+    for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (!known.has(id) || !v || typeof v !== 'object') continue
+      const o = v as Record<string, unknown>
+      const e: StepLog = { ok: o.ok === true ? true : o.ok === false ? false : null, sec: int(o.sec, 24 * 3600), t: int(o.t, 100) }
+      if (typeof o.x === 'string' && o.x.trim()) e.x = o.x.trim().slice(0, 400)
+      if (o.sc != null) e.sc = int(o.sc, 100)
+      steps[id] = e
+    }
+    const vals = Object.values(steps)
+    const doc: RunLog = { who, course: c.id, item: itemId, run: runId, at, upd: t, sec: int(b.sec, 24 * 3600), n: int(b.n, 1000),
+      ok: vals.filter((x) => x.ok === true).length, all: vals.filter((x) => x.ok !== null).length, fin: b.fin === true, steps }
+    const ref = logs().doc(`${who}_${runId}`)
+    await db.runTransaction(async (tx) => {
+      const old = (await tx.get(ref)).data() as RunLog | undefined
+      if (old && (old.who !== who || old.course !== c.id || old.item !== itemId)) throw fail(409, 'run taken')
+      if (old?.fin) doc.fin = true                                       // законченный заход назад «в процессе» не становится
+      tx.set(ref, doc)
+    })
+    return { ok: true }
+  }
 
   /** Записать результат задания в прохождение who (id ученика или teacher_<uid>) */
   async function save(who: string, c: Course, input: unknown): Promise<CourseRun> {
@@ -117,6 +178,7 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
         if (!(cid in all)) return
         delete all[cid]; tx.set(ref, { c: all, updatedAt: FieldValue.serverTimestamp() })
       })
+      await dropLogs(`teacher_${user.uid}`, cid)
       return run(undefined)
     },
 
@@ -124,6 +186,41 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
     async done(user: TokenUser, rawId: unknown, input: unknown) {
       const sid = await me(user)
       return save(sid, await mineCourse(sid, rawId), input)
+    },
+
+    /** Ученик: заход в урок — в журнал (по ходу урока) */
+    async log(user: TokenUser, rawId: unknown, input: unknown) {
+      const sid = await me(user)
+      return writeLog(sid, await mineCourse(sid, rawId), input)
+    },
+    /** Преподаватель проходит курс сам — его заходы тоже в журнал */
+    async teacherLog(user: TokenUser, rawId: unknown, input: unknown) {
+      return writeLog(`teacher_${user.uid}`, await get(rawId), input)
+    },
+    /** «Журнал» (Review): заходы в уроки — новые сверху, до 300; свой, преподаватель с studentId — ученика */
+    async runLogs(user: TokenUser, studentId?: unknown) {
+      const who = await whoOf(user, studentId)
+      const all = (await logs().where('who', '==', who).get()).docs.map((d) => d.data() as RunLog)
+      const tries: Record<string, number> = {}
+      for (const r of [...all].sort((a, b) => a.at - b.at)) (r as RunLog & { try?: number }).try = tries[`${r.course}/${r.item}`] = (tries[`${r.course}/${r.item}`] ?? 0) + 1
+      const recent = all.sort((a, b) => b.at - a.at).slice(0, 300), cs = new Map<string, Course | null>()
+      const out: RunView[] = []
+      for (const r of recent) {
+        if (!cs.has(r.course)) cs.set(r.course, await get(r.course).catch(() => null))
+        const c = cs.get(r.course); if (!c) continue                                      // курс удалили — его заходов нет
+        let unit = '', item: (CourseItem & { steps?: Record<string, unknown>[]; sub?: string }) | undefined
+        for (const it of c.items as (CourseItem & { steps?: Record<string, unknown>[]; sub?: string })[]) {
+          if (it.type === 'unit') unit = `${it.title ?? ''} ${it.sub ?? ''}`.trim()
+          else if (it.id === r.item) { item = it; break }
+        }
+        if (!item) continue
+        const byId = new Map(c.items.flatMap((x) => ((x as { steps?: Record<string, unknown>[] }).steps ?? []).map((s) => [String(s.id), s] as const)))
+        const ids = item.type === 'checkpoint' ? Object.keys(r.steps) : [...new Set([...(item.steps ?? []).map((s) => String(s.id)), ...Object.keys(r.steps)])]
+        const steps = ids.map((id) => { const s = byId.get(id) ?? {}; return { id, kind: String(s.kind ?? ''), w: stepLabel(s), ...(r.steps[id] ?? {}) } })
+        const { who: _w, steps: _s, ...rest } = r
+        out.push({ ...rest, try: (r as RunLog & { try: number }).try, courseTitle: c.title ?? '', title: item.title ?? '', type: item.type, unit, steps })
+      }
+      return { runs: out }
     },
 
     /** Ученик: может ли он смотреть эти файлы (только файлы своих курсов) */
@@ -139,7 +236,7 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
       if (b.what === 'all') {
         const batch = db.batch()
         batch.delete(progress().doc(sid)); batch.delete(db.collection('review').doc(sid))
-        await batch.commit(); return { ok: true }
+        await batch.commit(); await dropLogs(sid); return { ok: true }
       }
       if (b.what !== 'course') throw fail(400, 'bad what')
       const cid = cleanId(b.courseId, 'course id')
@@ -148,14 +245,14 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
         if (!(cid in all)) return
         delete all[cid]; tx.set(ref, { c: all, updatedAt: FieldValue.serverTimestamp() })
       })
+      await dropLogs(sid, cid)
       return { ok: true }
     },
 
     /** «Аналитика прогресса»: пройденные уроки всех курсов — когда, сколько верно, сколько времени и из каких экранов (по ним сайт
      *  считает теги: Чтение / Слух / Письмо / Речь, utils/lesson.ts). Свои; преподаватель с studentId — ученика, без — своё прохождение */
     async lessonsDone(user: TokenUser, studentId?: unknown) {
-      const who = studentId != null && studentId !== '' ? (user.role === 'teacher' ? cleanId(studentId, 'student id') : (() => { throw fail(403, 'forbidden') })())
-        : user.role === 'teacher' ? `teacher_${user.uid}` : await me(user)
+      const who = await whoOf(user, studentId)
       const runs = await runsOf(who), out: LessonDone[] = []
       for (const [cid, r] of Object.entries(runs)) {
         const c = await get(cid).catch(() => null); if (!c) continue          // курс удалили — его уроков в аналитике нет

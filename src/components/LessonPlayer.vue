@@ -185,7 +185,7 @@ async function recToggle() {
         const loud = (voiced ?? long) >= VOICE_MS
         if (k === 'speak' && !srBroken) {          // распознавание работает — засчитываем, только когда фраза совпала (18.11.2026)
           const ok = !!rec.heard && speechMatch(step.value.phrase, rec.heard).score >= SPEAK_OK
-          if (ok) { st.done = true; rec.err = ''; if (props.track) emit('answer', { step: step.value, ok: true }) } /* совпала — верный ответ: память «Речи» и темы (аналитика прогресса) */ else { rec.miss = !!rec.heard; rec.err = rec.heard ? '' : 'Не расслышали — скажите ещё раз' }
+          if (ok) { st.done = true; rec.err = ''; if (props.track) emit('answer', { step: step.value, ok: true, text: rec.heard }) } /* совпала — верный ответ: память «Речи» и темы (аналитика прогресса) */ else { rec.miss = !!rec.heard; rec.err = rec.heard ? '' : 'Не расслышали — скажите ещё раз' }
           return
         }
         if (rec.heard || loud) { st.done = true; rec.err = ''; if (k === 'answer' && rec.heard) st.text = rec.heard }          // сказанное — это и есть ответ
@@ -230,10 +230,18 @@ const words = computed(() => {
   return out
 })
 const say = (a) => { au?.pause(); au = new Audio(src(a, 'audio')); au.play().catch(() => {}) }
+// что ответил ученик — текстом, для журнала заходов (utils/runlog.js): выбранный вариант, собранная фраза, вписанное, сказанное
+function answerText(s) {
+  if (s.kind === 'choice' || s.kind === 'odd') return s.opts?.[st.picked]?.w ?? ''
+  if (s.kind === 'order') return st.built.map(x => pw.value[x]).join(s.by === 'letters' ? '' : ' ')
+  if (s.kind === 'gap') return st.typed
+  if (s.kind === 'kp' || s.kind === 'answer') return st.text
+  return ''
+}
 // экран решён (или показан, если без оценки) — ответ в Review: верно / нет, у «Пар» — какие пары перепутали
 watch(() => st.done, (d) => {
   const s = step.value; if (!d || !props.track || !s || !['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp'].includes(s.kind)) return
-  emit('answer', { step: s, ok: s.kind === 'kp' && st.ai?.error ? null : s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong] })          // ИИ не ответил — без оценки
+  emit('answer', { step: s, ok: s.kind === 'kp' && st.ai?.error ? null : s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong], text: answerText(s), score: st.ai?.score })          // ИИ не ответил — без оценки
 })
 // всё объявлено — теперь можно запускать (immediate вызывает setup сразу)
 watch([i, () => (props.single || props.embedded ? JSON.stringify(step.value) : props.steps)], setup, { immediate: true })     // в конструкторе — заново при каждой правке

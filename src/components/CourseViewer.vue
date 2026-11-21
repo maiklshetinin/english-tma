@@ -8,6 +8,7 @@ import { API, apiRequest, fb, isDemo } from '../firebase'
 import { theme } from '../composables/useTelegram'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
+import { makeRunLog, saveLocal } from '../utils/runlog'
 import ReviewChart from './ReviewChart.vue'
 import { topicById, detectTopic, wordsOnly, screenKey } from '../utils/skills'
 import WordNow from './WordNow.vue'
@@ -98,6 +99,7 @@ const done = computed(() => Math.min(mine.value.done, total.value))
 // ученик прошёл задание (урок — по «Готово» в итоге; кружок, фото, занятие — кнопкой) → на сервер, «Сейчас» переезжает дальше
 let t0 = 0
 async function finish(x, sc = {}) {
+  if (rlog && open.value === x) rlog.finish()          // журнал: заход закончен («Готово»)
   if (props.of || !x || x.virtual) return          // «Повторение» в прогресс курса не пишется
   const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0, ...(x.type !== 'checkpoint' && misses.size ? { miss: [...misses] } : {}) }
   if (self && !online) {                       // без сервера — те же правила, что на сервере (server/learn.ts), в этом браузере
@@ -162,7 +164,7 @@ function tap(x) {
   if (x.type === 'video' || x.type === 'photo') { inline.value = inline.value === x.id ? null : x.id; return }
   peek.value = peek.value === x.id ? null : x.id          // всё остальное — карточкой под заданием, без перехода на отдельную страницу
 }
-function go(x, at = 0) { startAt.value = at; peek.value = null; open.value = x; t0 = Date.now(); misses.clear(); for (const k in snap) delete snap[k]; for (const k in rvLog) delete rvLog[k] }
+function go(x, at = 0) { startLog(x); startAt.value = at; peek.value = null; open.value = x; t0 = Date.now(); misses.clear(); for (const k in snap) delete snap[k]; for (const k in rvLog) delete rvLog[k] }
 // «Повторить навыки» (как Review skills в Busuu, 18.11.2026) — у пройденного урока: короткая тренировка только по нему, до RV_MAX заданий:
 //  1) экраны урока, где ученик ошибался или которым по алгоритму пора (память экрана), — сначала забытые;
 //  2) слова и фразы урока — «Как это по-английски?» (utils/practice), сначала слабые.
@@ -214,7 +216,31 @@ function dragSplit(e) {
 const snap = reactive({})                      // ключ слова → стабильность памяти до урока, дни (null — новое, ещё без ответов)
 const rvLog = reactive({})                     // ключ слова → журнал: какой экран, как ответили, какая стала память
 const sOf = (k) => { const m = review.items[k] && memOf(review.items[k]); return m ? Math.round(m.s * 10) / 10 : null }
+// ── Журнал заходов (21.11.2026, utils/runlog.js → server/learn.ts): каждый заход в урок пишется по ходу — какие экраны, верно / нет,
+// сколько секунд, что ответил. Так видно и незаконченный урок (вкладка Review «Журнал»). «Повторение» и карточка ученика — не пишутся.
+let rlog = null
+function startLog(x) {
+  rlog?.close(); rlog = null
+  if (props.of || !x || x.virtual || !stepsOf(x).length) return
+  const cidNow = props.id, list = stepsOf(x)
+  const u = units.value.find(v => v.tasks.some(t => t.id === x.id))
+  rlog = makeRunLog({ itemId: x.id, n: list.length, send: (b) => {
+    if (!online) {                             // без сервера — в этом браузере, сразу в виде, как отдаёт GET /progress/log
+      const vals = Object.values(b.steps)
+      saveLocal({ ...b, course: cidNow, item: x.id, upd: Date.now(), ok: vals.filter(v => v.ok === true).length, all: vals.filter(v => v.ok === true || v.ok === false).length,
+        courseTitle: course.value?.title ?? '', title: x.title ?? '', type: x.type, unit: u ? `${u.title ?? ''} ${u.sub ?? ''}`.trim() : '',
+        steps: [...list.map(s => s.id), ...Object.keys(b.steps).filter(id => !list.some(s => s.id === id))].map(id => { const s = list.find(v => v.id === id) ?? { id, kind: '' }; return { id, kind: s.kind, w: stepWord(s) || '', ...(b.steps[id] ?? {}) } }) })
+      return
+    }
+    apiRequest(self ? `/courses/${cidNow}/run/log` : `/my/courses/${cidNow}/log`, { method: 'POST', body: JSON.stringify(b), keepalive: true }).catch(() => {})          // без сети — следующая пачка допишет
+  } })
+}
+watch(open, (x) => { if (!x && rlog) { rlog.close(); rlog = null } })
+const onHide = (e) => { if (e.type === 'pagehide' || document.visibilityState === 'hidden') rlog?.save() }
+onMounted(() => { document.addEventListener('visibilitychange', onHide); addEventListener('pagehide', onHide) })
+onUnmounted(() => { document.removeEventListener('visibilitychange', onHide); removeEventListener('pagehide', onHide); rlog?.close() })
 const onAnswer = (a) => {
+  rlog?.answer(a.step.id, { ok: a.ok ?? null, text: a.text, score: a.score })
   if (String(a.step.id).startsWith('pr-')) { recordStep(a.step, a, { lesson: open.value?.home?.title, course: course.value?.title, noTags: true }); return }          // «Как это по-английски?» — только слова
   if (a.ok === false) misses.add(a.step.id)
   const hits = hitsOf(a.step, a), was = {}
@@ -485,7 +511,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             </div>
           </div>
         </template>
-        <LessonPlayer v-if="steps.length" :key="open.id" :start="startAt" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @step="curStep = $event" @done="finish(open, $event)" @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :start="startAt" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @step="curStep = $event; rlog?.step($event?.id)" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>

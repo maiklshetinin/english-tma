@@ -13,6 +13,7 @@ import WordCurve from './WordCurve.vue'
 import ReviewChart from './ReviewChart.vue'
 import MemoryChart from './MemoryChart.vue'
 import SkillsPanel from './SkillsPanel.vue'
+import LessonLog from './LessonLog.vue'
 import { wordsOnly, tagsOnly } from '../utils/skills'
 import { nextTick } from 'vue'
 
@@ -66,8 +67,9 @@ async function reset() {
 
 <template>
   <div class="rv">
-    <div class="secs" role="tablist"><button v-for="[k, t] in [['words', 'Словарь'], ['skills', 'Аналитика прогресса']]" :key="k" role="tab" :aria-selected="sec === k" :class="{ on: sec === k }" @click="sec = k">{{ t }}</button><span class="se"><slot name="end" /></span></div>
+    <div class="secs" role="tablist"><button v-for="[k, t] in [['words', 'Словарь'], ['skills', 'Аналитика прогресса'], ['log', 'Журнал']]" :key="k" role="tab" :aria-selected="sec === k" :class="{ on: sec === k }" @click="sec = k">{{ t }}</button><span class="se"><slot name="end" /></span></div>
     <SkillsPanel v-if="sec === 'skills'" :items="tags" :cfg="cfgNow" :student-id="studentId" />
+    <LessonLog v-else-if="sec === 'log'" :student-id="studentId" />
     <template v-else>
     <div class="rcard flat">
       <!-- баночки как в Busuu: сразу видно, сколько слабых / средних / сильных; нажал — список только их -->
@@ -187,6 +189,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .det li { display: flex; gap: 8px; align-items: center; font-weight: 600 } .det li small { margin-left: auto; color: var(--hint) }
 .det li span { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 7px; color: #fff } .det .y { background: #58cc02 } .det .x { background: #ff4b4b } .det .n { background: #b5bac1 }
 @media (max-width: 520px) {
+  .secs { flex-wrap: wrap; column-gap: 16px } .secs button { font-size: 15px } .se { order: -1; flex-basis: 100%; text-align: right }          /* три вкладки — «Алгоритм» строкой над ними */
   .rcard { padding: 14px; gap: 12px } h2 { font-size: 21px }
   .lv3 { gap: 2px } .lvc { gap: 5px; padding: 2px } .jar { width: 14px; height: 34px; border-radius: 5px } .hdr .vt { margin-left: 0 } .lvc b { font-size: 19px } .lvc > span:last-child { font-size: 11.5px }
   .rbar .sp { flex-basis: 100%; height: 0 } .rbar .go, .rbar .ghost { flex: 1; padding: 9px 10px }
