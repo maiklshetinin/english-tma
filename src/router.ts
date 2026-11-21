@@ -77,5 +77,16 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(im
     // Пока вход не закончился, роль неизвестна: пропускаем, а App.vue перепроверит, когда она появится
     return auth.status === 'ready' ? (redirectFor(to, auth.role) ?? true) : true
   })
+  // 21.11.2026: после выкладки новой версии в открытом приложении (Telegram) старая страница просит куски кода, которых на сайте
+  // уже нет, — вкладки, что грузятся отдельно (Review, Инфо, Курсы-редактор), молча не открывались. Такая ошибка — перезагрузить
+  // страницу сразу на нужной вкладке (один раз на адрес, чтобы не крутиться, если сайт правда недоступен)
+  const CHUNK = /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|Unable to preload/i
+  router.onError((err, to) => {
+    if (!CHUNK.test(String((err as Error)?.message ?? err))) return
+    try { if (sessionStorage.getItem('tma.chunkReload') === to.fullPath) return; sessionStorage.setItem('tma.chunkReload', to.fullPath) } catch { /* приватный режим */ }
+    window.history.replaceState(window.history.state, '', router.resolve(to).href)          // адрес — уже нужной вкладки (#/review)
+    location.reload()
+  })
+  router.afterEach(() => { try { sessionStorage.removeItem('tma.chunkReload') } catch { /* приватный режим */ } })
   return router
 }

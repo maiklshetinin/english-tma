@@ -529,12 +529,12 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 </template>
 
 <style scoped>
-.cv { display: grid; gap: 10px; margin-bottom: 22px }
+.cv { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-bottom: 22px }
 .vh { width: 100%; max-width: 620px; margin: 0 auto; font-size: 15px } .vh small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .tabs { flex-wrap: wrap; justify-self: start }
 .none { text-align: center; margin: 0 }
 /* курс — как рельс в редакторе */
-.cr { display: grid; gap: 16px; width: 100%; max-width: 620px; margin: 6px auto 0 }
+.cr { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; width: 100%; max-width: 620px; margin: 6px auto 0 }          /* minmax(0) — длинное название модуля не раздвигает курс шире телефона (21.11.2026) */
 .ctl { margin: 0; font-size: 30px; font-weight: 900 }
 .tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px }
 .tbar > b { white-space: nowrap } .tpr { flex: 1; min-width: 80px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden } .tpr i { display: block; height: 100%; background: #1fbe78; transition: width .3s }
@@ -542,9 +542,9 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .trs svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .cpill { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 14px; font-size: 16px }
 .cpill svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round } .cpill span { color: var(--hint) }
-.un { display: grid; padding: 22px 24px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: var(--card) }
+.un { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; padding: 22px 24px 14px; border: 1.5px solid var(--border); border-radius: 22px; background: var(--card) }
 .un.all { border-color: #1fbe78; background: #f2fbf7 }
-.uh { display: flex; align-items: center; gap: 8px; white-space: nowrap }
+.uh { display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0 }
 .uh b { font-size: 24px; font-weight: 900; overflow: hidden; text-overflow: ellipsis }
 .uok { flex: none; width: 22px; height: 22px } .uok circle { fill: #1fbe78 } .uok path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
 .ubar { position: relative; width: 100%; height: 10px; margin: 16px 0 12px; border-radius: 6px; background: var(--border) } .ubar i { display: block; height: 100%; border-radius: 6px; background: #1fbe78 }
@@ -672,7 +672,8 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 @media (min-width: 1024px) { .full { z-index: 9; padding-left: 116px } .x { left: 134px } }
 @media (min-width: 1024px) { .rvt { left: 180px } }          /* 19.11.2026: «Графики» — сверху, справа от «назад» (было внизу слева) */
 .rvt svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
-@media (max-width: 600px) { .rvt span { display: none } .rvt { padding: 8px 9px } }          /* на телефоне — только значок, не налезает на полоску */
+@media (max-width: 600px) { .rvt span { display: none } .rvt { padding: 8px 9px } }
+@media (max-width: 600px) { .un { padding: 16px 14px 10px; border-radius: 18px } .uh b { font-size: 20px } }          /* телефон: модуль с меньшими полями */          /* на телефоне — только значок, не налезает на полоску */
 /* урок уже 1024 (перегородку увели влево) — как на телефоне: меню приложения нет, урок во всю свою ширину */
 .full.split.simm { padding-left: 0 } .full.split.simm .x { left: 18px } .full.split.simm .rvt { left: 64px }
 /* размер урока, пока тянем перегородку, — как в DevTools */

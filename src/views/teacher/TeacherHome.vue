@@ -64,6 +64,8 @@ const monthWeek = computed(() => Math.floor((Date.parse(monthEnd.value) - Date.p
 const AHEAD = 4
 const maxWeek = computed(() => Math.max(AHEAD, monthWeek.value))
 const dates = computed(() => week.value === 0 ? w1.value : week.value === 1 ? w2.value : (nowTick.value, weekDates(week.value)))
+// телефон: «16–22 Ноя» вместо «16 Ноя — 22 Ноя» — влезает в узкую плашку недели (21.11.2026)
+const shortRange = computed(() => { const [x, y] = weekRange(dates.value).split(' — '); return x.split(' ')[1] === y.split(' ')[1] ? `${x.split(' ')[0]}–${y}` : `${x} – ${y}` })
 const weekName = computed(() => { const w = week.value; return w === 0 ? 'Эта неделя' : w === 1 ? 'Следующая' : w === -1 ? 'Прошлая' : w > 1 ? `Через ${w} нед.` : `${-w} нед. назад` })
 watch(() => dates.value[0], () => { if (week.value < 0 || week.value > 1) scheduleStore.loadWeek(dates.value[0]).catch(() => {}) })
 // Недели после следующей подгружаем заранее: по ним считается «план на месяц» и видно, какие ячейки свободны для автоподстановки
@@ -374,7 +376,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
         <div class="wcol">
           <div ref="whEl" class="wh" :data-lv="whLv || null">
             <BackButton class="wk-back" to="Предыдущая неделя" @click="week--" />
-            <button class="wk-now" :class="{ on: week === 0, open: !!picker }" :aria-expanded="!!picker" title="Календарь: выбрать неделю, заработок за месяц" @click="togglePicker"><b>{{ weekName }}</b><small>{{ weekRange(dates) }}</small></button>
+            <button class="wk-now" :class="{ on: week === 0, open: !!picker }" :aria-expanded="!!picker" title="Календарь: выбрать неделю, заработок за месяц" @click="togglePicker"><b>{{ weekName }}</b><small class="wr-l">{{ weekRange(dates) }}</small><small class="wr-s">{{ shortRange }}</small></button>
             <MonthPicker v-if="picker" :selected="dates[0]" :this-week="w1[0]" :max-monday="shift(w1[0], 7 * maxWeek)" :today="today" @pick="pickWeek" @close="picker = false" />
             <button class="icon-btn wk-next" :disabled="week >= maxWeek" :title="week >= maxWeek ? 'Дальше пока не планируем' : 'Следующая неделя'" aria-label="Следующая неделя" @click="week++"><AppIcon name="back" :size="20" /></button>
             <WeekLoad class="wload" :lessons="scheduleStore.lessons" :dates="dates" :active-of="activeOf" />
@@ -411,6 +413,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 .wk-next { border-color: var(--border) } .wk-next :deep(svg) { transform: rotate(180deg) }
 .wk-now { flex: none; width: 116px; height: 40px; display: grid; align-content: center; justify-items: center; padding: 0 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.2; white-space: nowrap; cursor: pointer }
 .wk-now b { font-size: 13px; font-weight: 800 } .wk-now small { font-size: 11px; font-weight: 700; color: var(--hint) }
+.wk-now .wr-s { display: none }
 .wk-now.on { background: var(--blue-l); border-color: var(--blue-l) } .wk-now:hover, .wk-now.open { border-color: var(--blue) }      /* нажатие — календарь месяца */ .wk-now.on b, .wk-now.on small { color: var(--blue) }
 /* Деньги недели и месяца — WeekMoney, одинаковые плашки. Выключатель автоподстановки — в меню решётки (GridStyleButton) */
 .wcol { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0 }
@@ -449,13 +452,16 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
   .side { grid-area: side; padding: 4px 0 6px }
   .side :deep(.nm) { display: none }
   .wk-back { order: 1 } .wk-now { order: 2; flex: 1; width: auto; min-width: 0 } .wk-next { order: 3 }
-  /* 21.11.2026: шапка на телефоне в две строки вместо трёх, всё по 40–42px — до таблицы почти вдвое меньше места.
-     1-я строка: ‹ неделя › · «? 23» · «Как на этой неделе» · вид таблицы · стикеры; 2-я — спидометр и деньги недели и месяца */
-  .ask { order: 4; height: 40px; padding: 0 10px } .ask .askt { display: none }
-  .gall { order: 5 } .wh :deep(.gsb) { order: 6 } .trial-pad { order: 6 }          /* GridStyleButton — без одного корня, поэтому :deep */
-  .brk { display: block; order: 7; flex-basis: 100%; height: 0 } .brk.b2 { display: none }
-  .wload { order: 8 } .wload :deep(.g) { width: 44px; height: 42px; padding: 2px; border-radius: 12px } .wload :deep(.g svg) { width: 34px; height: 18px } .wload :deep(.v b) { font-size: 13px }
-  .wh .money { order: 9; flex: 1 1 0; min-width: 0; height: 42px; min-height: 0; box-sizing: border-box; align-content: center; padding: 2px 9px; border-radius: 12px }
+  /* 21.11.2026: шапка на телефоне — одна строка: ‹ неделя › · спидометр · «? 23» · «Как на этой неделе» · вид таблицы · стикеры (всё 36–40px,
+     плашка недели — сколько останется); деньги недели и месяца — второй строкой, только если есть */
+  .wh { gap: 6px 5px }
+  .wk-back, .wk-next { width: 32px; min-width: 32px; padding: 0 }
+  .wk-now { padding: 0 4px } .wk-now .wr-l { display: none } .wk-now .wr-s { display: block } .wk-now b { font-size: 12px } .wk-now small { font-size: 10px; overflow: hidden; text-overflow: ellipsis; max-width: 100% }
+  .wload { order: 4 } .wload :deep(.g) { width: 40px; height: 40px; padding: 2px; border-radius: 12px } .wload :deep(.g svg) { width: 30px; height: 16px } .wload :deep(.v b) { font-size: 12px } .wload :deep(.v) { font-size: 9px }
+  .ask { order: 5; height: 40px; padding: 0 8px; gap: 4px } .ask .askt { display: none }
+  .gall { order: 6 } .wh :deep(.gsb) { order: 7; width: 36px; min-width: 36px } .trial-pad { order: 8; width: 36px }          /* GridStyleButton — без одного корня, поэтому :deep */
+  .brk { display: block; order: 9; flex-basis: 100%; height: 0 } .brk.b2 { display: none }
+  .wh .money { order: 10; flex: 1 1 0; min-width: 0; height: 42px; min-height: 0; box-sizing: border-box; align-content: center; padding: 2px 9px; border-radius: 12px }
   .wh .money :deep(.top) { justify-self: start; gap: 4px } .wh .money :deep(b) { font-size: 14px } .wh .money :deep(small) { font-size: 10.5px }
   .wh .money :deep(.bar) { height: 3px; margin: 2px 0 } .wh .money :deep(.bot) { font-size: 10px }
 }
