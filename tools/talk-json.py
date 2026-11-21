@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PDF домашки Karta Polaka → JSON экрана «Разговор с персонажем» (Gemini Live): консул проводит собеседование по вопросам урока.
+"""PDF домашки Karta Polaka → JSON экранов «Разговор с персонажем» (Gemini Live): один вопрос — один экран, как у «Ответа по смыслу».
 
 Проще всего: положить PDF в tools/pdf/ и дважды щёлкнуть «Сделать разговор.bat» — JSON появятся в tools/json/разговор/.
 Из терминала:
@@ -8,9 +8,9 @@
     python tools/talk-json.py "ДЗ 8. Кухня.json"        # или из готового JSON «Ответа по смыслу» (tools/json/мост/…)
     python tools/talk-json.py "ДЗ 8.pdf" --no-avatar    # обычный «Разговор с Gemini», без персонажа
 
-Вопросы и эталоны достаёт tools/kp-json.py (тот же разбор PDF — один на оба скрипта). Получается один экран на урок:
-роль Gemini (prompt) — консул на Карту поляка, тема урока, вопросы по порядку (со звездой — обязательно) и ключевые факты
-эталонов, чтобы дополнять и поправлять. Роль — до 4000 знаков (столько хранит сервер): длинные эталоны сокращаются.
+Вопросы и эталоны достаёт tools/kp-json.py (тот же разбор PDF — один на оба скрипта). На каждый вопрос — свой экран (21.11.2026;
+раньше — один экран на весь урок): консул на Карту поляка задаёт ЭТОТ вопрос, сверяет ответ с его эталоном, допрашивает (2–3 вопроса),
+поправляет ошибки и в конце коротко оценивает. Роль Gemini — до 4000 знаков (столько хранит сервер): длинный эталон сокращается.
 Вставляют, как и JSON домашки: скопировать весь текст файла и Ctrl+V на холсте урока.
 """
 import argparse, json, os, re, subprocess, sys, tempfile
@@ -51,40 +51,45 @@ def short(t, n):
     return cut + '…'
 
 
+def role(q):
+    """Роль Gemini для одного вопроса: консул обсуждает только его, эталон — для сверки"""
+    head = ('Jesteś konsulem RP. Prowadzisz rozmowę kwalifikacyjną na Kartę Polaka. Mówisz tylko po polsku, spokojnie i życzliwie. '
+            f'W tej rozmowie omawiasz tylko jedno pytanie: «{q["question"].strip()}». '
+            'Na początku zadaj to pytanie (możesz je lekko przeformułować) i czekaj na odpowiedź. '
+            'Porównuj odpowiedź z wzorcową odpowiedzią poniżej: jeśli brakuje czegoś ważnego — dopytaj (najwyżej 2–3 pytania pomocnicze) albo krótko podpowiedz. '
+            'Jeśli rozmówca robi błąd językowy — delikatnie popraw jednym zdaniem. '
+            + ('To pytanie jest bardzo ważne — uczeń musi znać odpowiedź. ' if q.get('star') else '')
+            + 'Na koniec krótko oceń odpowiedź: co było dobrze, czego zabrakło — i powiedz, że można przejść do następnego pytania.')
+    ref = (q.get('reference') or '').strip()
+    if not ref: return head, 0
+    room = PROMPT_MAX - len(head) - len('\n\nWzorcowa odpowiedź:\n')
+    body = ref if len(ref) <= room else short(ref, room)
+    return head + '\n\nWzorcowa odpowiedź:\n' + body, (0 if body == ref else len(body))
+
+
 def build(d):
-    lesson = (d.get('lesson') or '').strip()
     qs = [q for q in d.get('questions', []) if (q.get('question') or '').strip()]
     if not qs: sys.exit('Не получилось: в домашке нет вопросов')
-    head = ('Jesteś konsulem RP. Prowadzisz rozmowę kwalifikacyjną na Kartę Polaka. '
-            + (f'Temat rozmowy — lekcja «{lesson}» (nazwa po rosyjsku). ' if lesson else '')
-            + 'Mówisz tylko po polsku, spokojnie i życzliwie. '
-            'Zadawaj po kolei pytania z listy poniżej, po jednym — możesz je lekko przeformułować. Czekaj na odpowiedź. '
-            'Porównuj odpowiedź z kluczowymi faktami: jeśli brakuje czegoś ważnego — dopytaj albo krótko podpowiedz. '
-            'Jeśli rozmówca robi błąd językowy — delikatnie popraw jednym zdaniem i idź dalej. '
-            'Pytania oznaczone * są najważniejsze — zadaj je na pewno. '
-            'Po ostatnim pytaniu podziękuj i krótko oceń rozmowę: co było dobrze, co poćwiczyć.\n\nPytania i kluczowe fakty:\n')
-    lines = lambda n: '\n'.join(f"{i + 1}.{'*' if q.get('star') else ''} {q['question'].strip()}"
-                                + (f" — {short(q.get('reference', ''), n)}" if n and q.get('reference') else '')
-                                for i, q in enumerate(qs))
-    n = 400                                    # эталон к вопросу — до n знаков; не влезает в 4000 — короче
-    while n > 0 and len(head + lines(n)) > PROMPT_MAX: n -= 20
-    prompt = head + lines(n)
-    if len(prompt) > PROMPT_MAX: sys.exit(f'Не получилось: даже без эталонов вопросы длиннее {PROMPT_MAX} знаков')
-    num = re.match(r'Урок\s*(\d+)\.?\s*(.*)', lesson)
-    text = ('Собеседование на Карту поляка' + (f' по уроку {num.group(1)} «{num.group(2)}»' if num and num.group(2) else f' — {lesson}' if lesson else '')
-            + ': консул задаёт вопросы урока — отвечайте по-польски')[:TEXT_MAX]
-    step = {'kind': 'talk', 'text': text, 'prompt': prompt}
-    if not ARGS.no_avatar: step['avatar'] = True
-    return {'steps': [step]}, len(qs), n, len(prompt)
+    steps, cut = [], []
+    for i, q in enumerate(qs):
+        prompt, c = role(q)
+        if len(prompt) > PROMPT_MAX: sys.exit(f'Не получилось: вопрос {i + 1} длиннее {PROMPT_MAX} знаков')
+        if c: cut.append(i + 1)
+        num = q.get('id') if isinstance(q.get('id'), int) else i + 1
+        text = (f"Вопрос {num}{' ★' if q.get('star') else ''}: {q['question'].strip()} — поговорите с консулом по-польски")[:TEXT_MAX]
+        step = {'kind': 'talk', 'text': text, 'prompt': prompt}
+        if not ARGS.no_avatar: step['avatar'] = True
+        steps.append(step)
+    return {'steps': steps}, len(qs), cut, max(len(s['prompt']) for s in steps)
 
 
 def one(src, out):
     if not os.path.exists(src): sys.exit(f'Нет файла: {src}')
-    res, nq, n, plen = build(kp_data(src))
+    res, nq, cut, plen = build(kp_data(src))
     json.dump(res, open(out, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
     print(f'Готово: {out}')
-    print(f'  вопросов: {nq} · роль Gemini: {plen} знаков' + ('' if n >= 400 else f' (эталоны сокращены до {n} знаков)' if n else ' (без эталонов — не влезли)')
-          + ('' if ARGS.no_avatar else ' · с персонажем'))
+    print(f'  экранов: {nq} (один вопрос — один экран) · самая длинная роль Gemini: {plen} знаков'
+          + (f' · эталон сокращён у вопросов: {", ".join(map(str, cut))}' if cut else '') + ('' if ARGS.no_avatar else ' · с персонажем'))
 
 
 if ARGS.src:
