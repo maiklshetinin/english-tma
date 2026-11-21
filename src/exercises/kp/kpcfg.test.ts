@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../firebase', () => ({ apiRequest: async () => ({ ok: false, json: async () => ({}) }) }))
 import { stepJson, applyStepJson, stepsFromJson, type Step } from '../../utils/lesson'
-import { SYSTEM, PASS, DEF, kpCfg, kpFields, fill } from './defaults'
+import { SYSTEM, PASS, DEF, CHAT, STT, kpCfg, kpFields, kpShown, fill } from './defaults'
 import { checkDirect, setPick } from '../../utils/kpcheck'
 import { ai } from '../../utils/gemini'
 
@@ -10,13 +10,29 @@ import { ai } from '../../utils/gemini'
 describe('«Ответ по смыслу»: настройки проверки в JSON экрана', () => {
   it('через мост: в JSON — промпт и порог по умолчанию', () => {
     const j: any = stepJson({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })
-    expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A', prompt: SYSTEM, pass: PASS })
+    expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A', prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL' })
+  })
+
+  it('мост: в JSON ровно то, что уходит в чат — prompt, message, format (с {id}); свой format без {id} не принимается', () => {
+    const s: Step = { id: 'm', kind: 'kp', text: 'Q', ideal: 'A' }
+    expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), message: 'Pytanie: {question}\nOdpowiedź: {answer}', format: 'Ответь JSON с id {id}' }))).toBe('')
+    expect(s).toMatchObject({ message: 'Pytanie: {question}\nOdpowiedź: {answer}', format: 'Ответь JSON с id {id}' })
+    expect(kpFields({ kind: 'kp', format: 'без метки' })).toEqual({})
+    expect(kpCfg({ format: 'без метки' }).format).toBe(CHAT.format)
+    expect(kpCfg({ engine: 'api' }).format).toBe(DEF.format)          // у Gemini API своё умолчание
+  })
+
+  it('«целым аудио»: в JSON — промпт и просьба расшифровки; у других форм их нет', () => {
+    expect(kpShown({ dic: 'file' })).toMatchObject({ sttPrompt: STT.sttPrompt, sttAsk: STT.sttAsk })
+    expect('sttPrompt' in kpShown({})).toBe(false)
+    expect(kpFields({ dic: 'file', sttAsk: 'Przepisz nagranie.', lang: 'en-US' })).toEqual({ sttAsk: 'Przepisz nagranie.', lang: 'en-US' })
   })
 
   it('· Gemini API: в JSON — все промпты, модель, температура, размышления', () => {
     const j: any = stepJson({ id: 'a', kind: 'kp', engine: 'api', text: 'Q', ideal: 'A' })
     expect(j).toMatchObject({ prompt: SYSTEM, pass: 60, model: 'auto', format: DEF.format, message: DEF.message, temperature: null, thinking: false,
-      livePrompt: DEF.livePrompt, liveAsk: 'Oceń moją odpowiedź.', liveMore: DEF.liveMore, discussPrompt: DEF.discussPrompt, discussOpener: 'Proszę omówić moją odpowiedź.' })
+      livePrompt: DEF.livePrompt, liveAsk: 'Oceń moją odpowiedź.', liveMore: DEF.liveMore, discussPrompt: DEF.discussPrompt, discussOpener: 'Proszę omówić moją odpowiedź.',
+      lang: 'pl-PL', liveTool: DEF.liveTool, liveModel: 'auto', voice: 'Kore', discussNone: 'nic ważnego' })
   })
 
   it('применили JSON целиком без правок — в экране ничего лишнего', () => {

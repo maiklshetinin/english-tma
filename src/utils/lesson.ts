@@ -45,7 +45,7 @@ export interface Step {
   ptt?: boolean                                                       // «Разговор · рация» (тест): нажал — говоришь, нажал — Gemini отвечает
   avatar?: boolean                                                    // «Разговор с персонажем» (тест): над разговором — анимированный персонаж, рот по голосу Gemini
   lock?: string; opener?: string; silenceMs?: number; endSens?: EndSens; temperature?: number; noiseSuppression?: boolean   // «Разговор с Gemini»: замок языка, первая реплика, пауза до «договорил», чувствительность конца речи, температура, шумодав (нет — умолчания, exercises/talk/defaults.ts)
-  format?: string; message?: string; thinking?: boolean; livePrompt?: string; liveAsk?: string; liveMore?: string; discussPrompt?: string; discussOpener?: string   // «Ответ по смыслу · Gemini API»: промпты и настройки моделей проверки (нет — умолчания, exercises/kp/defaults.ts)
+  format?: string; message?: string; thinking?: boolean; livePrompt?: string; liveAsk?: string; liveMore?: string; discussPrompt?: string; discussOpener?: string; liveTool?: string; liveModel?: string; discussNone?: string; sttPrompt?: string; sttAsk?: string   // (21.11.2026: + описание функции оценки, Live-модель, «ничего не упущено», промпт и просьба расшифровки «целым аудио») «Ответ по смыслу · Gemini API»: промпты и настройки моделей проверки (нет — умолчания, exercises/kp/defaults.ts)
   cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean; tw?: boolean; rows?: number; cs?: boolean; noEx?: boolean   // tw — «Заполни таблицу» (Настя, 18.11.2026): rows — строк, cs — с учётом регистра, noEx — без образцов; «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
 }
 

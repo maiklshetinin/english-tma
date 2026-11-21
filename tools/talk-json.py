@@ -7,8 +7,7 @@
     python tools/talk-json.py "ДЗ 8. Кухня.pdf"         # рядом появится «ДЗ 8. Кухня.разговор.json»
     python tools/talk-json.py "ДЗ 8. Кухня.json"        # или из готового JSON «Ответа по смыслу» (tools/json/мост/…)
     python tools/talk-json.py "ДЗ 8.pdf" --no-avatar    # обычный «Разговор с Gemini», без персонажа
-    python tools/talk-json.py --ptt                    # «Разговор · рация» (нажал — говоришь, нажал — ответ) → tools/json/рация/
-                                                       # то же — кнопка «Сделать рацию.bat»
+                                                       # «Разговор · рация» — свой скрипт: ptt-json.py («Сделать рацию.bat»)
 
 Вопросы и эталоны достаёт tools/kp-json.py (тот же разбор PDF — один на оба скрипта). На каждый вопрос — свой экран (21.11.2026;
 раньше — один экран на весь урок): консул на Карту поляка задаёт ЭТОТ вопрос, сверяет ответ с его эталоном, допрашивает (2–3 вопроса),
@@ -25,7 +24,6 @@ ap = argparse.ArgumentParser(description='PDF домашки Karta Polaka → JS
 ap.add_argument('src', nargs='?', help='PDF домашки или JSON «Ответа по смыслу» (без него — все PDF из tools/pdf/ → tools/json/разговор/)')
 ap.add_argument('-o', '--out', help='куда сохранить JSON (по умолчанию — рядом, «<имя>.разговор.json»)')
 ap.add_argument('--no-avatar', action='store_true', help='без персонажа — обычный «Разговор с Gemini»')
-ap.add_argument('--ptt', action='store_true', help='«Разговор · рация»: нажал — говоришь, нажал — ответ; язык закреплён (пакетом — в tools/json/рация/)')
 ap.add_argument('--lesson', help='название урока, если в PDF его нет текстом (передаётся в kp-json.py)')
 ARGS = ap.parse_args()
 
@@ -82,7 +80,6 @@ def build(d):
         text = (f"Вопрос {num}{' ★' if q.get('star') else ''}: {q['question'].strip()} — поговорите с консулом по-польски")[:TEXT_MAX]
         step = {'kind': 'talk', 'text': text, 'prompt': prompt}
         if not ARGS.no_avatar: step['avatar'] = True
-        if ARGS.ptt: step['ptt'] = True          # шаблон «Разговор · рация» (21.11.2026)
         steps.append(step)
     return {'steps': steps}, len(qs), cut, max(len(s['prompt']) for s in steps)
 
@@ -93,13 +90,13 @@ def one(src, out):
     json.dump(res, open(out, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
     print(f'Готово: {out}')
     print(f'  экранов: {nq} (один вопрос — один экран) · самая длинная роль Gemini: {plen} знаков'
-          + (f' · эталон сокращён у вопросов: {", ".join(map(str, cut))}' if cut else '') + ('' if ARGS.no_avatar else ' · с персонажем') + (' · рация' if ARGS.ptt else ''))
+          + (f' · эталон сокращён у вопросов: {", ".join(map(str, cut))}' if cut else '') + ('' if ARGS.no_avatar else ' · с персонажем'))
 
 
 if ARGS.src:
-    one(ARGS.src, ARGS.out or re.sub(r'\.(pdf|json)$', '', ARGS.src, flags=re.I) + ('.рация.json' if ARGS.ptt else '.разговор.json'))
-else:                                          # пакетный режим: tools/pdf/*.pdf → tools/json/разговор/ (с --ptt — tools/json/рация/)
-    IN, OUT = os.path.join(HERE, 'pdf'), os.path.join(HERE, 'json', 'рация' if ARGS.ptt else 'разговор')
+    one(ARGS.src, ARGS.out or re.sub(r'\.(pdf|json)$', '', ARGS.src, flags=re.I) + '.разговор.json')
+else:                                          # пакетный режим: tools/pdf/*.pdf → tools/json/разговор/
+    IN, OUT = os.path.join(HERE, 'pdf'), os.path.join(HERE, 'json', 'разговор')
     os.makedirs(IN, exist_ok=True); os.makedirs(OUT, exist_ok=True)
     pdfs = sorted(f for f in os.listdir(IN) if f.lower().endswith('.pdf'))
     if not pdfs: sys.exit(f'В папке {IN} нет PDF — положите туда домашки и запустите ещё раз')

@@ -11,7 +11,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
-import { usePlay, useEdit } from '../ctx'
+import { usePlay, useEdit, inEditor } from '../ctx'
 import { PASS, SYSTEM, bridgeStatus, aiIcon, kpPlain } from '../../utils/ai'
 import TtsDialog from '../../components/TtsDialog.vue'
 import { modelName } from '../../utils/tts'
@@ -80,7 +80,7 @@ async function dictate() {
   const key = firstKey(); dicErr.value = ''
   if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
   dic.value = 'connecting'
-  dicS = startTranscribe({ key, model: await sttModel(key), lang: 'pl-PL', on: {
+  dicS = startTranscribe({ key, model: await sttModel(key), lang: kpCfg(props.step).lang, on: {          // язык — из JSON экрана (lang)
     state: (s, info) => {
       if (s === 'live' && info) return
       dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s
@@ -121,7 +121,8 @@ async function sendNote() {
   const n = note.value; if (!n) return
   n.status = 'sending'; n.err = ''; dic.value = 'sending'
   try {
-    const r = await transcribeFile({ blob: n.blob, lang: 'pl-PL' })
+    const c = kpCfg(props.step)          // промпт и просьба расшифровки, язык — из JSON экрана (sttPrompt, sttAsk, lang)
+    const r = await transcribeFile({ blob: n.blob, lang: c.lang, prompt: c.sttPrompt, ask: c.sttAsk })
     n.model = checkName(r.model); n.ms = r.ms
     if (!r.text) { n.status = 'error'; n.err = 'Речи не слышно — запишите ещё раз, поближе к микрофону' } else { n.status = 'done'; typeIn(r.text) }
   } catch (e) { n.status = 'error'; n.err = e?.message || String(e) }
@@ -140,9 +141,12 @@ const dicShow = computed(() => { const t = dicDraft.value || (dic.value === 'liv
 // «· Gemini API» (20.11.2026, тест): проверка напрямую (utils/kpcheck.js), мост — запасной. Модель: в правке — у экрана,
 // в подвале перед проверкой — своя в этом браузере (главнее)
 const api = computed(() => props.step.engine === 'api' || props.step.engine === 'live')          // 'live' — убранный «Live (голос)»: идёт как Gemini API
-const cModels = ref([]), cPick = ref(getPick())
+// модель проверки — из JSON экрана (model); в редакторе курса пилюля пишет прямо в экран, у ученика — выбор только на это открытие
+const editor = inEditor()
+const cModels = ref([]), cPick = ref(editor ? '' : getPick())
 onMounted(async () => { if (api.value && ai.keys[0]) cModels.value = await checkModels(ai.keys[0].key) })
-function pickCheck(v) { cPick.value = v; setPick(v) }
+const cSel = computed(() => (editor ? props.step.model || '' : cPick.value || props.step.model || ''))
+function pickCheck(v) { if (editor) return setModelF(v); v = v === (props.step.model || '') ? '' : v; cPick.value = v; setPick(v) }
 const cAuto = computed(() => props.step.model || cModels.value[0] || '')
 function setModelF(v) { if (v) props.step.model = v; else delete props.step.model; ed.changed() }
 
@@ -162,14 +166,14 @@ async function discuss() {
   const key = firstKey(); tkErr.value = ''
   if (!key) { tkErr.value = 'Нужен ключ Gemini в профиле'; return }
   tk.value = 'connecting'; tkLines.value = []
-  let m = ''; try { m = localStorage.getItem('tma.live.pick') || '' } catch { /* */ }
+  const c = kpCfg(props.step)          // промпт разбора, первая реплика, Live-модель, голос, язык — из JSON экрана (exercises/kp/defaults.ts)
+  let m = c.liveModel !== 'auto' ? c.liveModel : ''
   if (!m) m = (await liveModels(key))[0] || ''
   if (!m) { tk.value = 'idle'; tkErr.value = 'Google не дал ключу Live-модели'; return }
-  let v = 'Kore'; try { v = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
+  const v = c.voice
   tkModel.value = m
-  const c = kpCfg(props.step)          // промпт разбора и первая реплика — из JSON экрана (exercises/kp/defaults.ts)
-  const sys = fill(c.discussPrompt, { question: props.step.text ?? '', reference: kpPlain(props.step.ideal ?? ''), answer: p.st.text ?? '', score: r.value?.score ?? '?', missed: (r.value?.missed ?? []).join('; ') || 'nic ważnego' })
-  tkS = startTalk({ key, model: m, voice: v, lang: 'pl-PL', system: sys, opener: c.discussOpener, on: {
+  const sys = fill(c.discussPrompt, { question: props.step.text ?? '', reference: kpPlain(props.step.ideal ?? ''), answer: p.st.text ?? '', score: r.value?.score ?? '?', missed: (r.value?.missed ?? []).join('; ') || c.discussNone })
+  tkS = startTalk({ key, model: m, voice: v, lang: c.lang, system: sys, opener: c.discussOpener, on: {
     state: (s2, info) => { if (s2 === 'live' && info) return; tk.value = s2 === 'error' || s2 === 'ended' ? 'idle' : s2; if (s2 === 'error') tkErr.value = info; if (s2 === 'ended' || s2 === 'error') { tkS = null; tkLvl.value = 0 } },
     text: tkPush, turn: () => { const l = tkLines.value.at(-1); if (l) l.closed = true }, level: (x) => { tkLvl.value = tkLvl.value * 0.6 + x * 0.4 },
   } })
@@ -331,7 +335,7 @@ function jsApply() {
   </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && api">
     <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
-      <select class="kms" :value="cPick" title="Модель проверки — запоминается в этом браузере" @change="pickCheck($event.target.value)"><option value="">{{ cAuto ? nameOf(cAuto) + (step.model ? ' (из урока)' : ' · авто') : 'авто' }}</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
+      <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
   </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && bridge">

@@ -2397,7 +2397,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
    уезжали во второй ряд, хотя в окне места хватало; теперь второй ряд — только если правда не влезло (21.11.2026) */
 .tray.inter.kpw { left: 16px; right: 16px; margin: 0 auto; transform: none; width: max-content; max-width: calc(100% - 32px); animation-name: trayc }
 @keyframes trayc { from { opacity: 0; transform: translateY(6px) } }
-/* группа — шириной с плашку, описание группы не повторяем (оно и так под плашкой): все в один ряд, плашки на одной линии */
-.xrow.wrap .xg { width: min-content } .xrow.wrap .xgh small { display: none } .xrow.wrap .xgh b { white-space: normal; line-height: 1.2 } .xrow.wrap .xgh { min-height: 50px; align-content: start }
+/* группа — шириной с плашку: заголовок и описание в одну строку с «…» (полное название — под плашкой) и в ширине группы не участвуют —
+   все в один ряд, и меню той же высоты, что у других вкладок (21.11.2026) */
+.xrow.wrap .xgh { width: 0; min-width: 100%; box-sizing: border-box } .xrow.wrap .xgh b, .xrow.wrap .xgh small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .xg.bk { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }
 </style>

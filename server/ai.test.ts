@@ -7,6 +7,10 @@ const status = async (p: Promise<unknown>) => { try { await p; return 0 } catch 
 const t = chatText('k1a2b3', { question: 'Kiedy Mikołajki?', reference: '6 grudnia', answer: 'Szóstego grudnia' })
 ok(t.includes('Kiedy Mikołajki?') && t.includes('6 grudnia') && t.includes('Szóstego grudnia') && t.includes('k1a2b3') && t.startsWith('Ты проверяешь'), 'вопрос, эталон, ответ и метка — в тексте; промпт по умолчанию')
 ok(chatText('x', { prompt: 'Свой промпт', reference: 'r', answer: 'a' }).startsWith('Свой промпт'), 'свой промпт экрана')
+// 21.11.2026: экран прислал message и format (JSON экрана) — в чат ровно prompt + message + format, без наших строк
+{ const t2 = chatText('k9', { prompt: 'P', question: 'Q', reference: 'R', answer: 'A', message: 'Pytanie: {question} / {reference} / {answer}', format: 'JSON, id={id}' })
+  ok(t2 === 'P\n\nPytanie: Q / R / A\n\nJSON, id=k9', 'message и format экрана — ровно они')
+  ok(chatText('k9', { prompt: 'P', reference: 'R', answer: 'A', message: 'M', format: 'без метки' }).includes('Ответь ТОЛЬКО одним JSON'), 'format без {id} — как раньше (иначе ответ не найти)') }
 
 const r = parseReply('k1', 'Вот оценка:\n```json\n{"id": "k1", "score": 72.4, "missed_points": ["про подарки", ""], "feedback": "Хорошо {в целом}"}\n```\nCopy code')
 ok(r?.score === 72 && r.missed.length === 1 && r.feedback === 'Хорошо {в целом}', 'JSON в обёртке ```json, скобки внутри строки не мешают')

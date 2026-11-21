@@ -22,7 +22,7 @@
     },
     "prompt": {
       "type": "text",
-      "label": "Как оценивать — промпт проверки (мост, Gemini API, Live); пусто — общий (SYSTEM)"
+      "label": "Промпт проверки: мост — в чат, Gemini API — systemInstruction; пусто — общий (SYSTEM)"
     },
     "pass": {
       "type": "number",
@@ -31,6 +31,16 @@
       "max": 100,
       "label": "Порог зачёта, %"
     },
+    "lang": {
+      "type": "select",
+      "options": [
+        "pl-PL",
+        "en-US",
+        "en-GB"
+      ],
+      "default": "pl-PL",
+      "label": "Язык ответа: диктовка, проверка голосом, разбор"
+    },
     "model": {
       "type": "text",
       "default": "auto",
@@ -38,11 +48,11 @@
     },
     "format": {
       "type": "text",
-      "label": "· Gemini API: требование к ответу модели (JSON) — дописывается к промпту"
+      "label": "Как ответить: мост — в конце сообщения в чат, обязательно {id}; Gemini API — дописывается к промпту. У каждой формы своё умолчание"
     },
     "message": {
       "type": "text",
-      "label": "· Gemini API: сообщение модели — шаблон с {question} {reference} {answer}"
+      "label": "Сообщение с вопросом: шаблон с {question} {reference} {answer}. У моста и у Gemini API — свои умолчания"
     },
     "temperature": {
       "type": "number",
@@ -68,6 +78,20 @@
       "type": "text",
       "label": "· проверка голосом: «Подробнее — разбор голосом»"
     },
+    "liveTool": {
+      "type": "text",
+      "label": "· проверка голосом: описание функции оценки submit_grade (его читает модель)"
+    },
+    "liveModel": {
+      "type": "text",
+      "default": "auto",
+      "label": "· проверка голосом и разбор: Live-модель (auto — самая свежая)"
+    },
+    "voice": {
+      "type": "text",
+      "default": "Kore",
+      "label": "· проверка голосом и разбор: голос Gemini"
+    },
     "discussPrompt": {
       "type": "text",
       "label": "· «Обсудить ответ голосом»: роль — шаблон с {question} {reference} {answer} {score} {missed}"
@@ -76,12 +100,24 @@
       "type": "text",
       "label": "· «Обсудить ответ голосом»: первая реплика"
     },
+    "discussNone": {
+      "type": "text",
+      "label": "· «Обсудить ответ голосом»: {missed}, когда ничего не упущено"
+    },
     "dic": {
       "type": "select",
       "options": [
         "file"
       ],
       "label": "Диктовка целой записью (шаблон «· целым аудио», тест): после «Стоп» вся запись — в Gemini одним файлом"
+    },
+    "sttPrompt": {
+      "type": "text",
+      "label": "· целым аудио (dic: file): промпт расшифровки, {lang} — язык словами"
+    },
+    "sttAsk": {
+      "type": "text",
+      "label": "· целым аудио: просьба к модели рядом с записью"
     }
   },
   "check": "button",

@@ -6,6 +6,7 @@ import { WORKLET } from './live'
 import { wavOf, LANG_NAME } from './speech'
 import { ai, mark, retryMs, errText, mask } from './gemini'
 import { checkModels } from './kpcheck'
+import { STT, fill } from '../exercises/kp/defaults'
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models'
 export const FILE_MAX_SEC = 180          // дольше — запись останавливается сама
@@ -48,17 +49,13 @@ export async function recordMic({ on = {}, max = FILE_MAX_SEC } = {}) {
   }
 }
 
-const prompt = (lang) => `Ты — стенографист. Запиши дословно, что говорит человек на записи (${LANG_NAME[lang] || 'польский'} язык). `
-  + 'Не исправляй ошибки в грамматике и словах, ничего не добавляй и не пересказывай, без комментариев и кавычек; знаки препинания — обычные. '
-  + 'Ответь только текстом расшифровки. Речи не слышно — ответь пустой строкой.'
-
-/** Запись целиком → текст. → { text, model, key, ms } */
-export async function transcribeFile({ blob, lang = 'pl-PL', fetcher = fetch }) {
+/** Запись целиком → текст. → { text, model, key, ms }. prompt и ask — из JSON экрана (sttPrompt, sttAsk; 21.11.2026), {lang} — язык словами */
+export async function transcribeFile({ blob, lang = 'pl-PL', prompt = STT.sttPrompt, ask = STT.sttAsk, fetcher = fetch }) {
   if (!ai.keys.length) throw new Error('Нужен ключ Gemini в профиле')
   const t0 = Date.now(), m = (await checkModels(ai.keys[0].key, fetcher))[0] || 'gemini-3.5-flash-lite'
   const data = await b64(blob)
-  const body = (thinking) => JSON.stringify({ systemInstruction: { parts: [{ text: prompt(lang) }] },
-    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data } }, { text: 'Расшифруй запись.' }] }],
+  const body = (thinking) => JSON.stringify({ systemInstruction: { parts: [{ text: fill(prompt, { lang: LANG_NAME[lang] || 'польский' }) }] },
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data } }, { text: ask }] }],
     generationConfig: { temperature: 0, ...(thinking ? { thinkingConfig: think(m) } : {}) } })
   let last = null
   for (const x of ai.keys) {

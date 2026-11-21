@@ -13,9 +13,12 @@ const rd = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null'
 const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* приватный режим */ } }
 const ver = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) ?? [])[1] ?? '0')
 
-/** Свой выбор модели проверки в этом браузере ('' — из экрана или самая свежая) */
-export const getPick = () => rd(PK, '')
-export const setPick = (m) => wr(PK, m || '')
+/** Выбор модели проверки учеником — только на это открытие ('' — из JSON экрана). 21.11.2026: в браузере больше не запоминается —
+ *  урок (model в JSON) главнее; старый запомненный выбор стёрт */
+let pick = ''
+try { localStorage.removeItem(PK) } catch { /* приватный режим */ }
+export const getPick = () => pick
+export const setPick = (m) => { pick = m || '' }
 /** «gemini-3.5-flash-lite» → «Gemini 3.5 Flash Lite» */
 export const checkName = (m) => String(m || '').replace(/^gemini-/, 'Gemini ').replace(/-/g, ' ').replace(/\b(flash|lite|pro|preview|latest)\b/g, (x) => x[0].toUpperCase() + x.slice(1))
 /** Лимит модели у бесплатного проекта — подпись в списке (из AI Studio → Rate limit, 20.11.2026) */
@@ -68,7 +71,7 @@ export async function checkDirect(q, { model = '', fetcher = fetch } = {}) {
   if (!ai.keys.length) { const e = new Error('нет ключей Gemini'); e.nokeys = true; throw e }
   const own = (v) => (v && v !== 'live' ? v : '')          // 'live' — проверка голосовой моделью (utils/kplive.js), тут — запасная текстовая
   const m = own(getPick()) || own(model) || (await checkModels(ai.keys[0].key, fetcher))[0] || CHECK_DEFAULT          // свой выбор в браузере (подвал экрана) — главнее экрана
-  const prompt = (q.prompt?.trim() || c.prompt) + ' ' + c.format.trim()
+  const prompt = c.prompt.trim() + ' ' + c.format.trim()          // ровно то, что в JSON экрана: prompt и format
   const user = fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer })
   const thinkOff = !c.thinking, temp = c.temperature
   const now = Date.now(), keys = ai.keys.filter((x) => !(quota(x.key, m) > now))

@@ -11,10 +11,10 @@ import { kpCfg, fill } from '../exercises/kp/defaults'
 export const kpLive = reactive({})
 const QK = 'tma.kp.quiet'
 const getQuiet = () => { try { return localStorage.getItem(QK) === '1' } catch { return false } }
-const TOOL = [{ name: 'submit_grade', description: 'Выставить оценку ответа ученика (обязательно, до любых слов)',
-  parameters: { type: 'OBJECT', properties: { score: { type: 'INTEGER', description: '0–100: полнота передачи смысла эталона' },
-    missed_points: { type: 'ARRAY', items: { type: 'STRING' }, description: 'важные факты эталона, которых нет в ответе, коротко по-русски' },
-    feedback: { type: 'STRING', description: 'одно короткое предложение по-русски' } }, required: ['score', 'missed_points', 'feedback'] } }]
+// функция оценки: описание (что модель читает) — из JSON экрана (liveTool, 21.11.2026); здесь только устройство: имена и типы полей
+const tool = (description) => [{ name: 'submit_grade', description,
+  parameters: { type: 'OBJECT', properties: { score: { type: 'INTEGER' }, missed_points: { type: 'ARRAY', items: { type: 'STRING' } }, feedback: { type: 'STRING' } },
+    required: ['score', 'missed_points', 'feedback'] } }]
 
 /** → Promise<{ score, missed, feedback, ok, site: 'Gemini', live: true, model, ms }>; разговор остаётся в kpLive[id] */
 export async function checkLive(q, id) {
@@ -22,18 +22,18 @@ export async function checkLive(q, id) {
   const key = firstKey(); if (!key) throw new Error('нет ключей Gemini')
   const c = q.cfg ?? kpCfg({ prompt: q.prompt, pass: q.pass })          // настройки экрана: livePrompt, message, liveAsk, liveMore
   const t0 = Date.now(), need = Number.isFinite(q.pass) ? q.pass : c.pass
-  let model = ''; try { model = localStorage.getItem('tma.live.pick') || '' } catch { /* */ }
+  let model = c.liveModel !== 'auto' ? c.liveModel : ''          // Live-модель и голос — из JSON экрана (liveModel, voice)
   if (!model) model = (await liveModels(key))[0] || ''
   if (!model) throw new Error('у ключа нет Live-моделей')
-  let voice = 'Kore'; try { voice = localStorage.getItem('tma.live.voice') || 'Kore' } catch { /* */ }
+  const voice = c.voice
   const S = reactive({ lines: [], state: 'connecting', quiet: getQuiet(), listening: false, model, name: liveName(model), err: '' })
   const push = (role, chunk) => { const l = S.lines.at(-1); if (l && l.role === role && !l.closed) l.t += chunk; else S.lines.push({ role, t: chunk.replace(/^\s+/, ''), closed: false }) }
-  const system = (q.prompt?.trim() || c.prompt) + '\n\n' + c.livePrompt.trim()
+  const system = c.prompt.trim() + '\n\n' + c.livePrompt.trim()
   const data = fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer }) + '\n\n' + c.liveAsk.trim()
   return new Promise((ok, no) => {
     let got = false
     const tm = setTimeout(() => { if (!got) { got = true; sess.stop(); no(new Error('Live не прислала оценку за 15 с')) } }, 15_000)
-    const sess = startTalk({ key, model, voice, lang: 'pl-PL', system, opener: data, tools: TOOL, micLater: true, quiet: S.quiet, on: {
+    const sess = startTalk({ key, model, voice, lang: c.lang, system, opener: data, tools: tool(c.liveTool), micLater: true, quiet: S.quiet, on: {
       state: (s, info) => { if (s === 'live' && info) return; S.state = s; if (s === 'error') { S.err = info; if (!got) { got = true; clearTimeout(tm); no(new Error(info || 'ошибка Live')) } } },
       text: push, turn: () => { const l = S.lines.at(-1); if (l) l.closed = true },
       tool: (name, a) => {

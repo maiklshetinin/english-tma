@@ -13,8 +13,17 @@ export const SYSTEM = 'Ты проверяешь устный ответ уче�
 
 const cut = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n)
 
-/** Текст, который скрипт вставит в чат. id — метка задания: по ней скрипт находит именно этот ответ среди прошлых */
-export function chatText(id: string, q: { question?: unknown; reference?: unknown; answer?: unknown; prompt?: unknown }) {
+type Q = { question?: unknown; reference?: unknown; answer?: unknown; prompt?: unknown; message?: unknown; format?: unknown }
+const fillT = (t: string, v: Record<string, string>) => t.replace(/\{(question|reference|answer|id)\}/g, (_, k) => v[k] ?? '')
+/** Текст, который скрипт вставит в чат. id — метка задания: по ней скрипт находит именно этот ответ среди прошлых.
+ *  21.11.2026: экран прислал message и format (JSON экрана, src/exercises/kp/defaults.ts → CHAT) — в чат уходит ровно prompt + message + format,
+ *  без наших строк сверху; в format обязательно {id}. Не прислал (старое приложение) — как раньше */
+export function chatText(id: string, q: Q) {
+  const message = cut(q.message, 4000), format = cut(q.format, 2000)
+  if (message && format.includes('{id}')) {
+    const v = { question: cut(q.question, 300), reference: cut(q.reference, 3000), answer: cut(q.answer, 3000), id }
+    return [cut(q.prompt, 4000) || SYSTEM, fillT(message, v), fillT(format, v)].join('\n\n')
+  }
   return [
     cut(q.prompt, 4000) || SYSTEM,
     'Это отдельная проверка: прошлые сообщения этого чата не учитывай.',
@@ -73,7 +82,7 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
 
   return {
     /** Проверка: задание в очередь, ждём ответ чата. Моста нет — сразу 503 */
-    async check(q: { question?: unknown; reference?: unknown; answer?: unknown; prompt?: unknown }) {
+    async check(q: Q) {
       if (!cut(q.answer, 1) || !cut(q.reference, 1)) throw fail(400, 'нет ответа или эталона')
       if (now() - st.seenAt > SEEN) throw fail(503, 'Мост с чатом не в сети — откройте вкладку с чатом и скриптом')
       if (queue.length >= 20) throw fail(503, 'Очередь проверок переполнена — попробуйте через минуту')

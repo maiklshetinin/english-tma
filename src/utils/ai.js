@@ -4,7 +4,7 @@
 import { apiRequest } from '../firebase'
 
 // порог и промпт по умолчанию — в exercises/kp/defaults.ts (там же все настройки моделей проверки, 20.11.2026)
-import { PASS, SYSTEM } from '../exercises/kp/defaults'
+import { PASS, SYSTEM, kpCfg } from '../exercises/kp/defaults'
 export { PASS, SYSTEM }
 
 /** Проверка: { score 0–100, missed: [], feedback, ok: score ≥ порога }. prompt, pass — свои у экрана (нет — по умолчанию).
@@ -29,7 +29,9 @@ export const aiIcon = (site) => (AI_ICON[site] ? import.meta.env.BASE_URL + 'ai/
 
 export async function checkAnswer(q, request = apiRequest) {
   const need = Number.isFinite(q.pass) ? q.pass : PASS, t0 = Date.now()          // ms — сколько ждал ученик (показывается у «проверил …»)
-  const r = await request('/ai/check', { method: 'POST', body: JSON.stringify({ question: q.question, reference: kpPlain(q.reference), answer: q.answer, prompt: q.prompt?.trim() || undefined }) })
+  // 21.11.2026: в чат уходит ровно prompt + message + format из JSON экрана (у «Gemini API» как запасного — его prompt и умолчания моста)
+  const c = q.chat ?? kpCfg({ prompt: q.prompt })
+  const r = await request('/ai/check', { method: 'POST', body: JSON.stringify({ question: q.question, reference: kpPlain(q.reference), answer: q.answer, prompt: c.prompt, message: c.message, format: c.format }) })
   let body = null
   try { body = await r.json() } catch { /* не JSON */ }
   if (!r.ok) throw new Error(body?.error || 'Ошибка сервера ' + r.status)
