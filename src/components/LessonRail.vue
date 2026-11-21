@@ -289,6 +289,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <small v-if="jsonErr[s.id]" class="jer">{{ jsonErr[s.id] }}</small>
         <div v-if="howOn[s.id] && hasHow(s)" class="jhow" :class="{ full: jsonEdit[s.id] == null }" @wheel="ownWheel">          <!-- просмотр — вместо JSON во всю высоту; правка — под полем -->
           <p v-for="w in howOf(s).warn" :key="w" class="jhw">⚠ {{ w }}</p>
+          <p class="jho">{{ howOf(s).own.length ? 'Своё у экрана: ' + howOf(s).own.join(', ') + '. ' : 'У экрана своё — только вопрос и эталон. ' }}Остальное — общее упражнения в курсе («{ }» на плитке в меню Exercise).</p>
           <section v-for="pt in howOf(s).parts" :key="pt.to"><b>{{ pt.to }}</b><pre>{{ pt.text || '‹пусто›' }}</pre></section>
         </div>
         <pre v-if="jsonEdit[s.id] == null && !howOn[s.id]" v-html="jsonHtml(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
@@ -450,6 +451,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .jhow.full { flex: 1; max-height: none; border-top: 0; padding: 0 }
 .jhow section { display: grid; gap: 3px } .jhow b { font-size: 11.5px; font-weight: 900; opacity: .75 }
 .jv .jhow pre { flex: none; max-height: none; border: 0; margin: 0; padding: 6px 8px; border-radius: 8px; background: rgba(127, 127, 127, .12); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace }
+.jho { margin: 0; font-size: 11.5px; font-weight: 700; opacity: .75 }
 .jhw { margin: 0; padding: 5px 8px; border-radius: 8px; background: #fff4dc; color: #b45309; font-weight: 800 }
 .jc.on { background: #1cb0f6; color: #fff }
 .ib.js { font: 900 13px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -1px }      /* «{ }» — JSON экрана */

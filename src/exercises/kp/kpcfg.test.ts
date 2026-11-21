@@ -8,9 +8,10 @@ import { ai } from '../../utils/gemini'
 
 // «Ответ по смыслу»: JSON экрана показывает всё, что уходит в модели проверки, в экране — только отличия (20.11.2026)
 describe('«Ответ по смыслу»: настройки проверки в JSON экрана', () => {
-  it('через мост: в JSON — промпт и порог по умолчанию', () => {
+  it('через мост: в JSON экрана — только своё; общее (промпт, message, format, порог) — kpShown, на плитке меню', () => {
     const j: any = stepJson({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })
-    expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A', prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL' })
+    expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A' })
+    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL' })
   })
 
   it('мост: в JSON ровно то, что уходит в чат — prompt, message, format (с {id}); свой format без {id} не принимается', () => {
@@ -22,28 +23,31 @@ describe('«Ответ по смыслу»: настройки проверки 
     expect(kpCfg({ engine: 'api' }).format).toBe(DEF.format)          // у Gemini API своё умолчание
   })
 
-  it('все 3 формы: стёрли текст или удалили строку в JSON — после «Применить» пусто, умолчание не возвращается', () => {
+  it('все 3 формы: "" в JSON — пусто, без подстановки, и так и остаётся; удалили поле — снова общее', () => {
     for (const form of [{}, { engine: 'api' }, { dic: 'file' }]) {
       const s: any = { id: 'x', kind: 'kp', text: 'Q', ideal: 'A', ...form }
-      const j: any = stepJson(s); j.prompt = ''; delete j.message
-      if (form.engine) { j.livePrompt = ''; delete j.discussOpener; j.format = '' }
-      if (form.dic) { j.sttAsk = '' }
+      const j: any = { ...stepJson(s), prompt: '', message: '' }
+      if (form.engine) Object.assign(j, { livePrompt: '', format: '' })
+      if (form.dic) j.sttAsk = ''
       expect(applyStepJson(s, JSON.stringify(j))).toBe('')
       const c = kpCfg(s), again: any = stepJson(s)
       expect([c.prompt, c.message, again.prompt, again.message]).toEqual(['', '', '', ''])
-      if (form.engine) expect([c.livePrompt, c.discussOpener, c.format]).toEqual(['', '', ''])
+      if (form.engine) expect([c.livePrompt, c.format]).toEqual(['', ''])
       if (form.dic) expect(c.sttAsk).toBe('')
-      expect(applyStepJson(s, JSON.stringify(again))).toBe('')          // открыли и применили ещё раз — так и осталось пусто
+      expect(applyStepJson(s, JSON.stringify(again))).toBe('')
       expect(kpCfg(s).prompt).toBe('')
+      const { prompt: _p, ...back } = again
+      expect(applyStepJson(s, JSON.stringify(back))).toBe('')
+      expect(kpCfg(s).prompt).toBe(SYSTEM)
     }
   })
 
-  it('мост: format без {id} или пустой — «Применить» не проходит и объясняет', () => {
+  it('мост: format без {id} — «Применить» не проходит и объясняет; без поля format — общий', () => {
     const s: any = { id: 'y', kind: 'kp', text: 'Q', ideal: 'A' }
-    const j: any = stepJson(s); j.format = 'просто JSON'
-    expect(applyStepJson(s, JSON.stringify(j))).toMatch(/\{id\}/)
-    delete j.format
-    expect(applyStepJson(s, JSON.stringify(j))).toMatch(/\{id\}/)
+    expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), format: 'просто JSON' }))).toMatch(/\{id\}/)
+    expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), format: '' }))).toMatch(/\{id\}/)
+    expect(applyStepJson(s, JSON.stringify(stepJson(s)))).toBe('')
+    expect(kpCfg(s).format).toBe(CHAT.format)
   })
 
   it('«целым аудио»: в JSON — промпт и просьба расшифровки; у других форм их нет', () => {
@@ -53,7 +57,7 @@ describe('«Ответ по смыслу»: настройки проверки 
   })
 
   it('· Gemini API: в JSON — все промпты, модель, температура, размышления', () => {
-    const j: any = stepJson({ id: 'a', kind: 'kp', engine: 'api', text: 'Q', ideal: 'A' })
+    const j: any = kpShown({ engine: 'api' })
     expect(j).toMatchObject({ prompt: SYSTEM, pass: 60, model: 'auto', format: DEF.format, message: DEF.message, temperature: null, thinking: false,
       livePrompt: DEF.livePrompt, liveAsk: 'Oceń moją odpowiedź.', liveMore: DEF.liveMore, discussPrompt: DEF.discussPrompt, discussOpener: 'Proszę omówić moją odpowiedź.',
       lang: 'pl-PL', liveTool: DEF.liveTool, liveModel: 'auto', voice: 'Kore', discussNone: 'nic ważnego' })

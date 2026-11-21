@@ -145,3 +145,6 @@ export const langRu = (l: string) => LANG_RU[l as KpLang] ?? 'польский'
 
 /** Подставить {question}, {reference}, {answer}, {score}, {missed} в шаблон */
 export const fill = (t: string, v: Record<string, unknown>) => t.replace(/\{(question|reference|answer|score|missed|id|lang)\}/g, (m, k) => (k in v ? String(v[k] ?? '') : m))
+
+/** умолчания кода для формы (без настроек курса) — от них считаются отличия настроек упражнения курса (presetJson.ts) */
+export const kpDefaults = (form: any): KpCfg => kpCode(form)

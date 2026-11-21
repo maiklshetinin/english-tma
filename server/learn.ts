@@ -158,7 +158,7 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
     /** Ученик: курс целиком (без черновиков с доски) + свой прогресс по нему */
     async myCourse(user: TokenUser, rawId: unknown) {
       const sid = await me(user), c = await mineCourse(sid, rawId)
-      return { id: c.id, title: c.title, items: c.items, run: run((await runsOf(sid))[c.id]) }
+      return { id: c.id, title: c.title, items: c.items, presets: c.presets ?? {}, run: run((await runsOf(sid))[c.id]) }          // presets — общие настройки упражнений курса (промпты)
     },
 
     /** Преподаватель: своё прохождение курса (для проверки чекпоинтов) */

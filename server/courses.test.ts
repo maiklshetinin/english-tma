@@ -123,6 +123,12 @@ ok('экран: своё задание, название и описание п
 ok('свои упражнения курса: сохраняются, пустое название — «Моё упражнение»', c9.templates.length === 2 && c9.templates[0].step.kind === 'order' && c9.templates[1].t === 'Моё упражнение')
 ok('свои упражнения — отдаются вместе с курсом', (await C.get('k19')).templates?.length === 2)
 ok('кривое упражнение — 400', await code(C.put(me, 'k19', { ...course, templates: [{ id: 'my1', step: { id: 'x', kind: 'nope' } }] })) === 400)
+// настройки упражнений курса («{ }» на плитке меню, 21.11.2026)
+await C.put(me, 'k20', { ...course, presets: { kpapi: { prompt: 'Общий промпт', format: '', livePrompt: '', text: 'не берём', ideal: 'тоже', model: 'live', pass: 70 }, talkptt: { guard: '', lock: 'L', voice: 'Puck' }, nope: { prompt: 'x' } } })
+{ const p = (await C.get('k20')).presets as any
+  ok('настройки упражнений курса: промпты (и пустые), модель, порог; вопрос и эталон не берём; чужой шаблон — нет',
+    p.kpapi.prompt === 'Общий промпт' && p.kpapi.format === '' && p.kpapi.livePrompt === '' && p.kpapi.model === 'live' && p.kpapi.pass === 70 && !('text' in p.kpapi) && !('ideal' in p.kpapi) && !('engine' in p.kpapi)
+    && p.talkptt.guard === '' && p.talkptt.lock === 'L' && p.talkptt.voice === 'Puck' && !('ptt' in p.talkptt) && !p.nope) }
 ok('удалить, потом — 404', (await C.remove('k1'), !store.has('courses/k1')) && await code(C.get('k1')) === 404)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')

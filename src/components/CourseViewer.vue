@@ -9,6 +9,7 @@ import { theme } from '../composables/useTelegram'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
 import { makeRunLog, saveLocal } from '../utils/runlog'
+import { setPresets } from '../exercises/presets'
 import ReviewChart from './ReviewChart.vue'
 import { topicById, detectTopic, wordsOnly, screenKey } from '../utils/skills'
 import WordNow from './WordNow.vue'
@@ -92,6 +93,8 @@ const run = ref({ done: 0, lessons: {} })
 // преподаватель в «Как видит ученик» проходит курс по тем же правилам, что ученик: по порядку, ошибки → чекпоинт, прогресс хранится
 // (на сервере — courseProgress/teacher_<uid>; без сервера — в этом браузере) и сбрасывается кнопкой «Сбросить моё прохождение»
 const self = !props.student && !props.of
+// общие настройки упражнений курса (промпты «Ответа по смыслу» и «Разговора», «{ }» на плитке меню) — экраны курса берут их отсюда
+watch(() => course.value?.presets, (p) => setPresets(p ?? {}), { immediate: true })
 const RUNK = (id) => 'tma.courseRun.' + id
 const readRun = (id) => { try { return JSON.parse(localStorage.getItem(RUNK(id))) ?? { done: 0, lessons: {} } } catch { return { done: 0, lessons: {} } } }
 const mine = computed(() => (props.of ? { done: 0, lessons: {}, ...props.of } : run.value))          // чьё прохождение показываем

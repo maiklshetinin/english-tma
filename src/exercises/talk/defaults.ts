@@ -117,3 +117,6 @@ export function talkFields(raw: any): Partial<TalkCfg> {
 
 /** Роль целиком для Live-модели: замок языка + роль */
 export const talkSystem = (c: Pick<TalkCfg, 'lock' | 'prompt'>) => [c.lock.trim(), c.prompt.trim()].filter(Boolean).join(' ')
+
+/** умолчания кода для формы (без настроек курса) — от них считаются отличия настроек упражнения курса (presetJson.ts) */
+export const talkDefaults = (form: any): TalkCfg => talkCode(form)

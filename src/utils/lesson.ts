@@ -16,8 +16,8 @@
 // Файл в поле image / audio / video: https-ссылка (фото и озвучка карточек), ключ файла курса в S3 (t/…/c/…)
 // или «idb:<id>» — файл пока только в этом браузере (без сервера или до загрузки), на сервер такой не уходит.
 
-import { talkCfg, talkFields, TALK_TEXTS, type EndSens } from '../exercises/talk/defaults'
-import { kpShown, kpFields, KP_TEXTS } from '../exercises/kp/defaults'
+import { talkFields, type EndSens } from '../exercises/talk/defaults'
+import { kpFields } from '../exercises/kp/defaults'
 
 export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk' | 'stt'
 export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
@@ -439,7 +439,7 @@ export function keepLocalFiles(incoming: Step[] | undefined, local: Step[] | und
 /** Экран → JSON для копирования: без id и без файлов «только в этом браузере» */
 export function stepJson(s: Step): Omit<Step, 'id'> {
   const { id: _id, ...rest } = stepsOut([s])[0]
-  return s.kind === 'talk' ? { ...rest, ...talkCfg(s) } as any : s.kind === 'kp' ? { ...rest, ...kpShown(s) } as any : rest          // «Разговор с Gemini»: всё, что уходит в Live-модель, с умолчаниями (20.11.2026); в экран сохраняются только отличия (talkFields)
+  return rest          // 21.11.2026: у «Ответа по смыслу» и «Разговора» — только своё (вопрос, эталон, исключения); общие промпты и настройки — «{ }» на плитке меню (src/exercises/presetJson.ts), что уйдёт — «Как собирается»
 }
 /** Правка экрана его JSON-ом (кнопка «{ }» → «Править», 19.11.2026): экран s получает поля из текста, id остаётся.
  *  Файлы, ещё не загруженные на сервер (idb: / blob:), сохраняются, если в JSON то же значение. Ошибка — текст, иначе '' */
@@ -449,13 +449,9 @@ export function applyStepJson(s: Step, text: string): string {
   if (Array.isArray(raw)) return 'Здесь один экран — нужен один объект { … }, а не список [ … ]'
   if (!raw || typeof raw !== 'object') return 'Нужен объект { … }'
   if (!(raw.kind in KINDS)) return `Неизвестный kind${raw.kind ? ` «${raw.kind}»` : ''} — можно: ${Object.keys(KINDS).join(', ')}`
-  // 21.11.2026: в JSON экрана — ровно то, что уходит в модели. Текстовое поле стёрли или удалили строку — значит пусто, умолчание
-  // не подставляем (раньше после «Применить» возвращался текст по умолчанию)
-  const texts: readonly string[] = raw.kind === 'kp' ? KP_TEXTS.filter((k) => k in kpShown(raw)) : raw.kind === 'talk' ? TALK_TEXTS : []
-  for (const k of texts) if (raw[k] === undefined || raw[k] === null) raw[k] = ''
-  if (raw.kind === 'kp' && !(raw.engine === 'api' || raw.engine === 'live') && !(typeof raw.format === 'string' && raw.format.includes('{id}')))
+  // 21.11.2026: в JSON экрана — своё (вопрос, эталон, исключения). Нет поля — общее упражнения курса (плитка меню); "" — пусто, без подстановки
+  if (raw.kind === 'kp' && !(raw.engine === 'api' || raw.engine === 'live') && raw.format !== undefined && !(typeof raw.format === 'string' && raw.format.includes('{id}')))
     return 'В format моста нужна метка {id} — по ней мост находит ответ в чате. Добавьте {id} (например: «Первое поле — id со значением {id}»)'
-  text = JSON.stringify(raw)
   const r = stepsFromJson(text)
   if (!r?.steps.length) return 'Экран не собрался — проверьте поля'
   const ns: any = r.steps[0], old: any = s

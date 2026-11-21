@@ -15,6 +15,9 @@
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
 import { aiIcon } from '../../utils/ai'
 import { ask, say, askText, dialog } from '../../composables/useDialog'
+import { setPresets, PRESET_TPLS } from '../../exercises/presets'
+import { presetJson, presetFromJson, presetKeys } from '../../exercises/presetJson'
+import { assemble } from '../../exercises/assemble'
 import { useAuthStore } from '../../stores/auth'
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import BackButton from '../../components/BackButton.vue'
@@ -28,7 +31,7 @@ import ExerciseMini from '../../components/ExerciseMini.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, BOOK_TPL, PAGE_TPL, BOOK } from '../../utils/lesson'
+import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, BOOK_TPL, PAGE_TPL, BOOK, tplOf } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 const AI_SITES = ['ChatGPT', 'Gemini', 'Claude']          // чаты, с которыми работает мост (значки — public/ai/)
 
@@ -80,6 +83,33 @@ const seed = () => ({
 const chName = (x) => (x?.type !== 'unit' ? x : { ...x, title: (x.title ?? '').replace(/^Глава(?=\s|$)/, 'Chapter'), ...(x.sub === 'Тема главы' ? { sub: 'Тема' } : {}) })
 const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY)); if (v?.items) return { loose: [], notes: [], ...v, items: v.items.map(chName), loose: (v.loose ?? []).map(chName) } } catch { /* нет */ } return seed() }
 const doc = reactive(load())
+// ---------- Настройки упражнений курса («{ }» на плитке меню Exercise, 21.11.2026) ----------
+// Общие промпты и настройки «Ответа по смыслу» и «Разговора» на весь курс: действуют на все экраны этого упражнения без своих полей и на новые.
+// В курсе — только отличия от умолчаний кода (src/exercises/presetJson.ts); экраны берут их через src/exercises/presets.ts
+watch(() => doc.presets, (p) => setPresets(p), { deep: true, immediate: true })
+const PRESET_SET = new Set(PRESET_TPLS)
+const preT = ref(null), preText = ref(''), preErr = ref(''), preHow = ref(false)
+const preName = (id) => TEMPLATES.find(t => t.id === id)?.t ?? id
+function preOpen(tpl) { tray.value = null; preT.value = tpl; preText.value = JSON.stringify(presetJson(tpl), null, 2); preErr.value = ''; preHow.value = false }
+const preAsm = computed(() => { try { return assemble({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(preT.value === 'kpapi' ? { engine: 'api' } : preT.value === 'kpfile' ? { dic: 'file' } : preT.value === 'talkptt' ? { ptt: true, avatar: true } : preT.value === 'talkava' ? { avatar: true } : {}) }) } catch { return { parts: [], warn: ['JSON пока не разбирается'], own: [] } } })
+function preSave() {
+  const r = presetFromJson(preT.value, preText.value); if (r.error) { preErr.value = r.error; return }
+  const all = { ...(doc.presets ?? {}) }
+  if (Object.keys(r.fields).length) all[preT.value] = r.fields; else delete all[preT.value]
+  doc.presets = all; save(); showToast(`«${preName(preT.value)}»: общие настройки сохранены — действуют на все такие экраны курса без своих`); preT.value = null
+}
+async function preReset() {
+  if (!(await ask(`Вернуть «${preName(preT.value)}» к умолчаниям?`, { text: 'Общие настройки этого упражнения в курсе сотрутся — экраны без своих полей возьмут умолчания приложения (их видно в JSON).', ok: 'Вернуть' }))) return
+  const all = { ...(doc.presets ?? {}) }; delete all[preT.value]; doc.presets = all; save(); preOpen(preT.value)
+}
+async function preAll() {
+  const tpl = preT.value, keys = presetKeys(tpl)
+  const list = [...doc.items, ...doc.loose].flatMap(x => x.steps ?? []).filter(st => tplOf(st) === tpl && keys.some(k => k in st))
+  if (!list.length) return showToast('У экранов этого упражнения своих настроек нет — все уже берут общие')
+  if (!(await ask(`Убрать свои настройки у ${list.length} экранов «${preName(tpl)}»?`, { text: 'Промпты и настройки этих экранов станут общими (как здесь). Вопрос и эталон не трогаем.', ok: 'Убрать', danger: true }))) return
+  for (const st of list) for (const k of keys) delete st[k]
+  save(); showToast(`У ${list.length} экранов — общие настройки`)
+}
 const boxTick = ref(0)
 let st = 0
 if (!doc.id) doc.id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -96,7 +126,7 @@ const save = () => {
 // ---------- Ctrl+Z / Ctrl+Shift+Z: история правок (как в Figma) ----------
 // Снимок курса — перед правкой; набор текста склеивается в один шаг (пауза 0,6 с). Удаления без подтверждений: их отменяет Ctrl+Z,
 // поэтому файлы удалённого из хранилища убираем только при уходе из редактора (и только если они больше нигде не нужны).
-const snap = () => JSON.stringify({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items, loose: doc.loose, notes: doc.notes ?? [], ink: doc.ink ?? [] })
+const snap = () => JSON.stringify({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items, loose: doc.loose, notes: doc.notes ?? [], ink: doc.ink ?? [], presets: doc.presets ?? {} })
 const undoS = [], redoS = []; let base = null, restoring = false, histT = 0
 function histMark() {                                     // первый save после паузы — фиксируем «как было»
   if (base == null) return
@@ -124,14 +154,14 @@ let remote = false, shareT = 0
 const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), text: n.text ?? '', color: n.color, ...(n.by ? { by: n.by } : {}), ...(n.sz && n.sz !== 's' ? { sz: n.sz } : {}), ...(n.font ? { font: n.font } : {}), ...(n.b ? { b: true } : {}), ...(n.st ? { st: true } : {}), ...(n.list ? { list: true } : {}), ...(n.nob ? { nob: true } : {}) })
 const cleanInk = (k) => ({ id: k.id, c: k.c, w: k.w, p: k.p.map(Math.round) })
 const payload = () => ({ title: doc.title, mode: 'line', progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk),
-  templates: (doc.templates ?? []).map(t => ({ id: t.id, t: t.t, d: t.d, step: stepsOut([t.step])[0] })) })          // templates — свои упражнения из конструктора (меню «Exercise» → «Мои»)
+  templates: (doc.templates ?? []).map(t => ({ id: t.id, t: t.t, d: t.d, step: stepsOut([t.step])[0] })), presets: doc.presets ?? {} })          // presets — общие настройки упражнений курса («{ }» на плитке)          // templates — свои упражнения из конструктора (меню «Exercise» → «Мои»)
 function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
   const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   remote = true
-  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], ink: d.ink ?? [], templates: d.templates ?? doc.templates ?? [], dirty: false })
+  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], ink: d.ink ?? [], templates: d.templates ?? doc.templates ?? [], presets: d.presets ?? doc.presets ?? {}, dirty: false })
   nextTick(() => { remote = false })
   clearTimeout(pt); if (online) sync.value = 'saved'       // коллега сам сохранил это в базу
   try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ }
@@ -207,7 +237,7 @@ const fromServer = (c) => {
   settle()
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
   const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
-  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], templates: c.templates ?? [], dirty: false })
+  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], templates: c.templates ?? [], presets: c.presets ?? {}, dirty: false })
   localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'; histReset()
   if (ensureChapter(doc)) save()
 }
@@ -1951,11 +1981,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <!-- мини-окошки: как выглядит экран -->
         <div class="xrow" :class="{ wrap: trayTab === 'kp' }">          <!-- Karta Polaka: группы по одной плашке — переносятся рядами по ширине окна, без горизонтального скролла (21.11.2026) -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">
-        <button v-for="t in g.items" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
+        <div v-for="t in g.items" :key="t.id" class="miw"><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i><span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span></span>          <!-- 19.11.2026: «Ответ по смыслу» — значки чатов в строку с навыком -->
-        </button>
+        </button><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button></div>
         </div></div>
         </div>
       </template>
@@ -1992,7 +2022,21 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-for="(g, gi) in GROUPS.filter(g => g.k !== 'note')" :key="g.k"><svg class="tarr" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
         <button class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" :title="gi === 0 ? '2 · Lesson — урок или чекпоинт внутри Chapter' : '3 · Exercise — экраны урока: пары, выбор ответа, порядок слов…'" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><em class="tn">{{ gi + 2 }}</em><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button></template>
     </div>
+    <!-- Настройки упражнения в курсе («{ }» на плитке меню): JSON общих промптов и настроек; «Как собирается» — что уйдёт в модели -->
+  <div v-if="preT" class="pre-bg" @pointerdown.self="preT = null">
+    <div class="pre" role="dialog" aria-modal="true" :aria-label="'Настройки упражнения ' + preName(preT)" @keydown.stop @keydown.esc="preT = null" @paste.stop @copy.stop @cut.stop>
+      <header><b>«{{ preName(preT) }}» — общее для курса</b><small>Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения.</small></header>
+      <div class="pre-row"><button class="pbtn" :class="{ on: preHow }" @click="preHow = !preHow">Как собирается</button><span class="pre-sp" /><button class="pbtn" title="Стереть общие настройки — вернуть умолчания приложения" @click="preReset">Вернуть умолчания</button><button class="pbtn" title="Убрать свои промпты и настройки у экранов этого упражнения — пусть берут общие" @click="preAll">Применить ко всем экранам</button></div>
+      <textarea v-if="!preHow" v-model="preText" class="pre-ed" spellcheck="false" aria-label="JSON настроек упражнения" @keydown.ctrl.enter.prevent="preSave" @keydown.meta.enter.prevent="preSave" />
+      <div v-else class="pre-how">
+        <p v-for="w in preAsm.warn" :key="w" class="pre-w">⚠ {{ w }}</p>
+        <section v-for="pt in preAsm.parts" :key="pt.to"><b>{{ pt.to }}</b><pre>{{ pt.text || '‹пусто›' }}</pre></section>
+      </div>
+      <small v-if="preErr" class="pre-err">{{ preErr }}</small>
+      <footer><small>"" — пусто, ничего не подставляется. Ctrl+Enter — сохранить, Esc — закрыть</small><span class="pre-sp" /><button class="pbtn" @click="preT = null">Отмена</button><button class="pbtn ap" @click="preSave">Сохранить для курса</button></footer>
+    </div>
   </div>
+</div>
 </template>
 
 <style scoped>
@@ -2336,6 +2380,19 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tray.inter { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 8px; overflow-x: auto; overflow-y: visible; max-width: calc(100vw - 32px); box-sizing: border-box }          /* группы по тегам — в один ряд (так легче читать); не влезло по ширине — листается вбок */
 .tray.inter .xg { flex: none } .tray.inter .tt2 { align-self: center }
 .xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea } .xg.book { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }          /* книжные — экспериментальные */          /* группы упражнений — рядом, по горизонтали */
+.miw { position: relative; display: grid }
+.mjs { position: absolute; top: 4px; right: 4px; z-index: 2; height: 22px; padding: 0 6px; border: 1px solid #dcdcdc; border-radius: 7px; background: #fff; font: 900 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -1px; color: #777; cursor: pointer; opacity: .85 }
+.mjs:hover, .mjs.on { opacity: 1; color: #1899d6; border-color: #84d8ff; background: #f0faff }
+.pre-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .28); display: grid; place-items: center; padding: 16px }
+.pre { width: min(760px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; background: #fff; box-shadow: 0 20px 60px rgba(0, 0, 0, .25) }
+.pre header { display: grid; gap: 2px } .pre header b { font-size: 16px; font-weight: 900 } .pre header small, .pre footer small { font-size: 12px; color: var(--hint); font-weight: 600 }
+.pre-row, .pre footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap } .pre-sp { flex: 1 }
+.pre .pbtn { flex: none; width: auto; height: auto; border: 0; border-radius: 10px; padding: 7px 11px; background: #f0f1f3; font: inherit; font-size: 12.5px; font-weight: 800; color: #4b4b4b; cursor: pointer; white-space: nowrap } .pre .pbtn.on, .pre .pbtn.ap { background: #1cb0f6; color: #fff }
+.pre-ed { flex: 1; min-height: 340px; padding: 12px 14px; border: 1px solid #8cc8ff; border-radius: 12px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; resize: vertical }
+.pre-how { flex: 1; min-height: 340px; overflow: auto; display: grid; align-content: start; gap: 8px; font-size: 12px }
+.pre-how section { display: grid; gap: 3px } .pre-how b { font-size: 11.5px; font-weight: 900; color: #777 }
+.pre-how pre { margin: 0; padding: 6px 8px; border-radius: 8px; background: #f4f5f7; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace }
+.pre-w { margin: 0; padding: 5px 8px; border-radius: 8px; background: #fff4dc; color: #b45309; font-weight: 800 } .pre-err { color: #d92d20; font-weight: 800 }
 .xgh { display: grid; gap: 0; padding: 0 8px } .xgh b { font-size: 13.5px; font-weight: 900; color: #2c2c2c } .xgh small { font-size: 11px; font-weight: 600; color: var(--hint) }
 .xgc { display: grid; gap: 2px 4px }
 .skl { display: flex; gap: 3px; justify-content: center } .chip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }          /* навык → аналитика */

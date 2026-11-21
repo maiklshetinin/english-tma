@@ -5,7 +5,8 @@ import { DEF_PROMPT, LOCK, OPENER, EN_PROMPT, EN_LOCK, EN_OPENER, LANGS, EVAL_PR
 // «Разговор с Gemini» (только польский): JSON экрана показывает всё, что уходит в Live-модель, а в экране хранятся только отличия (20.11.2026)
 describe('«Разговор с Gemini»: JSON экрана', () => {
   it('пустой экран → stepJson со всеми умолчаниями', () => {
-    const j: any = stepJson({ id: 'a', kind: 'talk', text: '' })
+    expect(stepJson({ id: 'a', kind: 'talk', text: '' })).toEqual({ kind: 'talk', text: '' })          // в JSON экрана — только своё
+    const j: any = { kind: 'talk', text: '', ...talkCfg({}) }
     expect(j).toEqual({ kind: 'talk', text: '', lang: 'pl-PL', prompt: DEF_PROMPT, lock: LOCK, opener: OPENER,
       voice: 'Kore', model: 'auto', silenceMs: 1200, endSens: 'low', temperature: null, noiseSuppression: false,
       guard: 'Odpowiadaj wyłącznie po polsku.', evalPrompt: EVAL_PROMPT, evalAsk: EVAL_ASK })
@@ -16,7 +17,7 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     const s: Step = { id: 'a', kind: 'talk', text: 'Rozmowa' }
     expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), voice: 'Puck', silenceMs: 2000 }))).toBe('')
     expect(s).toEqual({ id: 'a', kind: 'talk', text: 'Rozmowa', voice: 'Puck', silenceMs: 2000 })
-    expect(stepJson(s)).toMatchObject({ voice: 'Puck', silenceMs: 2000, lock: LOCK, opener: OPENER, prompt: DEF_PROMPT })
+    expect(stepJson(s)).toEqual({ kind: 'talk', text: 'Rozmowa', voice: 'Puck', silenceMs: 2000 }); expect(talkCfg(s)).toMatchObject({ lock: LOCK, opener: OPENER, prompt: DEF_PROMPT })
   })
 
   it('свои lock / opener / model / prompt сохраняются; temperature, endSens, noiseSuppression — тоже', () => {
@@ -38,13 +39,11 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     expect(LANGS['en-US'].code).toBe('EN'); expect('Dzień dobry, jak się masz?'.match(LANGS['en-US'].alien)!.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('стёрли текст в JSON (роль, замок, первая реплика, просьба вернуться к языку, оценка речи) — пусто, умолчание не возвращается', () => {
+  it('"" в JSON (замок, первая реплика, просьба вернуться к языку) — пусто, умолчание не возвращается; оценка речи — в общих настройках', () => {
     const s: any = { id: 'z', kind: 'talk', text: 'T' }
-    const j: any = stepJson(s)
-    expect(j).toMatchObject({ guard: 'Odpowiadaj wyłącznie po polsku.' })
-    expect(typeof j.evalPrompt).toBe('string'); expect(j.evalAsk).toContain('{transcript}')
-    j.lock = ''; delete j.opener; j.guard = ''
-    expect(applyStepJson(s, JSON.stringify(j))).toBe('')
+    const all: any = talkCfg(s)
+    expect(all).toMatchObject({ guard: 'Odpowiadaj wyłącznie po polsku.' }); expect(all.evalAsk).toContain('{transcript}')
+    expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), lock: '', opener: '', guard: '' }))).toBe('')
     const c = talkCfg(s)
     expect([c.lock, c.opener, c.guard]).toEqual(['', '', ''])
     expect(talkSystem(c)).toBe(c.prompt)

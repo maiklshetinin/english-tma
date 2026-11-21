@@ -1,7 +1,7 @@
 // «Как собирается» (21.11.2026): что именно уйдёт в чат и в модели из JSON экрана — по форме упражнения (мост, Gemini API, голосом,
 // целым аудио, разговор, рация). Те же функции, что и при проверке (kpCfg, fill, talkCfg, talkSystem), — показ не расходится с отправкой.
 // Вместо ответа ученика и т. п. — метки ‹…›. warn — чего не хватает, чтобы работало как задумано.
-import { kpCfg, kpApi, kpFile, fill, langRu } from './kp/defaults'
+import { kpCfg, kpApi, kpFile, kpShown, fill, langRu } from './kp/defaults'
 import { talkCfg, talkSystem, LANGS } from './talk/defaults'
 
 export interface Part { to: string; text: string }
@@ -9,9 +9,12 @@ const plain = (t: unknown) => String(t ?? '').replace(/\*\*(.+?)\*\*/g, '$1').re
 const cut = (t: string, n = 240) => (t.length > n ? t.slice(0, n).trimEnd() + ' …' : t)
 const join = (xs: string[], sep: string) => xs.map((x) => x.trim()).filter(Boolean).join(sep)
 
-export function assemble(raw: any): { parts: Part[]; warn: string[] } {
+/** own — какие настройки у экрана свои (исключения); остальные — общие упражнения курса (плитка меню) или умолчания кода */
+export function assemble(raw: any): { parts: Part[]; warn: string[]; own: string[] } {
   const parts: Part[] = [], warn: string[] = []
-  if (!raw || typeof raw !== 'object') return { parts, warn }
+  if (!raw || typeof raw !== 'object') return { parts, warn, own: [] }
+  const keys = raw.kind === 'kp' ? Object.keys(kpShown(raw)) : raw.kind === 'talk' ? Object.keys(talkCfg(raw)) : []
+  const own = keys.filter((k) => raw[k] !== undefined)
   if (raw.kind === 'kp') {
     const c = kpCfg(raw)
     const v = { question: raw.text || '‹вопрос›', reference: raw.ideal ? cut(plain(raw.ideal)) : '‹эталон›', answer: '‹ответ ученика›', id: 'k1a2b3' }
@@ -51,5 +54,5 @@ export function assemble(raw: any): { parts: Part[]; warn: string[] } {
     if (!c.evalAsk.includes('{transcript}')) warn.push('В evalAsk нет {transcript} — оценка речи не увидит расшифровку')
     if (!talkSystem(c)) warn.push('Роль пустая (lock и prompt) — Gemini не знает, кого играть')
   }
-  return { parts, warn }
+  return { parts, warn, own }
 }
