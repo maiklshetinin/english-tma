@@ -1949,7 +1949,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-else-if="tray === 'inter'">
         <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i></button></div>
         <!-- мини-окошки: как выглядит экран -->
-        <div class="xrow">
+        <div class="xrow" :class="{ wrap: trayTab === 'kp' }">          <!-- Karta Polaka: группы по одной плашке — переносятся рядами по ширине окна, без горизонтального скролла (21.11.2026) -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">
         <button v-for="t in g.items" :key="t.id" class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
@@ -2392,5 +2392,6 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .xtab .xexp { margin: 0 }
 .xrow { display: flex; gap: 8px; align-items: stretch; overflow-x: auto; overflow-y: visible; padding-bottom: 2px }
 .xrow .xg { flex: none }
+.xrow.wrap { flex-wrap: wrap; overflow-x: visible; max-height: calc(100vh - 220px); overflow-y: auto }          /* рядов много — меню не выше окна, листается вниз */
 .xg.bk { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }
 </style>
