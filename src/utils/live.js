@@ -29,8 +29,8 @@ export const liveName = (m) => String(m).replace(/^gemini-/, 'Gemini ').replace(
 
 const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s) }
 const unb64 = (s) => { const t = atob(s), u = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i); return u }
-// обработчик микрофона: копит 100 мс и отдаёт в основной поток (AudioWorklet из строки — без отдельного файла)
-const WORKLET = `class Mic extends AudioWorkletProcessor { constructor() { super(); this.b = new Float32Array(1600); this.n = 0 }
+// обработчик микрофона: копит 100 мс и отдаёт в основной поток (AudioWorklet из строки — без отдельного файла); экспорт — и для записи целым аудио (sttfile.js)
+export const WORKLET = `class Mic extends AudioWorkletProcessor { constructor() { super(); this.b = new Float32Array(1600); this.n = 0 }
   process(i) { const c = i[0] && i[0][0]; if (c) for (let k = 0; k < c.length; k++) { this.b[this.n++] = c[k]; if (this.n === 1600) { this.port.postMessage(this.b.slice()); this.n = 0 } } return true } }
 registerProcessor('tma-mic', Mic)`
 

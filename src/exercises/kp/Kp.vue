@@ -18,6 +18,8 @@ import { modelName } from '../../utils/tts'
 import { startTranscribe, sttModel, firstKey, startTalk, liveModels, liveName } from '../../utils/live'
 import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/kpcheck'
 import { kpLive } from '../../utils/kplive'
+import { recordMic, transcribeFile } from '../../utils/sttfile'
+import VoiceNote from '../../components/VoiceNote.vue'
 import { kpCfg, fill } from './defaults'
 import { ai } from '../../utils/gemini'
 import J from './kp.json'
@@ -73,6 +75,7 @@ const canDic = computed(() => ai.keys.length > 0)
 const dicSec = computed(() => { const s = Math.max(0, Math.round((dicNow.value - dicT0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const addText = (t) => { const x = String(t || '').trim(); if (x && !p.st.done) p.st.text = ((p.st.text || '').trim() + ' ' + x).trim() }
 async function dictate() {
+  if (fileMode.value) return dictateFile()
   if (dic.value === 'live' || dic.value === 'connecting') { dicS?.stop(); return }
   const key = firstKey(); dicErr.value = ''
   if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
@@ -90,9 +93,48 @@ async function dictate() {
     level: (v) => { dicLvl.value = dicLvl.value * 0.6 + v * 0.4 },
   } })
 }
-watch(() => p.st.busy || p.st.done, (v) => { if (v) dicS?.stop() })
+watch(() => p.st.busy || p.st.done, (v) => { if (v) { dicS?.stop(); if (recS) { recS.cancel(); recS = null; clearInterval(dicTm); dic.value = 'idle' } } })
+// «· целым аудио» (21.11.2026, тест; step.dic === 'file'): голос пишем целиком, после «Стоп» вся запись ОДНИМ запросом уходит в Gemini
+// (utils/sttfile.js — текстовая модель Flash Lite слушает аудио; не Transcribe Live, та только потоком). Запись — голосовым сообщением
+// «как в Telegram» (VoiceNote: переслушать, ⏱ отправляю → ✓✓ распознано), ответ модели «впечатывается» в поле. Облачка нет
+const fileMode = computed(() => props.step.dic === 'file')
+const note = ref(null)
+let recS = null, typeTm = 0
+async function dictateFile() {
+  if (dic.value === 'live') return finishRec()
+  if (dic.value !== 'idle') return
+  dicErr.value = ''
+  if (!ai.keys.length) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
+  dic.value = 'connecting'
+  try { recS = await recordMic({ on: { level: (v) => { dicLvl.value = dicLvl.value * 0.6 + v * 0.4 }, max: () => finishRec() } }) }
+  catch (e) { dic.value = 'idle'; dicErr.value = e?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (e?.message || e); return }
+  dic.value = 'live'; dicT0.value = dicNow.value = Date.now(); clearInterval(dicTm); dicTm = setInterval(() => { dicNow.value = Date.now() }, 500)
+}
+function finishRec() {
+  const r = recS?.stop(); recS = null; clearInterval(dicTm); dicLvl.value = 0
+  if (!r) { dic.value = 'idle'; return }
+  if (note.value?.url) URL.revokeObjectURL(note.value.url)
+  note.value = { url: URL.createObjectURL(r.blob), blob: r.blob, peaks: r.peaks, sec: r.sec, status: 'sending', model: '', ms: 0, err: '' }
+  sendNote()
+}
+async function sendNote() {
+  const n = note.value; if (!n) return
+  n.status = 'sending'; n.err = ''; dic.value = 'sending'
+  try {
+    const r = await transcribeFile({ blob: n.blob, lang: 'pl-PL' })
+    n.model = checkName(r.model); n.ms = r.ms
+    if (!r.text) { n.status = 'error'; n.err = 'Речи не слышно — запишите ещё раз, поближе к микрофону' } else { n.status = 'done'; typeIn(r.text) }
+  } catch (e) { n.status = 'error'; n.err = e?.message || String(e) }
+  finally { dic.value = 'idle' }
+}
+/** Ответ модели «впечатывается» в поле — около секунды */
+function typeIn(t) {
+  const base = (p.st.text || '').trim(), add = (base ? ' ' : '') + t, step = Math.max(1, Math.ceil(add.length / 40)); let i = 0
+  clearInterval(typeTm)
+  typeTm = setInterval(() => { if (p.st.done) return clearInterval(typeTm); i += step; p.st.text = base + add.slice(0, i); if (i >= add.length) clearInterval(typeTm) }, 25)
+}
 // облачко над полем: пока идёт диктовка (пусто — «…»), или ошибка; длинный черновик — его хвост
-const dicCloud = computed(() => !p.edit && (dic.value === 'live' || !!dicDraft.value || !!dicErr.value))
+const dicCloud = computed(() => !p.edit && !fileMode.value && (dic.value === 'live' || !!dicDraft.value || !!dicErr.value))
 const dicShow = computed(() => { const t = dicDraft.value || (dic.value === 'live' ? '…' : dicErr.value); return t.length > 120 ? '…' + t.slice(-120) : t })
 
 // «· Gemini API» (20.11.2026, тест): проверка напрямую (utils/kpcheck.js), мост — запасной. Модель: в правке — у экрана,
@@ -134,7 +176,7 @@ async function discuss() {
 }
 onBeforeUnmount(() => tkS?.stop())
 
-onBeforeUnmount(() => { dicS?.stop(); clearInterval(dicTm) })
+onBeforeUnmount(() => { dicS?.stop(); recS?.cancel(); clearInterval(dicTm); clearInterval(typeTm); if (note.value?.url) URL.revokeObjectURL(note.value.url) })
 // вид экрана (19.11.2026): pdf — как домашка (подписи на подложке, без рамок; по умолчанию), lines — тонкие линии между частями,
 // cards — мягкие подложки; step.plain — эталон без выделений (просто абзацы). Меняются кнопками в подвале правки
 const LOOKS = { pdf: 'PDF', lines: 'линии', cards: 'подложки' }
@@ -232,9 +274,11 @@ function jsApply() {
     </div>
 
     <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
-      <button v-if="!p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy" :title="dic === 'live' ? 'Остановить запись' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
-        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? 'Подключаюсь…' : 'Надиктовать с Gemini' }}</button>
+      <button v-if="!p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? (fileMode ? 'Включаю микрофон…' : 'Подключаюсь…') : dic === 'sending' ? 'Распознаю…' : fileMode ? 'Записать ответ' : 'Надиктовать с Gemini' }}</button>
       <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
+    <p v-if="fileMode && !p.st.done" class="kfn" :class="{ er: dicErr }">{{ dicErr || '🎙 Запись уходит в Gemini целым аудио после «Стоп» — не кусками; распознанный текст впишется в поле' }}</p>
+    <VoiceNote v-if="fileMode && note && !p.edit" :url="note.url" :peaks="note.peaks" :sec="note.sec" :status="note.status" :model="note.model" :ms="note.ms" :err="note.err" @retry="sendNote" />
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <div v-else-if="!p.st.done" class="kaw" :class="{ dic: dicCloud }">
       <textarea :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
@@ -347,6 +391,8 @@ function jsApply() {
 .kdic { --l: 0; margin: 0 8px 0 auto; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 0; border-radius: 13px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font-family: var(--font); font-size: 11.5px; font-weight: 800; text-transform: none; letter-spacing: 0; cursor: pointer; white-space: nowrap }
 .kdic svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .kdic.live { background: #e5484d; box-shadow: 0 0 0 calc(var(--l) * 8px) rgba(229, 72, 77, .22); font-variant-numeric: tabular-nums } .kdic.connecting { opacity: .7 } .kdic:disabled { opacity: .4; cursor: default }
+.kfn { margin: -4px 2px 8px; font-size: 12px; font-weight: 700; color: #a08060 } .kfn.er { color: #b3261e }          /* «· целым аудио»: что происходит с записью */
+.kdic.sending { opacity: .75 }
 .kaw { position: relative } .kaw.dic .ka { padding-bottom: 66px }          /* поле не меняет высоту — облачко лежит поверх его низа, текст прокручивается выше */
 .kdd { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 2; max-height: 58px; overflow: hidden; padding: 6px 12px 7px; border-radius: 14px; background: #fff; box-shadow: 0 4px 14px rgba(53, 26, 5, .14), 0 0 0 1px #ecd9b8; font-family: 'PT Serif', Georgia, serif; font-size: 14.5px; font-style: italic; line-height: 1.3; color: #6b4a26; pointer-events: none; animation: kdd .18s ease-out }
 .kdd small { display: block; margin-bottom: 1px; font-family: var(--font); font-size: 10.5px; font-style: normal; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #4b8df8 }
