@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { stepJson, applyStepJson, stepsFromJson, tplOf, TEMPLATES, type Step } from '../../utils/lesson'
-import { DEF_PROMPT, LOCK, OPENER, talkCfg, talkFields, talkSystem } from './defaults'
+import { DEF_PROMPT, LOCK, OPENER, EN_PROMPT, EN_LOCK, EN_OPENER, LANGS, talkCfg, talkFields, talkSystem } from './defaults'
 
 // «Разговор с Gemini» (только польский): JSON экрана показывает всё, что уходит в Live-модель, а в экране хранятся только отличия (20.11.2026)
 describe('«Разговор с Gemini»: JSON экрана', () => {
@@ -26,8 +26,19 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     expect(talkSystem(talkCfg(s))).toBe('Mów tylko po polsku. Jesteś kelnerem w Krakowie.')
   })
 
-  it('неверные значения и язык отбрасываются; умолчания не хранятся', () => {
-    expect(talkFields({ lang: 'en-US', silenceMs: 50, temperature: 5, endSens: 'mid', voice: 'Kore', model: 'auto', prompt: DEF_PROMPT, lock: LOCK, opener: OPENER, noiseSuppression: 'yes' })).toEqual({})
+  it('английский из JSON: lang хранится, умолчания роли / замка / первой реплики — английские', () => {
+    const s: any = stepsFromJson(JSON.stringify([{ kind: 'talk', lang: 'en-US', prompt: 'You are a barista.', lock: EN_LOCK, opener: EN_OPENER, voice: 'Kore' }]))!.steps[0]
+    expect(s).toMatchObject({ kind: 'talk', lang: 'en-US', prompt: 'You are a barista.' })
+    expect(s.lock).toBeUndefined(); expect(s.opener).toBeUndefined()
+    const c = talkCfg(s)
+    expect(c.lang).toBe('en-US'); expect(c.lock).toBe(EN_LOCK); expect(c.opener).toBe(EN_OPENER)
+    expect(talkCfg({ lang: 'en-GB' }).prompt).toBe(EN_PROMPT)
+    expect(talkCfg({ lang: 'xx' }).lang).toBe('pl-PL')
+    expect(LANGS['en-US'].code).toBe('EN'); expect('Dzień dobry, jak się masz?'.match(LANGS['en-US'].alien)!.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('неверные значения отбрасываются; умолчания не хранятся', () => {
+    expect(talkFields({ lang: 'xx-XX', silenceMs: 50, temperature: 5, endSens: 'mid', voice: 'Kore', model: 'auto', prompt: DEF_PROMPT, lock: LOCK, opener: OPENER, noiseSuppression: 'yes' })).toEqual({})
   })
 
   it('«Править → Применить» больше не теряет lang у «Транскрипции» и model у «Ответа по смыслу»', () => {

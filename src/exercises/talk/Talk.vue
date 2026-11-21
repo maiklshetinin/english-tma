@@ -3,7 +3,7 @@
 // По умолчанию — собеседование на Карту поляка: Gemini — консул, спрашивает по-польски, ученик отвечает голосом.
 // В правке: что делает ученик (text), роль Gemini (prompt — видит только ИИ), голос и модель. Ход разговора — расшифровка пузырями.
 // Без оценки: «Продолжить» доступна сразу (как у «Подсказки»).
-// Только польский. Всё, что уходит в Live-модель (роль, замок языка, первая реплика, пауза, чувствительность, температура, шумодав), — в JSON экрана
+// Язык — из JSON экрана (lang: pl-PL, en-US, en-GB; 21.11.2026). Всё, что уходит в Live-модель (роль, замок языка, первая реплика, пауза, чувствительность, температура, шумодав), — в JSON экрана
 // (кнопка «{ }»), умолчания — defaults.ts (talkCfg); в экране хранятся только отличия (20.11.2026).
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import ExHead from '../parts/ExHead.vue'
@@ -17,7 +17,7 @@ import SpeechReport from '../../components/SpeechReport.vue'
 import TalkAvatar from './TalkAvatar.vue'
 import { assessSpeech, wavOf } from '../../utils/speech'
 import J from './talk.json'
-import { LANG, DEF_PROMPT, talkCfg, talkSystem } from './defaults'
+import { LANGS, talkCfg, talkSystem } from './defaults'
 import { tp, setPick, setVoice as setVPick, setEval, loadModels } from './prefs'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -38,7 +38,10 @@ const vName = (n) => { const v = VOICES.find((x) => x[0] === n); return v ? `${v
 const think = (m) => /think/i.test(m)
 // язык разговора — польский: расшифровка и голос закреплены, перед ролью — «замок» (lock): иначе Live-модель сама угадывает язык
 // и с акцентом «слышит» русский (20.11.2026)
-const lang = LANG          // в модель — явно (startTalk → languageCode); в JSON экрана — lang: "pl-PL"
+// 21.11.2026: язык — из JSON экрана (lang: "pl-PL" | "en-US" | "en-GB"), по нему же умолчания роли, замок PL / EN и подсказки
+const lang = computed(() => cfg.value.lang)          // в модель — явно (startTalk → languageCode)
+const L = computed(() => LANGS[lang.value])
+const defPrompt = computed(() => talkCfg({ lang: lang.value }).prompt)
 function setF(k, v) { if (v) props.step[k] = v; else delete props.step[k]; ed.changed() }
 
 // разговор
@@ -75,7 +78,7 @@ async function start() {
   usedV.value = vpick.value || voice.value
   const c = cfg.value
   if (ptt.value) startTr(key)
-  sess = startTalk({ key, model: m, voice: usedV.value, lang, system: talkSystem(c), opener: c.opener, manual: ptt.value,
+  sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: talkSystem(c), opener: c.opener, manual: ptt.value,
     silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, rec: evalOn.value ? onRec : null, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
@@ -98,11 +101,11 @@ function stop() { if (pt.value === 'talk') pttEnd(); sess?.stop() }
 const ptt = computed(() => !!props.step.ptt)
 const pt = ref('idle')          // idle — можно говорить; talk — говорю; wait — отправил, жду ответ
 let tr = null, trAcc = '', trDraft = '', trLine = null, flushT = 0, aiWarned = null
-const CYR = /[\u0400-\u04FF]/, EN = /\b(the|and|you|your|what|is|are|this|that|with)\b/gi
+const CYR = /[\u0400-\u04FF]/
 function startTr(key) {
   sttModel(key).then((model) => {
     if (!sess) return
-    tr = startTranscribe({ key, model, lang, on: {
+    tr = startTranscribe({ key, model, lang: lang.value, on: {
       state: (s, info) => { if (s === 'error') note.value = 'расшифровка: ' + info },
       interim: (t) => { trDraft = t; trShow() },
       final: (t) => { trAcc = (trAcc + ' ' + t).trim(); trDraft = ''; trShow() },
@@ -131,12 +134,12 @@ function trCommit() {
   const l = trLine; trLine = null; if (!l) return
   l.t = (trAcc + ' ' + trDraft).trim() || l.t; l.draft = false; l.closed = true
   if (!l.t) l.t = '…'
-  if (CYR.test(l.t)) l.warn = 'похоже, по-русски — говорите по-польски'
+  if (CYR.test(l.t)) l.warn = 'похоже, по-русски — говорите ' + L.value.how
 }
 /** Gemini ответила не по-польски — один раз за реплику просим по-польски и помечаем пузырь */
 function aiGuard() {
   const l = lines.value.at(-1); if (!l || l.role !== 'ai' || aiWarned === l) return
-  if (CYR.test(l.t) || (l.t.match(EN) || []).length >= 2) { aiWarned = l; l.warn = 'Gemini ответила не по-польски — попросили по-польски'; sess?.send('Odpowiadaj wyłącznie po polsku.') }
+  if (CYR.test(l.t) || (l.t.match(L.value.alien) || []).length >= 2) { aiWarned = l; l.warn = `Gemini ответила не ${L.value.how} — попросили ${L.value.how}`; sess?.send(L.value.guard) }
 }
 const outLevel = () => sess?.outLevel?.() ?? 0          // громкость голоса Gemini — для персонажа (step.avatar)
 
@@ -159,7 +162,7 @@ async function sendEval(final = false) {
   const me = lines.value.filter((l) => l.role === 'me').map((l) => l.t).join(' '), them = lines.value.filter((l) => l.role === 'ai').map((l) => l.t).join('\n')
   const seg = { n: segs.value.length + 1, at: Math.round(speechSec.value), st: 'sent', rep: null, err: '' }
   segs.value.push(seg); const S = segs.value.at(-1)
-  try { S.rep = await assessSpeech({ blob, sec: Math.max(s2, 20), transcript: me, context: them, lang }); S.st = 'done' }
+  try { S.rep = await assessSpeech({ blob, sec: Math.max(s2, 20), transcript: me, context: them, lang: lang.value }); S.st = 'done' }
   catch (e) { S.st = 'err'; S.err = e.message }
   finally { evBusy = false; if (speechSec.value - sentAt >= STEP) sendEval() }
 }
@@ -175,7 +178,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
     <ExText v-model="step.text" tag="p" class="tk" ph="Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски" multi>{{ step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }}</ExText>
     <div v-if="!p.edit" class="thd" @pointerdown.stop>          <!-- вверху (21.11.2026): голос и «Оценивать речь»; пока идёт разговор — не меняются -->
       <label class="ev" :class="{ off: busy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="busy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
-      <span v-if="ptt" class="lk" title="Язык закреплён: польский — и для распознавания (Transcribe Live), и для ответа Gemini"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>PL</span>
+      <span v-if="ptt" class="lk" :title="`Язык закреплён: ${L.ru} — и для распознавания (Transcribe Live), и для ответа Gemini (lang в JSON экрана)`"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>{{ L.code }}</span>
       <label class="pill" :class="{ off: busy }" title="Голос Gemini — запоминается в этом браузере">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
         <select :value="vpick" :disabled="busy" aria-label="Голос" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice && step.voice !== 'Kore' ? ' (из урока)' : '' }}</option>
@@ -185,7 +188,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
 
     <template v-if="p.edit">
       <label class="tl">Роль Gemini <small>видит только ИИ · пусто — консул на Карту поляка</small></label>
-      <textarea class="tp" :value="step.prompt || ''" :placeholder="DEF_PROMPT" rows="6" spellcheck="false" @pointerdown.stop @keydown.stop @input="setF('prompt', $event.target.value)" />
+      <textarea class="tp" :value="step.prompt || ''" :placeholder="defPrompt" rows="6" spellcheck="false" @pointerdown.stop @keydown.stop @input="setF('prompt', $event.target.value)" />
       <div class="trow" @pointerdown.stop>
         <label>Голос <select :value="voice" @change="setF('voice', $event.target.value === 'Kore' ? '' : $event.target.value)"><option v-for="v in VOICES" :key="v[0]" :value="v[0]">{{ v[0] }} · {{ v[1] === 'женский' ? '♀' : '♂' }} {{ v[2] }}</option></select></label>
         <label>Модель <select :value="lessonModel" @change="setF('model', $event.target.value)"><option value="">авто{{ models[0] ? ' · ' + liveName(models[0]) : '' }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше' : '' }}</option></select></label>

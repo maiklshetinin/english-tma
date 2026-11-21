@@ -11,7 +11,7 @@ const PK = 'tma.speech.model'
 export const MIN_SEC = 20
 export const getSpeechPick = () => { try { return localStorage.getItem(PK) || '' } catch { return '' } }
 export const setSpeechPick = (m) => { try { if (m) localStorage.setItem(PK, m); else localStorage.removeItem(PK) } catch { /* */ } }
-export const LANG_NAME = { 'pl-PL': 'польский', 'en-US': 'английский', 'es-ES': 'испанский' }
+export const LANG_NAME = { 'pl-PL': 'польский', 'en-US': 'английский', 'en-GB': 'английский', 'es-ES': 'испанский' }
 
 /** Куски Int16Array (16 кГц) → { blob: WAV, sec } */
 export function wavOf(chunks, rate = 16000) {
