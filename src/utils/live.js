@@ -40,7 +40,8 @@ registerProcessor('tma-mic', Mic)`
  *  quiet — не проигрывать голос (расшифровка всё равно идёт). Возврат: { stop, mute, quiet(v), send(text), listen() } */
 /** silenceMs — пауза до «договорил», endSens — 'low' | 'high' (чувствительность конца речи), temperature — null: как у модели,
  *  noiseSuppression — шумодав браузера (по умолчанию выкл.: режет sz, cz, ś, ć). Умолчания — как было до 20.11.2026 (kp, kplive) */
-export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
+export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, manual = false, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
+  let talking = false          // manual (рация, 21.11.2026): голос уходит в модель только между talkStart() и talkEnd()
   let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, outAn = null, outBuf = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
   const say = (s, info) => { if (!done || s === 'ended' || s === 'error') on.state?.(s, info) }
@@ -70,6 +71,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
     src = ctxIn.createMediaStreamSource(mic); node = new AudioWorkletNode(ctxIn, 'tma-mic'); src.connect(node)
     node.port.onmessage = (e) => {
       if (done || ws?.readyState !== 1) return
+      if (manual && !talking) return          // рация: кнопку не нажали — не шлём
       const f = e.data; let sum = 0; const pcm = new Int16Array(f.length)
       for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = muted ? 0 : v * 32767 }
       on.level?.(muted ? 0 : Math.min(1, Math.sqrt(sum / f.length) * 4))
@@ -89,7 +91,8 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
     generationConfig: { responseModalities: ['AUDIO'], ...(typeof temperature === 'number' ? { temperature } : {}), speechConfig: { ...(voice ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } : {}), ...(lang && !plain ? { languageCode: lang } : {}) } },
     systemInstruction: { parts: [{ text: system }] },
     inputAudioTranscription: lang && !plain ? { languageCodes: [lang] } : {}, outputAudioTranscription: {},
-    ...(plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs } } }),
+    // рация (manual): «договорил» решает не модель по паузе, а кнопка — шлём activityStart / activityEnd сами
+    ...(manual ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } } : plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs } } }),
     ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
   } })
   function connect() {
@@ -132,7 +135,10 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   connect()
   /** Громкость голоса Gemini сейчас, 0..1 (нет звука или анализатора — 0) */
   function outLevel() { if (!outAn || done) return 0; outAn.getFloatTimeDomainData(outBuf); let sum = 0; for (let i = 0; i < outBuf.length; i++) sum += outBuf[i] * outBuf[i]; return Math.min(1, Math.sqrt(sum / outBuf.length) * 5) }
-  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() }, outLevel,
+  /** Рация (manual): начало реплики — Gemini замолкает (звук обрывается сразу), голос идёт в модель; конец — модель отвечает */
+  function talkStart() { if (!manual || talking || done || ws?.readyState !== 1) return; hush(); talking = true; ws.send(JSON.stringify({ realtimeInput: { activityStart: {} } })) }
+  function talkEnd() { if (!manual || !talking) return; talking = false; if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { activityEnd: {} } })) }
+  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() }, outLevel, talkStart, talkEnd,
     send: (text) => { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { text } })) },
     listen: async () => { if (mic || done) return; try { await startMic() } catch (err) { stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) } } }
 }
@@ -186,7 +192,9 @@ export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = 
     const r = e.reason || ''
     stop(e.code === 1000 ? '' : /API key|key not valid/i.test(r) ? 'Ключ не принят Google' : /quota|exhaust|limit/i.test(r) ? 'Лимит модели расшифровки исчерпан' : !ready && /model|not found|not supported/i.test(r) ? `Модель «${model}» недоступна этому ключу: ${r}` : `Соединение закрылось (${e.code})${r ? ': ' + r : ''}`)
   }
-  return { stop: () => stop(''), hold: (v) => { held = !!v } }
+  return { stop: () => stop(''), hold: (v) => { held = !!v },
+    /** Звук кончился (рация: нажали «отправить») — распознать хвост сразу, не дожидаясь паузы; потом можно слать снова */
+    flush: () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) } }
 }
 /** Модель расшифровки из списка ключа (если Google назвал её иначе — например, с -preview) */
 export async function sttModel(key, fetcher = fetch) {

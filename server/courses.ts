@@ -78,7 +78,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       // 20.11.2026: всё, что уходит в Live-модель, из JSON экрана (src/exercises/talk/defaults.ts; только отличия от умолчаний) и персонаж (шаблон «Разговор с персонажем»)
       put(o, 'lock', str(r.lock, 2000)); put(o, 'opener', str(r.opener, 500))
       put(o, 'silenceMs', within(r.silenceMs, 200, 5000, true)); if (r.endSens === 'high') o.endSens = 'high'; put(o, 'temperature', within(r.temperature, 0, 2))
-      if (r.noiseSuppression === true) o.noiseSuppression = true; if (r.avatar === true) o.avatar = true }
+      if (r.noiseSuppression === true) o.noiseSuppression = true; if (r.avatar === true) o.avatar = true; if (r.ptt === true) o.ptt = true }
     // «Транскрипция» (Gemini 3.5 Transcribe Live, 20.11.2026, эксперимент): подсказка, язык
     if (kind === 'stt') { put(o, 'text', str(r.text, 300)); if (['en-US', 'es-ES'].includes(String(r.lang))) o.lang = r.lang }
     // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.

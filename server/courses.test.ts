@@ -78,13 +78,13 @@ await C.put(me, 'k12', { ...course, items: [{ id: 'L', type: 'lesson', title: ''
   ok('разговор с Gemini: поля сохраняются, мусор срезан', s[0].kind === 'talk' && s[0].text === 'Собеседование' && s[0].prompt === 'Jesteś konsulem' && s[0].voice === 'Puck' && s[0].model === 'gemini-3.8-live' && !('junk' in s[0]) && !('voice' in s[1]) && !('model' in s[1])) }
 // 20.11.2026: настройки моделей из JSON экрана и персонаж — сохраняются, неверные значения срезаются
 await C.put(me, 'k13t', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [
-  { id: 't1', kind: 'talk', avatar: true, lock: 'Mów po polsku.', opener: 'Dzień dobry', silenceMs: 2000, endSens: 'high', temperature: 0.4, noiseSuppression: true },
+  { id: 't1', kind: 'talk', avatar: true, ptt: true, lock: 'Mów po polsku.', opener: 'Dzień dobry', silenceMs: 2000, endSens: 'high', temperature: 0.4, noiseSuppression: true },
   { id: 't2', kind: 'talk', avatar: 'yes', silenceMs: 50, temperature: 9, endSens: 'mid' },
   { id: 'k1', kind: 'kp', text: 'Q', ideal: 'I', engine: 'api', model: 'live', format: 'JSON.', message: 'P: {question}', thinking: true, temperature: 0.2, livePrompt: 'L', liveAsk: 'A', liveMore: 'M', discussPrompt: 'D', discussOpener: 'O' },
   { id: 'k2', kind: 'kp', text: 'Q', ideal: 'I', dic: 'file' }, { id: 'k3', kind: 'kp', text: 'Q', ideal: 'I', dic: 'stream' }] }] })
 { const s = ((await C.get('k13t')) as any).items[0].steps
-  ok('разговор: персонаж и настройки модели сохраняются', s[0].avatar === true && s[0].lock === 'Mów po polsku.' && s[0].opener === 'Dzień dobry' && s[0].silenceMs === 2000 && s[0].endSens === 'high' && s[0].temperature === 0.4 && s[0].noiseSuppression === true)
-  ok('разговор: неверные значения срезаны', !('avatar' in s[1]) && !('silenceMs' in s[1]) && !('temperature' in s[1]) && !('endSens' in s[1]))
+  ok('разговор: персонаж и настройки модели сохраняются', s[0].avatar === true && s[0].ptt === true && s[0].lock === 'Mów po polsku.' && s[0].opener === 'Dzień dobry' && s[0].silenceMs === 2000 && s[0].endSens === 'high' && s[0].temperature === 0.4 && s[0].noiseSuppression === true)
+  ok('разговор: неверные значения срезаны', !('avatar' in s[1]) && !('ptt' in s[1]) && !('silenceMs' in s[1]) && !('temperature' in s[1]) && !('endSens' in s[1]))
   ok('ответ по смыслу · Gemini API: промпты и настройки проверки сохраняются', s[2].engine === 'api' && s[2].model === 'live' && s[2].format === 'JSON.' && s[2].message === 'P: {question}' && s[2].thinking === true && s[2].temperature === 0.2 && s[2].livePrompt === 'L' && s[2].liveAsk === 'A' && s[2].liveMore === 'M' && s[2].discussPrompt === 'D' && s[2].discussOpener === 'O')
   ok('ответ по смыслу · целым аудио: dic: file сохраняется, чужое значение — нет', s[3].dic === 'file' && !('dic' in s[4])) }
 await C.put(me, 'k13', { ...course, items: [{ id: 'L', type: 'lesson', title: '', steps: [{ id: 'z1', kind: 'stt', text: 'Powiedz coś', lang: 'en-US', junk: 1 }] }] })

@@ -9,7 +9,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import { usePlay, useEdit } from '../ctx'
-import { startTalk, liveModels, liveName, firstKey } from '../../utils/live'
+import { startTalk, startTranscribe, sttModel, liveModels, liveName, firstKey } from '../../utils/live'
 import { ai } from '../../utils/gemini'
 import { aiIcon } from '../../utils/ai'
 import { VOICES } from '../../utils/tts'
@@ -74,22 +74,70 @@ async function start() {
   if (!m) { err.value = 'Google не дал этому ключу ни одной Live-модели'; return }
   usedV.value = vpick.value || voice.value
   const c = cfg.value
-  sess = startTalk({ key, model: m, voice: usedV.value, lang, system: talkSystem(c), opener: c.opener,
+  if (ptt.value) startTr(key)
+  sess = startTalk({ key, model: m, voice: usedV.value, lang, system: talkSystem(c), opener: c.opener, manual: ptt.value,
     silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, rec: evalOn.value ? onRec : null, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
       st.value = s === 'error' ? 'ended' : s
       if (s === 'error') err.value = info
       if (s === 'live') { t0.value = now.value = Date.now(); clearInterval(clock); clock = setInterval(() => { now.value = Date.now() }, 500) }
-      if (s === 'ended' || s === 'error') { clearInterval(clock); level.value = 0; sess = null; if (evalOn.value && speechSec.value - sentAt >= 8) sendEval(true) }          // хвост речи — последней оценкой
+      if (s === 'ended' || s === 'error') { clearInterval(clock); level.value = 0; sess = null; stopTr(); if (evalOn.value && speechSec.value - sentAt >= 8) sendEval(true) }          // хвост речи — последней оценкой
     },
-    text: (role, t) => push(role, t),
-    turn: () => { const l = lines.value.at(-1); if (l) l.closed = true },
-    level: (v) => { level.value = level.value * 0.6 + v * 0.4 },
+    text: (role, t) => { if (ptt.value && role === 'me') return; push(role, t); if (ptt.value && role === 'ai') aiGuard() },          // рация: свою речь пишет Transcribe
+    turn: () => { const l = lines.value.at(-1); if (l && !l.draft) l.closed = true; if (ptt.value && pt.value === 'wait') pt.value = 'idle' },
+    level: (v) => { if (!ptt.value) level.value = level.value * 0.6 + v * 0.4 },
   } })
   st.value = 'connecting'
 }
-function stop() { sess?.stop() }
+function stop() { if (pt.value === 'talk') pttEnd(); sess?.stop() }
+// «Разговор · рация» (21.11.2026, тест; step.ptt): нажал — говоришь сколько нужно, нажал ещё раз — реплика уходит, Gemini отвечает.
+// Две модели: свою речь пишет Gemini Transcribe Live (точнее распознаёт, язык закреплён настройкой), отвечает Gemini Live —
+// она слышит тот же голос (manual: activityStart / activityEnd — «договорил» решает кнопка, а не пауза). Нажатие, пока Gemini
+// говорит, — перебить. Язык: реплика с кириллицей — подсказка «по-польски»; Gemini ответила не по-польски — просим по-польски
+const ptt = computed(() => !!props.step.ptt)
+const pt = ref('idle')          // idle — можно говорить; talk — говорю; wait — отправил, жду ответ
+let tr = null, trAcc = '', trDraft = '', trLine = null, flushT = 0, aiWarned = null
+const CYR = /[\u0400-\u04FF]/, EN = /\b(the|and|you|your|what|is|are|this|that|with)\b/gi
+function startTr(key) {
+  sttModel(key).then((model) => {
+    if (!sess) return
+    tr = startTranscribe({ key, model, lang, on: {
+      state: (s, info) => { if (s === 'error') note.value = 'расшифровка: ' + info },
+      interim: (t) => { trDraft = t; trShow() },
+      final: (t) => { trAcc = (trAcc + ' ' + t).trim(); trDraft = ''; trShow() },
+      level: (v) => { level.value = level.value * 0.6 + v * 0.4 },
+    } })
+    tr.hold(true)
+  })
+}
+function stopTr() { tr?.stop(); tr = null; clearTimeout(flushT); pt.value = 'idle'; if (trLine) { trCommit() } }
+function trShow() { if (trLine) trLine.t = (trAcc + ' ' + trDraft).trim() }
+function pttStart() {
+  if (!sess || st.value !== 'live') return
+  if (pt.value === 'talk') return pttEnd()
+  clearTimeout(flushT); if (trLine) trCommit()
+  trAcc = ''; trDraft = ''
+  lines.value.push({ role: 'me', t: '', closed: false, draft: true }); trLine = lines.value.at(-1)
+  if (atEnd.value) nextTick(() => toEnd(false))
+  sess.talkStart(); tr?.hold(false); pt.value = 'talk'
+}
+function pttEnd() {
+  if (pt.value !== 'talk') return
+  sess?.talkEnd(); tr?.flush(); tr?.hold(true); pt.value = 'wait'; level.value = 0
+  clearTimeout(flushT); flushT = setTimeout(trCommit, 1500)          // хвост расшифровки приходит после «отправить»
+}
+function trCommit() {
+  const l = trLine; trLine = null; if (!l) return
+  l.t = (trAcc + ' ' + trDraft).trim() || l.t; l.draft = false; l.closed = true
+  if (!l.t) l.t = '…'
+  if (CYR.test(l.t)) l.warn = 'похоже, по-русски — говорите по-польски'
+}
+/** Gemini ответила не по-польски — один раз за реплику просим по-польски и помечаем пузырь */
+function aiGuard() {
+  const l = lines.value.at(-1); if (!l || l.role !== 'ai' || aiWarned === l) return
+  if (CYR.test(l.t) || (l.t.match(EN) || []).length >= 2) { aiWarned = l; l.warn = 'Gemini ответила не по-польски — попросили по-польски'; sess?.send('Odpowiadaj wyłącznie po polsku.') }
+}
 const outLevel = () => sess?.outLevel?.() ?? 0          // громкость голоса Gemini — для персонажа (step.avatar)
 
 // «Оценивать речь» во время разговора (20.11.2026): копится только свой голос (пока Gemini молчит); набралось ещё 20 с речи —
@@ -127,6 +175,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
     <ExText v-model="step.text" tag="p" class="tk" ph="Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски" multi>{{ step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }}</ExText>
     <div v-if="!p.edit" class="thd" @pointerdown.stop>          <!-- вверху (21.11.2026): голос и «Оценивать речь»; пока идёт разговор — не меняются -->
       <label class="ev" :class="{ off: busy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="busy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
+      <span v-if="ptt" class="lk" title="Язык закреплён: польский — и для распознавания (Transcribe Live), и для ответа Gemini"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>PL</span>
       <label class="pill" :class="{ off: busy }" title="Голос Gemini — запоминается в этом браузере">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
         <select :value="vpick" :disabled="busy" aria-label="Голос" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice && step.voice !== 'Kore' ? ' (из урока)' : '' }}</option>
@@ -148,6 +197,16 @@ const hasKeys = computed(() => ai.keys.length > 0)
       <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" />
       <div class="tc">
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ st === 'ended' ? 'Поговорить ещё раз' : 'Начать разговор' }}</button>
+        <div v-else-if="ptt" class="pt" :class="pt">          <!-- рация: одна большая кнопка — нажал, говоришь, нажал — отправил -->
+          <button type="button" class="pr" @click="stop">Завершить</button>
+          <button type="button" class="pb" :style="{ '--l': level }" :disabled="st !== 'live'" :aria-label="pt === 'talk' ? 'Отправить реплику' : 'Нажмите и говорите'" @click="pttStart">
+            <svg v-if="pt === 'talk'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5" /></svg>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+          </button>
+          <span class="pi">{{ st === 'live' ? sec : '' }}</span>
+          <p class="pc"><b>{{ st === 'connecting' ? 'Подключаюсь к Gemini…' : pt === 'talk' ? 'Говорите' : pt === 'wait' ? 'Gemini отвечает' : 'Нажмите и говорите' }}</b>
+            <small>{{ st === 'connecting' ? '' : pt === 'talk' ? 'нажмите ещё раз — реплика уйдёт в Gemini' : pt === 'wait' ? 'нажмите — перебить и сказать своё' : 'нажмите ещё раз — Gemini ответит' }}<template v-if="note"> · {{ note }}</template></small></p>
+        </div>
         <template v-else>
           <span class="orb" :style="{ '--l': level }"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></span>
           <div class="ts"><b>{{ st === 'connecting' ? 'Подключаюсь к Gemini…' : muted ? 'Микрофон выключен' : 'Говорите — Gemini слушает' }}</b><small v-if="st === 'live'">{{ sec }} · {{ liveName(used) }} · {{ usedV }}<template v-if="note"> · {{ note }}</template></small></div>
@@ -165,7 +224,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
       <p v-if="err" class="er">{{ err }}</p>
       <div v-if="lines.length" class="txw">
         <div ref="box" class="tx" :class="{ sc: scrolling }" @scroll.passive="onScroll">
-          <div v-for="(l, i) in lines" :key="i" class="b" :class="l.role">{{ l.t }}</div>
+          <div v-for="(l, i) in lines" :key="i" class="b" :class="[l.role, { dr: l.draft }]"><small v-if="l.draft" class="bl">Transcribe Live пишет…</small>{{ l.t || (l.draft ? '…' : '') }}<small v-if="l.warn" class="bw">⚠ {{ l.warn }}</small></div>
         </div>
         <button v-if="!atEnd" type="button" class="tdn" aria-label="Вниз, к новым репликам" @click="toEnd()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
       </div>
@@ -212,6 +271,18 @@ const hasKeys = computed(() => ai.keys.length > 0)
 .sm { flex: none; height: 34px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer } .sm.on { background: #fff4d6 } .sm.red { color: var(--red-d) }
 .er { margin: 0; font-size: 13px; font-weight: 700; color: var(--red-d) }
 .txw { position: relative }
+/* рация (21.11.2026) */
+.tc:has(.pt) { padding: 12px 10px } .pt { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px 10px }
+.pr { justify-self: start; height: 34px; padding: 0 12px; border: 1px solid #f1c7c7; border-radius: 17px; background: var(--card); color: #c0392b; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer }
+.pi { justify-self: end; font-size: 12px; font-weight: 700; color: var(--hint); font-variant-numeric: tabular-nums }
+.pb { --l: 0; width: 76px; height: 76px; display: grid; place-items: center; border: 0; border-radius: 50%; background: linear-gradient(135deg, #4b8df8, #a35cf0); color: #fff; box-shadow: 0 6px 18px rgba(91, 108, 240, .35); cursor: pointer; transition: background .2s, box-shadow .15s; touch-action: manipulation }
+.pb svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round } .pb:disabled { opacity: .5; cursor: default }
+.pt.talk .pb { background: #e5484d; box-shadow: 0 0 0 calc(6px + var(--l) * 14px) rgba(229, 72, 77, .18), 0 0 0 calc(14px + var(--l) * 24px) rgba(229, 72, 77, .07) }
+.pt.wait .pb { background: #eef1f6; color: #6b7a99; box-shadow: none }
+.pc { grid-column: 1 / -1; margin: 0; text-align: center; font-size: 14px } .pc small { display: block; font-size: 12px; font-weight: 700; color: var(--hint) } .pt.talk .pc b { color: #c0392b }
+.b.dr { background: #f2fbe9; border: 1.5px dashed #9ad07a; color: #4f7a3c } .bl { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #5aa33a }
+.bw { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 800; color: #c0392b }
+.lk { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
 .tx { display: flex; flex-direction: column; gap: 5px; max-height: max(340px, 52vh); overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px 4px 2px;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px);          /* верх растворяется */
   scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color .3s }
