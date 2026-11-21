@@ -15,6 +15,8 @@ import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
 import { stepJson, applyStepJson, tplOf, tplTitle, tplDesc, SKILL_T, skillsOf, BOOK } from '../utils/lesson'
 import { assemble } from '../exercises/assemble'
+import JsonModal from './JsonModal.vue'          // правка JSON — большое окно «как в VS Code» (21.11.2026)
+import { jsonTheme, flipJsonTheme as flipTheme } from '../utils/jsonTheme.js'
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
@@ -212,8 +214,6 @@ onUnmounted(() => { ro.disconnect(); ro2.disconnect(); cancelAnimationFrame(hT) 
 const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
 // JSON экрана прямо в карточке (17.11.2026): «{ }» — переключить живой экран ↔ его JSON; «Скопировать»; тема кода — светлая / тёмная (запоминается)
 const jsonOn = reactive({})
-const jsonTheme = ref((() => { try { return localStorage.getItem('tma.jsonTheme') === 'dark' ? 'dark' : 'light' } catch { return 'light' } })())
-function flipTheme() { jsonTheme.value = jsonTheme.value === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('tma.jsonTheme', jsonTheme.value) } catch { /* приватный режим */ } }
 const copied = ref(null)
 const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 // подсветка: ключи, строки, числа, true / false / null
@@ -221,7 +221,7 @@ const jsonHtml = (s) => esc(JSON.stringify(stepJson(s), null, 2)).replace(/("(?:
   (m, str, colon, num, lit) => (str ? (colon ? `<span class="jk">${str}</span>${colon}` : `<span class="js">${str}</span>`) : num ? `<span class="jn">${num}</span>` : `<span class="jl">${lit}</span>`))
 // Правка JSON (19.11.2026): «Править» — тот же JSON в поле; «Применить» — экран из текста (id прежний), ошибка — строкой под полем
 const jsonEdit = reactive({}), jsonErr = reactive({})
-function jsonStart(s) { jsonEdit[s.id] = JSON.stringify(stepJson(s), null, 2); jsonErr[s.id] = '' }
+function jsonStart(s) { for (const k in jsonEdit) delete jsonEdit[k]; jsonEdit[s.id] = JSON.stringify(stepJson(s), null, 2); jsonErr[s.id] = '' }          // окно — одно на всех
 function jsonStop(s) { delete jsonEdit[s.id]; delete jsonErr[s.id] }
 function jsonApply(s) {
   const e = applyStepJson(s, jsonEdit[s.id] ?? ''); if (e) { jsonErr[s.id] = e; return }
@@ -235,6 +235,7 @@ function howOf(s) {
   if (jsonEdit[s.id] != null) { try { raw = JSON.parse(jsonEdit[s.id]) } catch { return { parts: [], warn: ['JSON пока не разбирается — проверьте кавычки и запятые'] } } }
   return assemble(raw ?? stepJson(s))
 }
+const ownNote = (s) => { const o = howOf(s).own ?? []; return (o.length ? 'Своё у экрана: ' + o.join(', ') + '. ' : 'У экрана своё — только вопрос и эталон. ') + 'Остальное — общее упражнения в курсе («{ }» на плитке в меню Exercise).' }
 function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { if (copied.value === s.id) copied.value = null }, 2000) }
 </script>
 
@@ -282,18 +283,16 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
             <svg v-else viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
           </button>
           <button v-if="hasHow(s)" class="jc" :class="{ on: howOn[s.id] }" title="Что из этого JSON уйдёт в чат и в модели — с подставленными вопросом и эталоном" @click="howOn[s.id] = !howOn[s.id]">Как собирается</button>
-          <template v-if="jsonEdit[s.id] != null"><button class="jc" @click="jsonStop(s)">Отмена</button><button class="jc ap" @click="jsonApply(s)">Применить</button></template>
-          <template v-else><button v-if="!readonly" class="jc" title="Изменить экран прямо в JSON" @click="jsonStart(s)">Править</button><button class="jc" :class="{ ok: copied === s.id }" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать' }}</button></template>
+          <button v-if="!readonly" class="jc" title="Изменить экран в JSON — в большом окне" @click="jsonStart(s)">Править</button><button class="jc" :class="{ ok: copied === s.id }" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать' }}</button>
         </div>
-        <textarea v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" class="jed" spellcheck="false" aria-label="JSON экрана" @keydown.stop @keydown.ctrl.enter.prevent="jsonApply(s)" @keydown.meta.enter.prevent="jsonApply(s)" @keydown.esc="jsonStop(s)" @paste.stop @copy.stop @cut.stop @wheel="ownWheel" />
-        <small v-if="jsonErr[s.id]" class="jer">{{ jsonErr[s.id] }}</small>
-        <div v-if="howOn[s.id] && hasHow(s)" class="jhow" :class="{ full: jsonEdit[s.id] == null }" @wheel="ownWheel">          <!-- просмотр — вместо JSON во всю высоту; правка — под полем -->
+        <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :title="'JSON экрана · ' + tplTitle(s)" sub="Своё у экрана — вопрос и эталон; остальное общее для курса («{ }» на плитке в меню Exercise)" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)" />
+        <div v-if="howOn[s.id] && hasHow(s)" class="jhow full" @wheel="ownWheel">          <!-- просмотр — вместо JSON во всю высоту -->
           <p v-for="w in howOf(s).warn" :key="w" class="jhw">⚠ {{ w }}</p>
-          <p class="jho">{{ howOf(s).own.length ? 'Своё у экрана: ' + howOf(s).own.join(', ') + '. ' : 'У экрана своё — только вопрос и эталон. ' }}Остальное — общее упражнения в курсе («{ }» на плитке в меню Exercise).</p>
+          <p class="jho">{{ ownNote(s) }}</p>
           <section v-for="pt in howOf(s).parts" :key="pt.to"><b>{{ pt.to }}</b><pre>{{ pt.text || '‹пусто›' }}</pre></section>
         </div>
-        <pre v-if="jsonEdit[s.id] == null && !howOn[s.id]" v-html="jsonHtml(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
-        <small class="jft">{{ jsonEdit[s.id] != null ? 'Ctrl+Enter — применить, Esc — отмена' : 'Образец для ИИ. Обратно — Ctrl+V или перетащите JSON на холст' }}</small>
+        <pre v-if="!howOn[s.id]" v-html="jsonHtml(s)" :title="readonly ? '' : 'Двойной клик — править в большом окне'" @dblclick="readonly || jsonStart(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
+        <small class="jft">Образец для ИИ. Обратно — Ctrl+V или перетащите JSON на холст{{ readonly ? '' : '. Двойной клик — править' }}</small>
       </div>
       <LessonPlayer v-else-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
       <!-- Упражнения-шаблоны (src/exercises): правка = тот же живой экран (LessonPlayer edit) — один файл разметки, окно не меняет размер -->
@@ -465,8 +464,6 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .jv pre { flex: 1; margin: 0; max-height: 380px; overflow: auto; padding: 12px 14px; border: 1px solid #ececec; border-radius: 12px; background: #f7f7f8; color: #3c3c3c; font: 12.5px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word }
 .jv.dark pre { background: #1e1e1e; border-color: #1e1e1e; color: #d4d4d4 }
 /* правка JSON — то же окно кода, но поле */
-.jed { flex: 1; min-height: 220px; max-height: 380px; margin: 0; padding: 12px 14px; box-sizing: border-box; border: 1px solid #8cc8ff; border-radius: 12px; background: #fff; color: #3c3c3c; font: 12.5px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; overflow: auto; resize: none; outline: none; user-select: text }
-.jv.dark .jed { background: #1e1e1e; color: #d4d4d4; border-color: #3a6ea5 }
 .jer { color: #c33; font-size: 12px; font-weight: 700 } .jc.ap { background: var(--blue); color: #fff } .jc.ap:hover { background: var(--blue-d) }
 .jv pre :deep(.jk) { color: #185fa5 } .jv pre :deep(.js) { color: #3b6d11 } .jv pre :deep(.jn) { color: #ba7517 } .jv pre :deep(.jl) { color: #9747ff }
 .jv.dark pre :deep(.jk) { color: #9cdcfe } .jv.dark pre :deep(.js) { color: #ce9178 } .jv.dark pre :deep(.jn) { color: #b5cea8 } .jv.dark pre :deep(.jl) { color: #569cd6 }

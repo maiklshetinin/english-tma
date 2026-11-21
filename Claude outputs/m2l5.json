@@ -1,0 +1,249 @@
+{
+  "lesson_id": "m2l5",
+  "course": "Курс Karta Polaka / Pobyt Stały от Марии Кобрыни",
+  "module": "Модуль 2 - Праздники",
+  "lesson": "Урок 5. Период рождества",
+  "pass_threshold": 60,
+  "style": {
+    "fonts": {
+      "titles": "Alice",
+      "text": "Libra Serif Modern (похож — PT Serif)"
+    },
+    "colors": {
+      "background": "#ffeccf",
+      "text": "#351a05",
+      "accent": "#cd8a30",
+      "note": "#7b4224",
+      "titles": "#cda15e"
+    },
+    "markup": {
+      "star": "true — красная звезда: ответ нужно знать обязательно (в уроке и презентации тоже выделены)",
+      "reference": "чистый текст: абзацы — с новой строки, пункты списка — «• »",
+      "reference_md": "**жирный** — и жирные факты, и оранжевые термины (как понимает приложение)",
+      "reference_html": "<b class=\"acc\"> — оранжевый термин, <b> — жирный, <i> — курсив, <ul><li> — список",
+      "notes": "заметки Марии по-русски — не часть эталона"
+    }
+  },
+  "intro": "Рождество – один из важнейших праздников в Польше. Важно знать все, что с ним связано: даты, последовательность праздников в этот период, традиции, личности, символизм.",
+  "questions": [
+    {
+      "id": 1,
+      "star": false,
+      "question": "Proszę opowiedzieć o Adwencie.",
+      "question_in_answers": "Proszę opowiedzieć o adwencie.",
+      "reference": "Adwent to czas radosnego oczekiwania na Boże Narodzenie. Trwa cztery tygodnie i rozpoczyna się w pierwszą niedzielę po 26 listopada.\nPodczas Adwentu kupujemy dzieciom kalendarz adwentowy, który ma 24 okienka – otwieramy jedno każdego dnia aż do Wigilii. W każdym z nich znajduje się mała niespodzianka.\nDekorujemy również wieniec adwentowy, wykonany z gałązek świerku i ozdobiony czterema świecami, symbolizującymi cztery niedziele Adwentu. Co tydzień zapalamy jedną świecę, aż do Bożego Narodzenia.",
+      "reference_md": "**Adwent** to czas radosnego oczekiwania na Boże Narodzenie. Trwa **cztery tygodnie** i rozpoczyna się **w pierwszą niedzielę po 26 listopada**.\nPodczas Adwentu kupujemy dzieciom **kalendarz adwentowy**, który ma 24 okienka – otwieramy jedno każdego dnia aż do Wigilii. W każdym z nich znajduje się mała niespodzianka.\nDekorujemy również **wieniec adwentowy**, wykonany z gałązek świerku i ozdobiony **czterema świecami**, symbolizującymi cztery niedziele Adwentu. Co tydzień zapalamy jedną świecę, aż do Bożego Narodzenia.",
+      "reference_html": "<p><b class=\"acc\">Adwent</b> to czas radosnego oczekiwania na Boże Narodzenie. Trwa <b>cztery tygodnie</b> i rozpoczyna się <b>w pierwszą niedzielę po 26 listopada</b>.</p><p>Podczas Adwentu kupujemy dzieciom <b class=\"acc\">kalendarz adwentowy</b>, który ma 24 okienka – otwieramy jedno każdego dnia aż do Wigilii. W każdym z nich znajduje się mała niespodzianka.</p><p>Dekorujemy również <b class=\"acc\">wieniec adwentowy</b>, wykonany z gałązek świerku i ozdobiony <b>czterema świecami</b>, symbolizującymi cztery niedziele Adwentu. Co tydzień zapalamy jedną świecę, aż do Bożego Narodzenia.</p>"
+    },
+    {
+      "id": 2,
+      "star": false,
+      "question": "Kiedy i jak obchodzimy Mikołajki?",
+      "reference": "Mikołajki obchodzimy 6 grudnia na cześć świętego Mikołaja, biskupa z Miry, który czynił cuda.\nTego dnia dzieci otrzymują drobne prezenty, które zazwyczaj są ukrywane pod poduszką, w butach lub specjalnych skarpetach – najczęściej są to słodycze, zabawki lub książki.",
+      "reference_md": "**Mikołajki** obchodzimy **6 grudnia** na cześć świętego Mikołaja, biskupa z Miry, który czynił cuda.\nTego dnia dzieci otrzymują **drobne prezenty**, które zazwyczaj są ukrywane pod poduszką, w butach lub specjalnych skarpetach – najczęściej są to słodycze, zabawki lub książki.",
+      "reference_html": "<p><b class=\"acc\">Mikołajki</b> obchodzimy <b>6 grudnia</b> na cześć świętego Mikołaja, biskupa z Miry, który czynił cuda.</p><p>Tego dnia dzieci otrzymują <b class=\"acc\">drobne prezenty</b>, które zazwyczaj są ukrywane pod poduszką, w butach lub specjalnych skarpetach – najczęściej są to słodycze, zabawki lub książki.</p>"
+    },
+    {
+      "id": 3,
+      "star": true,
+      "question": "Kiedy obchodzimy Wigilię i na czym polega to święto?",
+      "question_in_answers": "Kiedy obchodzona jest Wigilia? O co chodzi w tym święcie?",
+      "reference": "Wigilia Bożego Narodzenia obchodzona jest wieczorem 24 grudnia. To uroczysty, rodzinny wieczór przed Bożym Narodzeniem.\nCała rodzina zbiera się na wspólną kolację i oczekuje na narodziny Jezusa. Wieczerza rozpoczyna się od wspólnej modlitwy (na przykład \"Ojcze nasz\", \"Zdrowaś Maryjo\") oraz czytania fragmentu Ewangelii o narodzeniu Chrystusa.\nNastępnie śpiewane są kolędy, po czym następuje dzielenie się opłatkiem i składanie życzeń. Po tych obrzędach wszyscy zasiadają do wigilijnej kolacji.",
+      "reference_md": "**Wigilia Bożego Narodzenia** obchodzona jest wieczorem **24 grudnia**. To uroczysty, rodzinny wieczór przed Bożym Narodzeniem.\nCała rodzina zbiera się na wspólną kolację i oczekuje na narodziny Jezusa. Wieczerza rozpoczyna się od **wspólnej modlitwy** (na przykład \"Ojcze nasz\", \"Zdrowaś Maryjo\") oraz czytania fragmentu Ewangelii o narodzeniu Chrystusa.\nNastępnie śpiewane są **kolędy**, po czym następuje **dzielenie się opłatkiem** i składanie życzeń. Po tych obrzędach wszyscy zasiadają do wigilijnej kolacji.",
+      "reference_html": "<p><b class=\"acc\">Wigilia Bożego Narodzenia</b> obchodzona jest wieczorem <b>24 grudnia</b>. To uroczysty, rodzinny wieczór przed Bożym Narodzeniem.</p><p>Cała rodzina zbiera się na wspólną kolację i oczekuje na narodziny Jezusa. Wieczerza rozpoczyna się od <b>wspólnej modlitwy</b> <i>(na przykład \"Ojcze nasz\", \"Zdrowaś Maryjo\")</i> oraz czytania fragmentu Ewangelii o narodzeniu Chrystusa.</p><p>Następnie śpiewane są <b>kolędy</b>, po czym następuje <b>dzielenie się opłatkiem</b> i składanie życzeń. Po tych obrzędach wszyscy zasiadają do wigilijnej kolacji.</p>"
+    },
+    {
+      "id": 4,
+      "star": true,
+      "question": "Jakie kolędy Pan(i) zna?",
+      "reference": "Popularne polskie kolędy to “Cicha noc, święta noc”, “Bóg się rodzi”, “Wśród nocnej ciszy”, “Dzisiaj w Betlejem”.\nKolędy śpiewamy tradycyjnie podczas Wigilii i w okresie Bożego Narodzenia, od 24 grudnia aż do Święta Trzech Króli 6 stycznia.",
+      "reference_md": "Popularne polskie **kolędy** to “**Cicha noc, święta noc**”, “**Bóg się rodzi**”, “Wśród nocnej ciszy”, “Dzisiaj w Betlejem”.\nKolędy śpiewamy tradycyjnie podczas Wigilii i w okresie Bożego Narodzenia, od 24 grudnia aż do Święta Trzech Króli 6 stycznia.",
+      "reference_html": "<p>Popularne polskie <b class=\"acc\">kolędy</b> to “<b>Cicha noc, święta noc</b>”, “<b>Bóg się rodzi</b>”, “Wśród nocnej ciszy”, “Dzisiaj w Betlejem”.</p><p>Kolędy śpiewamy tradycyjnie podczas Wigilii i w okresie Bożego Narodzenia, od 24 grudnia aż do Święta Trzech Króli 6 stycznia.</p>",
+      "notes": [
+        "(вам нужно знать хотя бы 2)"
+      ]
+    },
+    {
+      "id": 5,
+      "star": true,
+      "question": "Proszę wymienić tradycje wigilijne i ich symbolikę.",
+      "question_in_answers": "Prosze wymienić niektóre tradycje na Wigilię i do czego one nawiązują?",
+      "reference": "Podczas Wigilii kultywujemy wiele tradycji, na przykład:\n• Ubieranie choinki: Dekorujemy choinkę lampkami i bombkami (zazwyczaj w wigilijny poranek). Choinka symbolizuje rajskie drzewo, nadzieję i życie.\n• Kolędowanie: Śpiewamy kolędy, takie jak „Cicha noc, święta noc” czy „Bóg się rodzi”, i składamy życzenia na kolejny rok. Przebrani kolędnicy odwiedzają domy, życzą gospodarzom szczęścia i pomyślności, a w zamian otrzymują dary (słodycze lub pieniądze). Kolędowanie trwa od Bożego Narodzenia aż do Trzech Króli.\n• Szopki bożonarodzeniowe: Szopki to makiety przedstawiające miejsce narodzin Jezusa – często jako stajnię lub jaskinię. W szopkach są figury Świętej Rodziny, gwiazda betlejemska, anioły, pasterze, Trzej Królowie i zwierzęta. Szopka symbolizuje skromność miejsca narodzin Jezusa.\n• Dwanaście potraw: Na wigilijnym stole jest dwanaście postnych potraw, jak kutia, pierogi z kapustą i grzybami, karp, barszcz z uszkami i makowiec. Symbolizują 12 apostołów i dostatek w nowym roku.\n• Oczekiwanie pierwszej gwiazdki: Pierwsza gwiazdka na niebie symbolizuje gwiazdę betlejemską i oznacza czas rozpoczęcia kolacji wigilijnej.\n• Sianko pod obrusem: Kładziemy sianko pod obrusem, to przypomina o ubóstwie i skromności, w jakiej narodził się Jezus.\n• Dzielenie się opłatkiem: To łamanie cienkiego wafla (z mąki i wody) z każdym członkiem rodziny i składanie sobie wzajemnych życzeń. Nawiązuje do dzielenia się chlebem i symbolizuje chęć bycia razem, przebaczenie i miłość.\n• Puste miejsce przy stole: Zostawiamy jedno wolne miejsce dla niespodziewanego gościa – to nawiązuje do Świętej Rodziny, która szukała schronienia na obcej ziemi, oraz pamięć o zmarłych bliskich.\n• Pasterka: Uroczysta msza odprawiana o północy z 24 na 25 grudnia, która symbolizuje narodzenie Jezusa i początek świąt Bożego Narodzenia.",
+      "reference_md": "Podczas Wigilii kultywujemy wiele tradycji, na przykład:\n• **Ubieranie choinki**: Dekorujemy choinkę lampkami i bombkami (zazwyczaj w wigilijny poranek). Choinka symbolizuje rajskie drzewo, nadzieję i życie.\n• **Kolędowanie**: Śpiewamy kolędy, takie jak „**Cicha noc, święta noc**” czy „**Bóg się rodzi**”, i składamy życzenia na kolejny rok. Przebrani kolędnicy odwiedzają domy, życzą gospodarzom szczęścia i pomyślności, a w zamian otrzymują dary (słodycze lub pieniądze). Kolędowanie trwa od Bożego Narodzenia aż do Trzech Króli.\n• **Szopki bożonarodzeniowe**: Szopki to makiety przedstawiające **miejsce narodzin** Jezusa – często jako stajnię lub jaskinię. W szopkach są figury Świętej Rodziny, gwiazda betlejemska, anioły, pasterze, Trzej Królowie i zwierzęta. Szopka symbolizuje skromność miejsca narodzin Jezusa.\n• **Dwanaście potraw**: Na wigilijnym stole jest dwanaście **postnych** potraw, jak kutia, pierogi z kapustą i grzybami, karp, barszcz z uszkami i makowiec. Symbolizują 12 apostołów i dostatek w nowym roku.\n• **Oczekiwanie pierwszej gwiazdki**: Pierwsza gwiazdka na niebie symbolizuje gwiazdę **betlejemską** i oznacza czas rozpoczęcia kolacji wigilijnej.\n• **Sianko pod obrusem**: Kładziemy sianko pod obrusem, to przypomina o **ubóstwie** i skromności, w jakiej narodził się Jezus.\n• **Dzielenie się opłatkiem**: To łamanie **cienkiego wafla** (z mąki i wody) z każdym członkiem rodziny i składanie sobie wzajemnych życzeń. Nawiązuje do dzielenia się chlebem i symbolizuje chęć bycia razem, przebaczenie i miłość.\n• **Puste miejsce przy stole**: Zostawiamy jedno wolne miejsce dla niespodziewanego gościa – to nawiązuje do **Świętej Rodziny**, która szukała schronienia na obcej ziemi, oraz **pamięć o zmarłych bliskich**.\n• **Pasterka:** Uroczysta msza odprawiana o północy z 24 na 25 grudnia, która symbolizuje narodzenie Jezusa i początek świąt Bożego Narodzenia.",
+      "reference_html": "<p>Podczas Wigilii kultywujemy wiele tradycji, na przykład:</p><ul><li><b class=\"acc\">Ubieranie choinki</b>: Dekorujemy choinkę lampkami i bombkami (zazwyczaj w wigilijny poranek). Choinka symbolizuje rajskie drzewo, nadzieję i życie.</li><li><b class=\"acc\">Kolędowanie</b>: Śpiewamy kolędy, takie jak <i>„</i><b>Cicha noc, święta noc</b><i>”</i> czy <i>„</i><b>Bóg się rodzi</b><i>”</i>, i składamy życzenia na kolejny rok. Przebrani kolędnicy odwiedzają domy, życzą gospodarzom szczęścia i pomyślności, a w zamian otrzymują dary (słodycze lub pieniądze). Kolędowanie trwa od Bożego Narodzenia aż do Trzech Króli.</li><li><b class=\"acc\">Szopki bożonarodzeniowe</b>: Szopki to makiety przedstawiające <b>miejsce narodzin</b> Jezusa – często jako stajnię lub jaskinię. W szopkach są figury Świętej Rodziny, gwiazda betlejemska, anioły, pasterze, Trzej Królowie i zwierzęta. Szopka symbolizuje skromność miejsca narodzin Jezusa.</li><li><b class=\"acc\">Dwanaście potraw</b>: Na wigilijnym stole jest dwanaście <b>postnych</b> potraw, jak kutia, pierogi z kapustą i grzybami, karp, barszcz z uszkami i makowiec. Symbolizują 12 apostołów i dostatek w nowym roku.</li><li><b class=\"acc\">Oczekiwanie pierwszej gwiazdki</b>: Pierwsza gwiazdka na niebie symbolizuje gwiazdę <b>betlejemską</b> i oznacza czas rozpoczęcia kolacji wigilijnej.</li><li><b class=\"acc\">Sianko pod obrusem</b>: Kładziemy sianko pod obrusem, to przypomina o <b>ubóstwie</b> i skromności, w jakiej narodził się Jezus.</li><li><b class=\"acc\">Dzielenie się opłatkiem</b>: To łamanie <b>cienkiego wafla</b> (z mąki i wody) z każdym członkiem rodziny i składanie sobie wzajemnych życzeń. Nawiązuje do dzielenia się chlebem i symbolizuje chęć bycia razem, przebaczenie i miłość.</li><li><b class=\"acc\">Puste miejsce przy stole</b>: Zostawiamy jedno wolne miejsce dla niespodziewanego gościa – to nawiązuje do <b>Świętej Rodziny</b>, która szukała schronienia na obcej ziemi, oraz <b>pamięć o zmarłych bliskich</b>.</li><li><b class=\"acc\">Pasterka</b><b>: </b>Uroczysta msza odprawiana o północy z 24 na 25 grudnia, która symbolizuje narodzenie Jezusa i początek świąt Bożego Narodzenia.</li></ul>",
+      "notes": [
+        "Друзья, конечно же, вам не обязательно перечислять все эти традиции. Достаточно 3-4. Но знать нужно все (название и кратко о чем), потому что может быть вопрос по какой-то конкретной традиции и вы должны уметь ответить. Рождество – один из важнейших праздников в Польше."
+      ]
+    },
+    {
+      "id": 6,
+      "star": true,
+      "question": "Jakie potrawy podaje się na stole wigilijnym? Ile ich powinno być?",
+      "question_in_answers": "Jakie potrawy są podawane na stół w Wigilię? Ile ich ma być?",
+      "reference": "Na wigilijnym stole powinno być 12 potraw. Ta liczba symbolizuje 12 apostołów, którzy towarzyszyli Jezusowi podczas Ostatniej Wieczerzy.\nPotrawy wigilijne są postne, bez mięsa, a ich różnorodność symbolizuje szczęście i dostatek na nadchodzący rok.\nTypowe potrawy wigilijne to: barszcz z uszkami, zupa grzybowa, pierogi z kapustą i grzybami, gołąbki z kaszą, kutia, makowiec, kompot z suszu, sernik, kapusta z grochem, ryba po grecku, śledź, karp.",
+      "reference_md": "Na wigilijnym stole powinno być **12 potraw.** Ta liczba symbolizuje **12 apostołów**, którzy towarzyszyli Jezusowi podczas Ostatniej Wieczerzy.\nPotrawy wigilijne są **postne**, bez mięsa, a ich różnorodność symbolizuje szczęście i dostatek na nadchodzący rok.\nTypowe potrawy wigilijne to: barszcz z uszkami, zupa grzybowa, pierogi z kapustą i grzybami, gołąbki z kaszą, kutia, makowiec, kompot z suszu, sernik, kapusta z grochem, ryba po grecku, śledź, karp.",
+      "reference_html": "<p>Na wigilijnym stole powinno być <b class=\"acc\">12 potraw</b><b>. </b>Ta liczba symbolizuje <b>12 apostołów</b>, którzy towarzyszyli Jezusowi podczas Ostatniej Wieczerzy.</p><p>Potrawy wigilijne są <b>postne</b>, bez mięsa, a ich różnorodność symbolizuje szczęście i dostatek na nadchodzący rok.</p><p>Typowe potrawy wigilijne to: <i>barszcz z uszkami, zupa grzybowa, pierogi z kapustą i grzybami, gołąbki z kaszą, kutia, makowiec, kompot z suszu, sernik, kapusta z grochem, ryba po grecku, śledź, karp.</i></p>",
+      "notes": [
+        "Вам нужно уметь назвать минимум 6 из 12 блюд."
+      ]
+    },
+    {
+      "id": 7,
+      "star": true,
+      "question": "Kiedy rozpoczyna się kolacja wigilijna?",
+      "question_in_answers": "Od jakiego momentu rozpoczyna się kolacja wigilijna?",
+      "reference": "Kolacja wigilijna rozpoczyna się, gdy na niebie pojawi się pierwsza gwiazdka. Ta gwiazdka symbolizuje gwiazdę betlejemską, która świeciła w chwili narodzin Jezusa.",
+      "reference_md": "**Kolacja wigilijna** rozpoczyna się, gdy na niebie pojawi się **pierwsza gwiazdka**. Ta gwiazdka symbolizuje **gwiazdę betlejemską,** która świeciła w chwili narodzin Jezusa.",
+      "reference_html": "<p><b> Kolacja</b> <b>wigilijna</b> rozpoczyna się, gdy na niebie pojawi się <b class=\"acc\">pierwsza gwiazdka</b>. Ta gwiazdka symbolizuje <b>gwiazdę betlejemską, </b>która świeciła w chwili narodzin Jezusa.</p>"
+    },
+    {
+      "id": 8,
+      "star": true,
+      "question": "Dlaczego na stole wigilijnym zostawia się jedno wolne miejsce?",
+      "question_in_answers": "Dlaczego przy stole na Wigilię jest puste miejsce?",
+      "reference": "Puste miejsce przy stole na Wigilię jest przygotowane dla niespodziewanego gościa. Jeśli pojawi się ktoś niezapowiedziany, zawsze należy go przyjąć.\nTa tradycja nawiązuje do Świętej Rodziny, która szukała schronienia na obcej ziemi, oraz do pamięci o zmarłych bliskich.",
+      "reference_md": "**Puste miejsce** przy stole na Wigilię jest przygotowane dla **niespodziewanego** gościa. Jeśli pojawi się ktoś niezapowiedziany, zawsze należy go przyjąć.\nTa tradycja nawiązuje do **Świętej Rodziny**, która szukała schronienia na obcej ziemi, oraz do **pamięci o zmarłych bliskich**.",
+      "reference_html": "<p><b class=\"acc\">Puste miejsce</b> przy stole na Wigilię jest przygotowane dla <b>niespodziewanego</b> gościa. Jeśli pojawi się ktoś niezapowiedziany, zawsze należy go przyjąć.</p><p>Ta tradycja nawiązuje do <b>Świętej Rodziny</b>, która szukała schronienia na obcej ziemi, oraz do <b>pamięci o zmarłych bliskich</b>.</p>"
+    },
+    {
+      "id": 9,
+      "star": true,
+      "question": "Co to jest Pasterka i o której godzinie się odbywa?",
+      "question_in_answers": "Co to jest pasterka (północka)?",
+      "reference": "Pasterka (lub północka) to uroczysta msza odprawiana o północy z 24 na 25 grudnia, która symbolizuje narodziny Jezusa.\nNa początku śpiewamy kolędę i poświęcamy żłobek z figurką Dzieciątka Jezus, po czym odbywa się msza.\nCzytany jest fragment Ewangelii świętego Łukasza, opisujący narodziny Jezusa.",
+      "reference_md": "**Pasterka** (lub **północka**) to uroczysta msza odprawiana o północy z 24 na 25 grudnia, która symbolizuje narodziny Jezusa.\nNa początku śpiewamy **kolędę** i **poświęcamy żłobek** z figurką Dzieciątka Jezus, po czym odbywa się msza.\nCzytany jest fragment **Ewangelii** świętego Łukasza, opisujący narodziny Jezusa.",
+      "reference_html": "<p><b class=\"acc\">Pasterka</b> (lub <b class=\"acc\">północka</b>) to uroczysta msza odprawiana o północy z 24 na 25 grudnia, która symbolizuje narodziny Jezusa.</p><p>Na początku śpiewamy <b>kolędę</b> i <b>poświęcamy żłobek</b> z figurką Dzieciątka Jezus, po czym odbywa się msza.</p><p>Czytany jest fragment <b>Ewangelii</b> świętego Łukasza, opisujący narodziny Jezusa.</p>"
+    },
+    {
+      "id": 10,
+      "star": true,
+      "question": "Czym jest opłatek i co symbolizuje?",
+      "reference": "Opłatek to cienki wafel z mąki i wody. Poświęcony opłatek można kupić w sklepach obok kościołów. Dzielimy się opłatkiem z każdym członkiem rodziny i składamy sobie wzajemnie życzenia.\nSymbolizuje miłość, chęć bycia razem, pojednanie, przebaczenie i wsparcie. Dzielenie się opłatkiem nawiązuje do dzielenia się chlebem.",
+      "reference_md": "**Opłatek** to **cienki wafel** z mąki i wody. Poświęcony opłatek można kupić w sklepach obok kościołów. Dzielimy się opłatkiem z każdym członkiem rodziny i składamy sobie wzajemnie życzenia.\nSymbolizuje miłość, chęć bycia razem, pojednanie, przebaczenie i wsparcie. Dzielenie się opłatkiem nawiązuje do dzielenia się chlebem.",
+      "reference_html": "<p><b class=\"acc\">Opłatek</b> to <b>cienki wafel </b>z mąki i wody. Poświęcony opłatek można kupić w sklepach obok kościołów. Dzielimy się opłatkiem z każdym członkiem rodziny i składamy sobie wzajemnie życzenia.</p><p>Symbolizuje miłość, chęć bycia razem, pojednanie, przebaczenie i wsparcie. Dzielenie się opłatkiem nawiązuje do dzielenia się chlebem.</p>"
+    },
+    {
+      "id": 11,
+      "star": true,
+      "question": "Dlaczego pod obrus na Wigilię kładziemy sianko?",
+      "question_in_answers": "Dlaczego wkładamy sianko pod obrus na Wigilię?",
+      "reference": "Sianko pod obrusem to symbol ubóstwa i skromności, w jakich na świat przyszedł Jezus. Biały obrus symbolizuje czystość Maryi.\nSianko pod obrusem zapewnia gospodarzom dostatek na kolejny rok. Sianko można kupić w marketach lub internecie.",
+      "reference_md": "**Sianko pod obrusem** to symbol **ubóstwa i skromności**, w jakich na świat przyszedł Jezus. Biały obrus symbolizuje **czystość Maryi**.\nSianko pod obrusem zapewnia gospodarzom dostatek na kolejny rok. Sianko można kupić w marketach lub internecie.",
+      "reference_html": "<p><b class=\"acc\">Sianko pod obrusem</b> to symbol <b>ubóstwa i skromności</b>, w jakich na świat przyszedł Jezus. Biały obrus symbolizuje <b>czystość Maryi</b>.</p><p>Sianko pod obrusem zapewnia gospodarzom dostatek na kolejny rok. Sianko można kupić w marketach lub internecie.</p>"
+    },
+    {
+      "id": 12,
+      "star": true,
+      "question": "Proszę opowiedzieć o świętach Bożego Narodzenia.",
+      "question_in_answers": "Proszę powiedzieć o świętę Bożego Narodzenia.",
+      "reference": "Boże Narodzenie obchodzimy 25 grudnia. To pierwszy dzień świąt Bożego Narodzenia. Spędzamy go z najbliższą rodziną, odpoczywamy, a także idziemy do kościoła i uczestniczymy we mszy świętej. Jest to czas refleksji, modlitwy i radości z narodzin Jezusa.",
+      "reference_md": "**Boże Narodzenie** obchodzimy **25 grudnia**. To pierwszy dzień świąt Bożego Narodzenia. Spędzamy go z najbliższą rodziną, odpoczywamy, a także idziemy do kościoła i uczestniczymy we **mszy świętej**. Jest to czas refleksji, modlitwy i radości z narodzin Jezusa.",
+      "reference_html": "<p><b class=\"acc\">Boże Narodzenie</b> obchodzimy <b>25 grudnia</b>. To pierwszy dzień świąt Bożego Narodzenia. Spędzamy go z najbliższą rodziną, odpoczywamy, a także idziemy do kościoła i uczestniczymy we <b>mszy świętej</b>. Jest to czas refleksji, modlitwy i radości z narodzin Jezusa.</p>"
+    },
+    {
+      "id": 13,
+      "star": false,
+      "question": "Co świętujemy dzień po Bożym Narodzeniu?",
+      "reference": "Dzień po Bożym Narodzeniu, 26 grudnia, obchodzimy Święto świętego Szczepana, które jest także drugim dniem świąt Bożego Narodzenia.\nTego dnia tradycyjnie odwiedzamy rodzinę i sąsiadów, a w kościele święci się owies. Zwyczaj ten symbolizuje męczeństwo świętego Szczepana oraz urodzaj i dobrobyt, wierząc, że „cuda Szczepana są dobre jak zboże.”",
+      "reference_md": "Dzień po Bożym Narodzeniu, **26 grudnia**, obchodzimy **Święto świętego Szczepana**, które jest także drugim dniem świąt Bożego Narodzenia.\nTego dnia tradycyjnie odwiedzamy rodzinę i sąsiadów, a w kościele święci się **owies**. Zwyczaj ten symbolizuje **męczeństwo** świętego Szczepana oraz urodzaj i dobrobyt, wierząc, że „cuda Szczepana są dobre jak zboże.”",
+      "reference_html": "<p>Dzień po Bożym Narodzeniu, <b>26 grudnia</b>, obchodzimy <b class=\"acc\">Święto świętego Szczepana</b>, które jest także drugim dniem świąt Bożego Narodzenia.</p><p>Tego dnia tradycyjnie odwiedzamy rodzinę i sąsiadów, a w kościele święci się <b>owies</b>. Zwyczaj ten symbolizuje <b>męczeństwo</b> świętego Szczepana oraz urodzaj i dobrobyt, wierząc, że <i>„cuda Szczepana są dobre jak zboże.”</i></p>"
+    },
+    {
+      "id": 14,
+      "star": false,
+      "question": "Co obchodzimy trzydziestego pierwszego grudnia?",
+      "question_in_answers": "Co jest obchodzone trzydziestego pierwszego grudnia?",
+      "reference": "31 grudnia obchodzimy Sylwestra. Żegnamy stary rok i witamy nowy. Najważniejszym momentem jest północ, kiedy strzelają fajerwerki. Ludzie wznoszą toast szampanem i składają sobie życzenia noworoczne. Tego dnia popularne są duże imprezy.",
+      "reference_md": "**31 grudnia** obchodzimy **Sylwestra**. Żegnamy stary rok i witamy nowy. Najważniejszym momentem jest północ, kiedy strzelają fajerwerki. Ludzie wznoszą toast szampanem i składają sobie życzenia noworoczne. Tego dnia popularne są duże imprezy.",
+      "reference_html": "<p><b>31 grudnia</b> obchodzimy <b class=\"acc\">Sylwestra</b>. Żegnamy stary rok i witamy nowy. Najważniejszym momentem jest północ, kiedy strzelają fajerwerki. Ludzie wznoszą toast szampanem i składają sobie życzenia noworoczne. Tego dnia popularne są duże imprezy.</p>"
+    },
+    {
+      "id": 15,
+      "star": true,
+      "question": "Kiedy obchodzimy święto Trzech Króli i jaka jest jego inna nazwa? Co symbolizuje to święto?",
+      "question_in_answers": "Kiedy obchodzimy Trzech Króli? Jak inaczej nazywa się to święto?",
+      "reference": "Święto Trzech Króli obchodzimy 6 stycznia. Nazywamy ten dzień też „Objawieniem Pańskim”.\nSymbolizuje ono wizytę Mędrców ze Wschodu, którzy podążali za Gwiazdą Betlejemską, przybyli do miejsca narodzin Jezusa i przekazali mu dary.",
+      "reference_md": "Święto **Trzech Króli** obchodzimy **6 stycznia**. Nazywamy ten dzień też „**Objawieniem Pańskim**”.\nSymbolizuje ono wizytę Mędrców ze Wschodu, którzy podążali za **Gwiazdą Betlejemską**, przybyli do miejsca narodzin Jezusa i przekazali mu dary.",
+      "reference_html": "<p>Święto <b class=\"acc\">Trzech Króli</b> obchodzimy <b>6 stycznia</b>. Nazywamy ten dzień też „<b class=\"acc\">Objawieniem Pańskim</b>”.</p><p>Symbolizuje ono wizytę Mędrców ze Wschodu, którzy podążali za <b>Gwiazdą Betlejemską</b>, przybyli do miejsca narodzin Jezusa i przekazali mu dary.</p>"
+    },
+    {
+      "id": 16,
+      "star": true,
+      "question": "Kim byli Trzej Królowie, jakie dary przynieśli Jezusowi i co symbolizują te dary?",
+      "question_in_answers": "Kim są Trzej Królowie, co oni podarowali Jezusowi i co symbolizują te dary?",
+      "reference": "Trzej Królowie to Kacper, Melchior i Baltazar – Mędrcy ze Wschodu. Podążali za Gwiazdą Betlejemską, która zaprowadziła ich do narodzonego Jezusa. Oddali mu pokłon i przekazali dary: złoto, kadzidło i mirrę.\n• Złoto symbolizuje królewską godność Jezusa\n• Kadzidło – Jego boskość\n• Mirra – mękę i przyszłą śmierć.",
+      "reference_md": "**Trzej Królowie** to Kacper, Melchior i Baltazar – **Mędrcy ze Wschodu**. Podążali za Gwiazdą Betlejemską, która zaprowadziła ich do narodzonego Jezusa. Oddali mu pokłon i przekazali dary: złoto, kadzidło i mirrę.\n• **Złoto** symbolizuje królewską godność Jezusa\n• **Kadzidło** – Jego boskość\n• **Mirra** – mękę i przyszłą śmierć.",
+      "reference_html": "<p><b class=\"acc\">Trzej Królowie</b> to Kacper, Melchior i Baltazar – <b>Mędrcy ze Wschodu</b>. Podążali za Gwiazdą Betlejemską, która zaprowadziła ich do narodzonego Jezusa. Oddali mu pokłon i przekazali dary: złoto, kadzidło i mirrę.</p><ul><li><b>Złoto</b> symbolizuje królewską godność Jezusa</li><li><b>Kadzidło</b> – Jego boskość</li><li><b>Mirra</b> – mękę i przyszłą śmierć.</li></ul>"
+    },
+    {
+      "id": 17,
+      "star": true,
+      "question": "Jakie przedmioty święcimy w święto Trzech Króli i co potem z nimi robimy?",
+      "question_in_answers": "Jakie przedmioty święcimy w kościele jako dary Trzech Króli i co potem z nimi robimy?",
+      "reference": "W kościołach święcimy kadzidło, wodę i kredę na pamiątkę darów Mędrców dla nowo narodzonego Jezusa – złota, kadzidła i mirry.\nPoświęcone przedmioty zabieramy do domów:\n• kadzidło palimy\n• wodą kropimy mieszkanie\n• kredą piszemy na drzwiach „C+M+B” (od „Chrystus błogosławi to mieszkanie”), ten napis symbolizuje błogosławieństwo dla domu i jego ochronę przed złem.",
+      "reference_md": "W kościołach święcimy **kadzidło**, **wodę** i **kredę** na pamiątkę darów Mędrców dla nowo narodzonego Jezusa – złota, kadzidła i mirry.\nPoświęcone przedmioty zabieramy do domów:\n• kadzidło palimy\n• wodą kropimy mieszkanie\n• kredą piszemy na drzwiach „**C+M+B**” (od „Chrystus błogosławi to mieszkanie”), ten napis symbolizuje błogosławieństwo dla domu i jego ochronę przed złem.",
+      "reference_html": "<p>W kościołach święcimy <b>kadzidło</b>, <b>wodę</b> i <b>kredę</b> na pamiątkę darów Mędrców dla nowo narodzonego Jezusa – złota, kadzidła i mirry.</p><p>Poświęcone przedmioty zabieramy do domów:</p><ul><li>kadzidło palimy</li><li>wodą kropimy mieszkanie</li><li>kredą piszemy na drzwiach „<b>C+M+B</b>” (od <i>„Chrystus błogosławi to mieszkanie”</i>), ten napis symbolizuje błogosławieństwo dla domu i jego ochronę przed złem.</li></ul>"
+    },
+    {
+      "id": 18,
+      "star": false,
+      "question": "Proszę krótko opowiedzieć o karnawale. Kiedy go obchodzimy?",
+      "reference": "Karnawał (Zapusty) to czas zabaw, maskarad i przebieranek, który trwa od 6 stycznia do Środy Popielcowej. W tym okresie odbywają się tańce, kolorowe pochody i spotkania. Jest to radosny czas wolności i obfitego jedzenia, takiego jak bigos, żurek czy kiełbasy, przed rozpoczęciem Wielkiego Postu.",
+      "reference_md": "**Karnawał** (**Zapusty**) to czas zabaw, maskarad i przebieranek, który trwa **od 6 stycznia do Środy Popielcowej**. W tym okresie odbywają się tańce, kolorowe pochody i spotkania. Jest to radosny czas wolności i obfitego jedzenia, takiego jak bigos, żurek czy kiełbasy, przed rozpoczęciem Wielkiego Postu.",
+      "reference_html": "<p><b class=\"acc\">Karnawał</b> (<b class=\"acc\">Zapusty</b>) to czas zabaw, maskarad i przebieranek, który trwa <b>od 6 stycznia do Środy Popielcowej</b>. W tym okresie odbywają się tańce, kolorowe pochody i spotkania. Jest to radosny czas wolności i obfitego jedzenia, takiego jak bigos, żurek czy kiełbasy, przed rozpoczęciem Wielkiego Postu.</p>"
+    },
+    {
+      "id": 19,
+      "star": true,
+      "question": "Kiedy obchodzony jest Tłusty Czwartek i co wtedy jemy?",
+      "question_in_answers": "Proszę powiedzieć krótko o Tłustym Czwartku.",
+      "reference": "Tłusty Czwartek rozpoczyna ostatni tydzień karnawału. Tego dnia objadamy się pączkami, faworkami i innymi słodkościami, co symbolizuje radość i obfitość przed Wielkim Postem. Jedzenie tych przysmaków ma przynieść szczęście i dobrobyt.",
+      "reference_md": "**Tłusty Czwartek rozpoczyna ostatni tydzień karnawału**. Tego dnia objadamy się **pączkami**, faworkami i innymi słodkościami, co symbolizuje radość i obfitość przed Wielkim Postem. Jedzenie tych przysmaków ma przynieść szczęście i dobrobyt.",
+      "reference_html": "<p><b class=\"acc\">Tłusty Czwartek</b> <b>rozpoczyna ostatni tydzień karnawału</b>. Tego dnia objadamy się <b>pączkami</b>, faworkami i innymi słodkościami, co symbolizuje radość i obfitość przed Wielkim Postem. Jedzenie tych przysmaków ma przynieść szczęście i dobrobyt.</p>"
+    },
+    {
+      "id": 20,
+      "star": true,
+      "question": "Co oznacza C+M+B? Kiedy i gdzie to zapisujemy?",
+      "question_in_answers": "Co oznacza C+M+B? W jakie święto to piszemy i gdzie?",
+      "reference": "C+M+B po łacinie oznacza \"Christus Mansionem Benedicat\" – po polsku to \"Chrystus błogosławi to mieszkanie\".\nPiszemy to kredą na drzwiach mieszkania / domu w święto Trzech Króli.",
+      "reference_md": "**C+M+B** po łacinie oznacza \"**C**hristus **M**ansionem **B**enedicat\" – po polsku to \"Chrystus błogosławi to mieszkanie\".\nPiszemy to kredą na drzwiach mieszkania / domu w święto **Trzech Króli**.",
+      "reference_html": "<p><b>C+M+B</b> po łacinie oznacza <i>\"</i><b>C</b><i>hristus </i><b>M</b><i>ansionem </i><b>B</b><i>enedicat\"</i> – po polsku to <i>\"Chrystus błogosławi to mieszkanie\"</i>.</p><p>Piszemy to kredą <i>na drzwiach mieszkania</i> / domu w święto <b class=\"acc\">Trzech Króli</b>.</p>"
+    },
+    {
+      "id": 21,
+      "star": false,
+      "question": "Co to są ostatki i kiedy się rozpoczynają?",
+      "question_in_answers": "Co to są ostatki?",
+      "reference": "Ostatki to ostatnie dni karnawału, które trwają od Tłustego Czwartku do wtorku (Śledzika) – ostatniego dnia przed Środą Popielcową.\nTo czas hucznych zabaw i maskarad. Korzystamy z ostatnich chwil radości i obfitego jedzenia przed Wielkim Postem.",
+      "reference_md": "**Ostatki** to ostatnie dni karnawału, które trwają **od Tłustego Czwartku do wtorku (Śledzika)** – ostatniego dnia przed Środą Popielcową.\nTo czas hucznych zabaw i maskarad. Korzystamy z ostatnich chwil radości i obfitego jedzenia przed Wielkim Postem.",
+      "reference_html": "<p><b class=\"acc\">Ostatki</b> to ostatnie dni karnawału, które trwają <b>od Tłustego Czwartku do wtorku (Śledzika)</b> – ostatniego dnia przed Środą Popielcową.</p><p>To czas hucznych zabaw i maskarad. Korzystamy z ostatnich chwil radości i obfitego jedzenia przed Wielkim Postem.</p>"
+    }
+  ],
+  "appendix": {
+    "title": "Дополнение",
+    "text": "Друзья, помимо названий рождественских колядок, можете выучить первые пару строчек каждой колядки, чтобы показать свои углубленные знания на собеседовании:",
+    "carols": [
+      {
+        "title": "Cicha noc, święta noc",
+        "lines": [
+          "Cicha noc, święta noc,",
+          "Pokój niesie ludziom wszem.",
+          "A u żłóbka Matka Święta,",
+          "Czuwa sama uśmiechnięta,",
+          "Nad Dzieciątka snem,",
+          "Nad Dzieciątka snem."
+        ]
+      },
+      {
+        "title": "Bóg się rodzi",
+        "lines": [
+          "Bóg się rodzi, moc truchleje,",
+          "Pan niebiosów obnażony!",
+          "Ogień krzepnie, blask ciemnieje,",
+          "Ma granice Nieskończony."
+        ]
+      }
+    ]
+  }
+}

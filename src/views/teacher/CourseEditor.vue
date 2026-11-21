@@ -28,6 +28,7 @@ import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import ExerciseMini from '../../components/ExerciseMini.vue'
+import JsonModal from '../../components/JsonModal.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
@@ -88,9 +89,9 @@ const doc = reactive(load())
 // В курсе — только отличия от умолчаний кода (src/exercises/presetJson.ts); экраны берут их через src/exercises/presets.ts
 watch(() => doc.presets, (p) => setPresets(p), { deep: true, immediate: true })
 const PRESET_SET = new Set(PRESET_TPLS)
-const preT = ref(null), preText = ref(''), preErr = ref(''), preHow = ref(false)
+const preT = ref(null), preText = ref(''), preErr = ref(''), preK = ref(0)          // preK — окно заново (после «Вернуть умолчания»)
 const preName = (id) => TEMPLATES.find(t => t.id === id)?.t ?? id
-function preOpen(tpl) { tray.value = null; preT.value = tpl; preText.value = JSON.stringify(presetJson(tpl), null, 2); preErr.value = ''; preHow.value = false }
+function preOpen(tpl) { tray.value = null; preT.value = tpl; preText.value = JSON.stringify(presetJson(tpl), null, 2); preErr.value = ''; preK.value++ }
 const preAsm = computed(() => { try { return assemble({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(preT.value === 'kpapi' ? { engine: 'api' } : preT.value === 'kpfile' ? { dic: 'file' } : preT.value === 'talkptt' ? { ptt: true, avatar: true } : preT.value === 'talkava' ? { avatar: true } : {}) }) } catch { return { parts: [], warn: ['JSON пока не разбирается'], own: [] } } })
 function preSave() {
   const r = presetFromJson(preT.value, preText.value); if (r.error) { preErr.value = r.error; return }
@@ -2023,19 +2024,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <button class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" :title="gi === 0 ? '2 · Lesson — урок или чекпоинт внутри Chapter' : '3 · Exercise — экраны урока: пары, выбор ответа, порядок слов…'" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><em class="tn">{{ gi + 2 }}</em><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button></template>
     </div>
     <!-- Настройки упражнения в курсе («{ }» на плитке меню): JSON общих промптов и настроек; «Как собирается» — что уйдёт в модели -->
-  <div v-if="preT" class="pre-bg" @pointerdown.self="preT = null">
-    <div class="pre" role="dialog" aria-modal="true" :aria-label="'Настройки упражнения ' + preName(preT)" @keydown.stop @keydown.esc="preT = null" @paste.stop @copy.stop @cut.stop>
-      <header><b>«{{ preName(preT) }}» — общее для курса</b><small>Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения.</small></header>
-      <div class="pre-row"><button class="pbtn" :class="{ on: preHow }" @click="preHow = !preHow">Как собирается</button><span class="pre-sp" /><button class="pbtn" title="Стереть общие настройки — вернуть умолчания приложения" @click="preReset">Вернуть умолчания</button><button class="pbtn" title="Убрать свои промпты и настройки у экранов этого упражнения — пусть берут общие" @click="preAll">Применить ко всем экранам</button></div>
-      <textarea v-if="!preHow" v-model="preText" class="pre-ed" spellcheck="false" aria-label="JSON настроек упражнения" @keydown.ctrl.enter.prevent="preSave" @keydown.meta.enter.prevent="preSave" />
-      <div v-else class="pre-how">
-        <p v-for="w in preAsm.warn" :key="w" class="pre-w">⚠ {{ w }}</p>
-        <section v-for="pt in preAsm.parts" :key="pt.to"><b>{{ pt.to }}</b><pre>{{ pt.text || '‹пусто›' }}</pre></section>
-      </div>
-      <small v-if="preErr" class="pre-err">{{ preErr }}</small>
-      <footer><small>"" — пусто, ничего не подставляется. Ctrl+Enter — сохранить, Esc — закрыть</small><span class="pre-sp" /><button class="pbtn" @click="preT = null">Отмена</button><button class="pbtn ap" @click="preSave">Сохранить для курса</button></footer>
-    </div>
-  </div>
+  <JsonModal v-if="preT" :key="preK" v-model="preText" :title="'«' + preName(preT) + '» — общее для курса'" sub="Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения." :how="preAsm" :error="preErr" apply-text="Сохранить для курса" hint='"" — пусто, ничего не подставляется · Ctrl+Enter или Ctrl+S — сохранить · Esc — закрыть' @apply="preSave" @close="preT = null">
+    <template #actions><span class="pre-sp" /><button class="pbtn" title="Стереть общие настройки — вернуть умолчания приложения" @click="preReset">Вернуть умолчания</button><button class="pbtn" title="Убрать свои промпты и настройки у экранов этого упражнения — пусть берут общие" @click="preAll">Применить ко всем экранам</button></template>
+  </JsonModal>
 </div>
 </template>
 
@@ -2383,16 +2374,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .miw { position: relative; display: grid }
 .mjs { position: absolute; top: 4px; right: 4px; z-index: 2; height: 22px; padding: 0 6px; border: 1px solid #dcdcdc; border-radius: 7px; background: #fff; font: 900 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -1px; color: #777; cursor: pointer; opacity: .85 }
 .mjs:hover, .mjs.on { opacity: 1; color: #1899d6; border-color: #84d8ff; background: #f0faff }
-.pre-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .28); display: grid; place-items: center; padding: 16px }
-.pre { width: min(760px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; background: #fff; box-shadow: 0 20px 60px rgba(0, 0, 0, .25) }
-.pre header { display: grid; gap: 2px } .pre header b { font-size: 16px; font-weight: 900 } .pre header small, .pre footer small { font-size: 12px; color: var(--hint); font-weight: 600 }
-.pre-row, .pre footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap } .pre-sp { flex: 1 }
-.pre .pbtn { flex: none; width: auto; height: auto; border: 0; border-radius: 10px; padding: 7px 11px; background: #f0f1f3; font: inherit; font-size: 12.5px; font-weight: 800; color: #4b4b4b; cursor: pointer; white-space: nowrap } .pre .pbtn.on, .pre .pbtn.ap { background: #1cb0f6; color: #fff }
-.pre-ed { flex: 1; min-height: 340px; padding: 12px 14px; border: 1px solid #8cc8ff; border-radius: 12px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; resize: vertical }
-.pre-how { flex: 1; min-height: 340px; overflow: auto; display: grid; align-content: start; gap: 8px; font-size: 12px }
-.pre-how section { display: grid; gap: 3px } .pre-how b { font-size: 11.5px; font-weight: 900; color: #777 }
-.pre-how pre { margin: 0; padding: 6px 8px; border-radius: 8px; background: #f4f5f7; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace }
-.pre-w { margin: 0; padding: 5px 8px; border-radius: 8px; background: #fff4dc; color: #b45309; font-weight: 800 } .pre-err { color: #d92d20; font-weight: 800 }
+.pre-sp { flex: 1 }
+.pbtn { flex: none; width: auto; height: auto; border: 0; border-radius: 10px; padding: 7px 12px; background: #f0f1f3; font: inherit; font-size: 12.5px; font-weight: 800; color: #4b4b4b; cursor: pointer; white-space: nowrap } .pbtn:hover { background: #e6e8eb }
+:global(.jm.dark) .pbtn { background: #3a3d41; color: #ddd } :global(.jm.dark) .pbtn:hover { background: #45494e }
 .xgh { display: grid; gap: 0; padding: 0 8px } .xgh b { font-size: 13.5px; font-weight: 900; color: #2c2c2c } .xgh small { font-size: 11px; font-weight: 600; color: var(--hint) }
 .xgc { display: grid; gap: 2px 4px }
 .skl { display: flex; gap: 3px; justify-content: center } .chip { padding: 1px 7px; border-radius: 8px; font-size: 10px; font-style: normal; font-weight: 900; color: #fff }          /* навык → аналитика */
