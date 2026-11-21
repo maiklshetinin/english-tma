@@ -449,13 +449,15 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
   .side { grid-area: side; padding: 4px 0 6px }
   .side :deep(.nm) { display: none }
   .wk-back { order: 1 } .wk-now { order: 2; flex: 1; width: auto; min-width: 0 } .wk-next { order: 3 }
-  .brk { display: block; order: 4; flex-basis: 100%; height: 0 } .brk.b2 { order: 7 }
-  .wload { order: 5 }
-  /* вторая строка: спидометр и две плашки денег (неделя и месяц) — поровну на всю ширину */
-  .wh .money { order: 6; flex: 1 1 0; min-width: 0; min-height: 54px; box-sizing: border-box; align-content: center; padding: 4px 10px; border-radius: 14px }
-  .wh .money :deep(.top) { justify-self: start } .wh .money :deep(b) { font-size: 15px } .wh .money :deep(small) { font-size: 11px }
-  /* третья строка: слева «авто» и «Статус», справа — вид таблицы и стикеры */
-  .ask { order: 9 } .gall { order: 10 } .wh :deep(.gsb) { order: 11; margin-left: auto } .trial-pad { order: 12 }          /* GridStyleButton — без одного корня, поэтому :deep */
+  /* 21.11.2026: шапка на телефоне в две строки вместо трёх, всё по 40–42px — до таблицы почти вдвое меньше места.
+     1-я строка: ‹ неделя › · «? 23» · «Как на этой неделе» · вид таблицы · стикеры; 2-я — спидометр и деньги недели и месяца */
+  .ask { order: 4; height: 40px; padding: 0 10px } .ask .askt { display: none }
+  .gall { order: 5 } .wh :deep(.gsb) { order: 6 } .trial-pad { order: 6 }          /* GridStyleButton — без одного корня, поэтому :deep */
+  .brk { display: block; order: 7; flex-basis: 100%; height: 0 } .brk.b2 { display: none }
+  .wload { order: 8 } .wload :deep(.g) { width: 44px; height: 42px; padding: 2px; border-radius: 12px } .wload :deep(.g svg) { width: 34px; height: 18px } .wload :deep(.v b) { font-size: 13px }
+  .wh .money { order: 9; flex: 1 1 0; min-width: 0; height: 42px; min-height: 0; box-sizing: border-box; align-content: center; padding: 2px 9px; border-radius: 12px }
+  .wh .money :deep(.top) { justify-self: start; gap: 4px } .wh .money :deep(b) { font-size: 14px } .wh .money :deep(small) { font-size: 10.5px }
+  .wh .money :deep(.bar) { height: 3px; margin: 2px 0 } .wh .money :deep(.bot) { font-size: 10px }
 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */

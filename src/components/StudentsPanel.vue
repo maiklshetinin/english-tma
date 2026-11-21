@@ -221,6 +221,11 @@ const open = (id) => { router.push({ name: 'home', params: { id } }) }      // �
   .st { flex: none; width: 64px; padding: 4px 2px } .nm { font-size: 11px; -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block }
   .st :deep(.av) { width: 44px !important; height: 44px !important; font-size: 20px !important }
 }
+/* 21.11.2026: телефон — полоска учеников ниже: кружки 36px, без лишних отступов (до таблицы меньше места) */
+@media (max-width: 719px) {
+  .list { padding: 2px 4px; gap: 4px }
+  .st { width: 46px; padding: 3px 1px } .st :deep(.av) { width: 36px !important; height: 36px !important; font-size: 16px !important }
+}
 /* Меню группы — как контекстное меню iOS: карточка со скруглением, строки 52px, лёгкое затемнение вокруг */
 .gpop-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .06) }
 .gpop { position: fixed; display: grid; padding: 4px 0; border-radius: 16px; background: var(--card); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 0 0 1px rgba(0, 0, 0, .04); overflow: hidden;
