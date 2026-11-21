@@ -32,6 +32,7 @@ function put(el, text, a = el.selectionStart, b = el.selectionEnd) {
   if (!ok) { el.setRangeText(text, a, b, 'end'); emit('update:modelValue', el.value) }
 }
 function key(e) {
+  if (e.target.readOnly) return
   const el = e.target, v = el.value, s = el.selectionStart, en = el.selectionEnd
   if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
     e.preventDefault()

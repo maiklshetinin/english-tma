@@ -3,7 +3,7 @@
 // Номера строк, подсветка, проверка на лету (строка с ошибкой — красным, клик по ошибке — к строке), «Форматировать» (Shift+Alt+F),
 // перенос строк вкл/выкл (Alt+Z), справа — «Как собирается» (что уйдёт в чат и в модели) — обновляется, пока печатаете.
 // Ctrl+Enter / Ctrl+S — применить, Esc — закрыть (если меняли — спросит). В <body> через Teleport: холст с масштабом не мешает.
-// how — { parts: [{ to, text }], warn: [], own?: [] } или null (нет панели); note — строка над сборкой; error — ошибка от родителя.
+// readonly — только посмотреть (экран чужого курса). how — { parts: [{ to, text }], warn: [], own?: [] } или null (нет панели); note — строка над сборкой; error — ошибка от родителя.
 import { computed, nextTick, onMounted, ref } from 'vue'
 import JsonEdit from './JsonEdit.vue'
 import { jsonTheme, flipJsonTheme } from '../utils/jsonTheme.js'
@@ -12,6 +12,7 @@ const props = defineProps({
   modelValue: { type: String, default: '' }, title: { type: String, default: 'JSON' }, sub: { type: String, default: '' },
   how: { type: Object, default: null }, note: { type: String, default: '' }, error: { type: String, default: '' },
   applyText: { type: String, default: 'Применить' }, hint: { type: String, default: '' },
+  readonly: { type: Boolean, default: false },          // только посмотреть: без «Применить», поле не правится
 })
 const emit = defineEmits(['update:modelValue', 'apply', 'close'])
 const ed = ref(null), start = props.modelValue
@@ -40,13 +41,13 @@ const RU = [[/after property value/, 'после значения нужна з�
 const ruMsg = (m) => RU.find(([r]) => r.test(m))?.[1] ?? m
 const dirty = computed(() => text.value !== start)
 
-function fmt() { if (!parsed.value.ok) { if (parsed.value.line) ed.value?.goLine(parsed.value.line); return } text.value = JSON.stringify(JSON.parse(text.value), null, 2) }
+function fmt() { if (props.readonly) return; if (!parsed.value.ok) { if (parsed.value.line) ed.value?.goLine(parsed.value.line); return } text.value = JSON.stringify(JSON.parse(text.value), null, 2) }
 function flipWrap() { wrap.value = !wrap.value; keep('tma.jsonWrap', wrap.value) }
 function flipHow() { howOn.value = !howOn.value; keep('tma.jsonHow', howOn.value) }
 function close() { if (dirty.value && !window.confirm('Закрыть без сохранения? Изменения в JSON пропадут.')) return; emit('close') }
 function key(e) {
   const k = e.key.toLowerCase()
-  if ((e.ctrlKey || e.metaKey) && (k === 'enter' || k === 's')) { e.preventDefault(); emit('apply') }
+  if ((e.ctrlKey || e.metaKey) && (k === 'enter' || k === 's')) { e.preventDefault(); if (!props.readonly) emit('apply') }
   else if (e.shiftKey && e.altKey && (k === 'f' || e.code === 'KeyF')) { e.preventDefault(); fmt() }
   else if (e.altKey && !e.shiftKey && (k === 'z' || e.code === 'KeyZ')) { e.preventDefault(); flipWrap() }
   else if (k === 'escape') { e.preventDefault(); close() }
@@ -68,13 +69,13 @@ onMounted(() => nextTick(() => ed.value?.focus()))
           <button class="jb ic x" title="Закрыть (Esc)" @click="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
         </header>
         <div class="jm-bar">
-          <button class="jb" title="Расставить отступы (Shift+Alt+F)" @click="fmt">Форматировать</button>
+          <button v-if="!readonly" class="jb" title="Расставить отступы (Shift+Alt+F)" @click="fmt">Форматировать</button>
           <button class="jb" :class="{ on: wrap }" title="Переносить длинные строки (Alt+Z)" @click="flipWrap">Перенос строк</button>
           <button v-if="how" class="jb" :class="{ on: howOn }" title="Что из этого JSON уйдёт в чат и в модели — обновляется, пока печатаете" @click="flipHow">Как собирается</button>
           <slot name="actions" />
         </div>
         <div class="jm-body" :class="{ split: how && howOn }">
-          <JsonEdit ref="ed" v-model="text" box="jm-ed" :theme="jsonTheme" :wrap="wrap" :bad="parsed.ok ? 0 : parsed.line" aria-label="JSON" @caret="pos = $event" />
+          <JsonEdit ref="ed" v-model="text" box="jm-ed" :theme="jsonTheme" :wrap="wrap" :bad="parsed.ok ? 0 : parsed.line" :readonly="readonly" aria-label="JSON" @caret="pos = $event" />
           <aside v-if="how && howOn" class="jm-how">
             <p v-for="w in how.warn" :key="w" class="w">⚠ {{ w }}</p>
             <p v-if="note" class="n">{{ note }}</p>
@@ -89,10 +90,10 @@ onMounted(() => nextTick(() => ed.value?.focus()))
           <small class="pos">Стр {{ pos.line }}, стлб {{ pos.col }}</small>
         </footer>
         <div class="jm-end">
-          <small>{{ hint || 'Ctrl+Enter или Ctrl+S — применить · Esc — закрыть · Tab — отступ · Shift+Alt+F — форматировать' }}</small>
+          <small>{{ readonly ? 'Только просмотр · Esc — закрыть' : hint || 'Ctrl+Enter или Ctrl+S — применить · Esc — закрыть · Tab — отступ · Shift+Alt+F — форматировать' }}</small>
           <span class="sp" />
-          <button class="jb" @click="close">Отмена</button>
-          <button class="jb ap" :disabled="!parsed.ok" @click="emit('apply')">{{ applyText }}</button>
+          <button class="jb" @click="close">{{ readonly ? 'Закрыть' : 'Отмена' }}</button>
+          <button v-if="!readonly" class="jb ap" :disabled="!parsed.ok" @click="emit('apply')">{{ applyText }}</button>
         </div>
       </div>
     </div>

@@ -16,7 +16,6 @@ import { useDecksStore } from '../stores/decks'
 import { stepJson, applyStepJson, tplOf, tplTitle, tplDesc, SKILL_T, skillsOf, BOOK } from '../utils/lesson'
 import { assemble } from '../exercises/assemble'
 import JsonModal from './JsonModal.vue'          // правка JSON — большое окно «как в VS Code» (21.11.2026)
-import { jsonTheme, flipJsonTheme as flipTheme } from '../utils/jsonTheme.js'
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
@@ -166,8 +165,7 @@ const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.targe
 const cardEls = new WeakSet()
 const watchCard = (el) => { if (el && !cardEls.has(el)) { cardEls.add(el); ro3.observe(el) } }
 const typicalH = computed(() => { const v = Object.values(viewH).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 560 })
-const fixH = (s) => (jsonOn[s.id] ? { height: (viewH[s.id] ?? typicalH.value) + 'px' }
-  : isEdit(s) ? { minHeight: (viewH[s.id] ?? typicalH.value) + 'px' }
+const fixH = (s) => (isEdit(s) ? { minHeight: (viewH[s.id] ?? typicalH.value) + 'px' }
   : null)          // 20.11.2026: после правки живой экран — снова своей высоты (раньше оставался высотой правки, снизу пустота)
 const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.observe(el); ro2.observe(el) } }
 // ---------- Живая ветка: экраны проходятся прямо здесь, как у ученика ----------
@@ -212,13 +210,8 @@ onUnmounted(() => { ro.disconnect(); ro2.disconnect(); cancelAnimationFrame(hT) 
 
 // Колёсико над экраном прокручивает сам экран; Ctrl + колёсико (и щипок) — масштаб холста, а не всей страницы браузера
 const ownWheel = (e) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation() }
-// JSON экрана прямо в карточке (17.11.2026): «{ }» — переключить живой экран ↔ его JSON; «Скопировать»; тема кода — светлая / тёмная (запоминается)
-const jsonOn = reactive({})
+// JSON экрана (17.11.2026; с 21.11.2026 — в большом окне JsonModal): «{ }» — окно; «Скопировать экран»; тема кода — общая (utils/jsonTheme.js)
 const copied = ref(null)
-const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-// подсветка: ключи, строки, числа, true / false / null
-const jsonHtml = (s) => esc(JSON.stringify(stepJson(s), null, 2)).replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(-?\d+(?:\.\d+)?)\b|\b(true|false|null)\b/g,
-  (m, str, colon, num, lit) => (str ? (colon ? `<span class="jk">${str}</span>${colon}` : `<span class="js">${str}</span>`) : num ? `<span class="jn">${num}</span>` : `<span class="jl">${lit}</span>`))
 // Правка JSON (19.11.2026): «Править» — тот же JSON в поле; «Применить» — экран из текста (id прежний), ошибка — строкой под полем
 const jsonEdit = reactive({}), jsonErr = reactive({})
 function jsonStart(s) { for (const k in jsonEdit) delete jsonEdit[k]; jsonEdit[s.id] = JSON.stringify(stepJson(s), null, 2); jsonErr[s.id] = '' }          // окно — одно на всех
@@ -228,7 +221,6 @@ function jsonApply(s) {
   jsonStop(s); rk[s.id] = (rk[s.id] ?? 0) + 1; changed()          // экран пересобрать с новыми полями
 }
 // «Как собирается» (21.11.2026): что из этого JSON уйдёт в чат и в модели — у «Ответа по смыслу» и «Разговора»; при правке — по тексту в поле
-const howOn = reactive({})
 const hasHow = (s) => s.kind === 'kp' || s.kind === 'talk'
 function howOf(s) {
   let raw = null
@@ -268,33 +260,19 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <i v-if="stepIssue(s)" class="iss" :title="stepIssue(s)">{{ stepIssue(s) }}</i>
         <template v-if="!readonly && !free"><button class="ib mv" title="На шаг левее" :disabled="i === 0" @pointerdown.stop @click="shift(s, -1)">‹</button><button class="ib mv" title="На шаг правее" :disabled="i === order.length - 1" @pointerdown.stop @click="shift(s, 1)">›</button></template>
         <button v-if="!readonly" class="ib pen" :class="{ on: isEdit(s) }" :title="isEdit(s) ? 'Сейчас правите — «Сохранить» внизу экрана' : 'Изменить экран'" @pointerdown.stop @click="isEdit(s) ? save(s) : (editing[s.id] = true)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
-        <button class="ib cp js" :class="{ on: jsonOn[s.id] }" :title="jsonOn[s.id] ? 'Вернуть экран' : 'Показать JSON экрана (образец для ИИ). Обратно: перетащите JSON на холст или Ctrl+V'" @pointerdown.stop @click="jsonOn[s.id] = !jsonOn[s.id]">{ }</button>
+        <button class="ib cp js" :class="{ on: jsonEdit[s.id] != null }" title="JSON экрана — в большом окне: посмотреть, править, «Как собирается», скопировать" @pointerdown.stop @click="jsonStart(s)">{ }</button>
         <button class="ib cp" title="Копировать экран (Ctrl+C) — потом «Вставить» на любой ветке или Ctrl+V" @pointerdown.stop @click="emit('copy', s)"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2" /><path d="M15.5 8.5V6.7a2.2 2.2 0 0 0-2.2-2.2H6.7a2.2 2.2 0 0 0-2.2 2.2v6.6a2.2 2.2 0 0 0 2.2 2.2h1.8" /></svg></button>
         <button class="ib rs" :style="isEdit(s) ? { visibility: 'hidden' } : null" title="Сбросить экран — пройти заново" @pointerdown.stop @click="resetStep(s)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></svg></button>
         <button v-if="!readonly" class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
-      <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: jsonOn[s.id] || isEdit(s) }]" :data-id="s.id" :data-view="jsonOn[s.id] || isEdit(s) ? 0 : 1" :data-edit="!jsonOn[s.id] && isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
+      <!-- JSON экрана (кнопка «{ }», 21.11.2026) — сразу большое окно: посмотреть, править, «Как собирается», скопировать -->
+      <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :readonly="readonly" :title="'JSON экрана · ' + tplTitle(s)" :sub="readonly ? 'Экран другого курса — только посмотреть и скопировать' : 'Своё у экрана — вопрос и эталон; остальное общее для курса («{ }» на плитке в меню Exercise)'" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)">
+        <template #actions><button class="mcp" :class="{ ok: copied === s.id }" title="Скопировать экран — потом Ctrl+V на холсте или «Вставить» на ветке; JSON — образец для ИИ" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать экран' }}</button></template>
+      </JsonModal>
+      <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: isEdit(s) }]" :data-id="s.id" :data-view="isEdit(s) ? 0 : 1" :data-edit="isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
       <!-- JSON экрана (кнопка «{ }») — вместо живого экрана, в той же карточке -->
-      <div v-if="jsonOn[s.id]" class="jv" :class="jsonTheme" @pointerdown.stop>
-        <div class="jtop"><small>JSON экрана</small><span class="jsp" />
-          <button class="jt" :title="jsonTheme === 'dark' ? 'Светлый код' : 'Тёмный код'" @click="flipTheme">
-            <svg v-if="jsonTheme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>
-            <svg v-else viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
-          </button>
-          <button v-if="hasHow(s)" class="jc" :class="{ on: howOn[s.id] }" title="Что из этого JSON уйдёт в чат и в модели — с подставленными вопросом и эталоном" @click="howOn[s.id] = !howOn[s.id]">Как собирается</button>
-          <button v-if="!readonly" class="jc" title="Изменить экран в JSON — в большом окне" @click="jsonStart(s)">Править</button><button class="jc" :class="{ ok: copied === s.id }" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать' }}</button>
-        </div>
-        <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :title="'JSON экрана · ' + tplTitle(s)" sub="Своё у экрана — вопрос и эталон; остальное общее для курса («{ }» на плитке в меню Exercise)" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)" />
-        <div v-if="howOn[s.id] && hasHow(s)" class="jhow full" @wheel="ownWheel">          <!-- просмотр — вместо JSON во всю высоту -->
-          <p v-for="w in howOf(s).warn" :key="w" class="jhw">⚠ {{ w }}</p>
-          <p class="jho">{{ ownNote(s) }}</p>
-          <section v-for="pt in howOf(s).parts" :key="pt.to"><b>{{ pt.to }}</b><pre>{{ pt.text || '‹пусто›' }}</pre></section>
-        </div>
-        <pre v-if="!howOn[s.id]" v-html="jsonHtml(s)" :title="readonly ? '' : 'Двойной клик — править в большом окне'" @dblclick="readonly || jsonStart(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
-        <small class="jft">Образец для ИИ. Обратно — Ctrl+V или перетащите JSON на холст{{ readonly ? '' : '. Двойной клик — править' }}</small>
-      </div>
-      <LessonPlayer v-else-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
+      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
       <!-- Упражнения-шаблоны (src/exercises): правка = тот же живой экран (LessonPlayer edit) — один файл разметки, окно не меняет размер -->
       <LessonPlayer v-else-if="exOf(s) && pk.id !== s.id" :key="'e:' + s.id" embedded edit :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve">
         <template #foot><div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span class="fdk"><component :is="exOf(s).view" :step="s" part="tools" /></span><button class="go play" @click="save(s)">Сохранить</button></div></template>
@@ -378,6 +356,8 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 </template>
 
 <style scoped>
+.mcp { flex: none; border: 0; border-radius: 10px; padding: 7px 12px; background: #f0f1f3; color: #4b4b4b; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; white-space: nowrap } .mcp:hover { background: #e6e8eb } .mcp.ok { background: #dff5d8; color: #3b8a11 }
+:global(.jm.dark) .mcp { background: #3a3d41; color: #ddd } :global(.jm.dark) .mcp.ok { background: #24402a; color: #9be08a }
 .lr { position: absolute; left: 0; top: 0; width: 0; height: 0 }
 .line { position: absolute; overflow: visible; pointer-events: none; z-index: 1 } .line line { stroke: #e0e0e0; stroke-width: 8; stroke-linecap: round }
 /* экран — открытая карточка на рельсе, как на доске */
@@ -401,7 +381,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 /* текущий экран на ветке — без пульсации (07.11): в редакторе «дышит» только текущий урок на рельсе */
 .card.now { box-shadow: 0 0 0 2px #1fbe78, 0 8px 24px rgba(31, 190, 120, .18) }
 .card.editing { border-color: #8cc8ff; box-shadow: 0 0 0 1px #8cc8ff, 0 2px 12px rgba(0, 0, 0, .06) }          /* правка — сплошная голубая рамка (пунктир раздражал, 17.11.2026) */
-.card.fixh { min-height: 0 } .card.fixh.editing { overflow: visible } .card.fixh .jv pre { max-height: none; min-height: 0 }      /* JSON и правка — высотой с живой экран (fixH), лишнее — прокруткой внутри */
+.card.fixh { min-height: 0 } .card.fixh.editing { overflow: visible }      /* JSON и правка — высотой с живой экран (fixH), лишнее — прокруткой внутри */
 .ib.pen:hover, .ib.pen.on { background: var(--blue-l); color: var(--blue-d) }
 .stem { position: absolute; left: 50%; top: -40px; width: 4px; height: 54px;      /* от самой линии ветки (на ней теперь навыки плитки, а не кружок) */ margin-left: -2px; background: #d9d9d9; border-radius: 2px }
 .node { position: absolute; left: 50%; top: -54px; width: 34px; height: 34px; margin-left: -17px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font-size: 14px; font-weight: 900; box-shadow: 0 0 0 4px #f5f5f5, 0 0 0 6px color-mix(in srgb, var(--c) 45%, transparent); cursor: grab; touch-action: none; user-select: none; z-index: 2 }
@@ -446,28 +426,10 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .warn { width: 18px; height: 18px; border-radius: 50%; background: var(--orange); color: #fff; font-size: 12px; font-weight: 900; font-style: normal; display: grid; place-items: center }
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--hint); cursor: pointer; padding: 0 } .ib:hover { background: var(--red-l); color: var(--red-d) }
 .ib.cp:hover { background: var(--blue-l); color: var(--blue-d) }
-.jhow { flex: none; max-height: 45%; overflow: auto; border-top: 1px solid rgba(127, 127, 127, .3); padding: 8px 12px 10px; display: grid; gap: 8px; font-size: 12px }
-.jhow.full { flex: 1; max-height: none; border-top: 0; padding: 0 }
-.jhow section { display: grid; gap: 3px } .jhow b { font-size: 11.5px; font-weight: 900; opacity: .75 }
-.jv .jhow pre { flex: none; max-height: none; border: 0; margin: 0; padding: 6px 8px; border-radius: 8px; background: rgba(127, 127, 127, .12); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace }
-.jho { margin: 0; font-size: 11.5px; font-weight: 700; opacity: .75 }
-.jhw { margin: 0; padding: 5px 8px; border-radius: 8px; background: #fff4dc; color: #b45309; font-weight: 800 }
-.jc.on { background: #1cb0f6; color: #fff }
 .ib.js { font: 900 13px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -1px }      /* «{ }» — JSON экрана */
 .ib.js.on { background: var(--blue-l); color: var(--blue-d) }
 /* JSON экрана в карточке: светлый (по умолчанию) или тёмный код; текст можно выделять */
-.jv { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; padding: 14px; user-select: text; cursor: auto }
-.jtop { display: flex; align-items: center; gap: 6px } .jtop small { font-size: 12px; font-weight: 800; color: var(--hint) } .jsp { flex: 1 }
-.jt { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: none; color: var(--hint); cursor: pointer } .jt:hover { background: var(--surface); color: var(--text) }
-.jt svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.jc { height: 30px; padding: 0 12px; border: 0; border-radius: 9px; background: var(--blue-l); color: var(--blue-d); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap } .jc.ok { background: var(--green-l); color: var(--green-d) }
-.jv pre { flex: 1; margin: 0; max-height: 380px; overflow: auto; padding: 12px 14px; border: 1px solid #ececec; border-radius: 12px; background: #f7f7f8; color: #3c3c3c; font: 12.5px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word }
-.jv.dark pre { background: #1e1e1e; border-color: #1e1e1e; color: #d4d4d4 }
 /* правка JSON — то же окно кода, но поле */
-.jer { color: #c33; font-size: 12px; font-weight: 700 } .jc.ap { background: var(--blue); color: #fff } .jc.ap:hover { background: var(--blue-d) }
-.jv pre :deep(.jk) { color: #185fa5 } .jv pre :deep(.js) { color: #3b6d11 } .jv pre :deep(.jn) { color: #ba7517 } .jv pre :deep(.jl) { color: #9747ff }
-.jv.dark pre :deep(.jk) { color: #9cdcfe } .jv.dark pre :deep(.js) { color: #ce9178 } .jv.dark pre :deep(.jn) { color: #b5cea8 } .jv.dark pre :deep(.jl) { color: #569cd6 }
-.jft { font-size: 11px; font-weight: 700; color: var(--hint) }
 .empty-f .stem { top: -26px } .ef { display: grid; justify-items: center; gap: 4px; margin-top: 14px; padding: 18px; border: 2px dashed #d6d6d6; border-radius: 18px; background: rgba(255, 255, 255, .7); text-align: center }
 .ef b { font-size: 14px; font-weight: 800; color: var(--hint) }
 .ckalg { position: absolute; z-index: 3; width: 340px; box-sizing: border-box; padding: 12px 14px; border-radius: 4px; background: #fff3b0; box-shadow: 0 4px 14px rgba(0, 0, 0, .12); text-align: left; max-height: 620px; overflow: auto }          /* как стикер */
