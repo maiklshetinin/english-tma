@@ -292,5 +292,8 @@ td { padding: 14px 6px; border-bottom: 1px solid var(--border); font-weight: 600
   .legend { grid-template-columns: 1fr 1fr } .legend .lg:last-child { grid-column: 1 / -1 }
   .tbl { padding: 2px 10px } th, td { padding-left: 3px; padding-right: 3px } th:nth-child(3), td:nth-child(3) { display: none }
   .tip { min-width: 190px } .mn { display: none } .ms { display: inline } .badge { margin-left: 4px }
+  /* 21.11.2026: телефон — период в одну строку, «+ … запланировано» под суммой переносится, таблица не шире экрана */
+  .seg.per { display: flex } .seg.per button { flex: 1; padding: 7px 6px; white-space: nowrap; font-size: 13px }
+  table { font-size: 13px } th { font-size: 12px } .pl, .lp { white-space: normal; font-size: 11px }
 }
 </style>

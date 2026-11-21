@@ -306,6 +306,7 @@ app.post('/my/courses/:id/done', requireUser, wrap(async (req, res) => res.json(
 app.post('/my/courses/:id/log', requireUser, wrap(async (req, res) => res.json(await learn.log(req.user, req.params.id, req.body))))
 app.post('/courses/:id/run/log', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.teacherLog(req.user, req.params.id, req.body))))
 app.get('/progress/log', requireUser, wrap(async (req, res) => res.json(await learn.runLogs(req.user, req.query.studentId))))      // ?studentId= — преподаватель смотрит ученика
+app.post('/progress/log/remove', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.removeLogs(req.user, req.body))))      // { studentId?, runs? } — весь журнал или выбранные заходы
 app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(), storage: storage.ready })))
 app.get('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.get(req.params.id))))
 app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.put(req.user.uid, req.params.id, req.body))))
@@ -346,6 +347,7 @@ app.post('/review', requireUser, wrap(async (req, res) => res.json(await review.
 // «Аналитика прогресса» (вкладка Review «Грамматика и навыки»): пройденные уроки (темп по месяцам, теги экранов) и снимки навыков и тем по месяцам
 app.get('/progress/stats', requireUser, wrap(async (req, res) => { const sid = req.query.studentId; const [l, mon] = await Promise.all([learn.lessonsDone(req.user, sid), review.months(req.user, sid)]); res.json({ ...l, mon }) }))
 app.post('/review/reset', requireUser, wrap(async (req, res) => { await review.reset(req.user); res.json({ ok: true }) }))
+app.post('/review/remove', requireUser, requireTeacher, wrap(async (req, res) => res.json(await review.remove(req.user, req.body))))      // { keys, studentId? } — удалить отдельные слова (преподаватель)
 
 // Аватарка пользователя через Bot API (Mini App отдаёт фото только самого пользователя). Токен бота наружу не уходит.
 const tgApi = (m: string, q: Record<string, string>) => fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${m}?${new URLSearchParams(q)}`).then((r) => r.json() as Promise<any>)

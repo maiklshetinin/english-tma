@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { makeRunLog, newRun, byDay, dur, seen, saveLocal, readLocal, DELAY } from './runlog'
+import { makeRunLog, newRun, byDay, dur, seen, saveLocal, readLocal, removeLocal, DELAY } from './runlog'
 
 function clock() {
   let t = 1_000_000, fn: (() => void) | null = null
@@ -68,5 +68,10 @@ describe('журнал по дням', () => {
     const r = readLocal()
     expect(r.map((x: any) => `${x.run}:${x.try}`)).toEqual(['r2:2', 'r1:1'])
     expect(r[1].fin).toBe(true)
+  })
+  it('без сервера: удалить один заход и весь журнал', () => {
+    saveLocal({ run: 'r1', course: 'k', item: 'a', at: 1, steps: [] }); saveLocal({ run: 'r2', course: 'k', item: 'b', at: 2, steps: [] })
+    removeLocal(['r1']); expect(readLocal().map((x: any) => x.run)).toEqual(['r2'])
+    removeLocal(); expect(readLocal()).toEqual([])
   })
 })

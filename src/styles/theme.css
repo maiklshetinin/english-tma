@@ -40,7 +40,7 @@ html[data-theme='dark'].bg-dots, html[data-theme='dark'].bg-dots body { backgrou
 html.dragging, html.dragging * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
-.page { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(100px + var(--safe-b)); display: grid; gap: 14px; }
+.page { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(100px + var(--safe-b)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }      /* minmax(0) — широкая таблица или график не раздвигают страницу шире телефона (21.11.2026) */
 .page.wide { max-width: 920px; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
 .card h3 { margin: 0 0 6px; font-size: 19px; }

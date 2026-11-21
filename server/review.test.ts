@@ -72,6 +72,15 @@ ok('избранное сохраняется (только true)', store.get('r
   ok('хранится не больше 24 месяцев — старые убираются', Object.keys(store.get('review/s2').mon).length === 24 && !store.get('review/s2').mon['2024-01'])
 }
 
+// --- точечное удаление (преподаватель) ---
+{ await R.save(masha, { items: { hello: it('Hello'), bye: it('Bye') } })
+  const before = Object.keys(store.get('review/s1').items).length, mon = JSON.stringify(store.get('review/s1').mon)
+  const r = await R.remove(teacher, { studentId: 's1', keys: ['hello', 'нет такого'] })
+  ok('удалить слово у ученика: только его, остальное и снимки на месте', !store.get('review/s1').items.hello && !!store.get('review/s1').items.bye && r.count === before - 1 && JSON.stringify(store.get('review/s1').mon) === mon)
+  ok('плохие keys — 400', (await code(R.remove(teacher, { keys: [] }))) === 400 && (await code(R.remove(teacher, { keys: 'x' }))) === 400)
+  await R.save(teacher, { items: { bye: it('Bye') } }); await R.remove(teacher, { keys: ['bye'] })
+  ok('без studentId — из своего словаря, у ученика на месте', !store.get('review/teacher_tg:1').items.bye && !!store.get('review/s1').items.bye) }
+
 // --- очистка ---
 await R.reset(masha)
 ok('«Очистить» — свой словарь удалён, у преподавателя на месте', !store.has('review/s1') && store.has('review/teacher_tg:1'))

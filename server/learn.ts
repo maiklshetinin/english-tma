@@ -197,6 +197,20 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
     async teacherLog(user: TokenUser, rawId: unknown, input: unknown) {
       return writeLog(`teacher_${user.uid}`, await get(rawId), input)
     },
+    /** Преподаватель: стереть журнал — { runs: [id захода] } выбранные заходы, без runs — весь; studentId — ученика, без — свой.
+     *  Прогресс курса, словарь и чекпоинты не меняются. */
+    async removeLogs(user: TokenUser, input: unknown) {
+      const b = (input ?? {}) as { studentId?: unknown; runs?: unknown }
+      const who = await whoOf(user, b.studentId)
+      if (b.runs == null) { await dropLogs(who); return { ok: true } }
+      if (!Array.isArray(b.runs) || !b.runs.length || b.runs.length > 300) throw fail(400, 'bad runs')
+      const ids = [...new Set(b.runs.map(String))]
+      if (ids.some((r) => !RUN_RE.test(r))) throw fail(400, 'bad run')
+      const batch = db.batch()
+      for (const r of ids) batch.delete(logs().doc(`${who}_${r}`))      // id начинается с who — чужой заход так не удалить
+      await batch.commit()
+      return { ok: true }
+    },
     /** «Журнал» (Review): заходы в уроки — новые сверху, до 300; свой, преподаватель с studentId — ученика */
     async runLogs(user: TokenUser, studentId?: unknown) {
       const who = await whoOf(user, studentId)

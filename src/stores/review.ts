@@ -102,3 +102,12 @@ export async function resetReview(): Promise<boolean> {
   if (!online()) return true
   try { const r = await apiRequest('/review/reset', { method: 'POST', body: '{}' }); return r.ok } catch { return false }
 }
+
+/** Преподаватель: удалить отдельные слова из своего словаря — и в браузере, и на сервере. false — сервер не ответил. */
+export async function removeReview(keys: string[]): Promise<boolean> {
+  clearTimeout(timer); await inflight.catch(() => {})
+  for (const k of keys) { delete review.items[k]; pending.delete(k) }
+  save()
+  if (!online()) return true
+  try { const r = await apiRequest('/review/remove', { method: 'POST', body: JSON.stringify({ keys }) }); return r.ok } catch { return false }
+}

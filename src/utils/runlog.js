@@ -59,6 +59,14 @@ export function saveLocal(view) {
     all.push(view); localStorage.setItem(LOCAL_LOG, JSON.stringify(all.slice(-300)))
   } catch { /* приватный режим */ }
 }
+/** без сервера: стереть заходы (null — весь журнал) */
+export function removeLocal(runs = null) {
+  try {
+    if (!runs) { localStorage.removeItem(LOCAL_LOG); return }
+    const all = JSON.parse(localStorage.getItem(LOCAL_LOG) || '[]').filter((r) => !runs.includes(r.run))
+    localStorage.setItem(LOCAL_LOG, JSON.stringify(all))
+  } catch { /* приватный режим */ }
+}
 export function readLocal() {
   try {
     const all = JSON.parse(localStorage.getItem(LOCAL_LOG) || '[]'), tries = {}

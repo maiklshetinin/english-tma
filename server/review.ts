@@ -147,6 +147,23 @@ export function makeReview({ db, FieldValue }: ReviewDeps) {
       return months((await col().doc(await mine(user)).get()).data())
     },
 
+    /** Преподаватель: удалить отдельные слова / записи — { keys, studentId? } из словаря ученика, без studentId — из своего */
+    async remove(user: TokenUser, input: unknown): Promise<{ count: number }> {
+      const b = isObj(input) ? input : {}
+      if (!Array.isArray(b.keys) || !b.keys.length || b.keys.length > REVIEW_LIMITS.batch) throw fail(400, 'bad keys')
+      const keys = new Set(b.keys.map(String))
+      const docId = b.studentId != null && b.studentId !== '' ? id(b.studentId, 'student id') : await mine(user)
+      let count = 0
+      await db.runTransaction(async (tx) => {
+        const ref = col().doc(docId), d = (await tx.get(ref)).data()
+        if (!d) return
+        const cur = Object.fromEntries(Object.entries(items(d)).filter(([k]) => !keys.has(k)))
+        count = Object.keys(cur).length
+        tx.set(ref, { ...d, items: cur, updatedAt: FieldValue.serverTimestamp() })
+      })
+      return { count }
+    },
+
     /** «Очистить»: свой словарь целиком */
     async reset(user: TokenUser): Promise<void> {
       await col().doc(await mine(user)).delete()

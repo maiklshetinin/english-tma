@@ -30,6 +30,9 @@ button:hover { background: var(--surface) }
 .ic { position: relative; display: grid } .lb { font-size: 11px; font-weight: 800 }
 .dot { position: absolute; top: -2px; right: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--red); border: 2px solid var(--card) }
 button.on { background: var(--blue-l); color: var(--blue) }
+.lb { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+/* узкий телефон и 7 вкладок преподавателя: без зазоров, подпись мельче — «Ученики», «Профиль» влезают целиком (21.11.2026) */
+@media (max-width: 420px) { .nav { gap: 0; padding-left: 4px; padding-right: 4px } button { padding: 6px 0 } .lb { font-size: 10px; letter-spacing: -.2px } }
 @media (min-width: 1024px) {
   .nav { left: 24px; right: auto; top: 50%; bottom: auto; transform: translateY(-50%); width: 92px; flex-direction: column; padding: 10px;
     border: 1px solid var(--border); border-radius: 24px }

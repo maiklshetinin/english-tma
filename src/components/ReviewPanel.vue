@@ -2,7 +2,8 @@
 // Review — как «Your vocabulary» в Busuu: слова и фразы из пройденных уроков, сила каждого (слабое / среднее / сильное).
 // Нажал на строку — история: где встречалось, верно / ошибка, когда повторить. Пока — данные этого браузера (stores/review.ts).
 import { ref, computed, watch } from 'vue'
-import { review, resetReview, toggleFav, recordStep } from '../stores/review'
+import { review, resetReview, removeReview, toggleFav, recordStep } from '../stores/review'
+import { useAuthStore } from '../stores/auth'
 import { practiceSteps, askable } from '../utils/practice'
 import LessonPlayer from './LessonPlayer.vue'
 import { ask } from '../composables/useDialog'
@@ -24,6 +25,17 @@ const props = defineProps({
   title: { type: String, default: 'Твой словарь' },
   studentId: { type: [String, Number], default: null },  // карточка ученика: «Аналитика прогресса» — его уроки и снимки
 })
+const emit = defineEmits(['remove'])
+// Удалить слово из словаря — только преподаватель (и разработчик): в своём Review и в карточке ученика (там удаляет StudentReview)
+const auth = useAuthStore()
+const canDel = computed(() => auth.role === 'teacher')
+async function delWord(x) {
+  if (!(await ask(`Удалить «${x.text}» из словаря?`, { text: `${props.items ? 'Слово пропадёт из словаря ученика' : 'Слово пропадёт из словаря'} вместе с историей ответов и силой. Если оно снова встретится в уроке — появится заново, как новое.`, ok: 'Удалить', danger: true }))) return
+  openKey.value = null
+  if (props.items) return emit('remove', [x.key])
+  if (await removeReview([x.key])) showToast('Слово удалено')
+  else showToast('Не удалось удалить на сервере — попробуйте ещё раз', null, 'bad')
+}
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
 const chartOn = ref((() => { try { return localStorage.getItem('tma.review.chart.v2') === '1' } catch { return false } })())          // 18.11.2026: как в Busuu — сверху баночки, графики свёрнуты (по нажатию «График»)
@@ -132,6 +144,7 @@ async function reset() {
             <WordCurve v-if="!x.st.isNew" :item="x" :cfg="cfgNow" />
             <!-- заголовок истории: счёт ответов (остальное — в показателях над графиком) -->
             <p v-if="!x.st.isNew" class="sm">верно {{ x.ok }} · ошибок {{ x.bad }}</p>
+            <button v-if="canDel" class="del" @click="delWord(x)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>Удалить из словаря</button>
             <ul><li v-for="(h, k) in x.hist" :key="k"><span :class="h.ok === null ? 'n' : h.ok ? 'y' : 'x'">{{ h.ok === null ? 'встретилось' : h.ok ? 'верно' : 'ошибка' }}</span>{{ h.ex }}<template v-if="h.lesson"> · {{ h.lesson }}</template><small>{{ when(h.t) }}</small></li></ul>
           </div>
         </template>
@@ -143,6 +156,7 @@ async function reset() {
 </template>
 
 <style scoped>
+.del { justify-self: start; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 10px; padding: 6px 11px; background: none; font: inherit; font-size: 12.5px; font-weight: 800; color: #d92d20; cursor: pointer } .del:hover { background: #fdecea } .del svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .sy { margin-left: 10px; font-size: 12px; font-weight: 800; color: var(--hint); vertical-align: middle } .sy.synced { color: #1fbe78 } .sy.error { color: #ff9600 }
 .al { color: #1cb0f6; font-weight: 800; text-decoration: none }
 .secs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box }
@@ -191,7 +205,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 @media (max-width: 520px) {
   .secs { flex-wrap: wrap; column-gap: 16px } .secs button { font-size: 15px } .se { order: -1; flex-basis: 100%; text-align: right }          /* три вкладки — «Алгоритм» строкой над ними */
   .rcard { padding: 14px; gap: 12px } h2 { font-size: 21px }
-  .lv3 { gap: 2px } .lvc { gap: 5px; padding: 2px } .jar { width: 14px; height: 34px; border-radius: 5px } .hdr .vt { margin-left: 0 } .lvc b { font-size: 19px } .lvc > span:last-child { font-size: 11.5px }
+  .hdr .vt { margin-left: 0 }          /* 21.11.2026: убраны старые мини-баночки (.jar 14×34) — они сплющивали новые баночки на телефоне */
   .rbar .sp { flex-basis: 100%; height: 0 } .rbar .go, .rbar .ghost { flex: 1; padding: 9px 10px }
   .mt { display: block }
   .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px 26px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
@@ -203,5 +217,6 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .star { width: 26px; height: 26px; padding: 0; border: 0; background: none; font-size: 19px; line-height: 1; color: #cfd3d8; cursor: pointer } .star.on { color: #ff9600 } .star:hover:not(.ro) { color: #ffb84d } .star.ro { cursor: default; display: grid; place-items: center }
 /* тренировка «Повторить эти слова» — во весь экран, как урок */
 .prc { position: fixed; inset: 0; z-index: 3000; display: grid; background: var(--card); overflow: auto }
-@media (max-width: 600px) { .jars { gap: 6px } .jar { flex-direction: column; align-items: flex-start; gap: 6px } .jb { width: 52px; height: 66px } .jt b { font-size: 22px } }
+@media (max-width: 600px) { .jars { gap: 4px; padding: 10px } .jar { gap: 8px; padding: 6px 4px } .jb { width: 30px; height: 42px; border-radius: 6px } .jt { font-size: 12px; line-height: 1.2 } .jt b { font-size: 20px } }      /* телефон: баночка слева, цифра и подпись справа — три в ряд */
+@media (max-width: 340px) { .jar { flex-direction: column; align-items: flex-start; gap: 4px } }
 </style>

@@ -35,12 +35,19 @@ async function reset() {
   if (!r?.ok) return showToast('Не удалось сбросить — попробуйте ещё раз', null, 'bad')
   showToast('Прогресс ученика сброшен'); load(props.studentId)
 }
+// Удалить отдельные слова из словаря ученика (кнопка в раскрытой строке)
+async function remove(keys) {
+  const r = await apiRequest('/review/remove', { method: 'POST', body: JSON.stringify({ studentId: String(props.studentId), keys }) }).catch(() => null)
+  if (!r?.ok) return showToast('Не удалось удалить — попробуйте ещё раз', null, 'bad')
+  const next = { ...items.value }; for (const k of keys) delete next[k]; items.value = next
+  showToast('Слово удалено из словаря ученика')
+}
 </script>
 
 <template>
   <p v-if="err" class="hint">Не удалось загрузить словарь ученика {{ err }}</p>
   <p v-else-if="loading" class="hint">Загрузка…</p>
-  <ReviewPanel :student-id="studentId" v-else :resolve="resolve" :items="items" readonly title="Словарь ученика">
+  <ReviewPanel :student-id="studentId" v-else :resolve="resolve" :items="items" readonly title="Словарь ученика" @remove="remove">
     <template #actions><button v-if="online" class="rst" title="Сбросить прогресс ученика: словарь и прохождение курсов" @click="reset">Очистить</button></template>
   </ReviewPanel>
 </template>

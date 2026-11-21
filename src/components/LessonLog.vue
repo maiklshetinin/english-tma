@@ -2,10 +2,14 @@
 // Review → «Журнал» (21.11.2026): каждый заход в урок по дням, в том числе незаконченный.
 // День: сколько уроков, сколько минут, сколько ответов верно. Заход: урок, какая попытка, время, результат или «не закончен · 7 из 12».
 // Нажал заход — по каждому упражнению: ✓ верно / ✗ ошибка / • без оценки / — не дошёл, сколько секунд, с какой попытки, что ответил.
+// Преподаватель (и разработчик) может стереть весь журнал или один заход — прогресс курса и словарь при этом не меняются.
 // Данные — GET /progress/log (server/learn.ts → lessonLogs); пишет просмотр курса по ходу урока (utils/runlog.js). Без сервера — этот браузер.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { apiRequest, isDemo, API, fb } from '../firebase'
-import { readLocal, byDay, dur, seen } from '../utils/runlog'
+import { readLocal, removeLocal, byDay, dur, seen } from '../utils/runlog'
+import { useAuthStore } from '../stores/auth'
+import { ask } from '../composables/useDialog'
+import { showToast } from '../composables/useToast'
 import { exName } from '../utils/review'
 
 const props = defineProps({ studentId: { type: [String, Number], default: null } })   // карточка ученика у преподавателя; нет — свой журнал
@@ -28,6 +32,20 @@ let poll = null
 onMounted(() => { poll = setInterval(() => { if (document.visibilityState === 'visible' && !loading.value) load(true) }, 10_000) })
 onUnmounted(() => clearInterval(poll))
 
+const auth = useAuthStore()
+const canDel = computed(() => auth.role === 'teacher')
+const whose = computed(() => (props.studentId != null ? 'ученика' : 'свой'))
+async function drop(list = null) {
+  const one = list && runs.value.find(r => r.run === list[0])
+  const q = one ? [`Удалить заход «${one.title || 'Урок'}» ${hm(one.at)}?`, 'Запись пропадёт из журнала. Прохождение курса, словарь и ошибки для чекпоинта не меняются.']
+    : [`Очистить ${whose.value === 'свой' ? 'свой журнал' : 'журнал ученика'}?`, 'Все заходы в уроки удалятся из журнала. Прохождение курса, словарь и ошибки для чекпоинта не меняются. Вернуть журнал будет нельзя.']
+  if (!(await ask(q[0], { text: q[1], ok: one ? 'Удалить' : 'Очистить', danger: true }))) return
+  if (!online) { removeLocal(list); openRun.value = null; return load() }
+  const r = await apiRequest('/progress/log/remove', { method: 'POST', body: JSON.stringify({ ...(props.studentId != null ? { studentId: String(props.studentId) } : {}), ...(list ? { runs: list } : {}) }) }).catch(() => null)
+  if (!r?.ok) return showToast('Не удалось удалить — попробуйте ещё раз', null, 'bad')
+  runs.value = list ? runs.value.filter(x => !list.includes(x.run)) : []; openRun.value = null
+  showToast(list ? 'Заход удалён из журнала' : 'Журнал очищен')
+}
 const days = computed(() => byDay(runs.value))
 const week = computed(() => { const from = Date.now() - 7 * 864e5, r = runs.value.filter(x => x.at >= from); return { n: new Set(r.map(x => `${x.course}/${x.item}`)).size, runs: r.length, sec: r.reduce((a, x) => a + (x.sec || 0), 0) } })
 const dayName = (d) => {
@@ -51,7 +69,7 @@ const kindName = (s) => (s.kind ? exName(s) : 'Экран')
     <p v-else-if="loading && !runs.length" class="empty">Загрузка…</p>
     <p v-else-if="!runs.length" class="empty">Журнал пуст. Каждый заход в урок появится здесь сразу, даже если урок не закончен: какие упражнения пройдены, верно или нет, сколько времени.</p>
     <template v-else>
-      <div class="wk"><span>За 7 дней</span><b>{{ week.n }}</b> {{ lessonsWord(week.n) }}<i>·</i><b>{{ dur(week.sec) }}</b><i>·</i>{{ week.runs }} заход{{ week.runs % 10 === 1 && week.runs % 100 !== 11 ? '' : week.runs % 10 >= 2 && week.runs % 10 <= 4 && (week.runs % 100 < 10 || week.runs % 100 >= 20) ? 'а' : 'ов' }}</div>
+      <div class="wk"><span>За 7 дней</span><b>{{ week.n }}</b> {{ lessonsWord(week.n) }}<i>·</i><b>{{ dur(week.sec) }}</b><i>·</i>{{ week.runs }} заход{{ week.runs % 10 === 1 && week.runs % 100 !== 11 ? '' : week.runs % 10 >= 2 && week.runs % 10 <= 4 && (week.runs % 100 < 10 || week.runs % 100 >= 20) ? 'а' : 'ов' }}<button v-if="canDel" class="clr" @click="drop()">Очистить журнал</button></div>
       <section v-for="d in days" :key="d.day" class="day">
         <header class="dh">
           <h3>{{ dayName(d.day) }}</h3>
@@ -80,6 +98,7 @@ const kindName = (s) => (s.kind ? exName(s) : 'Экран')
                 <span class="sm"><template v-if="s.t > 1">{{ s.t }} попытки · </template><template v-if="s.sec != null">{{ dur(s.sec) }}</template></span>
               </li>
             </ol>
+            <div v-if="canDel && openRun === r.run" class="rdel"><button class="del" @click="drop([r.run])"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>Удалить этот заход</button></div>
           </div>
         </div>
       </section>
@@ -92,6 +111,10 @@ const kindName = (s) => (s.kind ? exName(s) : 'Экран')
 .empty { margin: 8px 0 0; color: var(--hint); font-weight: 600; font-size: 14px; line-height: 1.45 }
 .wk { font-size: 13px; font-weight: 700; color: var(--hint); display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; padding-top: 6px }
 .wk span { margin-right: 4px } .wk b, .ds b { color: var(--text); font-weight: 900 } .wk i, .ds i { font-style: normal; opacity: .5; margin: 0 2px }
+.clr { margin-left: auto; border: 0; border-radius: 12px; padding: 6px 12px; background: #f0f1f3; font: inherit; font-size: 12.5px; font-weight: 900; color: #555; cursor: pointer } .clr:hover { background: #fdecea; color: #d92d20 }
+.rdel { padding: 0 16px 12px 70px }
+.del { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 10px; padding: 6px 11px; background: none; font: inherit; font-size: 12.5px; font-weight: 800; color: #d92d20; cursor: pointer } .del:hover { background: #fdecea }
+.del svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .day { background: var(--card); border-radius: 18px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05); overflow: hidden; min-width: 0 }
 .dh { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; padding: 14px 16px 10px }
 .dh h3 { margin: 0; font-size: 16px; font-weight: 900 }
@@ -117,6 +140,6 @@ const kindName = (s) => (s.kind ? exName(s) : 'Экран')
 .sm { font-size: 12px; color: var(--hint); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums }
 @media (max-width: 560px) {
   .rh { grid-template-columns: 40px minmax(0, 1fr) auto 44px 14px; gap: 8px; padding: 10px 12px } .try { display: none }
-  .dh { padding: 12px 12px 8px } .st { padding: 2px 12px 10px 12px } .tt b { white-space: normal; line-height: 1.2 }
+  .dh { padding: 12px 12px 8px } .st { padding: 2px 12px 10px 12px } .rdel { padding: 0 12px 10px } .tt b { white-space: normal; line-height: 1.2 }
 }
 </style>

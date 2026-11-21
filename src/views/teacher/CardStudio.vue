@@ -392,6 +392,6 @@ tr.off td:not(.act) { opacity: .45 }
 .mini { border: 0; border-radius: 8px; padding: 5px 9px; background: rgba(0, 0, 0, .06); font: inherit; font-size: 12px; font-weight: 800; color: inherit; cursor: pointer } .mini:hover { background: rgba(0, 0, 0, .1) }
 .more { display: block; margin: 10px auto; border: 0; border-radius: 10px; padding: 8px 14px; background: var(--surface); font: inherit; font-size: 13px; font-weight: 800; color: var(--blue); cursor: pointer }
 .empty { padding: 30px; text-align: center; color: var(--hint) }
-@media (max-width: 700px) { .tip { display: none } .search { width: 120px } .cnt { display: none } }
+@media (max-width: 700px) { .tip { display: none } .search { width: 120px } .cnt { display: none } .bar { flex-wrap: wrap; row-gap: 8px } }
 .tts-b { display: inline-flex; align-items: center; gap: 6px } .tts-b img { width: 16px; height: 16px }
 </style>
