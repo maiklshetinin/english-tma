@@ -12,3 +12,5 @@ export const provideEdit = (v) => provide(EDIT, v)
 // заглушка — чтобы шаблон в режиме правки не падал вне редактора (например, в тесте)
 const NOOP = { pick() {}, drop() {}, clear() {}, put() {}, pct: () => null, changed() {}, cards() {}, canUndo: () => false, undoCard() {}, dropFiles() {} }
 export const useEdit = () => inject(EDIT, NOOP)
+/** шаблон открыт в редакторе курса (на ветке) — правки пишутся в сам экран (его JSON) */
+export const inEditor = () => !!inject(EDIT, null)

@@ -8,7 +8,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
-import { usePlay, useEdit } from '../ctx'
+import { usePlay, useEdit, inEditor } from '../ctx'
 import { startTalk, startTranscribe, sttModel, liveModels, liveName, firstKey } from '../../utils/live'
 import { ai } from '../../utils/gemini'
 import { aiIcon } from '../../utils/ai'
@@ -30,7 +30,12 @@ const lessonModel = computed(() => (cfg.value.model === 'auto' ? '' : cfg.value.
 onMounted(() => { loadModels() })
 // модель и голос перед разговором (20.11.2026): свой выбор ученика (запоминается в браузере), по умолчанию — из правки или самая свежая.
 // 21.11.2026: выбираются в подвале (part="fb"), «Оценивать речь» — вверху экрана; состояние общее — prefs.js
-const pick = computed(() => tp.pick), vpick = computed(() => tp.voice)
+// голос и модель — из JSON экрана; в редакторе пилюля меняет сам экран, у ученика — только это открытие (prefs.js)
+const editor = inEditor()
+const pick = computed(() => (editor ? '' : tp.pick)), vpick = computed(() => (editor ? '' : tp.voice))
+const vSel = computed(() => vpick.value || voice.value)
+function onVoice(v) { if (editor) setF('voice', v === 'Kore' ? '' : v); else setVPick(v === voice.value ? '' : v) }
+function onModel(v) { if (editor) setF('model', v); else setPick(v === lessonModel.value ? '' : v) }
 // надписи на «таблетках» подвала — коротко (список под ними — полный)
 const pickName = computed(() => liveName(pick.value || lessonModel.value || models.value[0] || ''))
 const vShort = computed(() => { const n = vpick.value || voice.value, v = VOICES.find((x) => x[0] === n); return v ? `${n} ${v[1] === 'женский' ? '♀' : '♂'}` : n })
@@ -179,11 +184,12 @@ const hasKeys = computed(() => ai.keys.length > 0)
     <div v-if="!p.edit" class="thd" @pointerdown.stop>          <!-- вверху (21.11.2026): голос и «Оценивать речь»; пока идёт разговор — не меняются -->
       <label class="ev" :class="{ off: busy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="busy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
       <span v-if="ptt" class="lk" :title="`Язык закреплён: ${L.ru} — и для распознавания (Transcribe Live), и для ответа Gemini (lang в JSON экрана)`"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>{{ L.code }}</span>
-      <label class="pill" :class="{ off: busy }" title="Голос Gemini — запоминается в этом браузере">
+      <label class="pill" :class="{ off: busy }" :title="editor ? 'Голос Gemini — пишется в экран (voice в JSON)' : 'Голос Gemini — из урока; выбор здесь — только на этот раз'">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
-        <select :value="vpick" :disabled="busy" aria-label="Голос" @change="setVPick($event.target.value)"><option value="">{{ vName(voice) }}{{ step.voice && step.voice !== 'Kore' ? ' (из урока)' : '' }}</option>
-          <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup>
-          <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}</option></optgroup></select></label>
+        <select :value="vSel" :disabled="busy" aria-label="Голос" @change="onVoice($event.target.value)">
+          <option v-if="!VOICES.some((x) => x[0] === voice)" :value="voice">{{ voice }} · из урока</option>
+          <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup>
+          <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup></select></label>
     </div>
 
     <template v-if="p.edit">
@@ -235,9 +241,9 @@ const hasKeys = computed(() => ai.keys.length > 0)
   </template>
   <!-- подвал (21.11.2026): модель — «таблеткой» слева от «Продолжить»; пока идёт разговор — не меняется (голос — вверху) -->
   <div v-else-if="part === 'fb' && !p.edit" class="tf" @pointerdown.stop>
-    <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" title="Модель разговора — запоминается в этом браузере">
+    <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" :title="editor ? 'Модель разговора — пишется в экран (model в JSON)' : 'Модель разговора — из урока; выбор здесь — только на этот раз'">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg><span class="pv">{{ pickName }}</span>
-      <select :value="pick" :disabled="tp.busy[step.id]" aria-label="Модель" @change="setPick($event.target.value)"><option value="">{{ lessonModel ? liveName(lessonModel) + ' (из урока)' : 'авто · ' + liveName(models[0]) }}</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
+      <select :value="pick || lessonModel" :disabled="tp.busy[step.id]" aria-label="Модель" @change="onModel($event.target.value)"><option value="">авто · {{ liveName(models[0]) }}{{ !editor && !lessonModel ? ' · из урока' : '' }}</option><option v-if="lessonModel && !models.includes(lessonModel)" :value="lessonModel">{{ liveName(lessonModel) }} · из урока</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ !editor && m === lessonModel ? ' · из урока' : '' }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
   </div>
 </template>
 
