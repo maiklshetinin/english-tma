@@ -550,7 +550,9 @@ const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Наст
 const trayTab = ref((() => { try { const v = localStorage.getItem('ce.trayTab'); return TRAY_TABS.some(b => b.k === v) ? v : 'app' } catch { return 'app' } })())          // была вкладка «Мои» (конструктор убран 18.11.2026) — откроется «Как в Busuu»
 watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })
 const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : trayTab.value === 'kp' ? XGROUPS_KP : XGROUPS_STD)
-  .map(g => ({ ...g, cols: g.items.length })))          // все плашки группы — в один ряд
+  .map((g, _, all) => ({ ...g, cols: all.length > 1 ? g.items.length : Math.max(1, Math.min(g.items.length, Math.floor((W.value - 32 - 44) / 140))) })))
+// все плашки группы — в один ряд; группа во вкладке одна (Karta Polaka) — сколько влезает по ширине окна, остальные следующим рядом,
+// без горизонтального скролла (21.11.2026). 140 — плашка 132 + промежуток; 32 — отступы меню от краёв окна, 44 — поля меню и группы
 const NEW_MINI = [...BOOK_TPL, ...PAGE_TPL]          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
 const skillsT = (t) => SKILLS[t.id] ?? []
 /** Экраны по плитке меню: «Готовый урок» или шаблон */
