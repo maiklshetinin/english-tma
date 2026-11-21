@@ -14,6 +14,7 @@ import { provideEdit } from '../exercises/ctx'
 import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
 import { stepJson, applyStepJson, tplOf, tplTitle, tplDesc, SKILL_T, skillsOf, BOOK } from '../utils/lesson'
+import { assemble } from '../exercises/assemble'
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
@@ -226,6 +227,14 @@ function jsonApply(s) {
   const e = applyStepJson(s, jsonEdit[s.id] ?? ''); if (e) { jsonErr[s.id] = e; return }
   jsonStop(s); rk[s.id] = (rk[s.id] ?? 0) + 1; changed()          // экран пересобрать с новыми полями
 }
+// «Как собирается» (21.11.2026): что из этого JSON уйдёт в чат и в модели — у «Ответа по смыслу» и «Разговора»; при правке — по тексту в поле
+const howOn = reactive({})
+const hasHow = (s) => s.kind === 'kp' || s.kind === 'talk'
+function howOf(s) {
+  let raw = null
+  if (jsonEdit[s.id] != null) { try { raw = JSON.parse(jsonEdit[s.id]) } catch { return { parts: [], warn: ['JSON пока не разбирается — проверьте кавычки и запятые'] } } }
+  return assemble(raw ?? stepJson(s))
+}
 function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { if (copied.value === s.id) copied.value = null }, 2000) }
 </script>
 
@@ -272,12 +281,17 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
             <svg v-if="jsonTheme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>
             <svg v-else viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
           </button>
+          <button v-if="hasHow(s)" class="jc" :class="{ on: howOn[s.id] }" title="Что из этого JSON уйдёт в чат и в модели — с подставленными вопросом и эталоном" @click="howOn[s.id] = !howOn[s.id]">Как собирается</button>
           <template v-if="jsonEdit[s.id] != null"><button class="jc" @click="jsonStop(s)">Отмена</button><button class="jc ap" @click="jsonApply(s)">Применить</button></template>
           <template v-else><button v-if="!readonly" class="jc" title="Изменить экран прямо в JSON" @click="jsonStart(s)">Править</button><button class="jc" :class="{ ok: copied === s.id }" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать' }}</button></template>
         </div>
         <textarea v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" class="jed" spellcheck="false" aria-label="JSON экрана" @keydown.stop @keydown.ctrl.enter.prevent="jsonApply(s)" @keydown.meta.enter.prevent="jsonApply(s)" @keydown.esc="jsonStop(s)" @paste.stop @copy.stop @cut.stop @wheel="ownWheel" />
         <small v-if="jsonErr[s.id]" class="jer">{{ jsonErr[s.id] }}</small>
-        <pre v-if="jsonEdit[s.id] == null" v-html="jsonHtml(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
+        <div v-if="howOn[s.id] && hasHow(s)" class="jhow" :class="{ full: jsonEdit[s.id] == null }" @wheel="ownWheel">          <!-- просмотр — вместо JSON во всю высоту; правка — под полем -->
+          <p v-for="w in howOf(s).warn" :key="w" class="jhw">⚠ {{ w }}</p>
+          <section v-for="pt in howOf(s).parts" :key="pt.to"><b>{{ pt.to }}</b><pre>{{ pt.text || '‹пусто›' }}</pre></section>
+        </div>
+        <pre v-if="jsonEdit[s.id] == null && !howOn[s.id]" v-html="jsonHtml(s)" />      <!-- колёсико — прокрутка JSON (карточка не пускает его на холст, ownWheel); Ctrl+колёсико — масштаб холста, не страницы -->
         <small class="jft">{{ jsonEdit[s.id] != null ? 'Ctrl+Enter — применить, Esc — отмена' : 'Образец для ИИ. Обратно — Ctrl+V или перетащите JSON на холст' }}</small>
       </div>
       <LessonPlayer v-else-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
@@ -432,6 +446,12 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 .warn { width: 18px; height: 18px; border-radius: 50%; background: var(--orange); color: #fff; font-size: 12px; font-weight: 900; font-style: normal; display: grid; place-items: center }
 .ib { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--hint); cursor: pointer; padding: 0 } .ib:hover { background: var(--red-l); color: var(--red-d) }
 .ib.cp:hover { background: var(--blue-l); color: var(--blue-d) }
+.jhow { flex: none; max-height: 45%; overflow: auto; border-top: 1px solid rgba(127, 127, 127, .3); padding: 8px 12px 10px; display: grid; gap: 8px; font-size: 12px }
+.jhow.full { flex: 1; max-height: none; border-top: 0; padding: 0 }
+.jhow section { display: grid; gap: 3px } .jhow b { font-size: 11.5px; font-weight: 900; opacity: .75 }
+.jv .jhow pre { flex: none; max-height: none; border: 0; margin: 0; padding: 6px 8px; border-radius: 8px; background: rgba(127, 127, 127, .12); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace }
+.jhw { margin: 0; padding: 5px 8px; border-radius: 8px; background: #fff4dc; color: #b45309; font-weight: 800 }
+.jc.on { background: #1cb0f6; color: #fff }
 .ib.js { font: 900 13px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -1px }      /* «{ }» — JSON экрана */
 .ib.js.on { background: var(--blue-l); color: var(--blue-d) }
 /* JSON экрана в карточке: светлый (по умолчанию) или тёмный код; текст можно выделять */
