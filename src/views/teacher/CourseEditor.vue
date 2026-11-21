@@ -1925,7 +1925,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <small><b>{{ tileItem.t }}</b><span>{{ tileItem.d }}</span></small>
       <span v-if="skillsT(tileItem).length" class="skl"><i v-for="k in skillsT(tileItem)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
     </div>
-    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter' }" role="toolbar" @pointerdown.stop @wheel.stop="trayWheel">
+    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter', kpw: tray === 'inter' && trayTab === 'kp' }" role="toolbar" @pointerdown.stop @wheel.stop="trayWheel">
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
         <!-- чекпоинт — как на рельсе: экраны НАД линией, линия снизу, в конце — итог Chapter -->
@@ -2393,5 +2393,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .xrow { display: flex; gap: 8px; align-items: stretch; overflow-x: auto; overflow-y: visible; padding-bottom: 2px }
 .xrow .xg { flex: none }
 .xrow.wrap { flex-wrap: wrap; overflow-x: visible; max-height: calc(100vh - 220px); overflow-y: auto }          /* рядов много — меню не выше окна, листается вниз */
+/* Karta Polaka: меню по центру, шириной по содержимому — но до краёв окна. С left: 50% ширина упиралась в половину холста, и плашки
+   уезжали во второй ряд, хотя в окне места хватало; теперь второй ряд — только если правда не влезло (21.11.2026) */
+.tray.inter.kpw { left: 16px; right: 16px; margin: 0 auto; transform: none; width: max-content; max-width: calc(100% - 32px); animation-name: trayc }
+@keyframes trayc { from { opacity: 0; transform: translateY(6px) } }
+/* группа — шириной с плашку, описание группы не повторяем (оно и так под плашкой): все в один ряд, плашки на одной линии */
+.xrow.wrap .xg { width: min-content } .xrow.wrap .xgh small { display: none } .xrow.wrap .xgh b { white-space: normal; line-height: 1.2 } .xrow.wrap .xgh { min-height: 50px; align-content: start }
 .xg.bk { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }
 </style>
