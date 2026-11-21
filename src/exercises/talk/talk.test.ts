@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { stepJson, applyStepJson, stepsFromJson, tplOf, TEMPLATES, type Step } from '../../utils/lesson'
-import { DEF_PROMPT, LOCK, OPENER, EN_PROMPT, EN_LOCK, EN_OPENER, LANGS, talkCfg, talkFields, talkSystem } from './defaults'
+import { DEF_PROMPT, LOCK, OPENER, EN_PROMPT, EN_LOCK, EN_OPENER, LANGS, EVAL_PROMPT, EVAL_ASK, talkCfg, talkFields, talkSystem } from './defaults'
 
 // «Разговор с Gemini» (только польский): JSON экрана показывает всё, что уходит в Live-модель, а в экране хранятся только отличия (20.11.2026)
 describe('«Разговор с Gemini»: JSON экрана', () => {
   it('пустой экран → stepJson со всеми умолчаниями', () => {
     const j: any = stepJson({ id: 'a', kind: 'talk', text: '' })
     expect(j).toEqual({ kind: 'talk', text: '', lang: 'pl-PL', prompt: DEF_PROMPT, lock: LOCK, opener: OPENER,
-      voice: 'Kore', model: 'auto', silenceMs: 1200, endSens: 'low', temperature: null, noiseSuppression: false })
+      voice: 'Kore', model: 'auto', silenceMs: 1200, endSens: 'low', temperature: null, noiseSuppression: false,
+      guard: 'Odpowiadaj wyłącznie po polsku.', evalPrompt: EVAL_PROMPT, evalAsk: EVAL_ASK })
     expect(talkSystem(talkCfg({}))).toBe(LOCK + ' ' + DEF_PROMPT)
   })
 
@@ -35,6 +36,18 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     expect(talkCfg({ lang: 'en-GB' }).prompt).toBe(EN_PROMPT)
     expect(talkCfg({ lang: 'xx' }).lang).toBe('pl-PL')
     expect(LANGS['en-US'].code).toBe('EN'); expect('Dzień dobry, jak się masz?'.match(LANGS['en-US'].alien)!.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('стёрли текст в JSON (роль, замок, первая реплика, просьба вернуться к языку, оценка речи) — пусто, умолчание не возвращается', () => {
+    const s: any = { id: 'z', kind: 'talk', text: 'T' }
+    const j: any = stepJson(s)
+    expect(j).toMatchObject({ guard: 'Odpowiadaj wyłącznie po polsku.' })
+    expect(typeof j.evalPrompt).toBe('string'); expect(j.evalAsk).toContain('{transcript}')
+    j.lock = ''; delete j.opener; j.guard = ''
+    expect(applyStepJson(s, JSON.stringify(j))).toBe('')
+    const c = talkCfg(s)
+    expect([c.lock, c.opener, c.guard]).toEqual(['', '', ''])
+    expect(talkSystem(c)).toBe(c.prompt)
   })
 
   it('неверные значения отбрасываются; умолчания не хранятся', () => {

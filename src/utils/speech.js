@@ -5,6 +5,7 @@
 import { ai, mark, retryMs, errText, mask } from './gemini'
 import { pcmToWav } from './tts'
 import { checkModels, checkName } from './kpcheck'
+import { EVAL_PROMPT, EVAL_ASK } from '../exercises/talk/defaults'
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models'
 const PK = 'tma.speech.model'
@@ -34,26 +35,18 @@ const SCHEMA = { type: 'OBJECT', properties: {
   strengths: { type: 'ARRAY', items: { type: 'STRING' } }, tips: { type: 'ARRAY', items: { type: 'STRING' } }, summary: { type: 'STRING' },
 }, required: ['level', 'read_aloud', 'confidence', 'intelligibility', 'scores', 'mistakes', 'strengths', 'tips', 'summary'] }
 
-const prompt = (lang) => `Ты строгий, но доброжелательный экзаменатор по устной речи (${LANG_NAME[lang] || 'польский'} язык), оцениваешь по шкале CEFR. ` +
-  'Тебе дана ЗАПИСЬ голоса ученика и её автоматическая расшифровка. Слушай запись: беглость, паузы, темп, произношение и ударение оценивай по звуку, ' +
-  'словарь, грамматику и связность — по сказанному. Расшифровка может содержать ошибки распознавания — не наказывай за них, если по звуку сказано верно. ' +
-  'Описания уровней: A1 — отдельные заученные фразы; A2 — простые предложения о себе и быте, частые ошибки; B1 — связный рассказ об опыте и планах, ошибки не мешают пониманию; ' +
-  'B2 — развёрнутые аргументированные ответы, разнообразный словарь, редкие ошибки; C1 — свободно, точно, гибко. Не завышай: модели склонны льстить — оценивай как на экзамене. ' +
-  'Акцент сам по себе не снижает оценку, если речь понятна носителю. ' +
-  'ЧТЕНИЕ: определи по звуку, читает ли ученик готовый текст или говорит заученное (ровный темп, интонация чтения, нет пауз на подбор слов, нет самоисправлений, книжная лексика, слишком гладко) — тогда read_aloud = true, ' +
-  'read_reason — коротко по-русски, по каким признакам; и помни: при чтении уровень показывает сложность ТЕКСТА, а не разговорную речь — оценивай словарь и грамматику осторожно и снизь confidence. ' +
-  'УВЕРЕННОСТЬ (confidence) будь честным: запись меньше 60 с — не выше 70; чтение или заученное — не выше 50; 85 и выше — только для длинной (2+ минуты) спонтанной речи. ' +
-    'intelligibility — 0–100: насколько легко носитель поймёт речь (100 — без усилий). scores — 0–100 по каждому критерию. confidence — 0–100: насколько уверен в уровне (мало речи — низкая). ' +
-  'mistakes — до 8 реальных ошибок: quote — ДОСЛОВНО фрагмент из расшифровки, fix — как правильно, why — коротко по-русски почему. Не выдумывай ошибок, которых нет. ' +
-  'pronunciation_notes — до 4 замечаний по звукам/ударению (по-русски, с примерами слов). strengths — 2–3 сильные стороны, tips — 2–4 конкретных совета, summary — 1–2 предложения итога. Всё по-русски, кроме цитат и исправлений.'
+// 21.11.2026: тексты — из JSON экрана (evalPrompt, evalAsk «Разговора с Gemini»); умолчания — exercises/talk/defaults.ts, их видно в JSON
+const fillE = (t, v) => t.replace(/\{(lang|context|transcript)\}/g, (_, k) => v[k] ?? '')
+/** без диалога (запись одного ученика): только расшифровка */
+export const EVAL_ASK_SOLO = 'Расшифровка речи ученика:\n{transcript}'
 
 /** → { level, plus, confidence, intelligibility, scores, mistakes, pron, strengths, tips, summary, model, sec, ms } */
-export async function assessSpeech({ blob, sec, transcript, context = '', lang = 'pl-PL', model = '', fetcher = fetch }) {          // context — реплики собеседника в диалоге (не оцениваются)
+export async function assessSpeech({ blob, sec, transcript, context = '', lang = 'pl-PL', model = '', prompt = EVAL_PROMPT, ask = context ? EVAL_ASK : EVAL_ASK_SOLO, fetcher = fetch }) {          // context — реплики собеседника в диалоге (не оцениваются)
   if (sec < MIN_SEC) { const e = new Error(`Мало речи для оценки: ${Math.round(sec)} с — нужно хотя бы ${MIN_SEC} с связного рассказа`); e.short = true; throw e }
   if (!ai.keys.length) throw new Error('Нужен ключ Gemini в профиле')
   const t0 = Date.now(), m = getSpeechPick() || model || (await checkModels(ai.keys[0].key, fetcher))[0] || 'gemini-3.5-flash-lite'
-  const body = { systemInstruction: { parts: [{ text: prompt(lang) }] },
-    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: await b64(blob) } }, { text: (context ? `Это фрагменты ДИАЛОГА: в записи — только голос ученика. Оценивай только ученика; реплики собеседника — для контекста (понимает ли ученик вопросы, отвечает ли по делу), цитаты — только из реплик ученика.\nРеплики собеседника:\n${context}\n\n` : '') + `Расшифровка речи ученика:\n${transcript || '(пусто)'}` }] }],
+  const body = { systemInstruction: { parts: [{ text: fillE(prompt, { lang: LANG_NAME[lang] || 'польский' }) }] },
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: await b64(blob) } }, { text: fillE(ask, { context, transcript: transcript || '(пусто)' }) }] }],
     generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA } }
   let last = null
   for (const x of ai.keys) {

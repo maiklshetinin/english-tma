@@ -34,8 +34,10 @@ onMounted(() => { loadModels() })
 const editor = inEditor()
 const pick = computed(() => (editor ? '' : tp.pick)), vpick = computed(() => (editor ? '' : tp.voice))
 const vSel = computed(() => vpick.value || voice.value)
-function onVoice(v) { if (editor) setF('voice', v === 'Kore' ? '' : v); else setVPick(v === voice.value ? '' : v) }
-function onModel(v) { if (editor) setF('model', v); else setPick(v === lessonModel.value ? '' : v) }
+// в редакторе: совпало с умолчанием (код ← настройки курса) — поле экрана убрать, иначе записать
+const base = () => talkCfg({ ptt: props.step.ptt, avatar: props.step.avatar, lang: props.step.lang })
+function onVoice(v) { if (editor) setF('voice', v === base().voice ? '' : v); else setVPick(v === voice.value ? '' : v) }
+function onModel(v) { if (editor) setF('model', (v || 'auto') === base().model ? '' : v || 'auto'); else setPick(v === lessonModel.value ? '' : v) }
 // надписи на «таблетках» подвала — коротко (список под ними — полный)
 const pickName = computed(() => liveName(pick.value || lessonModel.value || models.value[0] || ''))
 const vShort = computed(() => { const n = vpick.value || voice.value, v = VOICES.find((x) => x[0] === n); return v ? `${n} ${v[1] === 'женский' ? '♀' : '♂'}` : n })
@@ -144,7 +146,7 @@ function trCommit() {
 /** Gemini ответила не по-польски — один раз за реплику просим по-польски и помечаем пузырь */
 function aiGuard() {
   const l = lines.value.at(-1); if (!l || l.role !== 'ai' || aiWarned === l) return
-  if (CYR.test(l.t) || (l.t.match(L.value.alien) || []).length >= 2) { aiWarned = l; l.warn = `Gemini ответила не ${L.value.how} — попросили ${L.value.how}`; sess?.send(L.value.guard) }
+  if (CYR.test(l.t) || (l.t.match(L.value.alien) || []).length >= 2) { aiWarned = l; l.warn = `Gemini ответила не ${L.value.how}` + (cfg.value.guard ? ` — попросили ${L.value.how}` : ''); if (cfg.value.guard) sess?.send(cfg.value.guard) }          // просьба вернуться к языку — из JSON экрана (guard)
 }
 const outLevel = () => sess?.outLevel?.() ?? 0          // громкость голоса Gemini — для персонажа (step.avatar)
 
@@ -167,7 +169,7 @@ async function sendEval(final = false) {
   const me = lines.value.filter((l) => l.role === 'me').map((l) => l.t).join(' '), them = lines.value.filter((l) => l.role === 'ai').map((l) => l.t).join('\n')
   const seg = { n: segs.value.length + 1, at: Math.round(speechSec.value), st: 'sent', rep: null, err: '' }
   segs.value.push(seg); const S = segs.value.at(-1)
-  try { S.rep = await assessSpeech({ blob, sec: Math.max(s2, 20), transcript: me, context: them, lang: lang.value }); S.st = 'done' }
+  try { S.rep = await assessSpeech({ blob, sec: Math.max(s2, 20), transcript: me, context: them, lang: lang.value, prompt: cfg.value.evalPrompt, ask: cfg.value.evalAsk }); S.st = 'done' }          // промпт и сообщение оценки — из JSON экрана (evalPrompt, evalAsk)
   catch (e) { S.st = 'err'; S.err = e.message }
   finally { evBusy = false; if (speechSec.value - sentAt >= STEP) sendEval() }
 }

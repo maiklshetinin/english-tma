@@ -71,7 +71,7 @@ export async function checkDirect(q, { model = '', fetcher = fetch } = {}) {
   if (!ai.keys.length) { const e = new Error('нет ключей Gemini'); e.nokeys = true; throw e }
   const own = (v) => (v && v !== 'live' ? v : '')          // 'live' — проверка голосовой моделью (utils/kplive.js), тут — запасная текстовая
   const m = own(getPick()) || own(model) || (await checkModels(ai.keys[0].key, fetcher))[0] || CHECK_DEFAULT          // свой выбор в браузере (подвал экрана) — главнее экрана
-  const prompt = c.prompt.trim() + ' ' + c.format.trim()          // ровно то, что в JSON экрана: prompt и format
+  const prompt = [c.prompt.trim(), c.format.trim()].filter(Boolean).join(' ')          // ровно то, что в JSON экрана: prompt и format (пустое — пусто)
   const user = fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer })
   const thinkOff = !c.thinking, temp = c.temperature
   const now = Date.now(), keys = ai.keys.filter((x) => !(quota(x.key, m) > now))

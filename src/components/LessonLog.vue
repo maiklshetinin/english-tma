@@ -80,7 +80,7 @@ const kindName = (s) => (s.kind ? exName(s) : 'Экран')
             <button class="rh" :aria-expanded="openRun === r.run" @click="openRun = openRun === r.run ? null : r.run">
               <span class="tm">{{ hm(r.at) }}</span>
               <span class="tt"><b>{{ r.title || 'Урок' }}</b><small>{{ [r.courseTitle, r.unit].filter(Boolean).join(' · ') }}</small></span>
-              <span v-if="r.try > 1" class="try" :title="'Этот урок открывали ' + r.try + '-й раз'">{{ r.try }}-я попытка</span>
+              <span class="try" :class="{ no: r.try <= 1 }" :title="'Этот урок открывали ' + r.try + '-й раз'">{{ r.try }}-я попытка</span>          <!-- 1-я — место пустое, колонки не съезжают -->
               <span class="rs">
                 <template v-if="r.fin"><b :class="tone(r)">{{ r.all ? `${r.ok}/${r.all}` : '✓' }}</b><small>{{ r.all ? pct(r) + '%' : 'без оценки' }}</small></template>
                 <template v-else><b class="ip">не закончен</b><small>{{ seen(r) }} из {{ r.n || r.steps.length }} упр.</small></template>
@@ -127,6 +127,7 @@ const kindName = (s) => (s.kind ? exName(s) : 'Экран')
 .tt { display: grid; min-width: 0 } .tt b { font-size: 14.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .tt small { font-size: 12px; color: var(--hint); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .try { font-size: 11.5px; font-weight: 800; color: #1278b0; background: #e6f6fe; border-radius: 8px; padding: 2px 7px; white-space: nowrap }
+.try.no { visibility: hidden }
 .rs { display: grid; justify-items: end; line-height: 1.15 } .rs b { font-size: 14px; font-weight: 900; white-space: nowrap } .rs small { font-size: 11.5px; color: var(--hint); font-weight: 700; white-space: nowrap }
 .g { color: #2e8b00 } .m { color: #c2590a } .b { color: #d92d20 } .z { color: var(--hint) } .ip { color: #c2590a }
 .du { font-size: 13px; font-weight: 800; color: var(--hint); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums }

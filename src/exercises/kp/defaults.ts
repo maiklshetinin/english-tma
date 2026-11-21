@@ -5,8 +5,11 @@
 // У моста (чат) и у «· Gemini API» свои умолчания message и format — правятся независимо:
 //   мост: в чат уходит prompt + message + format (в format обязательно {id} — по нему мост находит ответ в чате), склеивает сервер;
 //   Gemini API: systemInstruction = prompt + format, сообщение = message; голосом — prompt + livePrompt, message + liveAsk, функция liveTool.
+// 21.11.2026: + настройки упражнения в курсе (src/exercises/presets.ts, «{ }» на плитке меню): код ← курс ← экран.
 // В шаблонах: {question} — вопрос, {reference} — эталон без разметки, {answer} — ответ ученика, {score} — процент, {missed} — чего не прозвучало,
 // {id} — метка задания (только format моста), {lang} — язык словами (sttPrompt).
+
+import { presetFor } from '../presets'
 
 export const PASS = 60                                    // зачёт — от 60 % (рекомендация курса: 60–70 % «идеального» ответа — уже хорошо)
 /** Промпт по умолчанию — тот же текст, что SYSTEM в server/ai.ts */
@@ -86,19 +89,31 @@ const base = (s: any) => (kpApi(s) ? { message: DEF.message, format: DEF.format 
 /** format моста без {id} мост не разберёт — такой не принимаем */
 const okFormat = (s: any, v: string) => kpApi(s) || v.includes('{id}')
 
-/** Действующие настройки экрана: свои поля поверх умолчаний этой формы */
-export function kpCfg(s: any): KpCfg {
-  const b = base(s), f = txt(s?.format)
+/** Умолчания кода, свои поля поверх (без настроек курса) */
+/** текстовые поля: свои у экрана — как есть, даже пустые (стёрли в JSON — значит пусто, умолчание не подставляем; 21.11.2026) */
+export const KP_TEXTS = ['prompt', 'message', 'format', ...API_TEXTS, ...STT_TEXTS] as const
+const own = (s: any, k: string) => (typeof s?.[k] === 'string' ? (s[k] as string) : undefined)
+function kpCode(s: any): KpCfg {
+  const b = base(s), f = own(s, 'format')
   const o: any = {
-    prompt: txt(s?.prompt).trim() || SYSTEM, pass: okPass(s?.pass) ? s.pass : PASS, lang: okLang(s?.lang) ? s.lang : 'pl-PL',
-    message: txt(s?.message) || b.message, format: f && okFormat(s, f) ? f : b.format,
+    prompt: own(s, 'prompt')?.trim() ?? SYSTEM, pass: okPass(s?.pass) ? s.pass : PASS, lang: okLang(s?.lang) ? s.lang : 'pl-PL',
+    message: own(s, 'message') ?? b.message, format: f !== undefined && okFormat(s, f) ? f : b.format,
     model: okModel(s?.model) ? s.model.trim() : DEF.model, temperature: okTemp(s?.temperature) ? s.temperature : DEF.temperature, thinking: s?.thinking === true,
     liveModel: okModel(s?.liveModel) ? s.liveModel.trim() : DEF.liveModel, voice: typeof s?.voice === 'string' && /^[A-Za-z]{2,20}$/.test(s.voice) ? s.voice : DEF.voice,
   }
-  for (const k of API_TEXTS) o[k] = txt(s?.[k]) || DEF[k]
-  for (const k of STT_TEXTS) o[k] = txt(s?.[k]) || STT[k]
+  for (const k of API_TEXTS) o[k] = own(s, k) ?? DEF[k]
+  for (const k of STT_TEXTS) o[k] = own(s, k) ?? STT[k]
   return o
 }
+/** шаблон экрана — по нему настройки курса (presets) */
+export const kpTpl = (s: any) => (kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')
+/** Действующие настройки экрана: умолчания кода ← настройки упражнения в курсе ← свои поля экрана */
+export function kpCfg(s: any): KpCfg {
+  const mine: any = {}
+  for (const [k, v] of Object.entries(s ?? {})) if (v !== undefined && v !== null) mine[k] = v
+  return kpCode({ ...presetFor(kpTpl(s)), ...mine })
+}
+
 /** Что показывать в JSON экрана — ровно то, что уходит у этой формы: мост — prompt, message, format; Gemini API — всё; «целым аудио» — + sttPrompt, sttAsk */
 export function kpShown(s: any): Partial<KpCfg> {
   const c = kpCfg(s)
@@ -107,25 +122,21 @@ export function kpShown(s: any): Partial<KpCfg> {
   return o
 }
 
-/** Поля экрана из JSON: только отличия от умолчаний этой формы (и только верного вида). Форму (engine, dic) берём из того же JSON */
+const API_ONLY = ['temperature', 'thinking', 'liveModel', 'voice', ...API_TEXTS] as const
+const eq = (a: unknown, b: unknown) => (typeof a === 'string' && typeof b === 'string' ? a.trim() === b.trim() : a === b)
+/** Поля экрана из JSON: только отличия от действующих умолчаний этой формы (код ← курс) и только верного вида. Форму (engine, dic) — из того же JSON */
 export function kpFields(raw: any): Partial<KpCfg> {
   const o: any = {}
   if (!raw || typeof raw !== 'object') return o
-  const b = base(raw)
-  const prompt = txt(raw.prompt); if (prompt && !same(prompt, SYSTEM)) o.prompt = prompt.trim()
-  if (okPass(raw.pass) && raw.pass !== PASS) o.pass = raw.pass
-  if (okLang(raw.lang) && raw.lang !== 'pl-PL') o.lang = raw.lang
-  const message = txt(raw.message); if (message && !same(message, b.message)) o.message = message
-  const format = txt(raw.format); if (format && okFormat(raw, format) && !same(format, b.format)) o.format = format
-  if (okModel(raw.model) && raw.model.trim() !== DEF.model) o.model = raw.model.trim()          // модель держим и у моста — пригодится, если экран переведут на Gemini API
-  if (kpApi(raw)) {
-    if (okTemp(raw.temperature)) o.temperature = raw.temperature
-    if (raw.thinking === true) o.thinking = true
-    if (okModel(raw.liveModel) && raw.liveModel.trim() !== DEF.liveModel) o.liveModel = raw.liveModel.trim()
-    if (typeof raw.voice === 'string' && /^[A-Za-z]{2,20}$/.test(raw.voice) && raw.voice !== DEF.voice) o.voice = raw.voice
-    for (const k of API_TEXTS) { const v = txt(raw[k]); if (v && !same(v, DEF[k])) o[k] = v }
+  const form = { engine: raw.engine, dic: raw.dic }
+  const x: any = kpCode({ ...form, ...raw }), d: any = kpCfg(form)          // x — значения JSON (неверные — умолчания кода), d — что было бы без своих полей
+  for (const k of Object.keys(x)) {
+    if (raw[k] === undefined) continue
+    if (!kpApi(raw) && (API_ONLY as readonly string[]).includes(k)) continue
+    if (!kpFile(raw) && (STT_TEXTS as readonly string[]).includes(k)) continue
+    if (k === 'temperature' && raw.temperature === null && d.temperature === null) continue
+    if (!eq(x[k], d[k])) o[k] = x[k]
   }
-  if (kpFile(raw)) for (const k of STT_TEXTS) { const v = txt(raw[k]); if (v && !same(v, STT[k])) o[k] = v }
   return o
 }
 

@@ -16,8 +16,8 @@
 // Файл в поле image / audio / video: https-ссылка (фото и озвучка карточек), ключ файла курса в S3 (t/…/c/…)
 // или «idb:<id>» — файл пока только в этом браузере (без сервера или до загрузки), на сервер такой не уходит.
 
-import { talkCfg, talkFields, type EndSens } from '../exercises/talk/defaults'
-import { kpShown, kpFields } from '../exercises/kp/defaults'
+import { talkCfg, talkFields, TALK_TEXTS, type EndSens } from '../exercises/talk/defaults'
+import { kpShown, kpFields, KP_TEXTS } from '../exercises/kp/defaults'
 
 export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk' | 'stt'
 export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
@@ -449,6 +449,13 @@ export function applyStepJson(s: Step, text: string): string {
   if (Array.isArray(raw)) return 'Здесь один экран — нужен один объект { … }, а не список [ … ]'
   if (!raw || typeof raw !== 'object') return 'Нужен объект { … }'
   if (!(raw.kind in KINDS)) return `Неизвестный kind${raw.kind ? ` «${raw.kind}»` : ''} — можно: ${Object.keys(KINDS).join(', ')}`
+  // 21.11.2026: в JSON экрана — ровно то, что уходит в модели. Текстовое поле стёрли или удалили строку — значит пусто, умолчание
+  // не подставляем (раньше после «Применить» возвращался текст по умолчанию)
+  const texts: readonly string[] = raw.kind === 'kp' ? KP_TEXTS.filter((k) => k in kpShown(raw)) : raw.kind === 'talk' ? TALK_TEXTS : []
+  for (const k of texts) if (raw[k] === undefined || raw[k] === null) raw[k] = ''
+  if (raw.kind === 'kp' && !(raw.engine === 'api' || raw.engine === 'live') && !(typeof raw.format === 'string' && raw.format.includes('{id}')))
+    return 'В format моста нужна метка {id} — по ней мост находит ответ в чате. Добавьте {id} (например: «Первое поле — id со значением {id}»)'
+  text = JSON.stringify(raw)
   const r = stepsFromJson(text)
   if (!r?.steps.length) return 'Экран не собрался — проверьте поля'
   const ns: any = r.steps[0], old: any = s

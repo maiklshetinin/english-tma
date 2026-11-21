@@ -22,6 +22,30 @@ describe('«Ответ по смыслу»: настройки проверки 
     expect(kpCfg({ engine: 'api' }).format).toBe(DEF.format)          // у Gemini API своё умолчание
   })
 
+  it('все 3 формы: стёрли текст или удалили строку в JSON — после «Применить» пусто, умолчание не возвращается', () => {
+    for (const form of [{}, { engine: 'api' }, { dic: 'file' }]) {
+      const s: any = { id: 'x', kind: 'kp', text: 'Q', ideal: 'A', ...form }
+      const j: any = stepJson(s); j.prompt = ''; delete j.message
+      if (form.engine) { j.livePrompt = ''; delete j.discussOpener; j.format = '' }
+      if (form.dic) { j.sttAsk = '' }
+      expect(applyStepJson(s, JSON.stringify(j))).toBe('')
+      const c = kpCfg(s), again: any = stepJson(s)
+      expect([c.prompt, c.message, again.prompt, again.message]).toEqual(['', '', '', ''])
+      if (form.engine) expect([c.livePrompt, c.discussOpener, c.format]).toEqual(['', '', ''])
+      if (form.dic) expect(c.sttAsk).toBe('')
+      expect(applyStepJson(s, JSON.stringify(again))).toBe('')          // открыли и применили ещё раз — так и осталось пусто
+      expect(kpCfg(s).prompt).toBe('')
+    }
+  })
+
+  it('мост: format без {id} или пустой — «Применить» не проходит и объясняет', () => {
+    const s: any = { id: 'y', kind: 'kp', text: 'Q', ideal: 'A' }
+    const j: any = stepJson(s); j.format = 'просто JSON'
+    expect(applyStepJson(s, JSON.stringify(j))).toMatch(/\{id\}/)
+    delete j.format
+    expect(applyStepJson(s, JSON.stringify(j))).toMatch(/\{id\}/)
+  })
+
   it('«целым аудио»: в JSON — промпт и просьба расшифровки; у других форм их нет', () => {
     expect(kpShown({ dic: 'file' })).toMatchObject({ sttPrompt: STT.sttPrompt, sttAsk: STT.sttAsk })
     expect('sttPrompt' in kpShown({})).toBe(false)

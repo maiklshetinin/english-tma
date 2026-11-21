@@ -36,6 +36,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
   // Файл экрана: свой ключ курса или https-ссылка (фото и озвучка карточек); иначе — нет файла
   const ref = (v: unknown) => (typeof v === 'string' && v.length <= 600 && (isOurKey(v) || isMediaUrl(v)) ? v : undefined)
   const put = (o: Record<string, unknown>, k: string, v: unknown) => { if (v !== undefined && v !== '') o[k] = v }
+  // промпты «Ответа по смыслу» и «Разговора»: пустая строка — тоже значение (стёрли в JSON экрана — пусто, умолчание не подставлять; 21.11.2026)
+  const putT = (o: Record<string, unknown>, k: string, v: unknown, n: number) => { if (typeof v === 'string') o[k] = v.slice(0, n) }
   const step = (raw: unknown): Step => {
     const r = (raw ?? {}) as Record<string, unknown>, kind = String(r.kind)
     if (!ID.test(String(r.id)) || !STEP_KINDS.includes(kind)) throw fail(400, 'bad step')
@@ -66,22 +68,22 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (kind === 'speak' || kind === 'gap') { put(o, 'phrase', str(r.phrase, 300)); put(o, 'tr', str(r.tr, 300)) }
     if (kind === 'gap') o.opts = (Array.isArray(r.opts) ? r.opts : []).slice(0, 8).map((x) => ({ w: str(((x ?? {}) as Record<string, unknown>).w, 120) }))          // до 8 — банк слов из учебника (предлоги)
     if (kind === 'answer') { put(o, 'text', str(r.text, 300)); put(o, 'note', str(r.note, 600)); put(o, 'tr', str(r.tr, 300)) }
-    if (kind === 'kp') { put(o, 'text', str(r.text, 300)); put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; if (r.look === 'lines' || r.look === 'cards') o.look = r.look; if (r.plain === true) o.plain = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n } put(o, 'prompt', str(r.prompt, 4000)); const p = Number(r.pass); if (Number.isInteger(p) && p > 0 && p <= 100) o.pass = p; if (r.autoplay === true) o.autoplay = true; if (r.dic === 'file') o.dic = 'file'          // 21.11.2026: «Ответ по смыслу · целым аудио» — диктовка целой записью
+    if (kind === 'kp') { put(o, 'text', str(r.text, 300)); put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; if (r.look === 'lines' || r.look === 'cards') o.look = r.look; if (r.plain === true) o.plain = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n } putT(o, 'prompt', r.prompt, 4000); const p = Number(r.pass); if (Number.isInteger(p) && p > 0 && p <= 100) o.pass = p; if (r.autoplay === true) o.autoplay = true; if (r.dic === 'file') o.dic = 'file'          // 21.11.2026: «Ответ по смыслу · целым аудио» — диктовка целой записью
       // 21.11.2026: всё, что уходит в чат и в модели, — из JSON экрана (src/exercises/kp/defaults.ts), клиент хранит только отличия от умолчаний:
       // у моста и у Gemini API — свои message и format; язык; «целым аудио» — промпт и просьба расшифровки
-      for (const k of ['format', 'message', 'sttPrompt', 'sttAsk']) put(o, k, str(r[k], 4000))
+      for (const k of ['format', 'message', 'sttPrompt', 'sttAsk']) putT(o, k, r[k], 4000)
       if (r.lang === 'en-US' || r.lang === 'en-GB') o.lang = r.lang
       if (r.engine === 'api' || r.engine === 'live') { o.engine = 'api'; if (typeof r.model === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.model)) o.model = r.model
         if (typeof r.liveModel === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.liveModel)) o.liveModel = r.liveModel
         if (typeof r.voice === 'string' && /^[A-Za-z]{2,20}$/.test(r.voice)) o.voice = r.voice
-        for (const k of ['livePrompt', 'liveAsk', 'liveMore', 'liveTool', 'discussPrompt', 'discussOpener', 'discussNone']) put(o, k, str(r[k], 4000))
+        for (const k of ['livePrompt', 'liveAsk', 'liveMore', 'liveTool', 'discussPrompt', 'discussOpener', 'discussNone']) putT(o, k, r[k], 4000)
         put(o, 'temperature', within(r.temperature, 0, 2)); if (r.thinking === true) o.thinking = true } }          // engine: 'api' (model: 'live' — проверка голосовой моделью); старый 'live' («Live (голос)», убран 20.11.2026) — тоже 'api'; свой промпт для Gemini и порог, %          // «Ответ по смыслу»: вопрос и эталон (Gemini сверяет)
     // чем озвучен звук экрана (Gemini, 20.11.2026): «модель|голос» — показать в редакторе
     { const by = r.audioBy; if (typeof by === 'string' && TTS_BY.test(by)) o.audioBy = by }
     // «Разговор с Gemini» (Live API, 20.11.2026, эксперимент): задание, роль ИИ, голос, модель
-    if (kind === 'talk') { put(o, 'text', str(r.text, 300)); put(o, 'prompt', str(r.prompt, 4000)); if (typeof r.voice === 'string' && /^[A-Za-z]{2,20}$/.test(r.voice)) o.voice = r.voice; if (typeof r.model === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.model)) o.model = r.model; if (r.lang === 'en-US' || r.lang === 'en-GB') o.lang = r.lang
+    if (kind === 'talk') { put(o, 'text', str(r.text, 300)); putT(o, 'prompt', r.prompt, 4000); if (typeof r.voice === 'string' && /^[A-Za-z]{2,20}$/.test(r.voice)) o.voice = r.voice; if (typeof r.model === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.model)) o.model = r.model; if (r.lang === 'en-US' || r.lang === 'en-GB') o.lang = r.lang
       // 20.11.2026: всё, что уходит в Live-модель, из JSON экрана (src/exercises/talk/defaults.ts; только отличия от умолчаний) и персонаж (шаблон «Разговор с персонажем»)
-      put(o, 'lock', str(r.lock, 2000)); put(o, 'opener', str(r.opener, 500))
+      putT(o, 'lock', r.lock, 2000); putT(o, 'opener', r.opener, 500); putT(o, 'guard', r.guard, 500); putT(o, 'evalPrompt', r.evalPrompt, 6000); putT(o, 'evalAsk', r.evalAsk, 2000)          // guard, eval* — 21.11.2026
       put(o, 'silenceMs', within(r.silenceMs, 200, 5000, true)); if (r.endSens === 'high') o.endSens = 'high'; put(o, 'temperature', within(r.temperature, 0, 2))
       if (r.noiseSuppression === true) o.noiseSuppression = true; if (r.avatar === true) o.avatar = true; if (r.ptt === true) o.ptt = true }
     // «Транскрипция» (Gemini 3.5 Transcribe Live, 20.11.2026, эксперимент): подсказка, язык

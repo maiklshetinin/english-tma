@@ -28,8 +28,8 @@ export async function checkLive(q, id) {
   const voice = c.voice
   const S = reactive({ lines: [], state: 'connecting', quiet: getQuiet(), listening: false, model, name: liveName(model), err: '' })
   const push = (role, chunk) => { const l = S.lines.at(-1); if (l && l.role === role && !l.closed) l.t += chunk; else S.lines.push({ role, t: chunk.replace(/^\s+/, ''), closed: false }) }
-  const system = c.prompt.trim() + '\n\n' + c.livePrompt.trim()
-  const data = fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer }) + '\n\n' + c.liveAsk.trim()
+  const system = [c.prompt.trim(), c.livePrompt.trim()].filter(Boolean).join('\n\n')
+  const data = [fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer }), c.liveAsk.trim()].filter((x) => x.trim()).join('\n\n')
   return new Promise((ok, no) => {
     let got = false
     const tm = setTimeout(() => { if (!got) { got = true; sess.stop(); no(new Error('Live не прислала оценку за 15 с')) } }, 15_000)

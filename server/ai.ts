@@ -22,7 +22,7 @@ export function chatText(id: string, q: Q) {
   const message = cut(q.message, 4000), format = cut(q.format, 2000)
   if (message && format.includes('{id}')) {
     const v = { question: cut(q.question, 300), reference: cut(q.reference, 3000), answer: cut(q.answer, 3000), id }
-    return [cut(q.prompt, 4000) || SYSTEM, fillT(message, v), fillT(format, v)].join('\n\n')
+    return [cut(q.prompt, 4000), fillT(message, v), fillT(format, v)].filter(Boolean).join('\n\n')          // промпт стёрли в JSON — без промпта, своего не подставляем
   }
   return [
     cut(q.prompt, 4000) || SYSTEM,
