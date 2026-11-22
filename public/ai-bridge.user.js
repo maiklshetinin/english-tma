@@ -72,7 +72,7 @@
   pill.title = 'Мост Tutor TMA. Клик или Alt+Shift+B — включить/выключить в этой вкладке'
   pill.addEventListener('click', toggle)
   function show(text, color) { if (!document.body.contains(pill)) document.body.appendChild(pill); label.textContent = 'Мост · ' + text; dot.style.background = color }
-  const idle = () => show(isOn() ? `ждёт (${served})` : 'выкл', isOn() ? SITE.color : '#8e8e8e')
+  const idle = () => show(isOn() ? `ждёт · ответов отправлено: ${served}` : 'выкл', isOn() ? SITE.color : '#8e8e8e')
 
   // ───────── DOM чата ─────────
   const shown = (el) => !!el && (el.offsetParent !== null || el.getClientRects().length > 0)
