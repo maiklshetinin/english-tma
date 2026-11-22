@@ -7,7 +7,7 @@
 // а «JSON» в подвале — весь экран текстом: вопрос, эталон, порог и промпт для Gemini (свой у этого экрана; для теста промпта).
 // 19.11.2026: точь-в-точь как в ответах домашки — номер и вопрос на подложке #f2dab5, красная гранёная звезда у обязательных (step.star),
 // в эталоне оранжевые термины, жирный, курсив, абзацы с отступом и пункты (разметка: ==термин==, **жирный**, _курсив_, «• »).
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
@@ -216,6 +216,10 @@ watch(() => lv.value?.lines.map((l) => l.t).join('').length, () => setTimeout(()
 onBeforeUnmount(() => { if (props.part === 'body') kpLive[props.step.id]?.stop?.() })
 const nameOf = (m) => (m === 'live' ? 'Live · голосом' : checkName(m))
 const checked = computed(() => !!r.value && r.value.score != null)
+// 22.11.2026: пришёл ответ чата — плавно подкрутить к «Не прозвучало», чтобы результат был виден целиком
+const resEl = ref(null)
+watch(checked, (v) => { if (v) nextTick(() => resEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })) })
+const refOpen = ref(false)          // эталон во всплывающей подсказке: открыта ли
 const words = computed(() => { const n = (p.st.text || '').trim() ? p.st.text.trim().split(/\s+/).length : 0; return `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'слово' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'слова' : 'слов'}` })
 const tier = computed(() => { const s = r.value?.score ?? 0; return s >= pass.value ? 'ok' : s >= 40 ? 'mid' : 'low' })
 const tierT = { ok: 'Зачтено', mid: 'Почти', low: 'Не зачтено' }
@@ -265,6 +269,18 @@ function jsApply() {
           <button v-if="step.audio" type="button" class="kax" title="Убрать озвучку" @pointerdown.stop @click.stop="ttsClear">✕</button>
         </template>
         <TtsDialog v-if="tts" :text="ttsText" what="вопрос" :by="step.audioBy || ''" :has="!!step.audio" @close="tts = false" @save="ttsSave" />
+        <template v-if="!p.edit">
+          <button type="button" class="krb" :class="{ on: refOpen }" :disabled="!p.st.done" :title="p.st.done ? 'Показать эталон' : 'Эталон откроется после проверки'" @pointerdown.stop @click="refOpen = !refOpen">Эталон</button>
+          <div v-if="refOpen && p.st.done" class="krp" @pointerdown.stop>
+            <button type="button" class="krx" title="Закрыть" @click="refOpen = false">✕</button>
+            <div class="kr">
+              <template v-for="(b, i) in refBlocks" :key="i">
+                <p v-if="b.p"><template v-for="(x, j) in b.p" :key="j"><b v-if="mk(x) === 'b' || mk(x) === 'acc'" :class="mk(x) === 'acc' && 'acc'">{{ x.t }}</b><i v-else-if="mk(x) === 'i'">{{ x.t }}</i><template v-else>{{ x.t }}</template></template></p>
+                <ul v-else><li v-for="(li, j) in b.ul" :key="j"><template v-for="(x, m) in li" :key="m"><b v-if="mk(x) === 'b' || mk(x) === 'acc'" :class="mk(x) === 'acc' && 'acc'">{{ x.t }}</b><i v-else-if="mk(x) === 'i'">{{ x.t }}</i><template v-else>{{ x.t }}</template></template></li></ul>
+              </template>
+            </div>
+          </div>
+        </template>
       </div>
       <div v-if="!p.edit && (checked || p.st.busy)" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
         <svg viewBox="0 0 120 66" role="img" :aria-label="checked ? `Совпадение по смыслу ${r.score} %` : 'Ещё не проверено'">
@@ -277,6 +293,7 @@ function jsApply() {
       </div>
     </div>
 
+    <div class="kth">
     <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
       <button v-if="!p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? (fileMode ? 'Включаю микрофон…' : 'Подключаюсь…') : dic === 'sending' ? 'Распознаю…' : fileMode ? 'Записать ответ' : 'Надиктовать с Gemini' }}</button>
@@ -291,7 +308,7 @@ function jsApply() {
     </div>
     <div v-else class="ka done">{{ p.st.text }}</div>
 
-    <div class="kb miss" :class="look">
+    <div ref="resEl" class="kb miss" :class="look">
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
         <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.live"> Live · {{ lv?.name || by.model }}</template><template v-else-if="by.api"> API · {{ checkName(by.model) }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
       <p v-if="checked && r.note" class="ph kno">{{ r.note }}</p>
@@ -301,7 +318,7 @@ function jsApply() {
       <p v-else-if="checked" class="ph">Всё главное прозвучало</p>
       <p v-else class="ph">Появится после проверки</p>
     </div>
-    <div class="kb ref" :class="look">
+    <div v-if="p.edit" class="kb ref" :class="look">
       <div class="kh"><span class="kht">Эталон</span></div>
       <ExText v-if="p.edit" v-model="step.ideal" tag="p" class="kr raw" ph="Полный «идеальный» ответ. Оформление: ==термин== оранжевым, **жирный**, _курсив_, строка с «• » — пункт" multi />
       <div v-else-if="p.st.done" class="kr">
@@ -311,6 +328,7 @@ function jsApply() {
         </template>
       </div>
       <p v-else class="ph">Откроется после проверки — не подглядывайте</p>
+    </div>
     </div>
     <div v-if="api && checked && !p.edit && lv" class="kdis" @pointerdown.stop>
       <div class="klv">
@@ -443,4 +461,17 @@ function jsApply() {
   .lp:not(.embedded):not(.single) .ka { height: 150px; font-size: 18px }
   .lp:not(.embedded):not(.single) .ka.done { height: auto }          /* 20.11.2026: высота 150 перебивала «после проверки — по тексту», длинный ответ наезжал на «Не прозвучало» */
 }
+/* 22.11.2026: экран как чат — всё одним столбцом, части идут друг за другом и не наезжают.
+   Ответ ученика — справа (зелёный), результат проверки — слева (белые «пузыри») */
+.kth { display: flex; flex-direction: column; gap: 10px; min-width: 0 }
+.kth .kl, .kth .kl.pdf { margin-bottom: 0 }          /* без отрицательных отступов — из-за них подписи заезжали на соседей */
+.kth .ka.done { align-self: flex-end; width: auto; max-width: 88%; padding: 9px 13px; border: 0; border-radius: 16px 16px 4px 16px; background: #d7ffb8; overflow: visible }
+.kth .kb.miss { align-self: flex-start; box-sizing: border-box; max-width: 94%; padding: 10px 14px; border: 0; border-radius: 16px 16px 16px 4px; background: #fff; box-shadow: 0 1px 3px rgba(53, 26, 5, .14) }
+/* 22.11.2026: эталон — всплывающая подсказка поверх экрана, места в потоке не занимает */
+.krb { flex: none; margin-left: 6px; height: 34px; padding: 0 12px; border: 0; border-radius: 17px; background: #f2dab5; color: #7b4224; font-family: var(--font); font-size: 13px; font-weight: 800; cursor: pointer }
+.krb:disabled { opacity: .45; cursor: default } .krb.on { background: #e9c99a }
+.krp { position: absolute; left: 0; right: 0; top: calc(100% + 8px); z-index: 20; max-height: 60vh; overflow: auto; box-sizing: border-box; padding: 12px 38px 12px 14px; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(53, 26, 5, .22), 0 0 0 1px #ecd9b8; animation: kdd .18s ease-out }
+.krx { position: absolute; top: 6px; right: 8px; width: 24px; height: 24px; border: 0; border-radius: 50%; background: none; color: #a07a55; cursor: pointer }
+.krx:hover { background: rgba(0, 0, 0, .06) }
+.krp .kr { font-size: 16px }
 </style>
