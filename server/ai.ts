@@ -15,30 +15,18 @@ const cut = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n)
 
 type Q = { question?: unknown; reference?: unknown; answer?: unknown; prompt?: unknown; message?: unknown; format?: unknown }
 const fillT = (t: string, v: Record<string, string>) => t.replace(/\{(question|reference|answer|id)\}/g, (_, k) => v[k] ?? '')
-/** Текст, который скрипт вставит в чат. id — метка задания: по ней скрипт находит именно этот ответ среди прошлых.
- *  21.11.2026: экран прислал message и format (JSON экрана, src/exercises/kp/defaults.ts → CHAT) — в чат уходит ровно prompt + message + format,
- *  без наших строк сверху; в format обязательно {id}. Не прислал (старое приложение) — как раньше */
+/** Текст, который скрипт вставит в чат: ровно prompt + message + format, как прислал экран. Своих строк, промпта по умолчанию и обрезки нет.
+ *  Подставляются только метки {question} {reference} {answer} {id} внутри message и format */
 export function chatText(id: string, q: Q) {
-  const message = cut(q.message, 4000), format = cut(q.format, 2000)
-  if (message && format.includes('{id}')) {
-    const v = { question: cut(q.question, 300), reference: cut(q.reference, 3000), answer: cut(q.answer, 3000), id }
-    return [cut(q.prompt, 4000), fillT(message, v), fillT(format, v)].filter(Boolean).join('\n\n')          // промпт стёрли в JSON — без промпта, своего не подставляем
-  }
-  return [
-    cut(q.prompt, 4000) || SYSTEM,
-    'Это отдельная проверка: прошлые сообщения этого чата не учитывай.',
-    '',
-    'Вопрос: ' + cut(q.question, 300),
-    'Эталон: ' + cut(q.reference, 3000),
-    'Ответ ученика: ' + cut(q.answer, 3000),
-    '',
-    `Ответь ТОЛЬКО одним JSON-объектом без пояснений. Первое поле — id со значением ${id}, затем score, missed_points, feedback. Пример формы: {"id": "…", "score": 70, "missed_points": ["…"], "feedback": "…"}`,
-  ].join('\n')
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  const v = { question: str(q.question), reference: str(q.reference), answer: str(q.answer), id }
+  return [str(q.prompt), fillT(str(q.message), v), fillT(str(q.format), v)].filter(Boolean).join('\n\n')
 }
 
-/** Ответ чата → { score, missed, feedback }. Ищем JSON-объект с нашим id (чат мог обернуть его в ```json или добавить слова) */
-export function parseReply(id: string, text: string) {
-  const s = String(text ?? '')
+/** Ответ чата → { score, missed, feedback, text }. Ищем первый JSON-объект с score (если в тексте была метка id — то с этим id).
+ *  Значения отдаём как есть, без округления и обрезки; text — полный ответ чата */
+export function parseReply(id: string, text: string, sent = '') {
+  const s = String(text ?? ''), needId = sent.includes(id)
   for (let i = s.indexOf('{'); i >= 0; i = s.indexOf('{', i + 1)) {
     let depth = 0, str = false, esc = false
     for (let j = i; j < s.length; j++) {
@@ -49,10 +37,8 @@ export function parseReply(id: string, text: string) {
       else if (c === '}' && --depth === 0) {
         let o: Record<string, unknown> | null = null
         try { o = JSON.parse(s.slice(i, j + 1)) } catch { /* не JSON — дальше */ }
-        if (o && typeof o === 'object' && String(o.id ?? '') === id && 'score' in o) {
-          const score = Math.max(0, Math.min(100, Math.round(Number(o.score) || 0)))
-          const missed = (Array.isArray(o.missed_points) ? o.missed_points : []).map((x) => cut(x, 300)).filter(Boolean).slice(0, 8)
-          return { score, missed, feedback: cut(o.feedback, 500) }
+        if (o && typeof o === 'object' && 'score' in o && (!needId || String(o.id ?? '') === id)) {
+          return { score: Number(o.score) || 0, missed: Array.isArray(o.missed_points) ? o.missed_points : [], feedback: String(o.feedback ?? ''), text: s }
         }
         break
       }
@@ -80,26 +66,34 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
     }
   }
 
+  /** Общая часть: поставить текст в очередь, дождаться ответа скрипта. Моста нет — 503; чат не ответил — 502 */
+  const run = async (id: string, text: string) => {
+    if (now() - st.seenAt > SEEN) throw fail(503, 'Мост с чатом не в сети — откройте вкладку с чатом и скриптом')
+    if (queue.length >= 20) throw fail(503, 'Очередь проверок переполнена — попробуйте через минуту')
+    const t0 = now()
+    let job: Job | null = null
+    const reply = await new Promise<{ text?: string; error?: string }>((done) => {
+      const j: Job = job = { id, text, at: t0, taken: 0, done }
+      const tm = setTimeout(() => j.done({ error: j.taken ? 'Чат не ответил вовремя' : 'Мост не забрал задание' }), JOB)
+      j.done = (r) => { clearTimeout(tm); const i = queue.indexOf(j); if (i >= 0) queue.splice(i, 1); done(r) }
+      queue.push(j); give()
+    })
+    st.lastAt = now(); st.lastMs = st.lastAt - t0
+    if (reply.error) { st.lastError = reply.error; throw fail(502, reply.error) }
+    return { reply, job: job as Job | null }
+  }
+
   return {
-    /** Проверка: задание в очередь, ждём ответ чата. Моста нет — сразу 503 */
+    /** Проверка: текст экрана — в очередь, ждём ответ чата. Моста нет — сразу 503 */
     async check(q: Q) {
-      if (!cut(q.answer, 1) || !cut(q.reference, 1)) throw fail(400, 'нет ответа или эталона')
-      if (now() - st.seenAt > SEEN) throw fail(503, 'Мост с чатом не в сети — откройте вкладку с чатом и скриптом')
-      if (queue.length >= 20) throw fail(503, 'Очередь проверок переполнена — попробуйте через минуту')
-      const id = 'k' + randomBytes(3).toString('hex'), t0 = now()
-      let job: Job | null = null
-      const reply = await new Promise<{ text?: string; error?: string }>((done) => {
-        const j: Job = job = { id, text: chatText(id, q), at: t0, taken: 0, done }
-        const tm = setTimeout(() => j.done({ error: j.taken ? 'Чат не ответил вовремя' : 'Мост не забрал задание' }), JOB)
-        j.done = (r) => { clearTimeout(tm); const i = queue.indexOf(j); if (i >= 0) queue.splice(i, 1); done(r) }
-        queue.push(j); give()
-      })
-      st.lastAt = now(); st.lastMs = st.lastAt - t0
-      if (reply.error) { st.lastError = reply.error; throw fail(502, reply.error) }
-      const r = parseReply(id, reply.text ?? '')
+      const id = 'k' + randomBytes(3).toString('hex'), sent = chatText(id, q)
+      if (!sent.trim()) throw fail(400, 'нечего отправлять в чат')
+      if (!sent.includes(id)) throw fail(400, 'В message или format нет метки {id}: по ней скрипт моста находит ответ чата')          // без метки скрипт ждёт ответ 85 с и отдаёт ошибку
+      const { reply, job } = await run(id, sent)
+      const r = parseReply(id, reply.text ?? '', sent)
       if (!r) { st.lastError = 'Чат ответил не JSON'; throw fail(502, 'Чат ответил не в том формате') }
       st.served++; st.lastError = ''
-      return { ...r, site: (job as Job | null)?.site ?? '' }          // какой чат проверил (ChatGPT / Gemini / Claude) — значок у ученика
+      return { ...r, site: job?.site ?? '' }          // какой чат проверил (ChatGPT / Gemini / Claude) — значок у ученика
     },
     /** Скрипт спрашивает задание: есть — сразу, нет — ждём до POLL мс. onGone — скрипт отключился до ответа: задание вернуть в очередь */
     async next(site: unknown, onGone: (f: () => void) => void): Promise<{ id: string; text: string } | null> {
@@ -120,7 +114,7 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
       st.seenAt = now()
       const j = queue.find((x) => x.id === String(id ?? ''))
       if (!j) return false
-      j.done(body.error ? { error: cut(body.error, 200) } : { text: cut(body.text, 20_000) })
+      j.done(body.error ? { error: cut(body.error, 200) } : { text: String(body.text ?? '') })
       return true
     },
     /** Для экрана ученика: в сети ли проверка и какие чаты подключены */

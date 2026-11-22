@@ -4,27 +4,30 @@ let fails = 0
 const ok = (c: unknown, m: string) => { if (c) console.log('PASS', m); else { fails++; console.log('FAIL', m) } }
 const status = async (p: Promise<unknown>) => { try { await p; return 0 } catch (e) { return (e as { status?: number }).status ?? -1 } }
 
-const t = chatText('k1a2b3', { question: 'Kiedy Mikołajki?', reference: '6 grudnia', answer: 'Szóstego grudnia' })
-ok(t.includes('Kiedy Mikołajki?') && t.includes('6 grudnia') && t.includes('Szóstego grudnia') && t.includes('k1a2b3') && t.startsWith('Ты проверяешь'), 'вопрос, эталон, ответ и метка — в тексте; промпт по умолчанию')
-ok(chatText('x', { prompt: 'Свой промпт', reference: 'r', answer: 'a' }).startsWith('Свой промпт'), 'свой промпт экрана')
-// 21.11.2026: экран прислал message и format (JSON экрана) — в чат ровно prompt + message + format, без наших строк
+// в чат уходит ровно prompt + message + format экрана; подставляются только метки; никакой обрезки и своих строк
 { const t2 = chatText('k9', { prompt: 'P', question: 'Q', reference: 'R', answer: 'A', message: 'Pytanie: {question} / {reference} / {answer}', format: 'JSON, id={id}' })
-  ok(t2 === 'P\n\nPytanie: Q / R / A\n\nJSON, id=k9', 'message и format экрана — ровно они')
-  ok(chatText('k9', { prompt: 'P', reference: 'R', answer: 'A', message: 'M', format: 'без метки' }).includes('Ответь ТОЛЬКО одним JSON'), 'format без {id} — как раньше (иначе ответ не найти)') }
+  ok(t2 === 'P\n\nPytanie: Q / R / A\n\nJSON, id=k9', 'prompt, message и format экрана — ровно они')
+  const long = 'я'.repeat(10_000)
+  ok(chatText('k', { message: long }) === long, 'длинный текст не обрезается')
+  ok(chatText('k', { message: '  два  пробела\n\nи абзац ' }) === '  два  пробела\n\nи абзац ', 'пробелы и абзацы не трогаются')
+  ok(chatText('k', {}) === '', 'экран ничего не прислал — пусто, своего текста не подставляем') }
 
-const r = parseReply('k1', 'Вот оценка:\n```json\n{"id": "k1", "score": 72.4, "missed_points": ["про подарки", ""], "feedback": "Хорошо {в целом}"}\n```\nCopy code')
-ok(r?.score === 72 && r.missed.length === 1 && r.feedback === 'Хорошо {в целом}', 'JSON в обёртке ```json, скобки внутри строки не мешают')
-ok(parseReply('k1', '{"id": "k0", "score": 90, "missed_points": [], "feedback": ""} {"id": "k1", "score": 150, "missed_points": [], "feedback": ""}')?.score === 100, 'берётся объект со своим id, score — в пределах 0–100')
-ok(parseReply('k1', 'Не могу оценить') === null && parseReply('k1', '{"id": "k1"}') === null, 'без JSON или без score — null')
+const r = parseReply('k1', 'Вот оценка:\n```json\n{"id": "k1", "score": 72.4, "missed_points": ["про подарки", ""], "feedback": "Хорошо {в целом}"}\n```\nCopy code', 'id=k1')
+ok(r?.score === 72.4 && r.missed.length === 2 && r.feedback === 'Хорошо {в целом}' && r.text.includes('Вот оценка'), 'JSON в обёртке ```json; значения как есть; text — весь ответ чата')
+ok(parseReply('k1', '{"id": "k0", "score": 90} {"id": "k1", "score": 150}', 'id=k1')?.score === 150, 'метка id была в тексте — берётся объект со своим id; score не зажимается')
+ok(parseReply('k1', '{"score": 55, "feedback": "ok"}', 'без метки')?.score === 55, 'метки в тексте не было — id в ответе не требуется')
+ok(parseReply('k1', 'Не могу оценить', '') === null && parseReply('k1', '{"id": "k1"}', 'id=k1') === null, 'без JSON или без score — null')
 
+const Q0 = { question: 'q', reference: 'r', answer: 'a', message: '{question}/{reference}/{answer}', format: 'JSON, id={id}' }
 let now = 1e9
 const store: { token: string } = { token: 'abc' }
 const ai = makeAi({ loadToken: async () => store.token, saveToken: async (x) => { store.token = x }, now: () => now, jobMs: 200, pollMs: 50, seenMs: 60_000 })
-ok(await status(ai.check({ question: 'q', reference: 'r', answer: 'a' })) === 503, 'моста не видно — сразу 503')
-ok(await status(ai.check({ question: 'q', reference: 'r', answer: '' })) === 400, 'пустой ответ — 400')
+ok(await status(ai.check(Q0)) === 503, 'моста не видно — сразу 503')
+await ai.next('ChatGPT', () => {})
+ok(await status(ai.check({ answer: 'a' })) === 400, 'экран не прислал message/format — 400, в чат нечего слать')
 ok((await ai.next('ChatGPT', () => {})) === null && ai.status().online && ai.status().site === 'ChatGPT', 'пустой опрос — null, мост в сети')
 
-const p = ai.check({ question: 'q', reference: 'r', answer: 'a' })
+const p = ai.check(Q0)
 const job = await ai.next('ChatGPT', () => {})
 ok(!!job && job.text.includes(job.id), 'скрипт получил задание')
 ok(ai.done(job!.id, { text: `{"id":"${job!.id}","score":65,"missed_points":["x"],"feedback":"ok"}` }), 'ответ принят')
@@ -34,15 +37,16 @@ ok(res.site === 'ChatGPT', 'и знает, какой чат проверил')
 ok(ai.pub().online && ai.pub().sites.includes('ChatGPT'), 'ученику видно, какой чат в сети')
 
 const w = ai.next('Claude', () => {})                        // скрипт уже ждёт — задание отдаётся сразу
-const p2 = ai.check({ question: 'q', reference: 'r', answer: 'a' })
+const p2 = ai.check(Q0)
 const j2 = await w
 ai.done(j2!.id, { text: 'Извините, не понял' })
 ok(await status(p2) === 502 && ai.status().lastError.includes('JSON'), 'ответ не по формату — 502')
-const p3 = ai.check({ question: 'q', reference: 'r', answer: 'a' }); const j3 = await ai.next('Claude', () => {})
+const p3 = ai.check(Q0); const j3 = await ai.next('Claude', () => {})
 ai.done(j3!.id, { error: 'Чат не ответил' })
 ok(await status(p3) === 502, 'ошибка скрипта — 502')
-ok(await status(ai.check({ question: 'q', reference: 'r', answer: 'a' })) === 502, 'никто не забрал задание — по таймеру 502')
+ok(await status(ai.check(Q0)) === 502, 'никто не забрал задание — по таймеру 502')
 
+ok(await status(ai.check({ message: 'есть текст, но нет метки', format: 'JSON' })) === 400, 'в тексте нет {id} — сразу 400, а не 85 секунд ожидания')
 let gone: () => void = () => {}
 const w2 = ai.next('Gemini', (f) => { gone = f }); gone()
 ok((await w2) === null, 'скрипт отключился — опрос закрыт')
