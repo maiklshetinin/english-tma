@@ -36,4 +36,11 @@ describe('рация в live.js', () => {
     expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), silenceMs: 1500 }))).toBe('')
     expect(s.ptt).toBe(true); expect(tplOf({ id: 'x', kind: 'talk', avatar: true })).toBe('talkava')
   })
+  it('копия рации для «Как в Busuu» (talkptt2): тот же talk с ptt, но свой шаблон; флаг busuu не теряется при «Применить»', () => {
+    const s = TEMPLATES.find((t) => t.id === 'talkptt2').make()
+    expect(s.kind).toBe('talk'); expect(s.ptt).toBe(true); expect(s.busuu).toBe(true); expect(tplOf(s)).toBe('talkptt2')
+    expect(tplOf({ id: 'x', kind: 'talk', ptt: true, avatar: true })).toBe('talkptt')          // рация из Karta Polaka — как была
+    expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), silenceMs: 1500 }))).toBe('')
+    expect(s.busuu).toBe(true); expect(s.ptt).toBe(true); expect(tplOf(s)).toBe('talkptt2')
+  })
 })

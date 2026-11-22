@@ -29,4 +29,12 @@ describe('настройки упражнения курса («{ }» на пл�
     expect(presetKeys('kpfile')).toEqual(expect.arrayContaining(['sttPrompt', 'sttAsk']))
     expect(talkCfg({ ptt: true, avatar: true }).guard).toBe('')
   })
+  it('«рация» в Karta Polaka и её копия в «Как в Busuu» — общие настройки курса у каждой свои', () => {
+    setPresets({ talkptt: { guard: 'KP' }, talkptt2: { guard: 'BUSUU' } })
+    expect(talkCfg({ ptt: true, avatar: true }).guard).toBe('KP')
+    expect(talkCfg({ ptt: true, avatar: true, busuu: true }).guard).toBe('BUSUU')
+    setPresets({ talkptt: { guard: 'KP' } })
+    expect(talkCfg({ ptt: true, avatar: true, busuu: true }).guard).toBe('Odpowiadaj wyłącznie po polsku.')          // у копии своих настроек нет — умолчания кода, а не «рации» KP
+    expect(presetJson('talkptt2')).not.toMatchObject({ guard: 'KP' })
+  })
 })

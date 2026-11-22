@@ -124,11 +124,13 @@ ok('свои упражнения курса: сохраняются, пусто
 ok('свои упражнения — отдаются вместе с курсом', (await C.get('k19')).templates?.length === 2)
 ok('кривое упражнение — 400', await code(C.put(me, 'k19', { ...course, templates: [{ id: 'my1', step: { id: 'x', kind: 'nope' } }] })) === 400)
 // настройки упражнений курса («{ }» на плитке меню, 21.11.2026)
-await C.put(me, 'k20', { ...course, presets: { kpapi: { prompt: 'Общий промпт', format: '', livePrompt: '', text: 'не берём', ideal: 'тоже', model: 'live', pass: 70 }, talkptt: { guard: '', lock: 'L', voice: 'Puck' }, nope: { prompt: 'x' } } })
+await C.put(me, 'k20', { ...course, presets: { kpapi: { prompt: 'Общий промпт', format: '', livePrompt: '', text: 'не берём', ideal: 'тоже', model: 'live', pass: 70 }, talkptt: { guard: '', lock: 'L', voice: 'Puck' }, talkptt2: { guard: 'Busuu', busuu: true }, nope: { prompt: 'x' } } })
 { const p = (await C.get('k20')).presets as any
   ok('настройки упражнений курса: промпты (и пустые), модель, порог; вопрос и эталон не берём; чужой шаблон — нет',
     p.kpapi.prompt === 'Общий промпт' && p.kpapi.format === '' && p.kpapi.livePrompt === '' && p.kpapi.model === 'live' && p.kpapi.pass === 70 && !('text' in p.kpapi) && !('ideal' in p.kpapi) && !('engine' in p.kpapi)
     && p.talkptt.guard === '' && p.talkptt.lock === 'L' && p.talkptt.voice === 'Puck' && !('ptt' in p.talkptt) && !p.nope) }
+{ const p = (await C.get('k20')).presets as any
+  ok('копия рации для «Как в Busuu»: свои настройки курса, не мешают «рации»; служебный флаг не хранится', p.talkptt2.guard === 'Busuu' && !('busuu' in p.talkptt2) && !('ptt' in p.talkptt2) && p.talkptt.guard === '') }
 ok('удалить, потом — 404', (await C.remove('k1'), !store.has('courses/k1')) && await code(C.get('k1')) === 404)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')

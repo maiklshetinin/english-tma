@@ -35,7 +35,7 @@ const editor = inEditor()
 const pick = computed(() => (editor ? '' : tp.pick)), vpick = computed(() => (editor ? '' : tp.voice))
 const vSel = computed(() => vpick.value || voice.value)
 // в редакторе: совпало с умолчанием (код ← настройки курса) — поле экрана убрать, иначе записать
-const base = () => talkCfg({ ptt: props.step.ptt, avatar: props.step.avatar, lang: props.step.lang })
+const base = () => talkCfg({ ptt: props.step.ptt, avatar: props.step.avatar, busuu: props.step.busuu, lang: props.step.lang })
 function onVoice(v) { if (editor) setF('voice', v === base().voice ? '' : v); else setVPick(v === voice.value ? '' : v) }
 function onModel(v) { if (editor) setF('model', (v || 'auto') === base().model ? '' : v || 'auto'); else setPick(v === lessonModel.value ? '' : v) }
 // надписи на «таблетках» подвала — коротко (список под ними — полный)

@@ -92,7 +92,7 @@ const PRESET_SET = new Set(PRESET_TPLS)
 const preT = ref(null), preText = ref(''), preErr = ref(''), preK = ref(0)          // preK — окно заново (после «Вернуть умолчания»)
 const preName = (id) => TEMPLATES.find(t => t.id === id)?.t ?? id
 function preOpen(tpl) { tray.value = null; preT.value = tpl; preText.value = JSON.stringify(presetJson(tpl), null, 2); preErr.value = ''; preK.value++ }
-const preAsm = computed(() => { try { return assemble({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(preT.value === 'kpapi' ? { engine: 'api' } : preT.value === 'kpfile' ? { dic: 'file' } : preT.value === 'talkptt' ? { ptt: true, avatar: true } : preT.value === 'talkava' ? { avatar: true } : {}) }) } catch { return { parts: [], warn: ['JSON пока не разбирается'], own: [] } } })
+const preAsm = computed(() => { try { return assemble({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(preT.value === 'kpapi' ? { engine: 'api' } : preT.value === 'kpfile' ? { dic: 'file' } : preT.value === 'talkptt2' ? { ptt: true, avatar: true, busuu: true } : preT.value === 'talkptt' ? { ptt: true, avatar: true } : preT.value === 'talkava' ? { avatar: true } : {}) }) } catch { return { parts: [], warn: ['JSON пока не разбирается'], own: [] } } })
 function preSave() {
   const r = presetFromJson(preT.value, preText.value); if (r.error) { preErr.value = r.error; return }
   const all = { ...(doc.presets ?? {}) }
@@ -563,7 +563,7 @@ const XGROUPS_STD = (() => {
     { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
-  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpfile', 'kpapi', 'talk', 'stt'])          // kp — на своей вкладке «Karta Polaka»
+  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpfile', 'kpapi', 'talk', 'talkptt', 'stt'])          // kp и talkptt — на своей вкладке «Karta Polaka»; talkptt2 (копия рации) — в «Как в Busuu», в «Речи»
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()

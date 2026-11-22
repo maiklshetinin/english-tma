@@ -5,7 +5,8 @@
   "templates": [
     "talk",
     "talkava",
-    "talkptt"
+    "talkptt",
+    "talkptt2"
   ],
   "fields": {
     "head": {
@@ -112,6 +113,10 @@
       "L"
     ],
     "talkptt": [
+      "S",
+      "L"
+    ],
+    "talkptt2": [
       "S",
       "L"
     ]
