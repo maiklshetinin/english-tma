@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Tutor TMA — мост с чатом (ChatGPT / Gemini / Claude)
 // @namespace    english-tma
-// @version      1.2
+// @version      1.3
 // @description  Берёт с сервера Tutor TMA проверки «Ответ по смыслу», вставляет их в открытый чат, ждёт ответ и отправляет его обратно
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
