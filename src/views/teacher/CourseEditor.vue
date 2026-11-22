@@ -563,7 +563,7 @@ const XGROUPS_STD = (() => {
     { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
-  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpfile', 'kpapi', 'talk', 'talkptt', 'stt'])          // kp и talkptt — на своей вкладке «Karta Polaka»; talkptt2 (копия рации) — в «Как в Busuu», в «Речи»
+  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpfile', 'kpapi', 'talk', 'talkava', 'talkptt', 'stt'])          // kp, talkava и talkptt — на своей вкладке «Karta Polaka»; talkptt2 (копия рации) — в «Как в Busuu», в «Речи»
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
