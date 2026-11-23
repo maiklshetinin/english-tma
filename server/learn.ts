@@ -30,11 +30,13 @@ const stepBrief = (s: Record<string, unknown>): StepBrief => {
 }
 /** Журнал: экран в одном заходе — ok: верно / ошибка / null без оценки (разговор, «Повтори», интро), sec — сколько пробыл,
  *  t — сколько раз отвечал (ошибся — экран вернётся в конце урока), x — что ответил (текст), sc — балл ИИ «Ответа по смыслу» */
-export interface StepLog { ok: boolean | null; sec: number; t: number; x?: string; sc?: number }
+export interface StepLog { ok: boolean | null; sec: number; t: number; x?: string; sc?: number; at?: number }          // at — когда ответил (24.11.2026: журнал по упражнениям)
 export interface RunLog { who: string; course: string; item: string; run: string; at: number; upd: number; sec: number; ok: number; all: number; n: number; fin: boolean; steps: Record<string, StepLog> }
 /** Заход в журнале для экрана «Журнал»: + названия, номер попытки и экраны по порядку урока (не дошёл — без ok) */
 export interface RunView extends Omit<RunLog, 'who' | 'steps'> { courseTitle: string; title: string; type: string; unit: string; try: number; steps: (Partial<StepLog> & { id: string; kind: string; w: string })[] }
 const RUN_RE = /^[A-Za-z0-9]{6,32}$/, LOG_MAX = 400
+/** экран пройден — на него ответили (оценка, текст ответа или балл ИИ); просто открыл — нет */
+export const answered = (e: StepLog) => e.ok !== null || e.t > 0 || !!e.x || e.sc != null
 const plain = (v: unknown) => String(v ?? '').replace(/<[^>]*>/g, ' ').replace(/[*_{}[\]]/g, '').replace(/\s+/g, ' ').trim()
 /** короткая подпись экрана в журнале: слово, фраза, вопрос — что есть */
 const stepLabel = (s: Record<string, unknown>) => {
@@ -90,6 +92,7 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
       const e: StepLog = { ok: o.ok === true ? true : o.ok === false ? false : null, sec: int(o.sec, 24 * 3600), t: int(o.t, 100) }
       if (typeof o.x === 'string' && o.x.trim()) e.x = o.x.trim().slice(0, 400)
       if (o.sc != null) e.sc = int(o.sc, 100)
+      { const a = Number(o.at); if (o.at != null && Number.isInteger(a) && a >= at && a <= t + 60_000) e.at = a }          // время ответа; неверное — без него (старые клиенты не шлют)
       steps[id] = e
     }
     const vals = Object.values(steps)
@@ -279,6 +282,32 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
         }
       }
       return { lessons: out.sort((a, b) => a.at - b.at) }
+    },
+
+    /** «Аналитика прогресса» (24.11.2026): пройденные упражнения — каждый экран, на который ответил в любом заходе (даже если урок не закончен).
+     *  Вид — как у пройденного урока с одним экраном: так считают те же функции (utils/progress.ts) */
+    async exercisesDone(user: TokenUser, studentId?: unknown) {
+      const who = await whoOf(user, studentId)
+      const all = (await logs().where('who', '==', who).get()).docs.map((d) => d.data() as RunLog), cs = new Map<string, Course | null>()
+      const out: LessonDone[] = []
+      for (const r of all) {
+        if (!cs.has(r.course)) cs.set(r.course, await get(r.course).catch(() => null))
+        const c = cs.get(r.course); if (!c) continue
+        let unit = '', item: (CourseItem & { steps?: Record<string, unknown>[]; topic?: string; sub?: string }) | undefined
+        for (const it of c.items as (CourseItem & { steps?: Record<string, unknown>[]; topic?: string; sub?: string })[]) {
+          if (it.type === 'unit') unit = `${it.title ?? ''} ${it.sub ?? ''}`.trim()
+          else if (it.id === r.item) { item = it; break }
+        }
+        if (!item) continue
+        const byId = new Map(c.items.flatMap((x) => ((x as { steps?: Record<string, unknown>[] }).steps ?? []).map((s) => [String(s.id), s] as const)))
+        for (const [id, e] of Object.entries(r.steps)) {
+          if (!answered(e)) continue
+          const s = byId.get(id); if (!s) continue
+          out.push({ course: c.id, courseTitle: c.title ?? '', id: item.id, title: item.title ?? '', unit, ...(item.topic ? { topic: item.topic } : {}),
+            at: e.at ?? r.at, ok: e.ok === true ? 1 : 0, all: e.ok === null ? 0 : 1, sec: e.sec, miss: [], steps: [stepBrief(s)] })
+        }
+      }
+      return { ex: out.sort((a, b) => a.at - b.at) }
     },
 
     /** Преподаватель: курсы и прохождение ученика (назначенные — с прогрессом, остальные — чтобы назначить) */

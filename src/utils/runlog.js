@@ -27,6 +27,7 @@ export function makeRunLog({ itemId, n, send, now = Date.now, timer = TIMER }) {
       const o = { ok: e.ok, sec: Math.min(86400, Math.round(e.ms / 1000)), t: Math.min(100, e.t) }
       if (e.x) o.x = e.x
       if (e.sc != null) o.sc = e.sc
+      if (e.at) o.at = e.at
       out[id] = o
     }
     return { run, itemId, at, sec: Math.min(86400, Math.round((now() - at) / 1000)), n: Math.min(1000, n), fin, steps: out }
@@ -42,6 +43,7 @@ export function makeRunLog({ itemId, n, send, now = Date.now, timer = TIMER }) {
       if (ok !== null) { e.t++; e.ok = ok }
       if (typeof text === 'string' && text.trim()) e.x = text.trim().slice(0, 400)
       if (Number.isFinite(score)) e.sc = Math.max(0, Math.min(100, Math.round(score)))
+      if (ok !== null || e.x || e.sc != null) e.at = now()          // когда ответил — журнал по упражнениям (24.11.2026)
       later()
     },
     /** «Готово» — урок закончен */
@@ -93,3 +95,28 @@ export function byDay(runs) {
 export const dur = (sec) => { const s = Math.round(sec || 0); if (s < 60) return `${s} с`; const m = Math.round(s / 60); return m < 60 ? `${m} мин` : `${Math.floor(m / 60)} ч ${String(m % 60).padStart(2, '0')} мин` }
 /** сколько экранов пройдено в заходе (были на экране) */
 export const seen = (r) => (r.steps ?? []).filter((s) => s.ok !== undefined || s.sec != null).length
+
+// ---------- Журнал по упражнениям (24.11.2026): только пройденные (ответил), без уроков, попыток и текста ответа ----------
+/** экран пройден — на него ответили (оценка, текст или балл ИИ); просто открыл — нет */
+export const isDone = (s) => s.ok === true || s.ok === false || !!s.x || s.sc != null || (s.t ?? 0) > 0
+/** Пройденные упражнения из заходов — новые сверху: { key, at, id, kind, w, ok, sc, sec, title, courseTitle, unit } */
+export function exList(runs) {
+  const out = []
+  for (const r of runs) for (const s of r.steps ?? []) if (isDone(s)) {
+    out.push({ key: `${r.run}/${s.id}`, run: r.run, at: s.at ?? r.at, id: s.id, kind: s.kind ?? '', w: s.w ?? '', ok: s.ok ?? null, sc: s.sc ?? null, sec: s.sec ?? 0, title: r.title ?? '', courseTitle: r.courseTitle ?? '', unit: r.unit ?? '' })
+  }
+  return out.sort((a, b) => b.at - a.at)
+}
+const dayOf = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+/** Упражнения по дням (новые сверху): { day, ex, sec, ok — зачтено, all — с оценкой } */
+export function exDays(list) {
+  const m = new Map()
+  for (const e of list) {
+    const day = dayOf(e.at), g = m.get(day) ?? { day, ex: [], sec: 0, ok: 0, all: 0 }
+    g.ex.push(e); g.sec += e.sec || 0; if (e.ok !== null) { g.all++; if (e.ok) g.ok++ }
+    m.set(day, g)
+  }
+  return [...m.values()].sort((a, b) => (a.day < b.day ? 1 : -1))
+}
+/** «упражнение / упражнения / упражнений» */
+export const exWord = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'упражнение' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'упражнения' : 'упражнений')

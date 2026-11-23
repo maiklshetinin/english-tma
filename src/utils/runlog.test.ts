@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { makeRunLog, newRun, byDay, dur, seen, saveLocal, readLocal, removeLocal, DELAY } from './runlog'
+import { makeRunLog, newRun, byDay, dur, seen, saveLocal, readLocal, removeLocal, DELAY, exList, exDays, exWord } from './runlog'
 
 function clock() {
   let t = 1_000_000, fn: (() => void) | null = null
@@ -73,5 +73,28 @@ describe('журнал по дням', () => {
     saveLocal({ run: 'r1', course: 'k', item: 'a', at: 1, steps: [] }); saveLocal({ run: 'r2', course: 'k', item: 'b', at: 2, steps: [] })
     removeLocal(['r1']); expect(readLocal().map((x: any) => x.run)).toEqual(['r2'])
     removeLocal(); expect(readLocal()).toEqual([])
+  })
+})
+
+describe('Журнал по упражнениям (24.11.2026)', () => {
+  it('только пройденные (ответил) — новые сверху, время ответа у экрана', () => {
+    const runs: any[] = [
+      { run: 'r1', at: 1000, title: 'Урок', courseTitle: 'Курс', steps: [{ id: 'a', kind: 'kp', w: 'Q1', ok: true, sec: 30, t: 1, sc: 80, at: 5000 }, { id: 'b', kind: 'kp', w: 'Q2', ok: null, sec: 4, t: 0 }, { id: 'c', kind: 'kp', w: 'Q3' }] },
+      { run: 'r2', at: 2000, steps: [{ id: 'a', kind: 'kp', ok: null, sec: 9, t: 0, x: 'ответ' }, { id: 'd', ok: false, sec: 5, t: 1 }] },
+    ]
+    const l = exList(runs)
+    expect(l.map((e) => e.key)).toEqual(['r1/a', 'r2/a', 'r2/d'])
+    expect(l[0]).toMatchObject({ at: 5000, sc: 80, ok: true, w: 'Q1', title: 'Урок' })
+    expect(l[1].at).toBe(2000)          // без времени ответа — время захода
+    expect('x' in l[1]).toBe(false)          // текст ответа в журнал не идёт
+    const d = exDays(l)
+    expect(d.reduce((a, g) => a + g.ex.length, 0)).toBe(3); expect(d[0].all + (d[1]?.all ?? 0)).toBe(2)
+    expect(exWord(1) + exWord(3) + exWord(11)).toBe('упражнениеупражненияупражнений')
+  })
+  it('makeRunLog: при ответе — время ответа', () => {
+    let now = 100; const sent: any[] = []
+    const log = makeRunLog({ itemId: 'i', n: 2, send: (b) => sent.push(b), now: () => now, timer: { set: () => 0, clear: () => {} } })
+    log.step('a'); now = 700; log.answer('a', { ok: true }); log.flush()
+    expect(sent[0].steps.a.at).toBe(700)
   })
 })

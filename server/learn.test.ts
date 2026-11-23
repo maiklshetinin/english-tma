@@ -100,6 +100,14 @@ await L.assign('k1', { studentId: 's1', on: true })
   const { runs } = await L.runLogs(masha)
   ok('журнал: новые сверху, номер попытки, названия, экраны урока по порядку (не дошёл — без ok)', runs.length === 2 && runs[0].run === 'run0002' && runs[0].try === 2 && runs[1].try === 1
     && runs[0].title === 'Урок 1' && runs[0].courseTitle.startsWith('A1') && runs[0].unit === 'Chapter 1' && runs[1].steps[0].id === 's1' && runs[1].steps[0].ok === true && runs[1].steps[0].w === 'a' && runs[0].steps[0].ok === undefined && !('who' in runs[0]))
+  await L.log(masha, 'k1', { run: 'run0004', itemId: 'a', at: 960, sec: 9, n: 2, steps: { s1: { ok: null, sec: 9, t: 0, x: 'odpowiedź', sc: 40, at: 965 }, s2: { ok: null, sec: 2, t: 0 } } })
+  { const { ex } = await L.exercisesDone(masha)
+    const mine = ex.filter((x) => x.at >= 900)
+    ok('аналитика: пройденные упражнения — и из незаконченных заходов; просто открытый экран не считается', mine.length === 2 && !mine.some((x) => x.steps[0].id === 's2')
+      && mine.some((x) => x.at === 965 && x.all === 0 && x.title === 'Урок 1') && mine.filter((x) => x.at === 900).length === 1)
+    ok('журнал: время ответа у экрана; неверное — без него', store.get('lessonLogs/s1_run0004').steps.s1.at === 965
+      && (await L.log(masha, 'k1', { run: 'run0005', itemId: 'a', at: 960, sec: 1, n: 2, steps: { s1: { ok: true, sec: 1, t: 1, at: 5 } } }), !('at' in store.get('lessonLogs/s1_run0005').steps.s1))) }
+  await L.removeLogs(teacher, { studentId: 's1', runs: ['run0004', 'run0005'] })
   ok('журнал: преподаватель видит ученика, ученик чужой — 403', (await L.runLogs(teacher, 's1')).runs.length === 2 && (await code(L.runLogs(petya, 's1'))) === 403)
   await L.log(masha, 'k1', { ...base, run: 'run0003' })
   await L.removeLogs(teacher, { studentId: 's1', runs: ['run0003'] })

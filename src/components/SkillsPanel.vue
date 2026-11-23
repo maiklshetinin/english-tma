@@ -3,15 +3,17 @@
 // Только то, что уже есть, — ничего не вводится и не придумывается; цвета — только 4 цвета наших тегов:
 //  • Плашки навыков — теги экранов (Чтение, Слух, Письмо, Речь): шанс вспомнить по FSRS, сколько дней помнит, разница
 //    с прошлым месяцем (по снимкам сервера). Нажал на плашку — всё ниже только по этому тегу.
-//  • «Темп по месяцам» — столбики: сколько уроков пройдено за месяц; внутри — доля упражнений каждого тега в этих уроках.
-//    Над ними: уроков за месяц, разница с прошлым, время в уроках и сколько ответов верно.
+//  • «Темп по месяцам» — столбики: сколько упражнений пройдено за месяц (24.11.2026: раньше — законченные уроки; теперь каждое
+//    упражнение, на которое ответил, даже если урок не закончен — из журнала); внутри — доля по тегам.
+//    Над ними: упражнений за месяц, разница с прошлым, время и сколько ответов зачтено.
 //  • «По навыкам» — круг по тегам: сколько упражнений каждого навыка в уроках месяца.
 //  • Темы грамматики — шанс вспомнить, разница с прошлым месяцем, сколько помнит; сначала слабые. Нажал — кривая памяти.
 // Расчёты — utils/progress.ts; данные — словарь Review (items) и GET /progress/stats (пройденные уроки и снимки по месяцам).
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { SKILL_C } from '../utils/lesson'
 import { SKILLS, topicById } from '../utils/skills'
-import { TAGS, monthOf, prevMonth, monthName, monthIn, monthTo, monthsOf, lessonsIn, tagCount, stateAt, topicTags, memText, lessonsWord, hm } from '../utils/progress'
+import { TAGS, monthOf, prevMonth, monthName, monthIn, monthTo, monthsOf, lessonsIn, tagCount, stateAt, topicTags, memText, hm } from '../utils/progress'
+import { exWord } from '../utils/runlog'
 import { apiRequest, isDemo, API, fb } from '../firebase'
 import WordCurve from './WordCurve.vue'
 
@@ -30,7 +32,8 @@ async function load() {
     const r = await apiRequest('/progress/stats' + (props.studentId != null ? `?studentId=${encodeURIComponent(props.studentId)}` : ''))
     if (!r.ok) throw new Error(String(r.status))
     const d = await r.json(); if (n !== reqN) return
-    lessons.value = d.lessons ?? []; mon.value = d.mon ?? {}; loadErr.value = false
+    lessons.value = d.ex ?? d.lessons ?? []; mon.value          // ex — пройденные упражнения (сервер с 24.11.2026); старый сервер — уроки
+     = d.mon ?? {}; loadErr.value = false
   } catch { if (n === reqN) loadErr.value = true }
 }
 watch(() => props.studentId, load, { immediate: true })
@@ -126,9 +129,9 @@ const how = ref(false)
       <button class="lnk" @click="how = !how">Откуда цифры <span>{{ how ? '▴' : '▾' }}</span></button>
       <div v-if="how" class="how">
         <p>Всё — из ответов в уроках, ничего не вводится. Процент у навыка и темы — шанс вспомнить по алгоритму повторений (FSRS), «помнит» — сколько дней держится память. Навык — по тегам упражнений, как в меню: Чтение, Слух, Письмо, Речь («Повтори за диктором» — когда фраза распозналась и совпала).</p>
-        <p>Темп — пройденные уроки за месяц; цвета внутри столбика — доля упражнений каждого навыка в этих уроках. Прошлые месяцы — по снимкам на конец месяца (сохраняются сами с 18.11.2026).</p>
+        <p>Темп — пройденные упражнения за месяц (каждое, на которое ответили, даже если урок не закончен); цвета внутри столбика — доля каждого навыка. Прошлые месяцы — по снимкам на конец месяца (сохраняются сами с 18.11.2026).</p>
       </div>
-      <p v-if="loadErr" class="em">Не удалось загрузить уроки — темп появится, когда сервер ответит.</p>
+      <p v-if="loadErr" class="em">Не удалось загрузить упражнения — темп появится, когда сервер ответит.</p>
 
       <div class="tiles">
         <button v-for="s in tiles" :key="s.k" class="tile" :class="{ sel: tag === s.k, dim: tag && tag !== s.k }" @click="pick(s.k)">
@@ -146,12 +149,12 @@ const how = ref(false)
       <div class="tabs" role="tablist"><button v-for="[k, t] in [['pace', 'Темп по месяцам'], ['tags', 'По навыкам']]" :key="k" role="tab" :aria-selected="tab === k" :class="{ on: tab === k }" @click="tab = k">{{ t }}</button></div>
       <template v-if="tab === 'pace'">
         <div class="kpis">
-          <div class="kpi"><b>{{ kpi.n }} {{ lessonsWord(kpi.n) }}</b><span>пройдено в {{ monthIn(ym) }}<template v-if="tag"> · с тегом «{{ SKILLS[tag] }}»</template></span></div>
+          <div class="kpi"><b>{{ kpi.n }} {{ exWord(kpi.n) }}</b><span>пройдено в {{ monthIn(ym) }}<template v-if="tag"> · с тегом «{{ SKILLS[tag] }}»</template></span></div>
           <div class="kpi"><b :class="kpi.d == null ? '' : kpi.d >= 0 ? 'pos' : 'neg'">{{ kpi.d == null ? '—' : (kpi.d >= 0 ? '+' : '') + kpi.d }}</b><span>{{ kpi.d == null ? 'первый месяц' : 'к ' + monthTo(pm) }}</span></div>
-          <div class="kpi"><b>{{ kpi.n ? hm(kpi.sec) : '—' }}</b><span>в уроках<template v-if="kpi.okp != null"> · {{ kpi.okp }}% ответов верно</template></span></div>
+          <div class="kpi"><b>{{ kpi.n ? hm(kpi.sec) : '—' }}</b><span>в упражнениях<template v-if="kpi.okp != null"> · {{ kpi.okp }}% зачтено</template></span></div>
         </div>
         <span class="lg"><i v-for="k in tag ? [tag] : TAGS" :key="k" class="tg sm" :style="{ background: SKILL_C[k] }">{{ SKILLS[k] }}</i></span>
-        <div ref="chartBox" class="cbx"><svg class="bars" :width="W" :height="H" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="bars.map(b => `${monthName(b.m)}: ${b.n} ${lessonsWord(b.n)}`).join(', ')">
+        <div ref="chartBox" class="cbx"><svg class="bars" :width="W" :height="H" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="bars.map(b => `${monthName(b.m)}: ${b.n} ${exWord(b.n)}`).join(', ')">
           <line :x1="0" :x2="W" :y1="H - 22" :y2="H - 22" class="base" />
           <g v-for="b in bars" :key="b.m" class="col" :class="{ on: b.m === ym }" @click="ym = b.m">
             <rect :x="b.x - 6" y="0" :width="b.w + 12" :height="H" fill="transparent" />
@@ -161,7 +164,7 @@ const how = ref(false)
             <text :x="b.cx" :y="H - 6" class="ax">{{ monthName(b.m).slice(0, 3) }}</text>
           </g>
         </svg></div>
-        <p class="mu">Высота — сколько уроков пройдено. Цвета внутри — доля упражнений каждого навыка в этих уроках. Нажмите на месяц, чтобы посмотреть его сверху.</p>
+        <p class="mu">Высота — сколько упражнений пройдено. Цвета внутри — доля каждого навыка. Нажмите на месяц, чтобы посмотреть его сверху.</p>
       </template>
       <template v-else>
         <div v-if="donut.tot" class="dn">
@@ -174,8 +177,8 @@ const how = ref(false)
             <template v-for="k in TAGS" :key="k"><i class="tg" :style="{ background: SKILL_C[k], opacity: tag && tag !== k ? .45 : 1 }" @click="pick(k)">{{ SKILLS[k] }}</i><b>{{ donut.cnt[k] }}</b><span class="mu">{{ Math.round(donut.cnt[k] / donut.tot * 100) }}%</span></template>
           </div>
         </div>
-        <p v-else class="em">В {{ monthIn(ym) }} уроков не было.</p>
-        <p class="mu">Сколько упражнений каждого навыка было в уроках за {{ monthName(ym) }} — видно, какому навыку не хватает практики. Нажмите на навык, чтобы оставить только его.</p>
+        <p v-else class="em">В {{ monthIn(ym) }} упражнений не было.</p>
+        <p class="mu">Сколько упражнений каждого навыка было за {{ monthName(ym) }} — видно, какому навыку не хватает практики. Нажмите на навык, чтобы оставить только его.</p>
       </template>
     </div>
 

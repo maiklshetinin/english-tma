@@ -1,20 +1,21 @@
 <script setup>
-// Review → «Журнал» (21.11.2026): каждый заход в урок по дням, в том числе незаконченный.
-// День: сколько уроков, сколько минут, сколько ответов верно. Заход: урок, какая попытка, время, результат или «не закончен · 7 из 12».
-// Нажал заход — по каждому упражнению: ✓ верно / ✗ ошибка / • без оценки / — не дошёл, сколько секунд, с какой попытки, что ответил.
-// Преподаватель (и разработчик) может стереть весь журнал или один заход — прогресс курса и словарь при этом не меняются.
+// Review → «Журнал»: пройденные упражнения по дням (24.11.2026 — раньше были заходы в уроки с попытками и «не закончен»).
+// Упражнение попадает сюда, как только на него ответил, даже если урок не закончен; просто открытое — нет. Текст ответа не показываем.
+// Строка: когда ответил, упражнение и вопрос, курс и урок, результат (балл ИИ, ✓ / ✗ или «без оценки»), сколько пробыл.
+// Преподаватель (и разработчик) может очистить журнал — прогресс курса и словарь при этом не меняются.
 // Данные — GET /progress/log (server/learn.ts → lessonLogs); пишет просмотр курса по ходу урока (utils/runlog.js). Без сервера — этот браузер.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { apiRequest, isDemo, API, fb } from '../firebase'
-import { readLocal, removeLocal, byDay, dur, seen } from '../utils/runlog'
+import { readLocal, removeLocal, dur, exList, exDays, exWord } from '../utils/runlog'
 import { useAuthStore } from '../stores/auth'
 import { ask } from '../composables/useDialog'
 import { showToast } from '../composables/useToast'
 import { exName } from '../utils/review'
+import ExerciseCharts from './ExerciseCharts.vue'
 
 const props = defineProps({ studentId: { type: [String, Number], default: null } })   // карточка ученика у преподавателя; нет — свой журнал
 const online = !isDemo && !!API && !!fb
-const runs = ref([]), err = ref(''), loading = ref(false), openRun = ref(null)
+const runs = ref([]), err = ref(''), loading = ref(false)
 let reqN = 0
 async function load(quiet = false) {
   if (!online) { runs.value = readLocal(); return }
@@ -26,7 +27,7 @@ async function load(quiet = false) {
     runs.value = d.runs ?? []; err.value = ''
   } catch (e) { if (n === reqN && !quiet) err.value = e.message } finally { if (n === reqN) loading.value = false }
 }
-watch(() => props.studentId, () => { openRun.value = null; load() }, { immediate: true })
+watch(() => props.studentId, () => load(), { immediate: true })
 // ученик сейчас в уроке — журнал тихо подтягивается раз в 10 с (заход пишется пачкой раз в несколько секунд)
 let poll = null
 onMounted(() => { poll = setInterval(() => { if (document.visibilityState === 'visible' && !loading.value) load(true) }, 10_000) })
@@ -35,19 +36,16 @@ onUnmounted(() => clearInterval(poll))
 const auth = useAuthStore()
 const canDel = computed(() => auth.role === 'teacher')
 const whose = computed(() => (props.studentId != null ? 'ученика' : 'свой'))
-async function drop(list = null) {
-  const one = list && runs.value.find(r => r.run === list[0])
-  const q = one ? [`Удалить заход «${one.title || 'Урок'}» ${hm(one.at)}?`, 'Запись пропадёт из журнала. Прохождение курса, словарь и ошибки для чекпоинта не меняются.']
-    : [`Очистить ${whose.value === 'свой' ? 'свой журнал' : 'журнал ученика'}?`, 'Все заходы в уроки удалятся из журнала. Прохождение курса, словарь и ошибки для чекпоинта не меняются. Вернуть журнал будет нельзя.']
-  if (!(await ask(q[0], { text: q[1], ok: one ? 'Удалить' : 'Очистить', danger: true }))) return
-  if (!online) { removeLocal(list); openRun.value = null; return load() }
-  const r = await apiRequest('/progress/log/remove', { method: 'POST', body: JSON.stringify({ ...(props.studentId != null ? { studentId: String(props.studentId) } : {}), ...(list ? { runs: list } : {}) }) }).catch(() => null)
-  if (!r?.ok) return showToast('Не удалось удалить — попробуйте ещё раз', null, 'bad')
-  runs.value = list ? runs.value.filter(x => !list.includes(x.run)) : []; openRun.value = null
-  showToast(list ? 'Заход удалён из журнала' : 'Журнал очищен')
+async function drop() {
+  if (!(await ask(`Очистить ${whose.value === 'свой' ? 'свой журнал' : 'журнал ученика'}?`, { text: 'Все пройденные упражнения пропадут из журнала. Прохождение курса, словарь и ошибки для чекпоинта не меняются.', ok: 'Очистить', danger: true }))) return
+  if (!online) { removeLocal(); return load() }
+  const r = await apiRequest('/progress/log/remove', { method: 'POST', body: JSON.stringify(props.studentId != null ? { studentId: String(props.studentId) } : {}) }).catch(() => null)
+  if (!r?.ok) return showToast('Не удалось очистить — попробуйте ещё раз', null, 'bad')
+  runs.value = []; showToast('Журнал очищен')
 }
-const days = computed(() => byDay(runs.value))
-const week = computed(() => { const from = Date.now() - 7 * 864e5, r = runs.value.filter(x => x.at >= from); return { n: new Set(r.map(x => `${x.course}/${x.item}`)).size, runs: r.length, sec: r.reduce((a, x) => a + (x.sec || 0), 0) } })
+const list = computed(() => exList(runs.value))
+const days = computed(() => exDays(list.value))
+const week = computed(() => { const from = Date.now() - 7 * 864e5, e = list.value.filter(x => x.at >= from), g = e.filter(x => x.ok !== null); return { n: e.length, sec: e.reduce((a, x) => a + (x.sec || 0), 0), ok: g.filter(x => x.ok).length, all: g.length } })
 const dayName = (d) => {
   const t = new Date(d + 'T12:00:00'), today = new Date(), y = new Date(Date.now() - 864e5)
   const same = (a, b) => a.toDateString() === b.toDateString()
@@ -55,50 +53,32 @@ const dayName = (d) => {
   return same(t, today) ? `Сегодня, ${s}` : same(t, y) ? `Вчера, ${s}` : s[0].toUpperCase() + s.slice(1)
 }
 const hm = (t) => new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-const pct = (r) => (r.all ? Math.round(r.ok / r.all * 100) : null)
-const tone = (r) => { const p = pct(r); return p == null ? 'z' : p >= 80 ? 'g' : p >= 50 ? 'm' : 'b' }
-const lessonsWord = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'урок' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'урока' : 'уроков')
-const mark = (s) => (s.ok === true ? '✓' : s.ok === false ? '✗' : s.ok === null ? '•' : '—')
-const mcl = (s) => (s.ok === true ? 'g' : s.ok === false ? 'b' : s.ok === null ? 'z' : 'no')
-const kindName = (s) => (s.kind ? exName(s) : 'Экран')
+// результат упражнения: балл ИИ, ✓ / ✗ или «без оценки»
+const res = (e) => (e.sc != null ? `${e.sc}%` : e.ok === true ? '✓' : e.ok === false ? '✗' : '•')
+const resT = (e) => (e.ok === true ? (e.sc != null ? 'зачтено' : 'верно') : e.ok === false ? (e.sc != null ? 'не зачтено' : 'ошибка') : 'без оценки')
+const tone = (e) => (e.ok === true ? 'g' : e.ok === false ? 'b' : 'z')
+const kindName = (e) => (e.kind ? exName(e) : 'Экран')
 </script>
 
 <template>
   <div class="lg">
     <p v-if="err" class="empty">Не удалось загрузить журнал {{ err }}</p>
     <p v-else-if="loading && !runs.length" class="empty">Загрузка…</p>
-    <p v-else-if="!runs.length" class="empty">Журнал пуст. Каждый заход в урок появится здесь сразу, даже если урок не закончен: какие упражнения пройдены, верно или нет, сколько времени.</p>
+    <p v-else-if="!list.length" class="empty">Журнал пуст. Каждое упражнение, на которое ответили, появится здесь сразу — даже если урок не закончен: результат и сколько времени.</p>
     <template v-else>
-      <div class="wk"><span>За 7 дней</span><b>{{ week.n }}</b> {{ lessonsWord(week.n) }}<i>·</i><b>{{ dur(week.sec) }}</b><i>·</i>{{ week.runs }} заход{{ week.runs % 10 === 1 && week.runs % 100 !== 11 ? '' : week.runs % 10 >= 2 && week.runs % 10 <= 4 && (week.runs % 100 < 10 || week.runs % 100 >= 20) ? 'а' : 'ов' }}<button v-if="canDel" class="clr" @click="drop()">Очистить журнал</button></div>
+      <ExerciseCharts :list="list" />
+      <div class="wk"><span>За 7 дней</span><b>{{ week.n }}</b> {{ exWord(week.n) }}<i>·</i><b>{{ dur(week.sec) }}</b><template v-if="week.all"><i>·</i><b>{{ week.ok }}/{{ week.all }}</b> зачтено</template><button v-if="canDel" class="clr" @click="drop()">Очистить журнал</button></div>
       <section v-for="d in days" :key="d.day" class="day">
         <header class="dh">
           <h3>{{ dayName(d.day) }}</h3>
-          <span class="ds"><b>{{ d.lessons }}</b> {{ lessonsWord(d.lessons) }}<i>·</i><b>{{ dur(d.sec) }}</b><template v-if="d.all"><i>·</i><b>{{ d.ok }}/{{ d.all }}</b> верно</template></span>
+          <span class="ds"><b>{{ d.ex.length }}</b> {{ exWord(d.ex.length) }}<i>·</i><b>{{ dur(d.sec) }}</b><template v-if="d.all"><i>·</i><b>{{ d.ok }}/{{ d.all }}</b> зачтено</template></span>
         </header>
         <div class="runs">
-          <div v-for="r in d.runs" :key="r.run" class="run" :class="{ on: openRun === r.run }">
-            <button class="rh" :aria-expanded="openRun === r.run" @click="openRun = openRun === r.run ? null : r.run">
-              <span class="tm">{{ hm(r.at) }}</span>
-              <span class="tt"><b>{{ r.title || 'Урок' }}</b><small>{{ [r.courseTitle, r.unit].filter(Boolean).join(' · ') }}</small></span>
-              <span class="try" :class="{ no: r.try <= 1 }" :title="'Этот урок открывали ' + r.try + '-й раз'">{{ r.try }}-я попытка</span>          <!-- 1-я — место пустое, колонки не съезжают -->
-              <span class="rs">
-                <template v-if="r.fin"><b :class="tone(r)">{{ r.all ? `${r.ok}/${r.all}` : '✓' }}</b><small>{{ r.all ? pct(r) + '%' : 'без оценки' }}</small></template>
-                <template v-else><b class="ip">не закончен</b><small>{{ seen(r) }} из {{ r.n || r.steps.length }} упр.</small></template>
-              </span>
-              <span class="du">{{ dur(r.sec) }}</span>
-              <svg class="ch" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
-            </button>
-            <ol v-if="openRun === r.run" class="st">
-              <li v-for="(s, k) in r.steps" :key="s.id" :class="{ no: mcl(s) === 'no' }">
-                <span class="mk" :class="mcl(s)">{{ mark(s) }}</span>
-                <span class="sn">{{ k + 1 }}</span>
-                <span class="sw"><b>{{ kindName(s) }}</b><template v-if="s.w"> · {{ s.w }}</template>
-                  <small v-if="s.x">ответ: «{{ s.x }}»<template v-if="s.sc != null"> · ИИ {{ s.sc }}%</template></small>
-                  <small v-else-if="s.ok === undefined && s.sec == null">не дошёл</small></span>
-                <span class="sm"><template v-if="s.t > 1">{{ s.t }} попытки · </template><template v-if="s.sec != null">{{ dur(s.sec) }}</template></span>
-              </li>
-            </ol>
-            <div v-if="canDel && openRun === r.run" class="rdel"><button class="del" @click="drop([r.run])"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>Удалить этот заход</button></div>
+          <div v-for="e in d.ex" :key="e.key" class="run rh">
+            <span class="tm">{{ hm(e.at) }}</span>
+            <span class="tt"><b>{{ kindName(e) }}<template v-if="e.w"> · {{ e.w }}</template></b><small>{{ [e.courseTitle, e.title].filter(Boolean).join(' · ') }}</small></span>
+            <span class="rs"><b :class="tone(e)">{{ res(e) }}</b><small>{{ resT(e) }}</small></span>
+            <span class="du">{{ dur(e.sec) }}</span>
           </div>
         </div>
       </section>
@@ -121,8 +101,8 @@ const kindName = (s) => (s.kind ? exName(s) : 'Экран')
 .ds { font-size: 13px; font-weight: 700; color: var(--hint); white-space: nowrap }
 .runs { display: grid }
 .run { border-top: 1px solid var(--border) }
-.rh { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto 52px 16px; align-items: center; gap: 10px; padding: 10px 16px }
-.rh:hover { background: var(--surface) } .rh:focus-visible { outline: 2px solid #1cb0f6; outline-offset: -2px }
+.rh { box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 52px; align-items: center; gap: 10px; padding: 10px 16px }
+.rh:hover { background: var(--surface) }
 .tm { font-size: 13px; font-weight: 800; color: var(--hint); font-variant-numeric: tabular-nums }
 .tt { display: grid; min-width: 0 } .tt b { font-size: 14.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .tt small { font-size: 12px; color: var(--hint); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
@@ -140,7 +120,7 @@ const kindName = (s) => (s.kind ? exName(s) : 'Экран')
 .sw { min-width: 0; overflow-wrap: anywhere } .sw b { font-weight: 800 } .sw small { display: block; font-size: 12px; color: var(--hint); font-weight: 600; margin-top: 1px }
 .sm { font-size: 12px; color: var(--hint); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums }
 @media (max-width: 560px) {
-  .rh { grid-template-columns: 40px minmax(0, 1fr) auto 44px 14px; gap: 8px; padding: 10px 12px } .try { display: none }
+  .rh { grid-template-columns: 40px minmax(0, 1fr) auto 44px; gap: 8px; padding: 10px 12px }
   .dh { padding: 12px 12px 8px } .st { padding: 2px 12px 10px 12px } .rdel { padding: 0 12px 10px } .tt b { white-space: normal; line-height: 1.2 }
 }
 </style>
