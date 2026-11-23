@@ -3,9 +3,13 @@
 // Номера строк, подсветка, проверка на лету (строка с ошибкой — красным, клик по ошибке — к строке), «Форматировать» (Shift+Alt+F),
 // перенос строк вкл/выкл (Alt+Z), справа — «Как собирается» (что уйдёт в чат и в модели) — обновляется, пока печатаете.
 // Ctrl+Enter / Ctrl+S — применить, Esc — закрыть (если меняли — спросит). В <body> через Teleport: холст с масштабом не мешает.
+// 23.11.2026: schema — «Что принимает» (src/exercises/schema.ts): справа список ключей упражнения с видом и подписью, есть в JSON —
+// подсвечен, нет — серым (нажать — вставить с действующим значением); «Применить» не пройдёт с неизвестным ключом, без обязательного
+// или с значением не того вида. Ключи, что были в JSON при открытии, — всегда свои. kind — каким должен остаться тип экрана.
 // readonly — только посмотреть (экран чужого курса). how — { parts: [{ to, text }], warn: [], own?: [] } или null (нет панели); note — строка над сборкой; error — ошибка от родителя.
 import { computed, nextTick, onMounted, ref } from 'vue'
 import JsonEdit from './JsonEdit.vue'
+import { checkKeys, blankOf } from '../exercises/schema'
 import { jsonTheme, flipJsonTheme } from '../utils/jsonTheme.js'
 
 const props = defineProps({
@@ -13,12 +17,22 @@ const props = defineProps({
   how: { type: Object, default: null }, note: { type: String, default: '' }, error: { type: String, default: '' },
   applyText: { type: String, default: 'Применить' }, hint: { type: String, default: '' },
   readonly: { type: Boolean, default: false },          // только посмотреть: без «Применить», поле не правится
+  schema: { type: Array, default: null }, kind: { type: String, default: '' },          // что принимает упражнение (schema.ts)
 })
 const emit = defineEmits(['update:modelValue', 'apply', 'close'])
 const ed = ref(null), start = props.modelValue
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v === '1' } catch { return d } }
 const keep = (k, v) => { try { localStorage.setItem(k, v ? '1' : '0') } catch { /* приватный режим */ } }
 const wrap = ref(read('tma.jsonWrap', true)), howOn = ref(read('tma.jsonHow', false))
+// справа — вкладка: «Что принимает» (keys) или «Как собирается» (how); выбор помнится
+const side = ref((() => { try { return localStorage.getItem('tma.jsonSide') || 'keys' } catch { return 'keys' } })())
+const sideOf = computed(() => {
+  if (side.value === 'none') return ''
+  if (side.value === 'how' && props.how) return 'how'
+  if (props.schema) return 'keys'
+  return props.how && howOn.value ? 'how' : ''
+})
+function setSide(v) { side.value = v; if (v === 'how') howOn.value = true; try { localStorage.setItem('tma.jsonSide', v) } catch { /* */ } }
 const pos = ref({ line: 1, col: 1 })
 const text = computed({ get: () => props.modelValue, set: (v) => emit('update:modelValue', v) })
 
@@ -40,6 +54,25 @@ const RU = [[/after property value/, 'после значения нужна з�
   [/[Uu]nterminated string/, 'строка не закрыта кавычкой'], [/after JSON/, 'лишний текст после JSON'], [/[Uu]nexpected token|unexpected character/, 'лишний или неверный символ']]
 const ruMsg = (m) => RU.find(([r]) => r.test(m))?.[1] ?? m
 const dirty = computed(() => text.value !== start)
+// ---------- «Что принимает»: ключи упражнения ----------
+let first = {}; try { first = JSON.parse(start) ?? {} } catch { /* */ }
+const known = computed(() => { if (!props.schema) return null; const s = [...props.schema]; for (const k of Object.keys(first)) if (!s.some((x) => x.key === k)) s.push({ key: k, type: 'any', label: 'было в JSON при открытии' }); return s })
+const obj = computed(() => { if (!parsed.value.ok) return null; try { return JSON.parse(text.value) } catch { return null } })
+const issues = computed(() => (known.value && obj.value ? checkKeys(obj.value, known.value, props.kind || undefined) : []))
+const badKeys = computed(() => new Set(issues.value.map((x) => x.key)))
+const has = (k) => !!obj.value && typeof obj.value === 'object' && k in obj.value
+const tsT = (s) => (s.type === 'kind' ? JSON.stringify(props.kind || 'тип') : s.type === 'select' ? (s.options ?? []).map((o) => JSON.stringify(o)).join(' | ') : { text: 'string', number: 'number', bool: 'boolean', list: '[ … ]', file: 'string /* адрес файла */', any: 'any' }[s.type] ?? 'any') + (s.null ? ' | null' : '')
+const typeT = (s) => (s.type === 'select' ? (s.options ?? []).join(' | ') : { kind: 'тип экрана', text: 'строка', number: 'число', bool: 'true / false', list: 'список', file: 'файл (адрес)', any: '' }[s.type] ?? '')
+const valT = (v) => { const x = typeof v === 'string' ? (v.length > 60 ? v.slice(0, 60) + '…' : v) : JSON.stringify(v); return x === undefined ? '' : x }
+/** нажали на ключ: есть — к его строке; нет — вставить с действующим значением */
+function pickKey(s) {
+  const line = text.value.split('\n').findIndex((l) => l.trimStart().startsWith(JSON.stringify(s.key) + ':'))
+  if (has(s.key)) { if (line >= 0) ed.value?.goLine(line + 1); return }
+  if (props.readonly || !obj.value || typeof obj.value !== 'object') return
+  text.value = JSON.stringify({ ...obj.value, [s.key]: blankOf(s) }, null, 2)
+  nextTick(() => { const l = text.value.split('\n').findIndex((x) => x.trimStart().startsWith(JSON.stringify(s.key) + ':')); if (l >= 0) ed.value?.goLine(l + 1) })
+}
+function apply() { if (props.readonly || !parsed.value.ok || issues.value.length) return; emit('apply') }
 
 function fmt() { if (props.readonly) return; if (!parsed.value.ok) { if (parsed.value.line) ed.value?.goLine(parsed.value.line); return } text.value = JSON.stringify(JSON.parse(text.value), null, 2) }
 function flipWrap() { wrap.value = !wrap.value; keep('tma.jsonWrap', wrap.value) }
@@ -47,7 +80,7 @@ function flipHow() { howOn.value = !howOn.value; keep('tma.jsonHow', howOn.value
 function close() { if (dirty.value && !window.confirm('Закрыть без сохранения? Изменения в JSON пропадут.')) return; emit('close') }
 function key(e) {
   const k = e.key.toLowerCase()
-  if ((e.ctrlKey || e.metaKey) && (k === 'enter' || k === 's')) { e.preventDefault(); if (!props.readonly) emit('apply') }
+  if ((e.ctrlKey || e.metaKey) && (k === 'enter' || k === 's')) { e.preventDefault(); apply() }
   else if (e.shiftKey && e.altKey && (k === 'f' || e.code === 'KeyF')) { e.preventDefault(); fmt() }
   else if (e.altKey && !e.shiftKey && (k === 'z' || e.code === 'KeyZ')) { e.preventDefault(); flipWrap() }
   else if (k === 'escape') { e.preventDefault(); close() }
@@ -71,12 +104,24 @@ onMounted(() => nextTick(() => ed.value?.focus()))
         <div class="jm-bar">
           <button v-if="!readonly" class="jb" title="Расставить отступы (Shift+Alt+F)" @click="fmt">Форматировать</button>
           <button class="jb" :class="{ on: wrap }" title="Переносить длинные строки (Alt+Z)" @click="flipWrap">Перенос строк</button>
-          <button v-if="how" class="jb" :class="{ on: howOn }" title="Что из этого JSON уйдёт в чат и в модели — обновляется, пока печатаете" @click="flipHow">Как собирается</button>
+          <button v-if="schema" class="jb" :class="{ on: sideOf === 'keys' }" title="Какие ключи принимает это упражнение — справа; нажмите на ключ: есть — перейти, нет — вставить" @click="sideOf === 'keys' ? setSide('none') : setSide('keys')">Что принимает</button>
+          <button v-if="how" class="jb" :class="{ on: sideOf === 'how' }" title="Что из этого JSON уйдёт в чат и в модели — обновляется, пока печатаете" @click="sideOf === 'how' ? setSide('none') : setSide('how')">Как собирается</button>
           <slot name="actions" />
         </div>
-        <div class="jm-body" :class="{ split: how && howOn }">
+        <div class="jm-body" :class="{ split: !!sideOf }">
           <JsonEdit ref="ed" v-model="text" box="jm-ed" :theme="jsonTheme" :wrap="wrap" :bad="parsed.ok ? 0 : parsed.line" :readonly="readonly" aria-label="JSON" @caret="pos = $event" />
-          <aside v-if="how && howOn" class="jm-how">
+          <aside v-if="sideOf === 'keys'" class="jm-how jm-keys">
+            <p class="n">Такой объект принимает это упражнение. <b class="kin">Подсвечено</b> — есть в вашем JSON; <span class="kout">серое</span> — можно добавить (нажмите — вставится с текущим значением); <code>?</code> — необязательный.</p>
+            <p v-for="x in issues" :key="x.key + x.msg" class="w">✕ {{ x.msg }}</p>
+            <div class="kobj">
+              <span class="kbr0">{</span>
+              <button v-for="s in known" :key="s.key" type="button" class="kline" :class="{ in: has(s.key), bad: badKeys.has(s.key) }" :title="(s.label ? s.label + '\n' : '') + (has(s.key) ? 'Есть в JSON — перейти к строке' : readonly ? '' : 'Вставить' + (s.def !== undefined && s.type !== 'kind' ? ' — сейчас: ' + valT(s.def) : ''))" @click="pickKey(s)">
+                <span class="kk">"{{ s.key }}"</span><span v-if="!s.req" class="kq">?</span>: <span class="kty">{{ tsT(s) }}</span>,<span v-if="s.label" class="kc"> // {{ s.label }}</span>
+              </button>
+              <span class="kbr0">}</span>
+            </div>
+          </aside>
+          <aside v-else-if="sideOf === 'how'" class="jm-how">
             <p v-for="w in how.warn" :key="w" class="w">⚠ {{ w }}</p>
             <p v-if="note" class="n">{{ note }}</p>
             <section v-for="pt in how.parts" :key="pt.to"><b>{{ pt.to }}</b><pre>{{ pt.text || '‹пусто›' }}</pre></section>
@@ -86,6 +131,7 @@ onMounted(() => nextTick(() => ed.value?.focus()))
           <button v-if="!parsed.ok" class="st bad" title="Перейти к строке с ошибкой" @click="parsed.line && ed?.goLine(parsed.line)">✕ {{ parsed.line ? 'Строка ' + parsed.line + (parsed.col ? ', столбец ' + parsed.col : '') + ': ' : '' }}{{ ruMsg(parsed.msg) }}</button>
           <span v-else class="st ok">✓ JSON в порядке</span>
           <small v-if="error" class="err">{{ error }}</small>
+          <small v-else-if="issues.length" class="err" title="Подробно — справа, «Что принимает»">{{ issues.length === 1 ? issues[0].msg : 'Ключи: ' + issues.length + ' ошибк' + (issues.length < 5 ? 'и' : 'ок') + ' — справа, «Что принимает»' }}</small>
           <span class="sp" />
           <small class="pos">Стр {{ pos.line }}, стлб {{ pos.col }}</small>
         </footer>
@@ -93,7 +139,7 @@ onMounted(() => nextTick(() => ed.value?.focus()))
           <small>{{ readonly ? 'Только просмотр · Esc — закрыть' : hint || 'Ctrl+Enter или Ctrl+S — применить · Esc — закрыть · Tab — отступ · Shift+Alt+F — форматировать' }}</small>
           <span class="sp" />
           <button class="jb" @click="close">{{ readonly ? 'Закрыть' : 'Отмена' }}</button>
-          <button v-if="!readonly" class="jb ap" :disabled="!parsed.ok" @click="emit('apply')">{{ applyText }}</button>
+          <button v-if="!readonly" class="jb ap" :disabled="!parsed.ok || issues.length > 0" :title="issues.length ? 'Сначала исправьте ключи — справа, «Что принимает»' : ''" @click="apply">{{ applyText }}</button>
         </div>
       </div>
     </div>
@@ -122,6 +168,18 @@ header { display: flex; align-items: center; gap: 8px } .jm-t { display: grid; g
 .jm.dark .jm-how pre { background: #2a2a2a; border-color: #333 }
 .jm-how .w { margin: 0; padding: 5px 8px; border-radius: 8px; background: #fff4dc; color: #b45309; font-weight: 800 }
 .jm-how .n { margin: 0; color: #8a8f98; font-weight: 600 }
+/* «Что принимает» (23.11.2026): объект, как в TypeScript; ключ есть в JSON — подсвечен; нет — серым; с ошибкой — красным */
+.jm-keys { gap: 8px; align-content: start }
+.kobj { display: grid; padding: 10px 4px; border-radius: 10px; background: #fff; border: 1px solid #eceef1; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #6b7280 }
+.jm.dark .kobj { background: #1e1e1e; border-color: #333; color: #9aa0a6 }
+.kbr0 { padding: 0 10px; color: #6b7280; font-weight: 700 }
+.kline { display: block; width: 100%; margin: 0; padding: 1px 10px 1px 26px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left; text-indent: -12px; cursor: pointer }
+.kline:hover { background: #f3f4f6 } .jm.dark .kline:hover { background: #2a2a2a }
+.kline .kk { color: #9aa0a6 } .kline .kq { color: #9aa0a6 } .kline .kty { color: #a3a3a3 } .kline .kc { color: #b5b9bf; font-style: italic }
+.kline.in { background: #eef7ff } .kline.in .kk { color: #0b6bcb; font-weight: 700 } .kline.in .kty { color: #b45309 } .kline.in .kc { color: #8a8f98 }
+.jm.dark .kline.in { background: #10314d } .jm.dark .kline.in .kk { color: #7cc4ff } .jm.dark .kline.in .kty { color: #e8b26a }
+.kline.bad { background: #fff1f0 } .kline.bad .kk { color: #d92d20 }
+.kin { color: #0b6bcb } .kout { color: #9aa0a6 } .jm-keys .n code { font: 700 12px ui-monospace, monospace; color: #6b7280 }
 footer { font-size: 12px; min-height: 22px }
 .st { border: 0; background: none; padding: 0; font: inherit; font-weight: 800; text-align: left } .st.ok { color: #3b8a11 } .st.bad { color: #d92d20; cursor: pointer } .st.bad:hover { text-decoration: underline }
 .err { color: #d92d20; font-weight: 800 } .pos { color: #8a8f98; font-variant-numeric: tabular-nums }

@@ -411,7 +411,7 @@ function jsApply() {
         </template>
       </div>
     </div>
-    <div class="kst">
+    <div class="kcst">
       <span v-if="idle" class="kbr idle" title="Экран не выбран: мост не спрашиваем, скрипты стоят. Нажмите на экран — оживёт и спросит мост"><i />Мост не активен</span>
       <span v-else-if="api" class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
@@ -430,12 +430,7 @@ function jsApply() {
       <select v-if="api" class="kms ed" :value="step.model || ''" title="Модель проверки у этого экрана (Gemini API)" @pointerdown.stop @change="setModelF($event.target.value)"><option value="">Модель: авто{{ cModels[0] ? ' · ' + checkName(cModels[0]) : '' }}</option><option value="live">Live · голосом</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <select v-if="!fileMode" class="kms ed" :value="dicSel" title="Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise" @pointerdown.stop @change="setDic($event.target.value)"><option value="">Диктовка: авто{{ dicAuto ? ' · ' + dicName(dicAuto) : '' }}</option><option v-if="dicSel && !dicOpts.some(o => o.id === dicSel)" :value="dicSel">Диктовка: {{ dicName(dicSel) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">Диктовка: {{ dicName(o.id) }}</option></optgroup></template></select>
       <ExTool :on="!!step.autoplay" title="Звук вопроса сам играет, когда ученик открывает экран (если вопрос озвучен)" @click="toggleAuto">Автозвук{{ step.autoplay ? ' ✓' : ' выкл' }}</ExTool>
-      <ExTool :on="jsOpen" title="Экран текстом: вопрос, эталон, порог и промпт для Gemini" @click="jsToggle">JSON{{ step.prompt || step.pass ? ' ✓' : '' }}</ExTool>
-      <span v-if="jsOpen" class="kj" @pointerdown.stop @keydown.stop>
-        <small>Этот экран: вопрос, эталон, порог зачёта и промпт для Gemini{{ step.prompt ? ' (свой)' : ' (общий)' }}</small>
-        <textarea v-model="js" class="exf kjt" spellcheck="false" aria-label="JSON экрана" />
-        <span class="kjb"><em v-if="jsErr">{{ jsErr }}</em><button type="button" class="kjg" @click="js = asJson(); jsErr = ''">Сбросить</button><button type="button" class="kjo" @click="jsApply">Применить</button></span>
-      </span>
+      <ExTool title="JSON экрана — то же большое окно, что «{ }»: всё, что можно поменять у этого экрана, и справа — «Что принимает»" @click="ed.json(step)">JSON</ExTool>          <!-- 23.11.2026: своё маленькое поле со своим форматом убрано -->
     </span>
   </template>
 </template>
@@ -511,7 +506,7 @@ function jsApply() {
    справа — серые квадратные кнопки и «отправить» со стрелкой; под строкой — мелко: мост, слова и порог, модель распознавания */
 .kcm { display: flex; flex-direction: column; gap: 6px; padding: 14px 12px 10px 18px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 20px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .04); text-align: left; transition: border-color .15s, box-shadow .15s }
 .kcm:focus-within, .kcm.live { border-color: rgba(0, 0, 0, .18); box-shadow: 0 2px 14px rgba(0, 0, 0, .07) }
-.kci { display: block; width: 100%; min-height: 24px; box-sizing: border-box; margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; color: #1f1f1f; font-family: var(--font); font-size: 15px; font-weight: 500; line-height: 1.55; user-select: text }
+.kci { display: block; width: 100%; min-height: 26px; box-sizing: border-box; margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; color: #1f1f1f; caret-color: #1a73e8; font-family: var(--font); font-size: 16px; font-weight: 500; line-height: 1.55; user-select: text }
 .kci::placeholder { color: #9b9b9b; font-weight: 500 }
 .kcd { color: #6f6f6f; font-family: var(--font); font-size: 15px; font-style: italic; font-weight: 500; line-height: 1.55 } .kcd.er { color: #b3261e; font-size: 12.5px; font-style: normal; font-weight: 700 }
 .kcr { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 34px }
@@ -523,12 +518,12 @@ function jsApply() {
 .kspin { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: kspin .8s linear infinite } @keyframes kspin { to { transform: rotate(360deg) } }
 .kcwv { display: flex; align-items: center; gap: 4px; height: 34px; margin-right: 6px; --l: 0 } .kcwv i { width: 2px; border-radius: 1px; background: #8f8f8f; height: calc(2px + var(--l) * 18px * var(--k, .45)); transition: height .12s }
 .kcwv i:nth-child(3n) { --k: 1 } .kcwv i:nth-child(3n + 1) { --k: .3 } .kcwv i:nth-child(4n) { --k: .7 } .kcwv i:nth-child(5n) { --k: .15 }
-.kcm, .kst { width: 100%; box-sizing: border-box }
-.kst { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; padding: 0 10px; font-size: 12px; line-height: 1.2 }
-.kst > * { flex: none } .kst .kbr { white-space: nowrap }
+.kcm, .kcst { width: 100%; box-sizing: border-box }
+.kcst { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; padding: 0 10px; font-size: 12px; line-height: 1.2 }
+.kcst > * { flex: none } .kcst .kbr { white-space: nowrap }
 .ksp { flex: 1 1 0 !important } .kcn { color: #8f8f8f; font-size: 12.5px; font-weight: 500 }
-.kst .kdm { height: 28px; max-width: 165px; margin-left: 0; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: #3a3a3a; font-size: 12.5px; font-weight: 600; cursor: pointer } .kst .kdm:hover:not(:disabled) { background: #f0f0f0 } .kst .kdm:disabled { color: #b0b0b0; background: transparent }
-.kst .kbr { font-size: 12.5px; font-weight: 600 }
+.kcst .kdm { height: 28px; max-width: 165px; margin-left: 0; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: #3a3a3a; font-size: 12.5px; font-weight: 600; cursor: pointer } .kcst .kdm:hover:not(:disabled) { background: #f0f0f0 } .kcst .kdm:disabled { color: #b0b0b0; background: transparent }
+.kcst .kbr { font-size: 12.5px; font-weight: 600 }
 :global(.foot:has(.kcm)) { align-items: flex-end }
 /* подвал тонкий, как у Claude: строка ввода и под ней строка мелкого текста — без полосы, рамки и больших отступов */
 :global(.lp .foot.foot:has(.kcm)) { padding: 6px 14px 8px; border-top: 0; background: transparent }

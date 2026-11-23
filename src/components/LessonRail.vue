@@ -15,7 +15,8 @@ import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
 import { stepJson, applyStepJson, tplOf, tplTitle, tplDesc, SKILL_T, skillsOf, BOOK } from '../utils/lesson'
 import { assemble } from '../exercises/assemble'
-import JsonModal from './JsonModal.vue'          // правка JSON — большое окно «как в VS Code» (21.11.2026)
+import JsonModal from './JsonModal.vue'
+import { stepSchema } from '../exercises/schema'          // «Что принимает» в окне JSON экрана (23.11.2026)          // правка JSON — большое окно «как в VS Code» (21.11.2026)
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
 const props = defineProps({
@@ -144,6 +145,7 @@ provideEdit({
   canUndo: (s) => !!undo[s.id],
   undoCard: (s) => undoCard(s),
   dropFiles: (f) => props.dropFiles(f),
+  json: (s) => jsonStart(s),          // кнопка «JSON» в правке шаблона — то же окно, что «{ }» (23.11.2026)
 })
 const full = computed(() => steps.value.length >= STEPS_MAX)
 // Экраны без прокрутки — во весь рост; редактору курса сообщаем высоту самого высокого, чтобы он раздвинул рельс
@@ -273,7 +275,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <button v-if="!readonly" class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
       <!-- JSON экрана (кнопка «{ }», 21.11.2026) — сразу большое окно: посмотреть, править, «Как собирается», скопировать -->
-      <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :readonly="readonly" :title="'JSON экрана · ' + tplTitle(s)" :sub="readonly ? 'Экран другого курса — только посмотреть и скопировать' : 'Своё у экрана — вопрос и эталон; остальное общее для курса («{ }» на плитке в меню Exercise)'" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)">
+      <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :schema="stepSchema(s)" :kind="s.kind" :readonly="readonly" :title="'JSON экрана · ' + tplTitle(s)" :sub="readonly ? 'Экран другого курса — только посмотреть и скопировать' : 'Своё у экрана — вопрос и эталон; остальное общее для курса («{ }» на плитке в меню Exercise)'" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)">
         <template #actions><button class="mcp" :class="{ ok: copied === s.id }" title="Скопировать экран — потом Ctrl+V на холсте или «Вставить» на ветке; JSON — образец для ИИ" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать экран' }}</button></template>
       </JsonModal>
       <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: isEdit(s) }]" :data-id="s.id" :data-view="isEdit(s) ? 0 : 1" :data-edit="isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">

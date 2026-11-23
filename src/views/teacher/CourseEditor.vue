@@ -29,6 +29,7 @@ import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
 import ExerciseMini from '../../components/ExerciseMini.vue'
 import JsonModal from '../../components/JsonModal.vue'
+import { presetSchema } from '../../exercises/schema'          // «Что принимает» в окне настроек упражнения (23.11.2026)
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
@@ -2024,7 +2025,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <button class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" :title="gi === 0 ? '2 · Lesson — урок или чекпоинт внутри Chapter' : '3 · Exercise — экраны урока: пары, выбор ответа, порядок слов…'" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><em class="tn">{{ gi + 2 }}</em><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button></template>
     </div>
     <!-- Настройки упражнения в курсе («{ }» на плитке меню): JSON общих промптов и настроек; «Как собирается» — что уйдёт в модели -->
-  <JsonModal v-if="preT" :key="preK" v-model="preText" :title="'«' + preName(preT) + '» — общее для курса'" sub="Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения." :how="preAsm" :error="preErr" apply-text="Сохранить для курса" hint='"" — пусто, ничего не подставляется · Ctrl+Enter или Ctrl+S — сохранить · Esc — закрыть' @apply="preSave" @close="preT = null">
+  <JsonModal v-if="preT" :key="preK" v-model="preText" :schema="presetSchema(preT)" :title="'«' + preName(preT) + '» — общее для курса'" sub="Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения." :how="preAsm" :error="preErr" apply-text="Сохранить для курса" hint='"" — пусто, ничего не подставляется · Ctrl+Enter или Ctrl+S — сохранить · Esc — закрыть' @apply="preSave" @close="preT = null">
     <template #actions><span class="pre-sp" /><button class="pbtn" title="Стереть общие настройки — вернуть умолчания приложения" @click="preReset">Вернуть умолчания</button><button class="pbtn" title="Убрать свои промпты и настройки у экранов этого упражнения — пусть берут общие" @click="preAll">Применить ко всем экранам</button></template>
   </JsonModal>
 </div>

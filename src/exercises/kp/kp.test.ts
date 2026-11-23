@@ -64,18 +64,14 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     provideEdit({ pick() {}, drop() {}, clear() {}, pct: () => null, changed: () => log.push('changed'), cards() {}, canUndo: () => false, undoCard() {}, dropFiles() {} })
     return () => h(LessonPlayer, { steps: [st], resolve, embedded: true, edit: true }, { foot: () => h('div', { class: 'cf' }, [h(EX.kp.view, { step: st, part: 'tools' })]) })
   } })
-  it('кнопка JSON: вопрос, эталон, порог и общий промпт; «Применить» — свой промпт и порог у экрана', async () => {
-    const st: any = reactive({ ...step }), log: string[] = []
-    const w = mount(host(st, log))
+  it('кнопка JSON открывает JSON экрана — то же окно, что «{ }» (23.11.2026)', async () => {
+    const st: any = reactive({ ...step }), opened: any[] = []
+    const w = mount(defineComponent({ setup() {
+      provideEdit({ pick() {}, drop() {}, clear() {}, pct: () => null, changed() {}, cards() {}, canUndo: () => false, undoCard() {}, dropFiles() {}, json: (s: any) => opened.push(s) })
+      return () => h(LessonPlayer, { steps: [st], resolve, embedded: true, edit: true }, { foot: () => h('div', { class: 'cf' }, [h(EX.kp.view, { step: st, part: 'tools' })]) })
+    } }))
     await w.findAll('.cf .ext').at(-1)!.trigger('click')
-    const o = JSON.parse((w.find('.kjt').element as HTMLTextAreaElement).value)
-    expect(o).toEqual({ id: null, star: false, autoplay: false, look: 'pdf', marks: true, question: step.text, reference: step.ideal, pass_threshold: 60, system_prompt: SYSTEM })
-    await w.find('.kjt').setValue(JSON.stringify({ ...o, pass_threshold: 70, system_prompt: 'Bądź surowy.' })); await w.find('.kjo').trigger('click')
-    expect(st.prompt).toBe('Bądź surowy.'); expect(st.pass).toBe(70); expect(log).toContain('changed'); expect(w.find('.kj').exists()).toBe(false)
-    await w.findAll('.cf .ext').at(-1)!.trigger('click'); await w.find('.kjt').setValue('{ сломано'); await w.find('.kjo').trigger('click')
-    expect(w.find('.kjb em').text()).toMatch(/Не JSON/); expect(st.prompt).toBe('Bądź surowy.')
-    await w.find('.kjt').setValue(JSON.stringify({ ...o })); await w.find('.kjo').trigger('click')          // вернули общий — у экрана своего нет
-    expect('prompt' in st).toBe(false); expect('pass' in st).toBe(false)
+    expect(opened).toHaveLength(1); expect(opened[0].text).toBe(step.text)
   })
   it('как в домашке: номер и вопрос на подложке, звезда, в эталоне — оранжевые термины, жирный, курсив, пункты', async () => {
     g.next.push(res(70))
