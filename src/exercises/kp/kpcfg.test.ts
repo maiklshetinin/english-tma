@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../firebase', () => ({ apiRequest: async () => ({ ok: false, json: async () => ({}) }) }))
 import { stepJson, applyStepJson, stepsFromJson, type Step } from '../../utils/lesson'
-import { SYSTEM, PASS, DEF, CHAT, STT, kpCfg, kpFields, kpShown, fill } from './defaults'
+import { SYSTEM, PASS, DEF, CHAT, STT, TOPIC, kpCfg, kpFields, kpShown, kpReady, fill } from './defaults'
 import { checkDirect, setPick } from '../../utils/kpcheck'
 import { ai } from '../../utils/gemini'
 
@@ -10,8 +10,11 @@ import { ai } from '../../utils/gemini'
 describe('«Ответ по смыслу»: настройки проверки в JSON экрана', () => {
   it('через мост: в JSON экрана — только своё; общее (промпт, message, format, порог) — kpShown, на плитке меню', () => {
     const j: any = stepJson({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })
-    expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A' })
-    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL', dicModel: 'auto' })
+    expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A', ...kpShown({}) })          // 23.11.2026: как на плитке — все настройки с действующими значениями
+    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL', topic: TOPIC, dicModel: 'auto' })
+    const s: Step = { id: 'a', kind: 'kp', text: 'Q', ideal: 'A' }
+    expect(applyStepJson(s, JSON.stringify(j))).toBe(''); expect(s).toEqual({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })          // не трогали — у экрана своего нет
+    expect(kpReady(kpCfg({ lang: 'es-ES', topic: 'examen DELE' })).prompt).toContain('(examen DELE, испанский язык)')          // {topic}, {lang} — подставлены
   })
 
   it('мост: в JSON ровно то, что уходит в чат — prompt, message, format (с {id}); свой format без {id} не принимается', () => {
@@ -91,7 +94,7 @@ describe('«Ответ по смыслу»: настройки проверки 
     const r = await checkDirect({ question: s.text, reference: s.ideal, answer: 'szóstego', cfg: kpCfg(s) }, { fetcher })
     expect(r.score).toBe(80)
     expect(body.contents[0].parts[0].text).toBe('P: Kiedy? | W: 6 grudnia | O: szóstego')
-    expect(body.systemInstruction.parts[0].text).toBe(SYSTEM + ' Tylko JSON.')
+    expect(body.systemInstruction.parts[0].text).toBe(fill(SYSTEM, { topic: TOPIC, lang: 'польский' }) + ' Tylko JSON.')          // метки темы и языка подставлены
     expect(body.generationConfig.temperature).toBe(0.3)
     expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'minimal' })
   })

@@ -13,18 +13,22 @@ import { presetFor } from '../presets'
 
 export const PASS = 60                                    // зачёт — от 60 % (рекомендация курса: 60–70 % «идеального» ответа — уже хорошо)
 /** Промпт по умолчанию — тот же текст, что SYSTEM в server/ai.ts */
-export const SYSTEM = 'Ты проверяешь устный ответ ученика на вопрос (подготовка к собеседованию на Карту поляка, польский язык). '
+// 23.11.2026: тема и язык — метками {topic}, {lang}, {langHow}: подставляются перед отправкой (kpReady) из topic и lang JSON экрана / курса
+export const TOPIC = 'подготовка к собеседованию на Карту поляка'
+export const SYSTEM = 'Ты проверяешь устный ответ ученика на вопрос ({topic}, {lang} язык). '
   + 'Оценивай ответ по смыслу относительно эталона, а не по буквальному совпадению слов. Засчитывай синонимы, перефразирование и иной порядок слов, если смысл сохранён. '
   + 'Ответ надиктован — не снижай оценку за мелкие ошибки распознавания речи. Эталон намеренно полный: 60–70 % его смысла — уже хороший ответ. '
   + 'score — целое 0–100 (полнота передачи смысла эталона); missed_points — короткие пункты на русском только о важных фактах эталона, которые не прозвучали (всё ключевое есть — пустой массив); '
-  + 'feedback — одно короткое предложение на русском: по смыслу или по польскому языку ответа, доброжелательно.'
+  + 'feedback — одно короткое предложение на русском: по смыслу или по языку ответа ({lang}), доброжелательно.'
 
-export type KpLang = 'pl-PL' | 'en-US' | 'en-GB'
-export const LANGS: KpLang[] = ['pl-PL', 'en-US', 'en-GB']
-const LANG_RU: Record<KpLang, string> = { 'pl-PL': 'польский', 'en-US': 'английский', 'en-GB': 'английский' }
+export type KpLang = 'pl-PL' | 'en-US' | 'en-GB' | 'es-ES'
+export const LANGS: KpLang[] = ['pl-PL', 'en-US', 'en-GB', 'es-ES']
+const LANG_RU: Record<KpLang, string> = { 'pl-PL': 'польский', 'en-US': 'английский', 'en-GB': 'английский', 'es-ES': 'испанский' }
+const LANG_HOW: Record<KpLang, string> = { 'pl-PL': 'по-польски', 'en-US': 'по-английски', 'en-GB': 'по-английски', 'es-ES': 'по-испански' }
 
 export interface KpCfg {
   prompt: string; pass: number; lang: KpLang; message: string; format: string
+  topic: string          // тема — в промптах меткой {topic} (по умолчанию — собеседование на Карту поляка); 23.11.2026
   dicModel: string          // «Надиктовать с Gemini» (потоком): auto — свежая …transcribe-live ключа; модель Live API; browser — распознавание браузера (23.11.2026)
   model: string; temperature: number | null; thinking: boolean
   livePrompt: string; liveAsk: string; liveMore: string; liveTool: string; liveModel: string; voice: string
@@ -46,9 +50,9 @@ export const DEF = {
   temperature: null as number | null,
   thinking: false,          // false — размышления выключены (3.x — thinkingLevel minimal, 2.x — thinkingBudget 0): проверка быстрее
   livePrompt: 'Ты проверяешь ответ голосом. Порядок строго такой: 1) СРАЗУ, ничего не говоря, вызови функцию submit_grade. ' +
-    '2) Потом скажи по-польски 1–2 коротких предложения: что хорошо и чего не хватило. 3) Замолчи и жди. ' +
-    'Если ученик попросит подробнее — разбери ответ подробно по-польски (простым языком), задай один наводящий вопрос и попроси ответить ещё раз. ' +
-    'Ученик говорит по-польски с акцентом — это польский; если он попросит по-русски — можно коротко пояснить по-русски.',
+    '2) Потом скажи {langHow} 1–2 коротких предложения: что хорошо и чего не хватило. 3) Замолчи и жди. ' +
+    'Если ученик попросит подробнее — разбери ответ подробно {langHow} (простым языком), задай один наводящий вопрос и попроси ответить ещё раз. ' +
+    'Ученик говорит {langHow} с акцентом — это {lang} язык; если он попросит по-русски — можно коротко пояснить по-русски.',
   liveAsk: 'Oceń moją odpowiedź.',
   liveMore: 'Proszę omówić moją odpowiedź szczegółowo.',
   liveTool: 'Выставить оценку ответа ученика (обязательно, до любых слов). score — 0–100: полнота передачи смысла эталона; ' +
@@ -99,7 +103,7 @@ const own = (s: any, k: string) => (typeof s?.[k] === 'string' ? (s[k] as string
 function kpCode(s: any): KpCfg {
   const b = base(s), f = own(s, 'format')
   const o: any = {
-    prompt: own(s, 'prompt')?.trim() ?? SYSTEM, pass: okPass(s?.pass) ? s.pass : PASS, lang: okLang(s?.lang) ? s.lang : 'pl-PL',
+    prompt: own(s, 'prompt')?.trim() ?? SYSTEM, pass: okPass(s?.pass) ? s.pass : PASS, lang: okLang(s?.lang) ? s.lang : 'pl-PL', topic: own(s, 'topic')?.trim() || TOPIC,
     dicModel: okModel(s?.dicModel) ? s.dicModel.trim() : DIC_AUTO,
     message: own(s, 'message') ?? b.message, format: f !== undefined && okFormat(s, f) ? f : b.format,
     model: okModel(s?.model) ? s.model.trim() : DEF.model, temperature: okTemp(s?.temperature) ? s.temperature : DEF.temperature, thinking: s?.thinking === true,
@@ -121,7 +125,7 @@ export function kpCfg(s: any): KpCfg {
 /** Что показывать в JSON экрана — ровно то, что уходит у этой формы: мост — prompt, message, format; Gemini API — всё; «целым аудио» — + sttPrompt, sttAsk */
 export function kpShown(s: any): Partial<KpCfg> {
   const c = kpCfg(s)
-  const o: any = kpApi(s) ? { ...c } : { prompt: c.prompt, message: c.message, format: c.format, pass: c.pass, lang: c.lang, dicModel: c.dicModel }
+  const o: any = kpApi(s) ? { ...c } : { prompt: c.prompt, message: c.message, format: c.format, pass: c.pass, lang: c.lang, topic: c.topic, dicModel: c.dicModel }
   for (const k of STT_TEXTS) { if (kpFile(s)) o[k] = c[k]; else delete o[k] }
   if (kpFile(s)) delete o.dicModel          // «целым аудио» распознаёт Flash Lite файлом — потоковая модель ему не нужна
   return o
@@ -147,9 +151,19 @@ export function kpFields(raw: any): Partial<KpCfg> {
 
 /** {lang} в sttPrompt — язык словами */
 export const langRu = (l: string) => LANG_RU[l as KpLang] ?? 'польский'
+/** «по-польски», «по-испански»… — для подсказок на экране */
+export const langHow = (l: string) => LANG_HOW[l as KpLang] ?? 'по-польски'
 
 /** Подставить {question}, {reference}, {answer}, {score}, {missed} в шаблон */
-export const fill = (t: string, v: Record<string, unknown>) => t.replace(/\{(question|reference|answer|score|missed|id|lang)\}/g, (m, k) => (k in v ? String(v[k] ?? '') : m))
+export const fill = (t: string, v: Record<string, unknown>) => t.replace(/\{(question|reference|answer|score|missed|id|lang|langHow|topic)\}/g, (m, k) => (k in v ? String(v[k] ?? '') : m))
+/** Перед отправкой в модель (23.11.2026): во всех текстах настроек — {lang} (польский…), {langHow} (по-польски…), {topic} — из lang и topic.
+ *  Остальные метки ({question}, {answer}, {id}…) не трогаем — их подставляют дальше */
+export function kpReady(c: KpCfg): KpCfg {
+  const v = { lang: langRu(c.lang), langHow: LANG_HOW[c.lang] ?? 'по-польски', topic: c.topic || TOPIC }
+  const o: any = { ...c }
+  for (const [k, x] of Object.entries(o)) if (typeof x === 'string' && k !== 'lang' && k !== 'topic') o[k] = fill(x, v)
+  return o
+}
 
 /** умолчания кода для формы (без настроек курса) — от них считаются отличия настроек упражнения курса (presetJson.ts) */
 export const kpDefaults = (form: any): KpCfg => kpCode(form)

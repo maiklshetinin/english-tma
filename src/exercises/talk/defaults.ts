@@ -30,6 +30,12 @@ export const EN_PROMPT = 'You are a friendly native speaker having a casual ever
   'If the user makes a noticeable mistake — gently correct it in one short sentence and keep the conversation going. After 8–10 exchanges, thank them and give brief feedback: what was good, what to practise.'
 export const EN_LOCK = 'IMPORTANT: The user speaks exclusively in English, often with a Russian or Ukrainian accent and with mistakes — it is still English. Always understand their speech as English and reply only in English. Do not switch to another language.'
 export const EN_OPENER = 'Hi! Please start the conversation.'
+// испанский (23.11.2026): те же три текста, что у английского
+export const ES_PROMPT = 'Eres un hablante nativo amable que mantiene una conversación cotidiana e informal en español. Habla solo en español, con naturalidad y calidez. ' +
+  'Haz una sola pregunta corta cada vez sobre la vida diaria: planes, comida, aficiones, trabajo o estudios, viajes. Espera la respuesta. Si algo no queda claro, haz una pregunta breve. ' +
+  'Si el usuario comete un error notable, corrígelo con amabilidad en una frase corta y sigue la conversación. Después de 8–10 intercambios, dale las gracias y una breve valoración: qué estuvo bien y qué practicar.'
+export const ES_LOCK = 'IMPORTANTE: El usuario habla exclusivamente en español, a menudo con acento ruso o ucraniano y con errores: sigue siendo español. Entiende siempre lo que dice como español y responde solo en español. No cambies a otro idioma.'
+export const ES_OPENER = '¡Hola! Empieza la conversación, por favor.'
 
 /** Языки разговора: код на замке, как сказать по-русски, просьба к Gemini вернуться к языку, умолчания роли / замка / первой реплики,
  *  «чужой язык» в ответе Gemini (2+ таких слова — просим вернуться) */
@@ -37,6 +43,7 @@ export const LANGS = {
   'pl-PL': { code: 'PL', ru: 'польский', how: 'по-польски', guard: 'Odpowiadaj wyłącznie po polsku.', prompt: '', lock: '', opener: '', alien: /\b(the|and|you|your|what|is|are|this|that|with)\b/gi },
   'en-US': { code: 'EN', ru: 'английский', how: 'по-английски', guard: 'Please reply only in English.', prompt: EN_PROMPT, lock: EN_LOCK, opener: EN_OPENER, alien: /[ąćęłńśźż]|\b(jest|nie|się|tak|czy|dzień|proszę|dobrze)\b/gi },
   'en-GB': { code: 'EN', ru: 'английский (британский)', how: 'по-английски', guard: 'Please reply only in English.', prompt: EN_PROMPT, lock: EN_LOCK, opener: EN_OPENER, alien: /[ąćęłńśźż]|\b(jest|nie|się|tak|czy|dzień|proszę|dobrze)\b/gi },
+  'es-ES': { code: 'ES', ru: 'испанский', how: 'по-испански', guard: 'Responde solo en español.', prompt: ES_PROMPT, lock: ES_LOCK, opener: ES_OPENER, alien: /[ąćęłńśźż]|\b(the|and|you|your|what|are|this|that|with|jest|nie|się|tak)\b/gi },
 }
 export type Lang = keyof typeof LANGS
 export const langOf = (v: unknown): Lang => (typeof v === 'string' && v in LANGS ? v as Lang : LANG)

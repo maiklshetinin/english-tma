@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { checkAnswer, PASS, SYSTEM } from './ai'
-import { CHAT } from '../exercises/kp/defaults'
+import { CHAT, TOPIC, fill } from '../exercises/kp/defaults'
 import { stepsFromJson, stepIssue, fishStep } from './lesson'
 
 // поддельный сервер: запоминает запрос, отвечает заданным
@@ -15,7 +15,7 @@ describe('Проверка ответа через мост', () => {
   it('запрос на /ai/check, оценка и зачёт от 60 %', async () => {
     const { f, calls } = fake(200, { score: 64.4, missed: ['подарки в ботинках'], feedback: 'Dobrze!', site: 'Gemini' })
     const r = await checkAnswer(q, f)
-    expect(calls[0]).toEqual({ path: '/ai/check', body: { question: q.question, reference: q.reference, answer: q.answer, prompt: SYSTEM, message: CHAT.message, format: CHAT.format } })          // в чат — ровно JSON экрана (умолчания моста)
+    expect(calls[0]).toEqual({ path: '/ai/check', body: { question: q.question, reference: q.reference, answer: q.answer, prompt: fill(SYSTEM, { topic: TOPIC, lang: 'польский' }), message: CHAT.message, format: CHAT.format } })          // в чат — ровно JSON экрана (умолчания моста)
     expect(r).toEqual({ score: 64, missed: ['подарки в ботинках'], feedback: 'Dobrze!', site: 'Gemini', ms: expect.any(Number), ok: true })
     expect(PASS).toBe(60)
   })

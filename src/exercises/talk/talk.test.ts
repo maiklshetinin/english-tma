@@ -5,7 +5,7 @@ import { DEF_PROMPT, LOCK, OPENER, EN_PROMPT, EN_LOCK, EN_OPENER, LANGS, EVAL_PR
 // «Разговор с Gemini» (только польский): JSON экрана показывает всё, что уходит в Live-модель, а в экране хранятся только отличия (20.11.2026)
 describe('«Разговор с Gemini»: JSON экрана', () => {
   it('пустой экран → stepJson со всеми умолчаниями', () => {
-    expect(stepJson({ id: 'a', kind: 'talk', text: '' })).toEqual({ kind: 'talk', text: '' })          // в JSON экрана — только своё
+    expect(stepJson({ id: 'a', kind: 'talk', text: '' })).toEqual({ kind: 'talk', text: '', ...talkCfg({}) })          // 23.11.2026: как на плитке — все настройки
     const j: any = { kind: 'talk', text: '', ...talkCfg({}) }
     expect(j).toEqual({ kind: 'talk', text: '', lang: 'pl-PL', prompt: DEF_PROMPT, lock: LOCK, opener: OPENER,
       voice: 'Kore', model: 'auto', silenceMs: 1200, endSens: 'low', temperature: null, noiseSuppression: false,
@@ -17,7 +17,7 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     const s: Step = { id: 'a', kind: 'talk', text: 'Rozmowa' }
     expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), voice: 'Puck', silenceMs: 2000 }))).toBe('')
     expect(s).toEqual({ id: 'a', kind: 'talk', text: 'Rozmowa', voice: 'Puck', silenceMs: 2000 })
-    expect(stepJson(s)).toEqual({ kind: 'talk', text: 'Rozmowa', voice: 'Puck', silenceMs: 2000 }); expect(talkCfg(s)).toMatchObject({ lock: LOCK, opener: OPENER, prompt: DEF_PROMPT })
+    expect(stepJson(s)).toEqual({ kind: 'talk', text: 'Rozmowa', ...talkCfg(s) }); expect(talkCfg(s)).toMatchObject({ lock: LOCK, opener: OPENER, prompt: DEF_PROMPT })
   })
 
   it('свои lock / opener / model / prompt сохраняются; temperature, endSens, noiseSuppression — тоже', () => {

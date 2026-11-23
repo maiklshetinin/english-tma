@@ -21,7 +21,7 @@ import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/k
 import { kpLive } from '../../utils/kplive'
 import { recordMic, transcribeFile } from '../../utils/sttfile'
 import VoiceNote from '../../components/VoiceNote.vue'
-import { kpCfg, fill } from './defaults'
+import { kpCfg, fill, kpReady, langHow } from './defaults'
 import { ai } from '../../utils/gemini'
 import J from './kp.json'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
@@ -164,7 +164,7 @@ async function sendNote() {
   const n = note.value; if (!n) return
   n.status = 'sending'; n.err = ''; dic.value = 'sending'
   try {
-    const c = kpCfg(props.step)          // промпт и просьба расшифровки, язык — из JSON экрана (sttPrompt, sttAsk, lang)
+    const c = kpReady(kpCfg(props.step))          // промпт и просьба расшифровки, язык — из JSON экрана (sttPrompt, sttAsk, lang)
     const r = await transcribeFile({ blob: n.blob, lang: c.lang, prompt: c.sttPrompt, ask: c.sttAsk })
     n.model = checkName(r.model); n.ms = r.ms
     if (!r.text) { n.status = 'error'; n.err = 'Речи не слышно — запишите ещё раз, поближе к микрофону' } else { n.status = 'done'; typeIn(r.text) }
@@ -236,7 +236,7 @@ async function discuss() {
   const key = firstKey(); tkErr.value = ''
   if (!key) { tkErr.value = 'Нужен ключ Gemini в профиле'; return }
   tk.value = 'connecting'; tkLines.value = []
-  const c = kpCfg(props.step)          // промпт разбора, первая реплика, Live-модель, голос, язык — из JSON экрана (exercises/kp/defaults.ts)
+  const c = kpReady(kpCfg(props.step))          // промпт разбора, первая реплика, Live-модель, голос, язык — из JSON экрана (exercises/kp/defaults.ts)
   let m = c.liveModel !== 'auto' ? c.liveModel : ''
   if (!m) m = (await liveModels(key))[0] || ''
   if (!m) { tk.value = 'idle'; tkErr.value = 'Google не дал ключу Live-модели'; return }
@@ -372,7 +372,7 @@ function jsApply() {
     <VoiceNote v-if="fileMode && note && !p.edit" :url="note.url" :peaks="note.peaks" :sec="note.sec" :status="note.status" :model="note.model" :ms="note.ms" :err="note.err" @retry="sendNote" />
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
     <div v-else-if="!p.st.done && fileMode" class="kaw" :class="{ dic: dicCloud }">
-      <textarea :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
+      <textarea :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" :placeholder="'Надиктуйте или напишите ответ ' + langHow(kpCfg(step).lang) + '…'" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
       <!-- черновик диктовки — облаком поверх низа поля (21.11.2026): раньше строкой под полем — появлялась и пропадала, всё ниже прыгало -->
       <div v-if="dicCloud" class="kdd" :class="{ er: dicErr && !dicDraft }" aria-live="polite"><small>{{ dicErr && !dicDraft ? 'Диктовка' : dicWho }}</small>{{ dicShow }}</div>
     </div>
@@ -427,7 +427,7 @@ function jsApply() {
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit">
     <div v-if="!fileMode" class="kcm" :class="[dic, { busy: p.st.busy, off: idle }]" @pointerdown.stop>
       <div class="kcw"><div class="kchl" aria-hidden="true"><template v-for="(sg, i) in cyrSegs" :key="i"><mark v-if="sg.c">{{ sg.t }}</mark><template v-else>{{ sg.t }}</template></template>{{ '\n' }}</div>
-      <textarea :id="'kpa-' + step.id" ref="ta" class="kci" rows="1" :readonly="p.st.busy" placeholder="Ответьте по-польски — напишите или нажмите микрофон" @input="p.st.text = $event.target.value; fit()" @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" /></div>
+      <textarea :id="'kpa-' + step.id" ref="ta" class="kci" rows="1" :readonly="p.st.busy" :placeholder="'Ответьте ' + langHow(kpCfg(step).lang) + ' — напишите или нажмите микрофон'" @input="p.st.text = $event.target.value; fit()" @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" /></div>
       <div v-if="dicDraft || dic === 'live' || dic === 'connecting' || dicErr" class="kcd" :class="{ er: dicErr && !dicDraft && dic === 'idle' }" aria-live="polite">{{ dicDraft || (dic === 'connecting' ? 'Подключаюсь…' : dic === 'live' ? 'Говорите — ' + dicWho.replace(/ слышит$/, '') + ' слушает…' : dicErr) }}</div>
       <div class="kcr">
         <template v-if="dic === 'live' || dic === 'connecting'">

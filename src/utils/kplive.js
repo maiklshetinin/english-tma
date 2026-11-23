@@ -6,7 +6,7 @@
 import { reactive } from 'vue'
 import { startTalk, liveModels, liveName, firstKey } from './live'
 import { kpPlain } from './ai'
-import { kpCfg, fill } from '../exercises/kp/defaults'
+import { kpCfg, kpReady, fill } from '../exercises/kp/defaults'
 
 export const kpLive = reactive({})
 const QK = 'tma.kp.quiet'
@@ -20,7 +20,7 @@ const tool = (description) => [{ name: 'submit_grade', description,
 export async function checkLive(q, id) {
   kpLive[id]?.stop?.()
   const key = firstKey(); if (!key) throw new Error('нет ключей Gemini')
-  const c = q.cfg ?? kpCfg({ prompt: q.prompt, pass: q.pass })          // настройки экрана: livePrompt, message, liveAsk, liveMore
+  const c = kpReady(q.cfg ?? kpCfg({ prompt: q.prompt, pass: q.pass }))          // {topic}, {lang}, {langHow} — подставлены          // настройки экрана: livePrompt, message, liveAsk, liveMore
   const t0 = Date.now(), need = Number.isFinite(q.pass) ? q.pass : c.pass
   let model = c.liveModel !== 'auto' ? c.liveModel : ''          // Live-модель и голос — из JSON экрана (liveModel, voice)
   if (!model) model = (await liveModels(key))[0] || ''

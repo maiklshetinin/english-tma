@@ -4,7 +4,7 @@
 // «ключ + модель» отдыхает, следующий ключ. Не вышло совсем (нет ключей, квота, сеть) — проверка уходит через мост, как раньше.
 import { ai, mark, retryMs, errText, mask } from './gemini'
 import { kpPlain, checkAnswer } from './ai'
-import { kpCfg, fill } from '../exercises/kp/defaults'
+import { kpCfg, kpReady, fill } from '../exercises/kp/defaults'
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models'
 const MK = 'tma.kp.models', PK = 'tma.kp.model', QK = 'tma.kp.quota'
@@ -66,7 +66,7 @@ async function once(key, model, prompt, user, fetcher, schema = true, thinkOff =
 /** Проверка напрямую. q.cfg — настройки экрана (kpCfg: формат, шаблон, температура, размышления); нет — умолчания.
  *  → { score, missed, feedback, ok, site: 'Gemini', api: true, model, key, ms } */
 export async function checkDirect(q, { model = '', fetcher = fetch } = {}) {
-  const c = q.cfg ?? kpCfg({ prompt: q.prompt, pass: q.pass })
+  const c = kpReady(q.cfg ?? kpCfg({ prompt: q.prompt, pass: q.pass }))          // {topic}, {lang}, {langHow} — подставлены
   const t0 = Date.now(), need = Number.isFinite(q.pass) ? q.pass : c.pass
   if (!ai.keys.length) { const e = new Error('нет ключей Gemini'); e.nokeys = true; throw e }
   const own = (v) => (v && v !== 'live' ? v : '')          // 'live' — проверка голосовой моделью (utils/kplive.js), тут — запасная текстовая

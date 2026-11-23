@@ -16,8 +16,8 @@
 // Файл в поле image / audio / video: https-ссылка (фото и озвучка карточек), ключ файла курса в S3 (t/…/c/…)
 // или «idb:<id>» — файл пока только в этом браузере (без сервера или до загрузки), на сервер такой не уходит.
 
-import { talkFields, type EndSens } from '../exercises/talk/defaults'
-import { kpFields } from '../exercises/kp/defaults'
+import { talkFields, talkCfg, type EndSens } from '../exercises/talk/defaults'
+import { kpFields, kpShown } from '../exercises/kp/defaults'
 
 export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk' | 'stt'
 export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
@@ -441,7 +441,12 @@ export function keepLocalFiles(incoming: Step[] | undefined, local: Step[] | und
 /** Экран → JSON для копирования: без id и без файлов «только в этом браузере» */
 export function stepJson(s: Step): Omit<Step, 'id'> {
   const { id: _id, ...rest } = stepsOut([s])[0]
-  return rest          // 21.11.2026: у «Ответа по смыслу» и «Разговора» — только своё (вопрос, эталон, исключения); общие промпты и настройки — «{ }» на плитке меню (src/exercises/presetJson.ts), что уйдёт — «Как собирается»
+  // 23.11.2026: как на плитке — у «Ответа по смыслу» и «Разговора» все настройки упражнения с действующими значениями
+  // (своё экрана ← курс ← умолчание): видно, что можно поменять. «Применить» оставит у экрана только то, что отличается от курса
+  // (kpFields / talkFields) — не трогали, значит экран и дальше берёт общее из курса
+  if (s.kind === 'kp') return { ...rest, ...kpShown(s) } as any
+  if (s.kind === 'talk') { const { ptt: _p, avatar: _a, busuu: _b, ...c } = talkCfg(s) as any; return { ...rest, ...c } }
+  return rest
 }
 /** Правка экрана его JSON-ом (кнопка «{ }» → «Править», 19.11.2026): экран s получает поля из текста, id остаётся.
  *  Файлы, ещё не загруженные на сервер (idb: / blob:), сохраняются, если в JSON то же значение. Ошибка — текст, иначе '' */

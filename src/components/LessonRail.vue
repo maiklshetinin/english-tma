@@ -236,7 +236,7 @@ function howOf(s) {
   if (jsonEdit[s.id] != null) { try { raw = JSON.parse(jsonEdit[s.id]) } catch { return { parts: [], warn: ['JSON пока не разбирается — проверьте кавычки и запятые'] } } }
   return assemble(raw ?? stepJson(s))
 }
-const ownNote = (s) => { const o = howOf(s).own ?? []; return (o.length ? 'Своё у экрана: ' + o.join(', ') + '. ' : 'У экрана своё — только вопрос и эталон. ') + 'Остальное — общее упражнения в курсе («{ }» на плитке в меню Exercise).' }
+const ownNote = (s) => { const o = howOf(s).own ?? []; return (o.length ? 'Своё у экрана: ' + o.join(', ') + '. ' : 'У экрана своих настроек нет. ') + 'Остальное — как в курсе («{ }» на плитке в меню Exercise); поменяете здесь — только у этого экрана.' }
 function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { if (copied.value === s.id) copied.value = null }, 2000) }
 </script>
 
@@ -275,7 +275,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
         <button v-if="!readonly" class="ib" title="Удалить экран" @pointerdown.stop @click="removeStep(s)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button>
       </div>
       <!-- JSON экрана (кнопка «{ }», 21.11.2026) — сразу большое окно: посмотреть, править, «Как собирается», скопировать -->
-      <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :schema="stepSchema(s)" :kind="s.kind" :readonly="readonly" :title="'JSON экрана · ' + tplTitle(s)" :sub="readonly ? 'Экран другого курса — только посмотреть и скопировать' : 'Своё у экрана — вопрос и эталон; остальное общее для курса («{ }» на плитке в меню Exercise)'" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)">
+      <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :schema="stepSchema(s)" :kind="s.kind" :readonly="readonly" :title="'JSON экрана · ' + tplTitle(s)" :sub="readonly ? 'Экран другого курса — только посмотреть и скопировать' : 'Все настройки — с текущими значениями. Поменяете — только у этого экрана; не трогали — берётся из курса («{ }» на плитке)'" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)">
         <template #actions><button class="mcp" :class="{ ok: copied === s.id }" title="Скопировать экран — потом Ctrl+V на холсте или «Вставить» на ветке; JSON — образец для ИИ" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать экран' }}</button></template>
       </JsonModal>
       <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: isEdit(s) }]" :data-id="s.id" :data-view="isEdit(s) ? 0 : 1" :data-edit="isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
