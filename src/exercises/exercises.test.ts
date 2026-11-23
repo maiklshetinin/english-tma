@@ -186,14 +186,11 @@ describe('часть 5: миниатюра — уменьшенный шабло
   it('у каждого шаблона меню — свой экран с «рыбой», нажатия выключены; «Готовый урок» — стопка', async () => {
     const { default: ExerciseMini } = await import('../components/ExerciseMini.vue')
     for (const t of TEMPLATES) {
-      const w = mount(ExerciseMini, { props: { id: t.id, size: 'tray', live: true } })          // live — живой экран (так снимают картинки, tools/minis)
+      const w = mount(ExerciseMini, { props: { id: t.id, size: 'tray' } })
       expect(w.find('.mini.xmt .body').classes()).toContain('x-' + t.kind)
       expect(w.find('.mini').attributes('inert')).toBeDefined()
-      // обычная плитка — картинка шаблона (public/minis/<id>.webp), живого экрана нет (23.11.2026)
-      const im = mount(ExerciseMini, { props: { id: t.id, size: 'tray' } })
-      expect(im.find('img.mim').attributes('src')).toContain('minis/' + t.id + '.webp'); expect(im.find('.lp').exists()).toBe(false)
     }
-    const pg = mount(ExerciseMini, { props: { id: 'pg_odd', size: 'rail', live: true } })
+    const pg = mount(ExerciseMini, { props: { id: 'pg_odd', size: 'rail' } })
     expect(pg.find('.lp').classes()).toEqual(expect.arrayContaining(['book', 'bkpg'])); expect(pg.find('.bkh').text()).toContain('Circle')
     expect(mount(ExerciseMini, { props: { id: 'lesson' } }).find('.ms').exists()).toBe(true)
   })

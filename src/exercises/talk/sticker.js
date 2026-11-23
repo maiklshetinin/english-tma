@@ -26,3 +26,15 @@ export function prepSticker(data) {
   for (const l of data?.layers ?? []) for (const [nm, t, cl] of Object.values(MOUTHS)) if (l.nm === nm) { freeze(l.shapes, t); l.ks.o = { a: 0, k: 100 }; l.cl = cl }
   return data
 }
+
+/** Текст стикера (.tgs = Lottie JSON в gzip): скачать и распаковать один раз на страницу (23.11.2026) — персонажей на холсте много,
+ *  каждый берёт отсюда свою копию данных (JSON.parse), а не качает и не распаковывает файл сам. Ошибка — в следующий раз заново */
+const texts = new Map()
+export function stickerText(src) {
+  if (!texts.has(src)) texts.set(src, (async () => {
+    if (typeof DecompressionStream === 'undefined' || typeof fetch === 'undefined') throw new Error('нет распаковки')
+    const r = await fetch(src); if (!r.ok || !r.body) throw new Error('нет файла')
+    return await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text()
+  })().catch((e) => { texts.delete(src); throw e }))
+  return texts.get(src)
+}

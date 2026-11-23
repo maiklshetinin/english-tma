@@ -52,7 +52,8 @@ watch(step, (v) => emit('step', v ?? null), { immediate: true })          // к�
 const isFinal = computed(() => i.value >= (retry ? seq.value.length : props.steps.length))
 const pct = computed(() => props.pct != null ? props.pct : props.single ? (props.steps.length ? Math.round(Math.min(i.value + 1, props.steps.length) / (props.steps.length + 1) * 100) : 0)
   : Math.round(i.value / ((retry ? seq.value.length : props.steps.length) || 1) * 100))
-const src = (v, k) => (v ? props.resolve(v, k) : '')
+// экран не выбран на холсте (idle, 23.11.2026): у звука и видео нет адреса — браузер ничего не качает; выбрали — адрес появляется
+const src = (v, k) => (!v || (props.idle && (k === 'audio' || k === 'video')) ? '' : props.resolve(v, k))
 
 // ---- состояние текущего экрана ----
 let au = null

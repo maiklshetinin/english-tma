@@ -1,31 +1,22 @@
 <script setup>
-// Миниатюра экрана (меню «Exercise», плитки на ветке урока): уменьшенный экран ученика с «рыбой» шаблона (TEMPLATES в utils/lesson.ts) —
-// полоска прогресса, экран, подвал с кнопкой. size: 'tray' / 'rail' — 124×156, как в меню «Exercise».
-// 23.11.2026: показываем КАРТИНКУ шаблона — public/minis/<шаблон>.webp (тёмная тема — .dark.webp), снятую с живой миниатюры
-// (tools/minis/shoot.py). Плитки одного типа одинаковые — одна картинка на все, а не живой экран (LessonPlayer) в каждой плитке.
-// Картинки нет (новый шаблон, не пересняли) или live — живой экран, как раньше: нажатия выключены, таймеры и анимации стоят (idle).
-// Не шаблон экрана (например, «Готовый урок») — стопка карточек.
-import { computed, ref, watch } from 'vue'
+// Миниатюра экрана (меню «Exercise», плитки на ветке урока): сам экран ученика — LessonPlayer с шаблоном из src/exercises
+// и «рыбой» шаблона (TEMPLATES в utils/lesson.ts), уменьшенный. Точь-в-точь как в уроке: полоска прогресса, экран, подвал с кнопкой.
+// Поменяли шаблон или плеер — поменялся и значок (18.11.2026). Нажатия выключены, звук и видео не грузятся.
+// size: 'tray' / 'rail' — 124×156, как в меню «Exercise». idle (23.11.2026) — таймеры и анимации шаблона в значке стоят. Не шаблон экрана (например, «Готовый урок») — стопка карточек.
+import { computed } from 'vue'
 import LessonPlayer from './LessonPlayer.vue'
 import { TEMPLATES } from '../utils/lesson'
-import { theme } from '../composables/useTelegram'
-const props = defineProps({ id: { type: String, required: true }, size: { type: String, default: 'tray' }, live: Boolean })
+const props = defineProps({ id: { type: String, required: true }, size: { type: String, default: 'tray' } })
 const ALIAS = { spell: 'order', speak: 'sayword' }          // старые id шаблонов
 const bid = computed(() => { const b = props.id.replace(/^pg_/, ''); return ALIAS[b] ?? b })
 const steps = computed(() => { const t = TEMPLATES.find(x => x.id === bid.value); if (!t) return null; const s = t.make(); if (props.id.startsWith('pg_')) s.bs = 'page'; return [s] })
 const resolve = (v, k) => (k === 'image' ? v : '')          // в значке — только картинки
 const small = computed(() => props.size === 'tray' || props.size === 'rail')
-const tid = computed(() => (props.id.startsWith('pg_') ? 'pg_' + bid.value : bid.value))
-const img = computed(() => import.meta.env.BASE_URL + 'minis/' + tid.value + (theme.value === 'dark' ? '.dark' : '') + '.webp?v=' + __APP_COMMIT__)
-const failed = ref(false)
-watch(img, () => { failed.value = false })
-const book = computed(() => !!steps.value?.[0]?.bk), page = computed(() => book.value && steps.value[0].bs === 'page')
 </script>
 
 <template>
-  <span v-if="steps" class="mini xmt" :class="[size, { bkb: book, bkp: page }]" inert aria-hidden="true">
-    <img v-if="!live && small && !failed" class="mim" :src="img" alt="" decoding="async" loading="lazy" draggable="false" @error="failed = true" />
-    <span v-else class="sc" :class="{ big: !small }"><LessonPlayer :steps="steps" :resolve="resolve" embedded mini idle :pct="30" /></span>
+  <span v-if="steps" class="mini xmt" :class="size" inert aria-hidden="true">
+    <span class="sc" :class="{ big: !small }"><LessonPlayer :steps="steps" :resolve="resolve" embedded mini idle :pct="30" /></span>
   </span>
   <span v-else class="mini" :class="[id, size]"><span class="ms"><i /><i /><i /></span></span>
 </template>
@@ -40,9 +31,7 @@ const book = computed(() => !!steps.value?.[0]?.bk), page = computed(() => book.
 .sc.big { height: calc(102px * 460 / 148); transform: scale(calc(148 / 460)) }
 .mini.xmt .sc :deep(.lp) { height: 100%; border-radius: 0 }
 .mini.xmt .sc :deep(.lp > .body) { flex: 1 1 auto; min-height: 0; overflow: hidden }
-.mini.xmt:has(.lp.book), .mini.xmt.bkb { background: #fffdf6; border-color: #eadfc4 } .mini.xmt:has(.lp.bkpg), .mini.xmt.bkp { background: #fff; border-color: #d3d1c7 }
-/* картинка шаблона — во весь значок (рамку рисует сам значок) */
-.mim { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left }
+.mini.xmt:has(.lp.book) { background: #fffdf6; border-color: #eadfc4 } .mini.xmt:has(.lp.bkpg) { background: #fff; border-color: #d3d1c7 }
 /* «Готовый урок» и прочее — стопка карточек */
 .mini .ms { position: relative; width: 120px; height: 90px; transform: scale(.82); transform-origin: top center }
 .mini .ms i { position: absolute; display: block; width: 84px; height: 62px; border: 1px solid #e3e3e3; border-radius: 8px; background: var(--card); box-shadow: 0 2px 5px rgba(0, 0, 0, .08) }

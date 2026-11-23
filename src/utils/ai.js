@@ -1,6 +1,7 @@
 // Проверка ответа по смыслу (упражнение «Ответ по смыслу», src/exercises/kp) — 19.11.2026.
 // Ключей нет: сервер отдаёт задание скрипту-мосту во вкладке с чатом (ChatGPT / Gemini / Claude) у преподавателя и ждёт ответ
 // чата (server/ai.ts, public/ai-bridge.user.js). Состояние моста и его ключ — вкладка «ИИ» панели разработчика (DevAi.vue).
+import { ref } from 'vue'
 import { apiRequest } from '../firebase'
 
 // порог и промпт по умолчанию — в exercises/kp/defaults.ts (там же все настройки моделей проверки, 20.11.2026)
@@ -15,13 +16,21 @@ export const kpPlain = (t) => String(t ?? '').replace(/\*\*(.+?)\*\*/g, '$1').re
 
 /** Мост в сети и с какими чатами: { online, sites: ['Gemini', …] }. Ответ живёт 15 с — экраны урока не дёргают сервер каждый раз */
 let stCache = null
+// 23.11.2026: последний статус — общий для всех экранов (bridgeLast): невыбранные экраны на холсте показывают его, сами не спрашивают;
+// одновременные вопросы (много экранов сразу) — одним запросом (stWait)
+export const bridgeLast = ref(null)
+let stWait = null
 export async function bridgeStatus(request = apiRequest) {
   if (stCache && Date.now() - stCache.at < 15_000) return stCache.v
-  const r = await request('/ai/status')
-  const b = r.ok ? await r.json().catch(() => null) : null
-  const v = { online: !!b?.online, sites: Array.isArray(b?.sites) ? b.sites.map(String) : [] }
-  stCache = { at: Date.now(), v }
-  return v
+  if (stWait) return stWait
+  stWait = (async () => {
+    const r = await request('/ai/status')
+    const b = r.ok ? await r.json().catch(() => null) : null
+    const v = { online: !!b?.online, sites: Array.isArray(b?.sites) ? b.sites.map(String) : [] }
+    stCache = { at: Date.now(), v }; bridgeLast.value = v
+    return v
+  })().finally(() => { stWait = null })
+  return stWait
 }
 /** Значок чата (файлы — public/ai/); нет — пусто, показываем только название */
 const AI_ICON = { ChatGPT: 'gpt.svg', Gemini: 'gemini.svg', Claude: 'Claude Spark - Clay.svg' }
