@@ -2,7 +2,7 @@
 // Миниатюра экрана (меню «Exercise», плитки на ветке урока): сам экран ученика — LessonPlayer с шаблоном из src/exercises
 // и «рыбой» шаблона (TEMPLATES в utils/lesson.ts), уменьшенный. Точь-в-точь как в уроке: полоска прогресса, экран, подвал с кнопкой.
 // Поменяли шаблон или плеер — поменялся и значок (18.11.2026). Нажатия выключены, звук и видео не грузятся.
-// size: 'tray' / 'rail' — 124×156, как в меню «Exercise». Не шаблон экрана (например, «Готовый урок») — стопка карточек.
+// size: 'tray' / 'rail' — 124×156, как в меню «Exercise». idle (23.11.2026) — таймеры и анимации шаблона в значке стоят. Не шаблон экрана (например, «Готовый урок») — стопка карточек.
 import { computed } from 'vue'
 import LessonPlayer from './LessonPlayer.vue'
 import { TEMPLATES } from '../utils/lesson'
@@ -16,7 +16,7 @@ const small = computed(() => props.size === 'tray' || props.size === 'rail')
 
 <template>
   <span v-if="steps" class="mini xmt" :class="size" inert aria-hidden="true">
-    <span class="sc" :class="{ big: !small }"><LessonPlayer :steps="steps" :resolve="resolve" embedded mini :pct="30" /></span>
+    <span class="sc" :class="{ big: !small }"><LessonPlayer :steps="steps" :resolve="resolve" embedded mini idle :pct="30" /></span>
   </span>
   <span v-else class="mini" :class="[id, size]"><span class="ms"><i /><i /><i /></span></span>
 </template>

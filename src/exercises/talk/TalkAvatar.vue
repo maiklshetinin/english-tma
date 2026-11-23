@@ -9,7 +9,8 @@
 // Не загрузился (нет файла, старый браузер без DecompressionStream) — персонажа просто нет, разговор работает.
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { prepSticker } from './sticker'
-const props = defineProps({ state: { type: String, default: 'idle' }, out: { type: Function, default: null }, inp: { type: Number, default: 0 } })
+const props = defineProps({ state: { type: String, default: 'idle' }, out: { type: Function, default: null }, inp: { type: Number, default: 0 },
+  idle: Boolean })          // экран не выбран на холсте редактора (23.11.2026): персонаж замер — без кадров и «дыхания»
 const box = ref(null), wrap = ref(null), ok = ref(true), mode = ref('hi')
 const SRC = import.meta.env.BASE_URL + 'talk/avatar.tgs?v=' + __APP_COMMIT__          // ?v= — новая сборка не возьмёт старый файл из кэша
 const CALM = 100, THINK = [100, 120], HI = [0, 90], MOUTH_HI = [12, 84]          // кадры стикера
@@ -22,7 +23,7 @@ async function load() {
   const { default: lottie } = await import('lottie-web/build/player/lottie_light')
   if (dead) return
   anim = lottie.loadAnimation({ container: box.value, renderer: 'svg', loop: false, autoplay: false, animationData: data, rendererSettings: { preserveAspectRatio: 'xMidYMid meet' } })
-  anim.addEventListener('DOMLoaded', () => { mo = box.value?.querySelector('.ava-mo'); mc = box.value?.querySelector('.ava-mc'); mouth(false); go(props.state === 'connecting' ? 'think' : 'hi'); tick() })
+  anim.addEventListener('DOMLoaded', () => { mo = box.value?.querySelector('.ava-mo'); mc = box.value?.querySelector('.ava-mc'); mouth(false); go(props.state === 'connecting' ? 'think' : props.idle ? 'idle' : 'hi'); tick() })          // не выбран — без взмаха, сразу спокойная поза
   anim.addEventListener('complete', () => { if (mode.value === 'hi' || mode.value === 'bye') go('idle') })
 }
 /** Спокойная поза: сначала сбросить кусок анимации — иначе lottie считает кадр от его начала (после «думает» персонаж пропадал) */
@@ -39,7 +40,8 @@ function go(m) {
   else calm()
 }
 function tick() {
-  if (dead || !anim) return
+  raf = 0
+  if (dead || !anim || props.idle) return          // не выбран — кадры не считаем; выбрали — tick снова (watch ниже)
   const now = performance.now()
   if (props.state === 'live') {
     lvl = lvl * 0.45 + (props.out?.() || 0) * 0.55
@@ -60,17 +62,18 @@ watch(() => props.state, (s, was) => {
   else if (s === 'live') go('idle')
   else if (was === 'live' || was === 'connecting') go('bye')          // «Завершить» — машет на прощание
 })
+watch(() => props.idle, (v) => { if (v) { cancelAnimationFrame(raf); raf = 0; anim?.pause() } else if (anim && !raf) tick() })
 onMounted(() => { load().catch(() => { ok.value = false }) })
 onBeforeUnmount(() => { dead = true; cancelAnimationFrame(raf); anim?.destroy() })
 </script>
 
 <template>
-  <div v-if="ok" class="avw"><div ref="wrap" class="avb"><div ref="box" class="ava" :class="mode" aria-hidden="true" /></div></div>
+  <div v-if="ok" class="avw" :class="{ still: idle }"><div ref="wrap" class="avb"><div ref="box" class="ava" :class="mode" aria-hidden="true" /></div></div>
 </template>
 
 <style scoped>
 .avw { display: grid; place-items: center; margin-bottom: -4px; pointer-events: none }
-.avb { animation: br 3.6s ease-in-out infinite } @keyframes br { 50% { translate: 0 -2px; scale: 1.012 } }
+.avb { animation: br 3.6s ease-in-out infinite } .avw.still .avb { animation: none } @keyframes br { 50% { translate: 0 -2px; scale: 1.012 } }
 .ava { width: 140px; height: 140px; transition: transform .35s ease }          /* 21.11.2026: меньше — чату больше места */
 .ava.listen { transform: rotate(-4deg) translateX(-6px) }
 .ava.think { transform: rotate(2deg) translateY(-3px) }

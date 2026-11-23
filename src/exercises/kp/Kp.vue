@@ -54,7 +54,11 @@ const refBlocks = computed(() => {
 const bridge = ref(null)
 const loadBridge = () => bridgeStatus().then((b) => { bridge.value = b }).catch(() => { bridge.value = null })
 let brTm = 0
-onMounted(() => { if (p.edit) return; loadBridge(); if (props.part === 'fb') brTm = setInterval(() => { if (!p.st.done) loadBridge() }, 15_000) })
+// экран не выбран на холсте редактора (p.idle, 23.11.2026) — мост не опрашиваем; выбрали — сразу свежий статус и опрос раз в 15 с
+const idle = computed(() => !!p?.idle)
+function brRun() { clearInterval(brTm); brTm = 0; if (p.edit || idle.value) return; loadBridge(); if (props.part === 'fb') brTm = setInterval(() => { if (!p.st.done) loadBridge() }, 15_000) }
+onMounted(() => { if (p.edit) return; if (idle.value) loadBridge(); else brRun() })          // невыбранный — один раз, чтобы подвал не был пустым
+watch(idle, brRun)
 onBeforeUnmount(() => clearInterval(brTm))
 const by = computed(() => (checked.value && r.value.site ? { t: 'проверил', api: !!r.value.api, live: !!r.value.live, model: r.value.model, sites: [r.value.site], sec: Number.isFinite(r.value.ms) ? (r.value.ms / 1000).toFixed(1).replace('.', ',') + ' с' : '' } : null))
 // 19.11.2026: программы диктовки вставляют текст в поле напрямую, без события input — v-model этого не видит («0 слов»,
@@ -63,7 +67,10 @@ const by = computed(() => (checked.value && r.value.site ? { t: 'провери�
 const ta = ref(null)
 const sync = () => { const v = ta.value?.value; if (typeof v === 'string' && v !== p.st.text && !p.st.done) p.st.text = v }
 let syncTm = 0
-onMounted(() => { if (ta.value) ta.value.value = p.st.text || ''; syncTm = setInterval(sync, 500) })
+// сверка поля раз в полсекунды — только у выбранного экрана (у невыбранного поле не трогают — inert)
+const syncRun = () => { clearInterval(syncTm); syncTm = 0; if (!idle.value) syncTm = setInterval(sync, 500) }
+onMounted(() => { if (ta.value) ta.value.value = p.st.text || ''; syncRun() })
+watch(idle, (v) => { if (v) sync(); syncRun() })          // уходят с экрана — последний раз сверить поле
 watch(() => p.st.text, (v) => { if (ta.value && ta.value.value !== (v || '')) ta.value.value = v || '' })
 watch(ta, (el) => { if (el) el.value = p.st.text || '' }, { flush: 'sync' })          // поле появилось заново (повтор вопроса) — со своим текстом
 onBeforeUnmount(() => clearInterval(syncTm))

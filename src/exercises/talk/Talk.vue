@@ -205,7 +205,7 @@ const hasKeys = computed(() => ai.keys.length > 0)
     </template>
 
     <div v-else class="tv" :class="st" @pointerdown.stop>
-      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" />
+      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" :idle="!!p?.idle && st !== 'live' && st !== 'connecting'" />
       <div class="tc">
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ st === 'ended' ? 'Поговорить ещё раз' : 'Начать разговор' }}</button>
         <div v-else-if="ptt" class="pt" :class="pt">          <!-- рация: одна большая кнопка — нажал, говоришь, нажал — отправил -->

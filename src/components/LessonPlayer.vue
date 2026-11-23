@@ -32,6 +32,7 @@ const props = defineProps({
   track: Boolean,                                         // ученик проходит урок — ответы уходят в Review (emit 'answer')
   ckLog: { type: Object, default: null },                 // итог: что уйдёт в чекпоинт Chapter — { title, items: [{ ex, w }] } или { none: true }
   review: { type: Array, default: null },                 // итог: слова, которые урок записал в Review, — { text, tr, kind, audio, before, now, lv } (CourseViewer)
+  idle: Boolean,                                          // экран на холсте редактора не выбран (23.11.2026): фоновые таймеры и анимации шаблона стоят (ctx idle)
   mini: Boolean,                                          // миниатюра экрана (ExerciseMini): всё по порядку, без случайностей и клавиш — тот же экран, только уменьшенный
   edit: Boolean,                                          // правка на ветке (LessonRail): тот же экран, поля правятся на месте; подвал — от ветки (slot foot)
 })
@@ -298,7 +299,7 @@ const ex = computed(() => (isFinal.value ? null : exOf(step.value)))
 providePlay(reactive({
   st, src, say, pick, right, later, answer, tap, put, back, rec, said, recToggle, again, setVid: (el) => { vid.value = el },
   fill, check, gapOkAt, sendText, sortPick, sortPut, sortBack, sortOkAt,
-  edit: computed(() => props.edit), single: computed(() => props.single), embedded: computed(() => props.embedded), track: computed(() => props.track),
+  edit: computed(() => props.edit), idle: computed(() => props.idle), single: computed(() => props.single), embedded: computed(() => props.embedded), track: computed(() => props.track),
   favKey, favOn, favToggle,
 }))
 </script>
