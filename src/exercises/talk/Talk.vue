@@ -27,7 +27,8 @@ const icon = aiIcon('Gemini')
 const cfg = computed(() => talkCfg(props.step))          // действующие настройки: свои поля экрана поверх умолчаний
 const models = computed(() => tp.models), voice = computed(() => cfg.value.voice)
 const lessonModel = computed(() => (cfg.value.model === 'auto' ? '' : cfg.value.model))          // 'auto' — самая свежая Live-модель ключа
-onMounted(() => { loadModels() })
+onMounted(() => { if (!p?.idle) loadModels() })          // экран не выбран на холсте (idle, 23.11.2026) — Google не спрашиваем
+watch(() => p?.idle, (v) => { if (!v) loadModels() })
 // модель и голос перед разговором (20.11.2026): свой выбор ученика (запоминается в браузере), по умолчанию — из правки или самая свежая.
 // 21.11.2026: выбираются в подвале (part="fb"), «Оценивать речь» — вверху экрана; состояние общее — prefs.js
 // голос и модель — из JSON экрана; в редакторе пилюля меняет сам экран, у ученика — только это открытие (prefs.js)

@@ -57,7 +57,7 @@ let brTm = 0
 // экран не выбран на холсте редактора (p.idle, 23.11.2026) — мост не опрашиваем; выбрали — сразу свежий статус и опрос раз в 15 с
 const idle = computed(() => !!p?.idle)
 function brRun() { clearInterval(brTm); brTm = 0; if (p.edit || idle.value) return; loadBridge(); if (props.part === 'fb') brTm = setInterval(() => { if (!p.st.done) loadBridge() }, 15_000) }
-onMounted(() => { if (p.edit) return; if (!idle.value) brRun(); else if (!bridgeLast.value) loadBridge() })          // невыбранный сам не спрашивает: статуса ещё нет — один общий запрос на все экраны
+onMounted(() => { if (p.edit) return; if (!idle.value) brRun() })          // невыбранный экран мост не спрашивает и его статус не показывает («Экран не активен»)
 watch(idle, brRun)
 onBeforeUnmount(() => clearInterval(brTm))
 const by = computed(() => (checked.value && r.value.site ? { t: 'проверил', api: !!r.value.api, live: !!r.value.live, model: r.value.model, sites: [r.value.site], sec: Number.isFinite(r.value.ms) ? (r.value.ms / 1000).toFixed(1).replace('.', ',') + ' с' : '' } : null))
@@ -380,6 +380,11 @@ function jsApply() {
   <template v-else-if="part === 'fb' && p.st.done && r">
     <small>{{ r.error ? 'Без проверки' : tierT[tier] }}</small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
   </template>
+  <!-- экран не выбран на холсте (idle, 23.11.2026): ничего не спрашивает и не показывает чужой статус моста — «не активен»; место то же -->
+  <template v-else-if="part === 'fb' && !p.st.done && !p.edit && idle">
+    <span class="kbr idle" title="Экран не выбран: мост не спрашиваем, скрипты стоят. Нажмите на экран — оживёт и спросит мост"><i />Мост не активен</span>
+    <select v-if="editor && !fileMode && canDic" class="kms kdm" disabled><option>🎙 {{ dicSel ? dicShort(dicSel) : 'авто' }}</option></select>
+  </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && api">
     <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
@@ -443,7 +448,7 @@ function jsApply() {
 .kb { padding: 0; border: 0; border-radius: 0; overflow: visible }          /* 19.11.2026: без пунктирных рамок и прокрутки — блок высотой с текст */
 /* А · PDF: подписи — на подложке, как «Ответы» в домашке */
 .kl.pdf { margin-bottom: -4px; align-items: center }
-.kdm { margin-left: 8px; height: 24px; max-width: 140px; font-size: 11px }
+.kdm { margin-left: 8px; height: 24px; max-width: 140px; font-size: 11px } .kdm:disabled { color: #a3a3a3; border-color: #dcdcdc; background: #f6f6f6 }
 .kdn { margin-left: 10px; color: #6b5a48; font-size: 12px; font-weight: 700; white-space: nowrap }          /* какая модель распознаёт диктовку — видно всем */          /* модель диктовки — в подвале, рядом с мостом */
 .kdic { --l: 0; margin: 0 8px 0 auto; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 0; border-radius: 13px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font-family: var(--font); font-size: 11.5px; font-weight: 800; text-transform: none; letter-spacing: 0; cursor: pointer; white-space: nowrap }
 .kdic svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
@@ -476,7 +481,7 @@ function jsApply() {
 .ktx { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow: auto }
 .kbl { max-width: 88%; padding: 7px 11px; border-radius: 13px; font-family: var(--font); font-size: 14px; line-height: 1.4; white-space: pre-wrap }
 .kbl.ai { align-self: flex-start; background: rgba(75, 141, 248, .14); border-bottom-left-radius: 4px } .kbl.me { align-self: flex-end; background: #d7ffb8; border-bottom-right-radius: 4px }
-.kbr { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #3d7a00 } .kbr.off { color: #b3261e }
+.kbr { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #3d7a00 } .kbr.off { color: #b3261e } .kbr.idle { color: #a3a3a3 }
 .kbr i { width: 8px; height: 8px; border-radius: 50%; background: currentColor } .kbr img { width: 16px; height: 16px; margin-left: 4px; object-fit: contain }
 .kb ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-family: 'PT Serif', Georgia, serif; font-size: 15px; line-height: 1.35; color: #351a05 }
 .ph { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 14.5px; font-style: italic; color: #8a6a48 } .ph.er { color: #b3261e; font-style: normal }
