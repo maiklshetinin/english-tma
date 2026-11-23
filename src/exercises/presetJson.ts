@@ -1,6 +1,7 @@
 // JSON настроек упражнения курса («{ }» на плитке меню Exercise, 21.11.2026): показать — действующие общие настройки (код ← курс),
 // сохранить — только отличия от умолчаний кода (их и хранит курс, server/courses.ts → presets). Свои поля экрана — вопрос, эталон и
 // исключения — остаются у экрана; «Применить ко всем экранам курса» убирает у экранов исключения по этим полям.
+import { same } from '../utils/overlay'
 import { kpShown, kpDefaults, kpApi } from './kp/defaults'
 import { talkCfg, talkDefaults } from './talk/defaults'
 import type { PresetTpl } from './presets'
@@ -19,7 +20,7 @@ export function presetJson(tpl: PresetTpl): Record<string, unknown> {
 /** поля настроек упражнения — их же «Применить ко всем экранам» убирает у экранов */
 export const presetKeys = (tpl: PresetTpl) => Object.keys(presetJson(tpl))
 
-const eq = (a: unknown, b: unknown) => (typeof a === 'string' && typeof b === 'string' ? a.trim() === b.trim() : a === b)
+const eq = same
 /** текст JSON → отличия от умолчаний кода (для курса) или ошибка строкой */
 export function presetFromJson(tpl: PresetTpl, text: string): { fields?: Record<string, unknown>; error?: string } {
   let raw: any

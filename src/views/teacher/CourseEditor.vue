@@ -18,6 +18,7 @@ import { ask, say, askText, dialog } from '../../composables/useDialog'
 import { setPresets, PRESET_TPLS } from '../../exercises/presets'
 import { presetJson, presetFromJson, presetKeys } from '../../exercises/presetJson'
 import { assemble } from '../../exercises/assemble'
+import { requests } from '../../exercises/requests'
 import { useAuthStore } from '../../stores/auth'
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import BackButton from '../../components/BackButton.vue'
@@ -93,6 +94,10 @@ const PRESET_SET = new Set(PRESET_TPLS)
 const preT = ref(null), preText = ref(''), preErr = ref(''), preK = ref(0)          // preK — окно заново (после «Вернуть умолчания»)
 const preName = (id) => TEMPLATES.find(t => t.id === id)?.t ?? id
 function preOpen(tpl) { tray.value = null; preT.value = tpl; preText.value = JSON.stringify(presetJson(tpl), null, 2); preErr.value = ''; preK.value++ }
+// «Запрос в API» (24.11.2026): что уйдёт по сети с этими общими настройками; JSON не разбирается — последний верный
+let preLast = []
+const preReqs = computed(() => { try { return (preLast = requests({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), ...preForm.value })) } catch { return preLast } })
+const preForm = computed(() => ({ kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(preT.value === 'kpapi' ? { engine: 'api' } : preT.value === 'kpfile' ? { dic: 'file' } : preT.value === 'talkptt2' ? { ptt: true, avatar: true, busuu: true } : preT.value === 'talkptt' ? { ptt: true, avatar: true } : preT.value === 'talkava' ? { avatar: true } : {}) }))
 const preAsm = computed(() => { try { return assemble({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(preT.value === 'kpapi' ? { engine: 'api' } : preT.value === 'kpfile' ? { dic: 'file' } : preT.value === 'talkptt2' ? { ptt: true, avatar: true, busuu: true } : preT.value === 'talkptt' ? { ptt: true, avatar: true } : preT.value === 'talkava' ? { avatar: true } : {}) }) } catch { return { parts: [], warn: ['JSON пока не разбирается'], own: [] } } })
 function preSave() {
   const r = presetFromJson(preT.value, preText.value); if (r.error) { preErr.value = r.error; return }
@@ -2025,7 +2030,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <button class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" :title="gi === 0 ? '2 · Lesson — урок или чекпоинт внутри Chapter' : '3 · Exercise — экраны урока: пары, выбор ответа, порядок слов…'" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><em class="tn">{{ gi + 2 }}</em><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button></template>
     </div>
     <!-- Настройки упражнения в курсе («{ }» на плитке меню): JSON общих промптов и настроек; «Как собирается» — что уйдёт в модели -->
-  <JsonModal v-if="preT" :key="preK" v-model="preText" :schema="presetSchema(preT)" :title="'«' + preName(preT) + '» — общее для курса'" sub="Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения." :how="preAsm" :error="preErr" apply-text="Сохранить для курса" hint='"" — пусто, ничего не подставляется · Ctrl+Enter или Ctrl+S — сохранить · Esc — закрыть' @apply="preSave" @close="preT = null">
+  <JsonModal v-if="preT" :key="preK" v-model="preText" :schema="presetSchema(preT)" :reqs="preReqs" :title="'«' + preName(preT) + '» — общее для курса'" sub="Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения." :how="preAsm" :error="preErr" apply-text="Сохранить для курса" hint='"" — пусто, ничего не подставляется · Ctrl+Enter или Ctrl+S — сохранить · Esc — закрыть' @apply="preSave" @close="preT = null">
     <template #actions><span class="pre-sp" /><button class="pbtn" title="Стереть общие настройки — вернуть умолчания приложения" @click="preReset">Вернуть умолчания</button><button class="pbtn" title="Убрать свои промпты и настройки у экранов этого упражнения — пусть берут общие" @click="preAll">Применить ко всем экранам</button></template>
   </JsonModal>
 </div>

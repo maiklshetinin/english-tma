@@ -3,6 +3,7 @@
 // потом голосом говорит 1–2 предложения. Звук можно заглушить (🔇) — расшифровка всё равно видна. «Подробнее» — тот же разговор:
 // развёрнутый разбор, микрофон включается, можно отвечать голосом. Нет оценки за 15 с — ошибка (плеер уходит в Flash Lite, потом мост).
 // Состояние разговора экрана — kpLive[id экрана] (его показывает Kp.vue).
+import { reqOf } from './overlay'
 import { reactive } from 'vue'
 import { startTalk, liveModels, liveName, firstKey } from './live'
 import { kpPlain } from './ai'
@@ -12,10 +13,15 @@ export const kpLive = reactive({})
 const QK = 'tma.kp.quiet'
 const getQuiet = () => { try { return localStorage.getItem(QK) === '1' } catch { return false } }
 // функция оценки: описание (что модель читает) — из JSON экрана (liveTool, 21.11.2026); здесь только устройство: имена и типы полей
-const tool = (description) => [{ name: 'submit_grade', description,
+export const gradeTool = (description) => [{ name: 'submit_grade', description,
   parameters: { type: 'OBJECT', properties: { score: { type: 'INTEGER' }, missed_points: { type: 'ARRAY', items: { type: 'STRING' } }, feedback: { type: 'STRING' } },
     required: ['score', 'missed_points', 'feedback'] } }]
 
+/** Роль и первая реплика проверки голосом — из JSON экрана (24.11.2026 — общее с вкладкой «Запрос в API») */
+export function liveCheckText(c, q) {
+  return { system: [c.prompt.trim(), c.livePrompt.trim()].filter(Boolean).join('\n\n'),
+    data: [fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer }), c.liveAsk.trim()].filter((x) => x.trim()).join('\n\n') }
+}
 /** → Promise<{ score, missed, feedback, ok, site: 'Gemini', live: true, model, ms }>; разговор остаётся в kpLive[id] */
 export async function checkLive(q, id) {
   kpLive[id]?.stop?.()
@@ -28,12 +34,11 @@ export async function checkLive(q, id) {
   const voice = c.voice
   const S = reactive({ lines: [], state: 'connecting', quiet: getQuiet(), listening: false, model, name: liveName(model), err: '' })
   const push = (role, chunk) => { const l = S.lines.at(-1); if (l && l.role === role && !l.closed) l.t += chunk; else S.lines.push({ role, t: chunk.replace(/^\s+/, ''), closed: false }) }
-  const system = [c.prompt.trim(), c.livePrompt.trim()].filter(Boolean).join('\n\n')
-  const data = [fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer }), c.liveAsk.trim()].filter((x) => x.trim()).join('\n\n')
+  const { system, data } = liveCheckText(c, q)
   return new Promise((ok, no) => {
     let got = false
     const tm = setTimeout(() => { if (!got) { got = true; sess.stop(); no(new Error('Live не прислала оценку за 15 с')) } }, 15_000)
-    const sess = startTalk({ key, model, voice, lang: c.lang, system, opener: data, tools: tool(c.liveTool), micLater: true, quiet: S.quiet, on: {
+    const sess = startTalk({ key, model, voice, lang: c.lang, system, opener: data, tools: gradeTool(c.liveTool), extra: reqOf(c, 'liveCheck'), micLater: true, quiet: S.quiet, on: {
       state: (s, info) => { if (s === 'live' && info) return; S.state = s; if (s === 'error') { S.err = info; if (!got) { got = true; clearTimeout(tm); no(new Error(info || 'ошибка Live')) } } },
       text: push, turn: () => { const l = S.lines.at(-1); if (l) l.closed = true },
       tool: (name, a) => {

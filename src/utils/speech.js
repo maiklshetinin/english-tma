@@ -2,6 +2,7 @@
 // оценивает речь строго, как экзаменатор: уровень CEFR, понятность, словарь, грамматика, связность, беглость, произношение,
 // ошибки с исправлениями (цитаты, которых нет в расшифровке, отбрасываются — модель любит выдумывать), сильные стороны, советы.
 // Ключи — из профиля, по очереди (квота — следующий). Модель — Flash Lite по умолчанию (500 в сутки), выбор — в браузере.
+import { overlay } from './overlay'
 import { ai, mark, retryMs, errText, mask } from './gemini'
 import { pcmToWav } from './tts'
 import { checkModels, checkName } from './kpcheck'
@@ -41,13 +42,18 @@ const fillE = (t, v) => t.replace(/\{(lang|context|transcript)\}/g, (_, k) => v[
 export const EVAL_ASK_SOLO = 'Расшифровка речи ученика:\n{transcript}'
 
 /** → { level, plus, confidence, intelligibility, scores, mistakes, pron, strengths, tips, summary, model, sec, ms } */
-export async function assessSpeech({ blob, sec, transcript, context = '', lang = 'pl-PL', model = '', prompt = EVAL_PROMPT, ask = context ? EVAL_ASK : EVAL_ASK_SOLO, fetcher = fetch }) {          // context — реплики собеседника в диалоге (не оцениваются)
+/** Тело generateContent оценки речи (24.11.2026 — общее с вкладкой «Запрос в API»)
+ *  @param {{ prompt?: string, ask?: string, lang?: string, context?: string, transcript?: string, audio?: string, extra?: object | null }} o */
+export function evalBody({ prompt = EVAL_PROMPT, ask = EVAL_ASK, lang = 'pl-PL', context = '', transcript = '', audio = '', extra = null }) {
+  return overlay({ systemInstruction: { parts: [{ text: fillE(prompt, { lang: LANG_NAME[lang] || 'польский' }) }] },
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: audio } }, { text: fillE(ask, { context, transcript: transcript || '(пусто)' }) }] }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA } }, extra)
+}
+export async function assessSpeech({ blob, sec, transcript, context = '', lang = 'pl-PL', model = '', prompt = EVAL_PROMPT, ask = context ? EVAL_ASK : EVAL_ASK_SOLO, extra = null, fetcher = fetch }) {          // context — реплики собеседника в диалоге (не оцениваются)
   if (sec < MIN_SEC) { const e = new Error(`Мало речи для оценки: ${Math.round(sec)} с — нужно хотя бы ${MIN_SEC} с связного рассказа`); e.short = true; throw e }
   if (!ai.keys.length) throw new Error('Нужен ключ Gemini в профиле')
   const t0 = Date.now(), m = getSpeechPick() || model || (await checkModels(ai.keys[0].key, fetcher))[0] || 'gemini-3.5-flash-lite'
-  const body = { systemInstruction: { parts: [{ text: fillE(prompt, { lang: LANG_NAME[lang] || 'польский' }) }] },
-    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: await b64(blob) } }, { text: fillE(ask, { context, transcript: transcript || '(пусто)' }) }] }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA } }
+  const body = evalBody({ prompt, ask, lang, context, transcript, audio: await b64(blob), extra })
   let last = null
   for (const x of ai.keys) {
     let r

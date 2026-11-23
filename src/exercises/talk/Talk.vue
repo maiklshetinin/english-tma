@@ -7,6 +7,7 @@
 // (кнопка «{ }»), умолчания — defaults.ts (talkCfg); в экране хранятся только отличия (20.11.2026).
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import ExHead from '../parts/ExHead.vue'
+import { reqOf } from '../../utils/overlay'
 import ExText from '../parts/ExText.vue'
 import { usePlay, useEdit, inEditor } from '../ctx'
 import { startTalk, startTranscribe, sttModel, liveModels, liveName, firstKey } from '../../utils/live'
@@ -87,7 +88,7 @@ async function start() {
   const c = cfg.value
   if (ptt.value) startTr(key)
   sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: talkSystem(c), opener: c.opener, manual: ptt.value,
-    silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, rec: evalOn.value ? onRec : null, on: {
+    silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, extra: reqOf(c, 'live'), rec: evalOn.value ? onRec : null, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
       st.value = s === 'error' ? 'ended' : s
@@ -113,7 +114,7 @@ const CYR = /[\u0400-\u04FF]/
 function startTr(key) {
   sttModel(key).then((model) => {
     if (!sess) return
-    tr = startTranscribe({ key, model, lang: lang.value, on: {
+    tr = startTranscribe({ key, model, lang: lang.value, extra: reqOf(cfg.value, 'transcribe'), on: {
       state: (s, info) => { if (s === 'error') note.value = 'расшифровка: ' + info },
       interim: (t) => { trDraft = t; trShow() },
       final: (t) => { trAcc = (trAcc + ' ' + t).trim(); trDraft = ''; trShow() },
@@ -170,7 +171,7 @@ async function sendEval(final = false) {
   const me = lines.value.filter((l) => l.role === 'me').map((l) => l.t).join(' '), them = lines.value.filter((l) => l.role === 'ai').map((l) => l.t).join('\n')
   const seg = { n: segs.value.length + 1, at: Math.round(speechSec.value), st: 'sent', rep: null, err: '' }
   segs.value.push(seg); const S = segs.value.at(-1)
-  try { S.rep = await assessSpeech({ blob, sec: Math.max(s2, 20), transcript: me, context: them, lang: lang.value, prompt: cfg.value.evalPrompt, ask: cfg.value.evalAsk }); S.st = 'done' }          // промпт и сообщение оценки — из JSON экрана (evalPrompt, evalAsk)
+  try { S.rep = await assessSpeech({ blob, sec: Math.max(s2, 20), transcript: me, context: them, lang: lang.value, prompt: cfg.value.evalPrompt, ask: cfg.value.evalAsk, extra: reqOf(cfg.value, 'eval') }); S.st = 'done' }          // промпт и сообщение оценки — из JSON экрана (evalPrompt, evalAsk)
   catch (e) { S.st = 'err'; S.err = e.message }
   finally { evBusy = false; if (speechSec.value - sentAt >= STEP) sendEval() }
 }

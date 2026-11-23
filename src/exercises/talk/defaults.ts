@@ -8,9 +8,11 @@ export type EndSens = 'low' | 'high'
 export interface TalkCfg {
   lang: Lang; prompt: string; lock: string; opener: string; voice: string; model: string
   silenceMs: number; endSens: EndSens; temperature: number | null; noiseSuppression: boolean
-  guard: string; evalPrompt: string; evalAsk: string          // 21.11.2026: просьба вернуться к языку, промпт и сообщение «Оценивать речь» — тоже из JSON
+  guard: string; evalPrompt: string; evalAsk: string
+  request: Record<string, any>          // свои поля запросов в API поверх собранных: live, transcribe, eval (utils/overlay.js; 24.11.2026)          // 21.11.2026: просьба вернуться к языку, промпт и сообщение «Оценивать речь» — тоже из JSON
 }
 
+import { same as sameV } from '../../utils/overlay'
 import { presetFor } from '../presets'
 
 export const LANG = 'pl-PL' as const          // язык по умолчанию; явно уходит в Live-модель: speechConfig.languageCode и inputAudioTranscription.languageCodes
@@ -102,6 +104,7 @@ function talkCode(s: any): TalkCfg {
     guard: ownT(s, 'guard')?.trim() ?? LANGS[lang].guard,
     evalPrompt: ownT(s, 'evalPrompt') ?? EVAL_PROMPT,
     evalAsk: ownT(s, 'evalAsk') ?? EVAL_ASK,
+    request: s?.request && typeof s.request === 'object' && !Array.isArray(s.request) ? s.request : {},
   }
 }
 
@@ -117,7 +120,7 @@ export function talkFields(raw: any): Partial<TalkCfg> {
     if (raw[k] === undefined) continue
     if (k === 'temperature' && raw.temperature === null && d.temperature === null) continue
     const base = k === 'lang' ? d0.lang : d[k]
-    if (!(typeof x[k] === 'string' && typeof base === 'string' ? x[k].trim() === base.trim() : x[k] === base)) o[k] = x[k]
+    if (!sameV(x[k], base)) o[k] = x[k]
   }
   return o
 }

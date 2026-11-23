@@ -9,7 +9,7 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     const j: any = { kind: 'talk', text: '', ...talkCfg({}) }
     expect(j).toEqual({ kind: 'talk', text: '', lang: 'pl-PL', prompt: DEF_PROMPT, lock: LOCK, opener: OPENER,
       voice: 'Kore', model: 'auto', silenceMs: 1200, endSens: 'low', temperature: null, noiseSuppression: false,
-      guard: 'Odpowiadaj wyłącznie po polsku.', evalPrompt: EVAL_PROMPT, evalAsk: EVAL_ASK })
+      guard: 'Odpowiadaj wyłącznie po polsku.', evalPrompt: EVAL_PROMPT, evalAsk: EVAL_ASK, request: {} })
     expect(talkSystem(talkCfg({}))).toBe(LOCK + ' ' + DEF_PROMPT)
   })
 

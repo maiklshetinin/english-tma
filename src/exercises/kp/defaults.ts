@@ -9,6 +9,7 @@
 // В шаблонах: {question} — вопрос, {reference} — эталон без разметки, {answer} — ответ ученика, {score} — процент, {missed} — чего не прозвучало,
 // {id} — метка задания (только format моста), {lang} — язык словами (sttPrompt).
 
+import { same as sameV } from '../../utils/overlay'
 import { presetFor } from '../presets'
 
 export const PASS = 60                                    // зачёт — от 60 % (рекомендация курса: 60–70 % «идеального» ответа — уже хорошо)
@@ -31,6 +32,7 @@ export interface KpCfg {
   topic: string          // тема — в промптах меткой {topic} (по умолчанию — собеседование на Карту поляка); 23.11.2026
   dicModel: string          // «Надиктовать с Gemini» (потоком): auto — свежая …transcribe-live ключа; модель Live API; browser — распознавание браузера (23.11.2026)
   model: string; temperature: number | null; thinking: boolean
+  request: Record<string, any>          // свои поля запросов в API поверх собранных: check, liveCheck, discuss, dictation, stt (utils/overlay.js; 24.11.2026)
   livePrompt: string; liveAsk: string; liveMore: string; liveTool: string; liveModel: string; voice: string
   discussPrompt: string; discussOpener: string; discussNone: string
   sttPrompt: string; sttAsk: string
@@ -107,6 +109,7 @@ function kpCode(s: any): KpCfg {
     dicModel: okModel(s?.dicModel) ? s.dicModel.trim() : DIC_AUTO,
     message: own(s, 'message') ?? b.message, format: f !== undefined && okFormat(s, f) ? f : b.format,
     model: okModel(s?.model) ? s.model.trim() : DEF.model, temperature: okTemp(s?.temperature) ? s.temperature : DEF.temperature, thinking: s?.thinking === true,
+    request: s?.request && typeof s.request === 'object' && !Array.isArray(s.request) ? s.request : {},
     liveModel: okModel(s?.liveModel) ? s.liveModel.trim() : DEF.liveModel, voice: typeof s?.voice === 'string' && /^[A-Za-z]{2,20}$/.test(s.voice) ? s.voice : DEF.voice,
   }
   for (const k of API_TEXTS) o[k] = own(s, k) ?? DEF[k]
@@ -125,14 +128,14 @@ export function kpCfg(s: any): KpCfg {
 /** Что показывать в JSON экрана — ровно то, что уходит у этой формы: мост — prompt, message, format; Gemini API — всё; «целым аудио» — + sttPrompt, sttAsk */
 export function kpShown(s: any): Partial<KpCfg> {
   const c = kpCfg(s)
-  const o: any = kpApi(s) ? { ...c } : { prompt: c.prompt, message: c.message, format: c.format, pass: c.pass, lang: c.lang, topic: c.topic, dicModel: c.dicModel }
+  const o: any = kpApi(s) ? { ...c } : { prompt: c.prompt, message: c.message, format: c.format, pass: c.pass, lang: c.lang, topic: c.topic, dicModel: c.dicModel, request: c.request }
   for (const k of STT_TEXTS) { if (kpFile(s)) o[k] = c[k]; else delete o[k] }
   if (kpFile(s)) delete o.dicModel          // «целым аудио» распознаёт Flash Lite файлом — потоковая модель ему не нужна
   return o
 }
 
 const API_ONLY = ['temperature', 'thinking', 'liveModel', 'voice', ...API_TEXTS] as const
-const eq = (a: unknown, b: unknown) => (typeof a === 'string' && typeof b === 'string' ? a.trim() === b.trim() : a === b)
+const eq = sameV
 /** Поля экрана из JSON: только отличия от действующих умолчаний этой формы (код ← курс) и только верного вида. Форму (engine, dic) — из того же JSON */
 export function kpFields(raw: any): Partial<KpCfg> {
   const o: any = {}

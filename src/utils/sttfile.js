@@ -2,6 +2,7 @@
 // после «Стоп» отправляем всю запись ОДНИМ запросом в Gemini (текстовая модель, слушает аудио) — обратно текст.
 // Не Transcribe Live: та работает только потоком (кусками по 100 мс, черновик на лету), целый файл не принимает.
 // Модель — свежая Flash Lite ключа (как у «Теста речи» и проверки «· Gemini API»), ключи — из профиля по очереди (квота — следующий).
+import { overlay } from './overlay'
 import { WORKLET } from './live'
 import { wavOf, LANG_NAME } from './speech'
 import { ai, mark, retryMs, errText, mask } from './gemini'
@@ -50,13 +51,18 @@ export async function recordMic({ on = {}, max = FILE_MAX_SEC } = {}) {
 }
 
 /** Запись целиком → текст. → { text, model, key, ms }. prompt и ask — из JSON экрана (sttPrompt, sttAsk; 21.11.2026), {lang} — язык словами */
-export async function transcribeFile({ blob, lang = 'pl-PL', prompt = STT.sttPrompt, ask = STT.sttAsk, fetcher = fetch }) {
+/** Тело generateContent расшифровки записи (24.11.2026 — общее с вкладкой «Запрос в API»)
+ *  @param {{ model: string, prompt?: string, ask?: string, lang?: string, data?: string, thinking?: boolean, extra?: object | null }} o */
+export function sttBody({ model, prompt = STT.sttPrompt, ask = STT.sttAsk, lang = 'pl-PL', data = '', thinking = true, extra = null }) {
+  return overlay({ systemInstruction: { parts: [{ text: fill(prompt, { lang: LANG_NAME[lang] || 'польский' }) }] },
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data } }, { text: ask }] }],
+    generationConfig: { temperature: 0, ...(thinking ? { thinkingConfig: think(model) } : {}) } }, extra)
+}
+export async function transcribeFile({ blob, lang = 'pl-PL', prompt = STT.sttPrompt, ask = STT.sttAsk, extra = null, fetcher = fetch }) {
   if (!ai.keys.length) throw new Error('Нужен ключ Gemini в профиле')
   const t0 = Date.now(), m = (await checkModels(ai.keys[0].key, fetcher))[0] || 'gemini-3.5-flash-lite'
   const data = await b64(blob)
-  const body = (thinking) => JSON.stringify({ systemInstruction: { parts: [{ text: fill(prompt, { lang: LANG_NAME[lang] || 'польский' }) }] },
-    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data } }, { text: ask }] }],
-    generationConfig: { temperature: 0, ...(thinking ? { thinkingConfig: think(m) } : {}) } })
+  const body = (thinking) => JSON.stringify(sttBody({ model: m, prompt, ask, lang, data, thinking, extra }))
   let last = null
   for (const x of ai.keys) {
     let r, raw

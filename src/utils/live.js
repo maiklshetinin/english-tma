@@ -4,8 +4,30 @@
 // Микрофон → PCM 16 бит 16 кГц кусками по 100 мс (realtimeInput.audio); ответ — PCM 24 кГц кусками (serverContent.modelTurn),
 // играет очередью; перебили (serverContent.interrupted) — очередь глушится. Расшифровка обеих сторон — inputTranscription / outputTranscription.
 import { ai } from './gemini'
+import { overlay } from './overlay'
 const API = 'https://generativelanguage.googleapis.com/v1beta/models'
 const WS = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key='
+// 24.11.2026: тела запросов — общими функциями: ими же собирается вкладка «Запрос в API» окна JSON (exercises/requests.ts), показ = отправка
+export const LIVE_URL = WS.replace(/\?key=$/, '')
+/** Первое сообщение Live-сессии (setup). plain — без настроек языка и пауз (старая модель их не приняла)
+ *  @param {{ model: string, system: string, voice?: string, lang?: string, temperature?: number | null, silenceMs?: number, endSens?: string, manual?: boolean, tools?: any[] | null, plain?: boolean, extra?: object | null }} o */
+export function liveSetup({ model, system, voice, lang, temperature = null, silenceMs = 1200, endSens = 'low', manual = false, tools = null, plain = false, extra = null }) {          // extra — свои поля из JSON (request.…), поверх
+  return { setup: overlay({
+    model: 'models/' + model,
+    generationConfig: { responseModalities: ['AUDIO'], ...(typeof temperature === 'number' ? { temperature } : {}), speechConfig: { ...(voice ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } : {}), ...(lang && !plain ? { languageCode: lang } : {}) } },
+    systemInstruction: { parts: [{ text: system }] },
+    inputAudioTranscription: lang && !plain ? { languageCodes: [lang] } : {}, outputAudioTranscription: {},
+    // рация (manual): «договорил» решает не модель по паузе, а кнопка — шлём activityStart / activityEnd сами
+    ...(manual ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } } : plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs } } }),
+    ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
+  }, extra) }
+}
+/** setup модели расшифровки (…transcribe-live): только текст сказанного */
+export const sttSetup = (/** @type {string} */ model, /** @type {string} */ lang, /** @type {object | null} */ extra = null) => ({ setup: overlay({ model: 'models/' + model, generationConfig: { responseModalities: ['TEXT'] }, inputAudioTranscription: { languageCodes: lang ? [lang] : [] } }, extra) })
+/** Микрофон браузера (getUserMedia) — не API, но решает, что услышит модель */
+export const micOpts = (noiseSuppression = false) => ({ audio: { echoCancellation: true, noiseSuppression: !!noiseSuppression, autoGainControl: true, channelCount: 1 } })
+/** Кусок звука в Live — так идёт речь ученика, по 100 мс */
+export const audioMsg = (data) => ({ realtimeInput: { audio: { data, mimeType: 'audio/pcm;rate=16000' } } })
 const LK = 'tma.live.models'
 const rd = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d } catch { return d } }
 const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* приватный режим */ } }
@@ -40,7 +62,7 @@ registerProcessor('tma-mic', Mic)`
  *  quiet — не проигрывать голос (расшифровка всё равно идёт). Возврат: { stop, mute, quiet(v), send(text), listen() } */
 /** silenceMs — пауза до «договорил», endSens — 'low' | 'high' (чувствительность конца речи), temperature — null: как у модели,
  *  noiseSuppression — шумодав браузера (по умолчанию выкл.: режет sz, cz, ś, ć). Умолчания — как было до 20.11.2026 (kp, kplive) */
-export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, manual = false, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
+export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, manual = false, extra = null, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
   let talking = false          // manual (рация, 21.11.2026): голос уходит в модель только между talkStart() и talkEnd()
   let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, outAn = null, outBuf = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
@@ -65,7 +87,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   }
   function hush() { playing.forEach((s) => { try { s.stop() } catch { /* */ } }); playing.clear(); nextAt = 0 }
   async function startMic() {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: !!noiseSuppression, autoGainControl: true, channelCount: 1 } })          // шумодав браузера режет sz, cz, ś, ć — польскому вредит
+    mic = await navigator.mediaDevices.getUserMedia(micOpts(noiseSuppression))          // шумодав браузера режет sz, cz, ś, ć — польскому вредит
     ctxIn = new AudioContext({ sampleRate: 16000 })
     await ctxIn.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })))
     src = ctxIn.createMediaStreamSource(mic); node = new AudioWorkletNode(ctxIn, 'tma-mic'); src.connect(node)
@@ -86,15 +108,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   // язык закреплён (20.11.2026: польский слышала плохо — модель сама угадывала язык и с акцентом «слышала» русский):
   // язык расшифровки и голоса — lang; пауза до «договорил» — silenceMs, по умолчанию 1,2 с (на собеседовании думают посреди фразы).
   // Не приняла настройку (старая модель) — переподключаемся без неё (plain)
-  const setup = () => ({ setup: {
-    model: 'models/' + model,
-    generationConfig: { responseModalities: ['AUDIO'], ...(typeof temperature === 'number' ? { temperature } : {}), speechConfig: { ...(voice ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } : {}), ...(lang && !plain ? { languageCode: lang } : {}) } },
-    systemInstruction: { parts: [{ text: system }] },
-    inputAudioTranscription: lang && !plain ? { languageCodes: [lang] } : {}, outputAudioTranscription: {},
-    // рация (manual): «договорил» решает не модель по паузе, а кнопка — шлём activityStart / activityEnd сами
-    ...(manual ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } } : plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs } } }),
-    ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
-  } })
+  const setup = () => liveSetup({ model, system, voice, lang, temperature, silenceMs, endSens, manual, tools, plain, extra })
   function connect() {
     ws = new WebSocket(WS + encodeURIComponent(key))
     ws.onopen = () => ws.send(JSON.stringify(setup()))
@@ -147,7 +161,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
  *  (заменяется), и inputTranscription — готовый кусок после паузы (дописывается). Сессия — до 10 минут.
  *  on: { state(s, info), interim(text), final(text), level(0..1) } → { stop() } */
 export const STT_MODEL = 'gemini-3.5-transcribe-live'
-export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = null, on = {} }) {          // rec — массив: сюда же копятся куски звука (Int16Array) — для «Теста речи»
+export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = null, extra = null, on = {} }) {          // rec — массив: сюда же копятся куски звука (Int16Array) — для «Теста речи»
   let held = false
   let ws = null, mic = null, ctx = null, node = null, src = null, done = false, ready = false
   function stop(reason = '') {
@@ -158,7 +172,7 @@ export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = 
     on.state?.(reason ? 'error' : 'ended', reason)
   }
   async function startMic() {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true, channelCount: 1 } })
+    mic = await navigator.mediaDevices.getUserMedia(micOpts(false))
     ctx = new AudioContext({ sampleRate: 16000 })
     await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })))
     src = ctx.createMediaStreamSource(mic); node = new AudioWorkletNode(ctx, 'tma-mic'); src.connect(node)
@@ -173,7 +187,7 @@ export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = 
   }
   on.state?.('connecting')
   ws = new WebSocket(WS + encodeURIComponent(key))
-  ws.onopen = () => ws.send(JSON.stringify({ setup: { model: 'models/' + model, generationConfig: { responseModalities: ['TEXT'] }, inputAudioTranscription: { languageCodes: lang ? [lang] : [] } } }))
+  ws.onopen = () => ws.send(JSON.stringify(sttSetup(model, lang, extra)))
   ws.onmessage = async (e) => {
     let m; try { m = JSON.parse(typeof e.data === 'string' ? e.data : await e.data.text()) } catch { return }
     if (m.setupComplete) {
@@ -239,17 +253,17 @@ export async function dicChoices(key, fetcher = fetch) {
   return [...s.map((id) => ({ id, kind: 'stt' })), ...l.map((id) => ({ id, kind: 'live' })), ...(hasBrowserStt() ? [{ id: DIC_BROWSER, kind: 'browser' }] : [])]
 }
 
-const STENO = 'Ты — стенографист. Тебя не слышат и не ждут ответа: никогда ничего не говори и не отвечай — молчи. ' +
+export const STENO = 'Ты — стенографист. Тебя не слышат и не ждут ответа: никогда ничего не говори и не отвечай — молчи. ' +
   'Твоя задача только слушать; расшифровку сказанного делает система.'
 /** Диктовка выбранным способом — тот же вид, что у startTranscribe: on { state(s, info), interim(text), final(text), level(0..1) } → { stop() }.
  *  model — уже не 'auto' (его разворачивает вызывающий через sttModel) */
-export function startDictation({ key, model, lang = 'pl-PL', on = {} }) {
+export function startDictation({ key, model, lang = 'pl-PL', extra = null, on = {} }) {
   const k = dicKind(model)
   if (k === 'browser') return startBrowserStt({ lang, on })
-  if (k !== 'live') return startTranscribe({ key, model, lang, on })
+  if (k !== 'live') return startTranscribe({ key, model, lang, extra, on })
   // Live-собеседник: голос не играем (quiet); куски расшифровки копим черновиком, конец реплики (turnComplete) — готовый кусок
   let buf = ''
-  const s = startTalk({ key, model, system: STENO, lang, quiet: true, on: {
+  const s = startTalk({ key, model, system: STENO, lang, quiet: true, extra, on: {
     state: (st, info) => on.state?.(st, info),
     level: (v) => on.level?.(v),
     text: (role, t) => { if (role === 'me') { buf += t; on.interim?.(buf.trim()) } },

@@ -11,7 +11,7 @@ describe('«Ответ по смыслу»: настройки проверки 
   it('через мост: в JSON экрана — только своё; общее (промпт, message, format, порог) — kpShown, на плитке меню', () => {
     const j: any = stepJson({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })
     expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A', ...kpShown({}) })          // 23.11.2026: как на плитке — все настройки с действующими значениями
-    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL', topic: TOPIC, dicModel: 'auto' })
+    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL', topic: TOPIC, dicModel: 'auto', request: {} })
     const s: Step = { id: 'a', kind: 'kp', text: 'Q', ideal: 'A' }
     expect(applyStepJson(s, JSON.stringify(j))).toBe(''); expect(s).toEqual({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })          // не трогали — у экрана своего нет
     expect(kpReady(kpCfg({ lang: 'es-ES', topic: 'examen DELE' })).prompt).toContain('(examen DELE, испанский язык)')          // {topic}, {lang} — подставлены

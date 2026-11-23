@@ -4,6 +4,7 @@
 // «ключ + модель» отдыхает, следующий ключ. Не вышло совсем (нет ключей, квота, сеть) — проверка уходит через мост, как раньше.
 import { ai, mark, retryMs, errText, mask } from './gemini'
 import { kpPlain, checkAnswer } from './ai'
+import { overlay, reqOf } from './overlay'
 import { kpCfg, kpReady, fill } from '../exercises/kp/defaults'
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models'
@@ -48,9 +49,18 @@ const WAIT = 30_000
 // «Размышления» (20.11.2026): модели 3.x по умолчанию думают перед ответом — проверка шла ~30 с. Для сверки с эталоном не нужно:
 // 3.x — thinkingLevel 'minimal', 2.x — thinkingBudget 0. Модель не знает такой настройки (400 про thinking) — повтор без неё
 const think = (m) => (/gemini-2\./.test(m) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' })
-async function once(key, model, prompt, user, fetcher, schema = true, thinkOff = true, temperature = null) {
-  const body = { systemInstruction: { parts: [{ text: prompt }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { responseMimeType: 'application/json', ...(typeof temperature === 'number' ? { temperature } : {}), ...(schema ? { responseSchema: SCHEMA } : {}), ...(thinkOff ? { thinkingConfig: think(model) } : {}) } }
+/** Тело generateContent проверки (24.11.2026 — общее с вкладкой «Запрос в API»)
+ *  @param {string} model @param {string} prompt @param {string} user @param {{ schema?: boolean, thinkOff?: boolean, temperature?: number | null, extra?: object | null }} [o] */
+export function checkBody(model, prompt, user, { schema = true, thinkOff = true, temperature = null, extra = null } = {}) {
+  return overlay({ systemInstruction: { parts: [{ text: prompt }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: { responseMimeType: 'application/json', ...(typeof temperature === 'number' ? { temperature } : {}), ...(schema ? { responseSchema: SCHEMA } : {}), ...(thinkOff ? { thinkingConfig: think(model) } : {}) } }, extra)
+}
+/** Роль и сообщение проверки — ровно из JSON экрана: роль = prompt + format, сообщение = message с подстановками */
+export function checkText(c, q) {
+  return { prompt: [c.prompt.trim(), c.format.trim()].filter(Boolean).join(' '), user: fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer }) }
+}
+async function once(key, model, prompt, user, fetcher, schema = true, thinkOff = true, temperature = null, extra = null) {
+  const body = checkBody(model, prompt, user, { schema, thinkOff, temperature, extra })
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), WAIT)
   let r
   try { r = await fetcher(`${API}/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), ...(ac ? { signal: ac.signal } : {}) }) }
@@ -71,18 +81,17 @@ export async function checkDirect(q, { model = '', fetcher = fetch } = {}) {
   if (!ai.keys.length) { const e = new Error('нет ключей Gemini'); e.nokeys = true; throw e }
   const own = (v) => (v && v !== 'live' ? v : '')          // 'live' — проверка голосовой моделью (utils/kplive.js), тут — запасная текстовая
   const m = own(getPick()) || own(model) || (await checkModels(ai.keys[0].key, fetcher))[0] || CHECK_DEFAULT          // свой выбор в браузере (подвал экрана) — главнее экрана
-  const prompt = [c.prompt.trim(), c.format.trim()].filter(Boolean).join(' ')          // ровно то, что в JSON экрана: prompt и format (пустое — пусто)
-  const user = fill(c.message, { question: q.question, reference: kpPlain(q.reference), answer: q.answer })
-  const thinkOff = !c.thinking, temp = c.temperature
+  const { prompt, user } = checkText(c, q)          // ровно то, что в JSON экрана: prompt и format (пустое — пусто)
+  const thinkOff = !c.thinking, temp = c.temperature, ext = reqOf(c, 'check')          // ext — свои поля запроса из JSON (request.check)
   const now = Date.now(), keys = ai.keys.filter((x) => !(quota(x.key, m) > now))
   if (!keys.length) { const e = new Error(`у ${checkName(m)} кончился лимит на всех ключах`); e.quota = true; throw e }
   let last = null
   for (const x of keys) {
     try {
       let o
-      try { o = await once(x.key, m, prompt, user, fetcher, true, thinkOff, temp) } catch (e) {
-        if (e.status === 400 && /think/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, true, false, temp)          // без настройки «размышлений»
-        else if (e.status === 400 && /schema|responseSchema|response_schema/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, false, thinkOff, temp)          // модель без схемы — просто JSON
+      try { o = await once(x.key, m, prompt, user, fetcher, true, thinkOff, temp, ext) } catch (e) {
+        if (e.status === 400 && /think/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, true, false, temp, ext)          // без настройки «размышлений»
+        else if (e.status === 400 && /schema|responseSchema|response_schema/i.test(e.raw || '')) o = await once(x.key, m, prompt, user, fetcher, false, thinkOff, temp, ext)          // модель без схемы — просто JSON
         else throw e
       }
       mark(x, true)

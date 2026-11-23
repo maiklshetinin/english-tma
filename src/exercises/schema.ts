@@ -9,7 +9,7 @@ import { talkCfg } from './talk/defaults'
 import { presetJson, PRESET_FORM } from './presetJson'
 import type { PresetTpl } from './presets'
 
-export type SType = 'kind' | 'text' | 'number' | 'bool' | 'select' | 'list' | 'file' | 'any'
+export type SType = 'kind' | 'text' | 'number' | 'bool' | 'select' | 'list' | 'file' | 'object' | 'any'
 export interface SKey { key: string; type: SType; label: string; options?: string[]; req?: boolean; def?: unknown; null?: boolean }
 
 const typeOf = (f: any): SType => {
@@ -19,6 +19,7 @@ const typeOf = (f: any): SType => {
   if (t === 'bool') return 'bool'
   if (t === 'select' || t === 'enum') return 'select'
   if (t === 'list') return 'list'
+  if (t === 'object') return 'object'
   if (t === 'image' || t === 'audio' || t === 'video') return 'file'
   return 'any'
 }
@@ -85,8 +86,9 @@ export function checkKeys(obj: unknown, schema: SKey[], kind?: string): SIssue[]
       : s.type === 'number' ? typeof v !== 'number' || !Number.isFinite(v)
         : s.type === 'bool' ? typeof v !== 'boolean'
           : s.type === 'select' ? !(s.options ?? []).includes(String(v)) || typeof v !== 'string'
-            : s.type === 'list' ? !Array.isArray(v) : false
-    if (bad) out.push({ key: k, msg: `«${k}» — ${s.type === 'select' ? 'одно из: ' + (s.options ?? []).join(', ') : s.type === 'number' ? 'число' : s.type === 'bool' ? 'true или false' : s.type === 'list' ? 'список [ … ]' : 'строка в кавычках'}` })
+            : s.type === 'list' ? !Array.isArray(v)
+              : s.type === 'object' ? !(v && typeof v === 'object' && !Array.isArray(v)) : false
+    if (bad) out.push({ key: k, msg: `«${k}» — ${s.type === 'select' ? 'одно из: ' + (s.options ?? []).join(', ') : s.type === 'number' ? 'число' : s.type === 'bool' ? 'true или false' : s.type === 'list' ? 'список [ … ]' : s.type === 'object' ? 'объект { … }' : 'строка в кавычках'}` })
   }
   for (const s of schema) if (s.req && !(s.key in o)) out.push({ key: s.key, msg: `нет обязательного «${s.key}»${s.label ? ' — ' + s.label : ''}` })
   return out

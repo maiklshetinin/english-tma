@@ -47,11 +47,19 @@ export const bridgePush = () => live.on && pushOk && !!bridgeLast.value
 const AI_ICON = { ChatGPT: 'gpt.svg', Gemini: 'gemini.svg', Claude: 'Claude Spark - Clay.svg' }
 export const aiIcon = (site) => (AI_ICON[site] ? import.meta.env.BASE_URL + 'ai/' + encodeURIComponent(AI_ICON[site]) : '')
 
+/** Что экран шлёт нашему серверу для проверки через мост (24.11.2026 — общее с вкладкой «Запрос в API») */
+export const bridgeBody = (c, q) => ({ question: q.question, reference: kpPlain(q.reference), answer: q.answer, prompt: c.prompt, message: c.message, format: c.format })
+/** Что сервер отдаёт скрипту моста — так же, как server/ai.ts chatText: prompt + message + format, метки подставлены */
+export function bridgeChat(c, q, id) {
+  const v = { question: q.question, reference: kpPlain(q.reference), answer: q.answer, id }
+  const f = (t) => String(t ?? '').replace(/\{(question|reference|answer|id)\}/g, (_, k) => v[k] ?? '')
+  return { id, text: [c.prompt, f(c.message), f(c.format)].filter(Boolean).join('\n\n') }
+}
 export async function checkAnswer(q, request = apiRequest) {
   const need = Number.isFinite(q.pass) ? q.pass : PASS, t0 = Date.now()          // ms — сколько ждал ученик (показывается у «проверил …»)
   // 21.11.2026: в чат уходит ровно prompt + message + format из JSON экрана (у «Gemini API» как запасного — его prompt и умолчания моста)
   const c = kpReady(q.chat ?? kpCfg({ prompt: q.prompt }))          // {topic}, {lang}, {langHow} — подставлены (23.11.2026)
-  const r = await request('/ai/check', { method: 'POST', body: JSON.stringify({ question: q.question, reference: kpPlain(q.reference), answer: q.answer, prompt: c.prompt, message: c.message, format: c.format }) })
+  const r = await request('/ai/check', { method: 'POST', body: JSON.stringify(bridgeBody(c, q)) })
   let body = null
   try { body = await r.json() } catch { /* не JSON */ }
   if (!r.ok) throw new Error(body?.error || 'Ошибка сервера ' + r.status)

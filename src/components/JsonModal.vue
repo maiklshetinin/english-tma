@@ -17,7 +17,8 @@ const props = defineProps({
   how: { type: Object, default: null }, note: { type: String, default: '' }, error: { type: String, default: '' },
   applyText: { type: String, default: 'Применить' }, hint: { type: String, default: '' },
   readonly: { type: Boolean, default: false },          // только посмотреть: без «Применить», поле не правится
-  schema: { type: Array, default: null }, kind: { type: String, default: '' },          // что принимает упражнение (schema.ts)
+  schema: { type: Array, default: null }, kind: { type: String, default: '' },
+  reqs: { type: Array, default: null },          // «Запрос в API» (24.11.2026, exercises/requests.ts): [{ to, via, body, note?, own? }] — по тексту в поле          // что принимает упражнение (schema.ts)
 })
 const emit = defineEmits(['update:modelValue', 'apply', 'close'])
 const ed = ref(null), start = props.modelValue
@@ -29,6 +30,7 @@ const side = ref((() => { try { return localStorage.getItem('tma.jsonSide') || '
 const sideOf = computed(() => {
   if (side.value === 'none') return ''
   if (side.value === 'how' && props.how) return 'how'
+  if (side.value === 'req' && props.reqs) return 'req'
   if (props.schema) return 'keys'
   return props.how && howOn.value ? 'how' : ''
 })
@@ -54,6 +56,23 @@ const RU = [[/after property value/, 'после значения нужна з�
   [/[Uu]nterminated string/, 'строка не закрыта кавычкой'], [/after JSON/, 'лишний текст после JSON'], [/[Uu]nexpected token|unexpected character/, 'лишний или неверный символ']]
 const ruMsg = (m) => RU.find(([r]) => r.test(m))?.[1] ?? m
 const dirty = computed(() => text.value !== start)
+// ---------- «Запрос в API»: объекты, как уходят по сети, с подсветкой ----------
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+function hl(v) {
+  const s = esc(JSON.stringify(v, null, 2) ?? '')
+  return s.replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g, (m, str, colon, lit) =>
+    str ? (colon ? `<span class="hk">${str}</span>${colon}` : `<span class="hs">${str}</span>`) : lit ? `<span class="hl">${m}</span>` : `<span class="hn">${m}</span>`)
+}
+const copiedReq = ref(-1)
+function copyReq(r, i) { navigator.clipboard?.writeText(JSON.stringify(r.body, null, 2)).then(() => { copiedReq.value = i; setTimeout(() => { if (copiedReq.value === i) copiedReq.value = -1 }, 1500) }).catch(() => {}) }
+/** «request.check» у запроса: есть в JSON — перейти к нему; нет — вставить пустым, чтобы дописать свои поля */
+function ownReq(name) {
+  if (props.readonly || !obj.value || typeof obj.value !== 'object') return
+  const o = obj.value, rq = o.request && typeof o.request === 'object' ? o.request : {}
+  if (!(name in rq)) text.value = JSON.stringify({ ...o, request: { ...rq, [name]: {} } }, null, 2)
+  nextTick(() => { const i = text.value.split('\n').findIndex((l) => l.includes(`"${name}"`)); if (i >= 0) ed.value?.goLine(i + 1) })
+}
+
 // ---------- «Что принимает»: ключи упражнения ----------
 let first = {}; try { first = JSON.parse(start) ?? {} } catch { /* */ }
 const known = computed(() => { if (!props.schema) return null; const s = [...props.schema]; for (const k of Object.keys(first)) if (!s.some((x) => x.key === k)) s.push({ key: k, type: 'any', label: 'было в JSON при открытии' }); return s })
@@ -61,8 +80,8 @@ const obj = computed(() => { if (!parsed.value.ok) return null; try { return JSO
 const issues = computed(() => (known.value && obj.value ? checkKeys(obj.value, known.value, props.kind || undefined) : []))
 const badKeys = computed(() => new Set(issues.value.map((x) => x.key)))
 const has = (k) => !!obj.value && typeof obj.value === 'object' && k in obj.value
-const tsT = (s) => (s.type === 'kind' ? JSON.stringify(props.kind || 'тип') : s.type === 'select' ? (s.options ?? []).map((o) => JSON.stringify(o)).join(' | ') : { text: 'string', number: 'number', bool: 'boolean', list: '[ … ]', file: 'string /* адрес файла */', any: 'any' }[s.type] ?? 'any') + (s.null ? ' | null' : '')
-const typeT = (s) => (s.type === 'select' ? (s.options ?? []).join(' | ') : { kind: 'тип экрана', text: 'строка', number: 'число', bool: 'true / false', list: 'список', file: 'файл (адрес)', any: '' }[s.type] ?? '')
+const tsT = (s) => (s.type === 'kind' ? JSON.stringify(props.kind || 'тип') : s.type === 'select' ? (s.options ?? []).map((o) => JSON.stringify(o)).join(' | ') : { text: 'string', number: 'number', bool: 'boolean', list: '[ … ]', object: '{ … }', file: 'string /* адрес файла */', any: 'any' }[s.type] ?? 'any') + (s.null ? ' | null' : '')
+const typeT = (s) => (s.type === 'select' ? (s.options ?? []).join(' | ') : { kind: 'тип экрана', text: 'строка', number: 'число', bool: 'true / false', list: 'список', object: 'объект', file: 'файл (адрес)', any: '' }[s.type] ?? '')
 const valT = (v) => { const x = typeof v === 'string' ? (v.length > 60 ? v.slice(0, 60) + '…' : v) : JSON.stringify(v); return x === undefined ? '' : x }
 /** нажали на ключ: есть — к его строке; нет — вставить с действующим значением */
 function pickKey(s) {
@@ -106,6 +125,7 @@ onMounted(() => nextTick(() => ed.value?.focus()))
           <button class="jb" :class="{ on: wrap }" title="Переносить длинные строки (Alt+Z)" @click="flipWrap">Перенос строк</button>
           <button v-if="schema" class="jb" :class="{ on: sideOf === 'keys' }" title="Какие ключи принимает это упражнение — справа; нажмите на ключ: есть — перейти, нет — вставить" @click="sideOf === 'keys' ? setSide('none') : setSide('keys')">Что принимает</button>
           <button v-if="how" class="jb" :class="{ on: sideOf === 'how' }" title="Что из этого JSON уйдёт в чат и в модели — обновляется, пока печатаете" @click="sideOf === 'how' ? setSide('none') : setSide('how')">Как собирается</button>
+          <button v-if="reqs" class="jb" :class="{ on: sideOf === 'req' }" title="Объекты, которые уходят в API, — как их видит программист; пока печатаете — обновляются" @click="sideOf === 'req' ? setSide('none') : setSide('req')">Запрос в API</button>
           <slot name="actions" />
         </div>
         <div class="jm-body" :class="{ split: !!sideOf }">
@@ -120,6 +140,18 @@ onMounted(() => nextTick(() => ed.value?.focus()))
               </button>
               <span class="kbr0">}</span>
             </div>
+          </aside>
+          <aside v-else-if="sideOf === 'req'" class="jm-how jm-req">
+            <p class="n">Ровно эти объекты уходят по сети — собраны из JSON слева. Свои поля — в <code>"request": {{ '{' }} "имя": {{ '{' }} … } }</code>: лягут поверх (вложенное сливается, <code>null</code> — убрать поле). Имя — у каждого запроса справа.</p>
+            <p v-if="!obj" class="w">JSON пока не разбирается — показан последний верный</p>
+            <section v-for="(r, i) in reqs" :key="i" class="rq">
+              <div class="rqh"><b>{{ r.to }}</b>
+                <button v-if="r.own" type="button" class="rqo" :class="{ in: !!obj?.request?.[r.own] }" :title="readonly ? 'Свои поля этого запроса — request.' + r.own : obj?.request?.[r.own] ? 'Есть свои поля — перейти' : 'Добавить свои поля этому запросу'" @click="ownReq(r.own)">request.{{ r.own }}</button>
+                <button type="button" class="rqc" title="Скопировать объект" @click="copyReq(r, i)">{{ copiedReq === i ? '✓' : 'Копировать' }}</button></div>
+              <code class="rqv">{{ r.via }}</code>
+              <pre class="rqb" v-html="hl(r.body)" />
+              <p v-if="r.note" class="rqn">{{ r.note }}</p>
+            </section>
           </aside>
           <aside v-else-if="sideOf === 'how'" class="jm-how">
             <p v-for="w in how.warn" :key="w" class="w">⚠ {{ w }}</p>
@@ -180,6 +212,18 @@ header { display: flex; align-items: center; gap: 8px } .jm-t { display: grid; g
 .jm.dark .kline.in { background: #10314d } .jm.dark .kline.in .kk { color: #7cc4ff } .jm.dark .kline.in .kty { color: #e8b26a }
 .kline.bad { background: #fff1f0 } .kline.bad .kk { color: #d92d20 }
 .kin { color: #0b6bcb } .kout { color: #9aa0a6 } .jm-keys .n code { font: 700 12px ui-monospace, monospace; color: #6b7280 }
+/* «Запрос в API» (24.11.2026): объект с подсветкой, как в редакторе */
+.rq { gap: 5px !important; padding-bottom: 6px }
+.rqh { display: flex; align-items: center; gap: 6px } .rqh b { flex: 1; min-width: 0 }
+.rqo, .rqc { flex: none; border: 0; border-radius: 6px; padding: 2px 7px; background: #eceef1; color: #6b7280; font: 700 11px ui-monospace, monospace; cursor: pointer } .rqc { font-family: inherit }
+.rqo.in { background: #e0efff; color: #0b6bcb } .rqo:hover, .rqc:hover { filter: brightness(.95) }
+.jm.dark .rqo, .jm.dark .rqc { background: #333; color: #aaa } .jm.dark .rqo.in { background: #10314d; color: #7cc4ff }
+.rqv { display: block; padding: 0 2px; color: #8a8f98; font: 600 11px/1.4 ui-monospace, monospace; overflow-wrap: anywhere }
+.jm-how pre.rqb { color: #374151 } .jm.dark .jm-how pre.rqb { color: #d4d4d4 }
+.rqb :deep(.hk) { color: #0b6bcb } .rqb :deep(.hs) { color: #a3570c } .rqb :deep(.hn) { color: #0e7c5a } .rqb :deep(.hl) { color: #7c3aed }
+.jm.dark .rqb :deep(.hk) { color: #9cdcfe } .jm.dark .rqb :deep(.hs) { color: #ce9178 } .jm.dark .rqb :deep(.hn) { color: #b5cea8 } .jm.dark .rqb :deep(.hl) { color: #569cd6 }
+.rqn { margin: 0; color: #8a8f98; font-size: 11.5px; font-style: italic }
+.jm-req .n code { font: 700 11.5px ui-monospace, monospace; color: #6b7280 }
 footer { font-size: 12px; min-height: 22px }
 .st { border: 0; background: none; padding: 0; font: inherit; font-weight: 800; text-align: left } .st.ok { color: #3b8a11 } .st.bad { color: #d92d20; cursor: pointer } .st.bad:hover { text-decoration: underline }
 .err { color: #d92d20; font-weight: 800 } .pos { color: #8a8f98; font-variant-numeric: tabular-nums }

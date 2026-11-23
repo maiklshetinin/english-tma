@@ -21,6 +21,7 @@ import { sttModel, sttModels, STT_MODEL, firstKey, startTalk, liveModels, liveNa
 import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/kpcheck'
 import { kpLive } from '../../utils/kplive'
 import { recordMic, transcribeFile } from '../../utils/sttfile'
+import { reqOf } from '../../utils/overlay'
 import VoiceNote from '../../components/VoiceNote.vue'
 import { kpCfg, fill, kpReady, langHow } from './defaults'
 import { ai } from '../../utils/gemini'
@@ -136,7 +137,7 @@ async function dictate() {
   // чем распознавать — dicModel экрана или курса (23.11.2026): auto — свежая …transcribe-live ключа; Live-собеседник — молча; browser — сам браузер
   const want = (!editor && dicPick.value) || kpCfg(props.step).dicModel, model = dicKind(want) === 'auto' ? await sttModel(key) : want
   dicUsed.value = model
-  dicS = startDictation({ key, model, lang: kpCfg(props.step).lang, on: {          // язык — из JSON экрана (lang)
+  dicS = startDictation({ key, model, lang: kpCfg(props.step).lang, extra: reqOf(kpCfg(props.step), 'dictation'), on: {          // язык — из JSON экрана (lang)
     state: (s, info) => {
       if (s === 'live' && info) return
       dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s
@@ -178,7 +179,7 @@ async function sendNote() {
   n.status = 'sending'; n.err = ''; dic.value = 'sending'
   try {
     const c = kpReady(kpCfg(props.step))          // промпт и просьба расшифровки, язык — из JSON экрана (sttPrompt, sttAsk, lang)
-    const r = await transcribeFile({ blob: n.blob, lang: c.lang, prompt: c.sttPrompt, ask: c.sttAsk })
+    const r = await transcribeFile({ blob: n.blob, lang: c.lang, prompt: c.sttPrompt, ask: c.sttAsk, extra: reqOf(c, 'stt') })
     n.model = checkName(r.model); n.ms = r.ms
     if (!r.text) { n.status = 'error'; n.err = 'Речи не слышно — запишите ещё раз, поближе к микрофону' } else { n.status = 'done'; typeIn(r.text) }
   } catch (e) { n.status = 'error'; n.err = e?.message || String(e) }
@@ -263,7 +264,7 @@ async function discuss() {
   const v = c.voice
   tkModel.value = m
   const sys = fill(c.discussPrompt, { question: props.step.text ?? '', reference: kpPlain(props.step.ideal ?? ''), answer: p.st.text ?? '', score: r.value?.score ?? '?', missed: (r.value?.missed ?? []).join('; ') || c.discussNone })
-  tkS = startTalk({ key, model: m, voice: v, lang: c.lang, system: sys, opener: c.discussOpener, on: {
+  tkS = startTalk({ key, model: m, voice: v, lang: c.lang, system: sys, opener: c.discussOpener, extra: reqOf(c, 'discuss'), on: {
     state: (s2, info) => { if (s2 === 'live' && info) return; tk.value = s2 === 'error' || s2 === 'ended' ? 'idle' : s2; if (s2 === 'error') tkErr.value = info; if (s2 === 'ended' || s2 === 'error') { tkS = null; tkLvl.value = 0 } },
     text: tkPush, turn: () => { const l = tkLines.value.at(-1); if (l) l.closed = true }, level: (x) => { tkLvl.value = tkLvl.value * 0.6 + x * 0.4 },
   } })
