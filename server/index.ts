@@ -90,7 +90,7 @@ notes.load().catch((e) => console.error('notes: не загрузились', e)
 const live = makeLive({
   notes,
   origins: list(env.ALLOWED_ORIGIN),
-  hello: () => ({ seen: students.recentSeen() }),
+  hello: () => ({ seen: students.recentSeen(), ai: ai.pub() }),          // ai — статус моста «Ответа по смыслу» на момент входа
   verify: async (t) => { const u = await auth.verifyIdToken(t); return { uid: u.uid, role: String(roleOf(u) ?? 'none'), name: String(u.tgName || ''), photo: String(u.tgPhoto || ''), dev: u.dev === true } },
 })
 const login = makeLogin({ db, auth, FieldValue, teacherIds: TEACHER_IDS, devIds: DEV_IDS })
@@ -372,7 +372,8 @@ app.get('/avatar/:tgId', requireUser, wrap(async (req, res) => {
 
 // «Ответ по смыслу»: проверка через чат в браузере преподавателя (ai.ts, скрипт public/ai-bridge.user.js). Ключ моста — в settings/ai
 const aiDoc = () => db.collection('settings').doc('ai')
-const ai = makeAi({ loadToken: async () => String((await aiDoc().get()).get('token') || ''), saveToken: async (token) => { await aiDoc().set({ token }, { merge: true }) } })
+const ai = makeAi({ loadToken: async () => String((await aiDoc().get()).get('token') || ''), saveToken: async (token) => { await aiDoc().set({ token }, { merge: true }) },
+  onChange: (v) => live.broadcast({ t: 'ai', ...v }) })          // мост включили / выключили — сразу во все вкладки (23.11.2026)
 app.get('/ai/status', requireUser, (_req, res) => { res.json(ai.pub()) })      // { online, sites: ['Gemini', …] } — значок «проверит» на экране ученика, без базы
 app.post('/ai/check', requireUser, wrap(async (req, res) => res.json(await ai.check(req.body ?? {}))))      // { question, reference, answer, prompt? } → { score, missed, feedback }
 app.get('/dev/ai', requireUser, requireDev, wrap(async (_req, res) => res.json({ ...ai.status(), token: await ai.token() })))

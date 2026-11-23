@@ -3,6 +3,7 @@
 // чата (server/ai.ts, public/ai-bridge.user.js). Состояние моста и его ключ — вкладка «ИИ» панели разработчика (DevAi.vue).
 import { ref } from 'vue'
 import { apiRequest } from '../firebase'
+import { onLive, live } from '../composables/useLive'
 
 // порог и промпт по умолчанию — в exercises/kp/defaults.ts (там же все настройки моделей проверки, 20.11.2026)
 import { PASS, SYSTEM, kpCfg, kpReady } from '../exercises/kp/defaults'
@@ -33,6 +34,12 @@ export async function bridgeStatus(request = apiRequest, fresh = false) {
   })().finally(() => { stWait = null })
   return stWait
 }
+// 23.11.2026: у преподавателя статус приходит сам — по живому соединению /live (сервер шлёт при входе и при каждом включении/выключении
+// моста). Пока оно есть, экраны сервер не спрашивают (bridgePush); нет (ученик, сервер спит) — как раньше, запросом раз в 15 с
+const setBridge = (b) => { const v = { online: !!b?.online, sites: Array.isArray(b?.sites) ? b.sites.map(String) : [] }; stCache = { at: Date.now(), v }; bridgeLast.value = v }
+onLive('hello', (m) => { if (m.ai) setBridge(m.ai) })
+onLive('ai', setBridge)
+export const bridgePush = () => live.on && !!bridgeLast.value
 /** Значок чата (файлы — public/ai/); нет — пусто, показываем только название */
 const AI_ICON = { ChatGPT: 'gpt.svg', Gemini: 'gemini.svg', Claude: 'Claude Spark - Clay.svg' }
 export const aiIcon = (site) => (AI_ICON[site] ? import.meta.env.BASE_URL + 'ai/' + encodeURIComponent(AI_ICON[site]) : '')

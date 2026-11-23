@@ -49,13 +49,19 @@ export function parseReply(id: string, text: string, sent = '') {
 
 type Job = { id: string; text: string; at: number; taken: number; site?: string; done: (r: { text?: string; error?: string }) => void }
 
-export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: string) => Promise<void>; now?: () => number; jobMs?: number; pollMs?: number; seenMs?: number }) {
+export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: string) => Promise<void>; now?: () => number; jobMs?: number; pollMs?: number; seenMs?: number; onChange?: (v: { online: boolean; sites: string[] }) => void }) {
   const now = o.now ?? Date.now, JOB = o.jobMs ?? 100_000, POLL = o.pollMs ?? 25_000, SEEN = o.seenMs ?? 60_000
   const queue: Job[] = [], waiting: Array<(j: Job | null) => void> = []
   const st = { seenAt: 0, site: '', served: 0, lastError: '', lastAt: 0, lastMs: 0 }
   const sites = new Map<string, number>()                                      // каждый чат отдельно: когда последний раз спрашивал задание
-  const seen = (site: unknown) => { const s = cut(site, 20); st.seenAt = now(); if (s) { st.site = s; sites.set(s, now()) } }
+  const seen = (site: unknown) => { const s = cut(site, 20); st.seenAt = now(); if (s) { st.site = s; sites.set(s, now()) } tick() }
   const live = () => [...sites].filter(([, t]) => now() - t <= SEEN).map(([s]) => s)
+  const pub = () => ({ online: now() - st.seenAt <= SEEN, sites: live() })
+  // 23.11.2026: статус моста — сразу во вкладки приложения (onChange → WebSocket /live, index.ts), только когда он правда поменялся:
+  // мост включили (первый запрос скрипта), выключили (bye) или пропал без bye (60 с тишины — проверка раз в 5 с)
+  let lastPub = ''
+  const tick = () => { if (!o.onChange) return; const v = pub(), k = JSON.stringify(v); if (k === lastPub) return; lastPub = k; try { o.onChange(v) } catch { /* вкладки — не главное */ } }
+  if (o.onChange) setInterval(tick, 5_000).unref?.()
   let token = '', loaded: Promise<void> | null = null
   const ensure = () => (loaded ??= o.loadToken().then((t) => { token = t }).catch(() => { loaded = null }))
 
@@ -111,7 +117,7 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
     },
     /** Скрипт прислал ответ чата (или ошибку) */
     done(id: unknown, body: { text?: unknown; error?: unknown }) {
-      st.seenAt = now()
+      st.seenAt = now(); tick()
       const j = queue.find((x) => x.id === String(id ?? ''))
       if (!j) return false
       j.done(body.error ? { error: cut(body.error, 200) } : { text: String(body.text ?? '') })
@@ -121,13 +127,14 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
      *  проверки, которые ещё никто не взял, — сразу ошибкой (не ждут 100 с). Взятую — дописывает тот же скрипт */
     bye(site: unknown) {
       const s = cut(site, 20); if (s) sites.delete(s)
-      if (live().length) return { online: true, sites: live() }
-      st.seenAt = 0
+      if (live().length) { tick(); return { online: true, sites: live() } }
+      st.seenAt = 0; tick()
       for (const j of [...queue]) if (!j.taken) j.done({ error: 'Мост выключили — проверка не ушла в чат' })
       return { online: false, sites: [] }
     },
     /** Для экрана ученика: в сети ли проверка и какие чаты подключены */
-    pub() { const l = live(); return { online: now() - st.seenAt <= SEEN, sites: l } },
+    pub,
+    tick,
     status() { return { online: now() - st.seenAt <= SEEN, seenAt: st.seenAt, site: st.site, sites: live(), queue: queue.length, served: st.served, lastError: st.lastError, lastAt: st.lastAt, lastMs: st.lastMs } },
     async token() { await ensure(); return token },
     async newToken() { const t = randomBytes(18).toString('base64url'); await o.saveToken(t); token = t; loaded = Promise.resolve(); return t },

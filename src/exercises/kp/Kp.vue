@@ -13,7 +13,8 @@ import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
 import { usePlay, useEdit, inEditor } from '../ctx'
-import { PASS, SYSTEM, bridgeStatus, bridgeLast, aiIcon, kpPlain } from '../../utils/ai'
+import { PASS, SYSTEM, bridgeStatus, bridgeLast, bridgePush, aiIcon, kpPlain } from '../../utils/ai'
+import { live } from '../../composables/useLive'
 import TtsDialog from '../../components/TtsDialog.vue'
 import { modelName } from '../../utils/tts'
 import { sttModel, sttModels, STT_MODEL, firstKey, startTalk, liveModels, liveName, startDictation, dicChoices, dicName, dicKind } from '../../utils/live'
@@ -60,9 +61,11 @@ let brTm = 0
 const idle = computed(() => !!p?.idle)
 // экран выбрали (или открыли) — сразу свежий статус, мимо 15-секундной памяти (23.11.2026): видно и в Network; дальше — раз в 15 с.
 // Спрашивает только подвал (part fb) — статус показывает он
-function brRun() { clearInterval(brTm); brTm = 0; if (p.edit || idle.value || props.part !== 'fb') return; loadBridge(true); brTm = setInterval(() => { if (!p.st.done) loadBridge() }, 15_000) }
+// статус идёт сам по /live (bridgePush) — тогда ни запроса, ни таймера; соединения нет — спросить при выборе и раз в 15 с
+function brRun() { clearInterval(brTm); brTm = 0; if (p.edit || idle.value || props.part !== 'fb' || bridgePush()) return; loadBridge(true); brTm = setInterval(() => { if (!p.st.done && !bridgePush()) loadBridge() }, 15_000) }
 onMounted(() => { if (p.edit) return; if (!idle.value) brRun() })          // невыбранный экран мост не спрашивает и его статус не показывает («Экран не активен»)
 watch(idle, brRun)
+watch(() => live.on, brRun)
 onBeforeUnmount(() => clearInterval(brTm))
 const by = computed(() => (checked.value && r.value.site ? { t: 'проверил', api: !!r.value.api, live: !!r.value.live, model: r.value.model, sites: [r.value.site], sec: Number.isFinite(r.value.ms) ? (r.value.ms / 1000).toFixed(1).replace('.', ',') + ' с' : '' } : null))
 // 19.11.2026: программы диктовки вставляют текст в поле напрямую, без события input — v-model этого не видит («0 слов»,

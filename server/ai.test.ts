@@ -67,4 +67,17 @@ ok(!ai.status().online, 'минуту не было опроса — мост н
   ok(await pr === 502 && Date.now() - t0 < 1000, 'невзятая проверка — сразу ошибкой, не ждёт 100 с')
   ok(await status(a2.check(Q0)) === 503, 'после выключения — сразу 503') }
 
+// статус — сразу во вкладки (onChange → /live): только когда поменялся; пропал без bye — по таймауту (tick)
+{ let n3 = 1e9; const got: string[] = []
+  const a3 = makeAi({ loadToken: async () => 'abc', saveToken: async () => {}, now: () => n3, pollMs: 10, seenMs: 60_000, onChange: (v) => got.push((v.online ? 'on:' : 'off:') + v.sites.join()) })
+  await a3.next('Gemini', () => {})
+  ok(got.join() === 'on:Gemini', 'мост включили — одно сообщение, повторный опрос того же не шлёт')
+  await a3.next('ChatGPT', () => {}); a3.bye('ChatGPT')
+  ok(got.join('|') === 'on:Gemini|on:Gemini,ChatGPT|on:Gemini', 'второй чат пришёл и ушёл — по сообщению')
+  a3.bye('Gemini')
+  ok(got[got.length - 1] === 'off:', 'выключили последний — сразу «не в сети»')
+  await a3.next('Gemini', () => {}); n3 += 61_000; a3.tick()
+  ok(got.slice(-2).join('|') === 'on:Gemini|off:', 'вкладку закрыли без bye — «не в сети» после 60 с тишины')
+  a3.tick(); ok(got.length === 6, 'ничего не поменялось — не шлём') }
+
 if (fails) { console.log(`\n${fails} FAIL`); process.exit(1) } else console.log('\nвсё PASS')

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { checkAnswer, PASS, SYSTEM } from './ai'
+import { checkAnswer, PASS, SYSTEM, bridgeLast, bridgePush, bridgeStatus } from './ai'
+import { live } from '../composables/useLive'
 import { CHAT, TOPIC, fill } from '../exercises/kp/defaults'
 import { stepsFromJson, stepIssue, fishStep } from './lesson'
 
@@ -80,5 +81,19 @@ describe('«Ответ по смыслу» в уроке', () => {
       reference_html: '<p>Podczas <b>Wigilii</b> <b class="red">nie</b>:</p><ul><li><b class="acc">Kolędowanie</b>: <i>„</i><b>Cicha noc</b><i>”</i> &amp; <i>(dary)</i></li></ul>' }, { id: 6, question: 'Bez?', reference: 'y' }] }))!
     expect(r.steps[0]).toMatchObject({ kind: 'kp', n: 5, star: true, ideal: 'Podczas **Wigilii** **nie**:\n• ==Kolędowanie==: „**Cicha noc**” & _(dary)_' })
     expect(r.steps[1].star).toBeUndefined(); expect(r.steps[1]).toMatchObject({ n: 6, ideal: 'y' })
+  })
+})
+
+describe('Статус моста по /live', () => {
+  it('сервер прислал — у всех экранов сразу, без запросов; соединения нет — запросом', async () => {
+    const w = globalThis.window.__live
+    w.emit({ t: 'hello', ai: { online: true, sites: ['Gemini'] } })
+    expect(bridgeLast.value).toEqual({ online: true, sites: ['Gemini'] })
+    w.emit({ t: 'ai', online: false, sites: [] })
+    expect(bridgeLast.value.online).toBe(false)
+    let asked = 0
+    expect(await bridgeStatus(async () => { asked++; return new Response('{}') })).toEqual({ online: false, sites: [] })
+    expect(asked).toBe(0)          // только что пришло по /live — 15 с не спрашиваем
+    expect(bridgePush()).toBe(false); live.on = true; expect(bridgePush()).toBe(true); live.on = false
   })
 })
