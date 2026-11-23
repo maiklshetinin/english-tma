@@ -120,7 +120,7 @@ const tip = computed(() => {
       </button>
     </div>
     <div ref="box" class="plot">
-      <div v-if="metric === 'ok'" class="lgd"><span><i class="g" />зачтено</span><span><i class="b" />не зачтено</span></div>
+      <div class="lgd" :class="{ hid: metric !== 'ok' }" :aria-hidden="metric !== 'ok'"><span><i class="g" />зачтено</span><span><i class="b" />не зачтено</span></div>          <!-- место под легенду есть на всех вкладках — высота не прыгает -->
       <svg :width="W" :height="H" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="cards.find(c => c.k === metric)?.t + ' по дням'" @pointermove="move" @pointerleave="hov = -1">
         <defs>
           <linearGradient id="excFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1cb0f6" stop-opacity=".32" /><stop offset="1" stop-color="#1cb0f6" stop-opacity="0" /></linearGradient>
@@ -169,6 +169,7 @@ const tip = computed(() => {
 .cross { stroke: var(--hint); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7 }
 .bg { fill: #58cc02 } .bb { fill: #ff4b4b } .dim { opacity: .45 }
 .lgd { display: flex; gap: 14px; justify-content: flex-end; font-size: 12px; font-weight: 700; color: var(--hint); margin-bottom: 4px }
+.lgd.hid { visibility: hidden }
 .lgd span { display: inline-flex; align-items: center; gap: 5px } .lgd i, .tr i { width: 10px; height: 10px; border-radius: 3px; display: inline-block }
 i.g { background: #58cc02 } i.b { background: #ff4b4b }
 .tip { position: absolute; top: 6px; pointer-events: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, .12); padding: 7px 10px; display: grid; gap: 3px; white-space: nowrap; z-index: 2 }
