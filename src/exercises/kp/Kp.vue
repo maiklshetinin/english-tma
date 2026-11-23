@@ -94,10 +94,20 @@ function dicCancel() { const s = dicS; dicDraft.value = ''; dicS = null; s?.stop
 const WAVE_N = 30
 const wave = ref(Array(WAVE_N).fill(0))
 let waveTm = 0, micOn = false
-function waveRun(on) { clearInterval(waveTm); waveTm = 0; if (on) waveTm = setInterval(() => { wave.value = [...wave.value.slice(1), dicLvl.value] }, 70); else wave.value = Array(WAVE_N).fill(0) }
+// 23.11.2026: лента едет плавно и в тишине (как у Claude): новая полоска раз в 70 мс, между ними — сдвиг на шаг (5 px) по кадрам
+const WAVE_STEP = 5, waveOff = ref(0)
+let waveRaf = 0, waveAt = 0
+function waveRun(on) {
+  clearInterval(waveTm); cancelAnimationFrame(waveRaf); waveTm = waveRaf = 0; waveOff.value = 0
+  if (!on) { wave.value = Array(WAVE_N).fill(0); return }
+  waveAt = performance.now()
+  waveTm = setInterval(() => { wave.value = [...wave.value.slice(1), dicLvl.value]; waveAt = performance.now() }, 70)
+  const f = (t) => { waveOff.value = Math.min(1, Math.max(0, (t - waveAt) / 70)) * WAVE_STEP; waveRaf = requestAnimationFrame(f) }
+  waveRaf = requestAnimationFrame(f)
+}
 const waveH = (v) => 2 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 20
 const micOffSnd = () => { if (micOn) { micOn = false; sfxMicOff() } }          // «тр-тр-тр» вниз — один раз на запись
-onBeforeUnmount(() => clearInterval(waveTm))
+onBeforeUnmount(() => { clearInterval(waveTm); cancelAnimationFrame(waveRaf) })
 const canDic = computed(() => ai.keys.length > 0)
 const dicSec = computed(() => { const s = Math.max(0, Math.round((dicNow.value - dicT0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const addText = (t) => { const x = String(t || '').trim(); if (x && !p.st.done) p.st.text = ((p.st.text || '').trim() + ' ' + x).trim() }
@@ -434,7 +444,7 @@ function jsApply() {
       <div v-if="dicDraft || dic === 'live' || dic === 'connecting' || dicErr" class="kcd" :class="{ er: dicErr && !dicDraft && dic === 'idle' }" aria-live="polite">{{ dicDraft || (dic === 'connecting' ? 'Подключаюсь…' : dic === 'live' ? 'Говорите — ' + dicWho.replace(/ слышит$/, '') + ' слушает…' : dicErr) }}</div>
       <div class="kcr">
         <template v-if="dic === 'live' || dic === 'connecting'">
-          <span class="kcwv" :title="dicSec" aria-hidden="true"><i v-for="(v, i) in wave" :key="i" :style="{ height: waveH(v) + 'px' }" /></span>
+          <span class="kcwv" :title="dicSec" aria-hidden="true"><span class="kcwvs" :style="{ transform: `translateX(${-waveOff}px)` }"><i v-for="(v, i) in wave" :key="i" :style="{ height: waveH(v) + 'px' }" /></span></span>
           <button type="button" class="kcx" title="Выбросить то, что продиктовали сейчас" aria-label="Выбросить" @click="dicCancel"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <button type="button" class="kcx" title="Остановить — текст останется" aria-label="Готово" @click="dictate"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button>
         </template>
@@ -554,7 +564,8 @@ function jsApply() {
 .kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
 .kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kcgo.busy:disabled { background: #1cb0f6; color: #fff }
 .kspin { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: kspin .8s linear infinite } @keyframes kspin { to { transform: rotate(360deg) } }
-.kcwv { display: flex; align-items: center; gap: 3px; height: 34px; margin-right: 6px } .kcwv i { flex: none; width: 2px; min-height: 2px; border-radius: 1px; background: #8f8f8f }
+.kcwv { flex: none; width: 142px; height: 34px; margin-right: 6px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px); mask-image: linear-gradient(90deg, transparent, #000 28px) }          /* слева лента тает */
+.kcwvs { display: flex; align-items: center; gap: 3px; height: 100%; will-change: transform } .kcwv i { flex: none; width: 2px; min-height: 2px; border-radius: 1px; background: #8f8f8f }
 .kcwv i:nth-last-child(-n + 3) { background: #3a3a3a }          /* свежие полоски — темнее */
 .kcm, .kcst { width: 100%; box-sizing: border-box }
 .kcst { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; padding: 0 10px; font-size: 12px; line-height: 1.2 }
