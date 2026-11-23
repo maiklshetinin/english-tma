@@ -91,11 +91,11 @@ let dicS = null, dicTm = 0, dicBase = ''
 /** ✕ во время диктовки (как в Claude): остановить и выбросить продиктованное сейчас — поле как до нажатия микрофона */
 function dicCancel() { const s = dicS; dicDraft.value = ''; dicS = null; s?.stop(); clearInterval(dicTm); dic.value = 'idle'; dicLvl.value = 0; waveRun(false); micOffSnd(); if (!p.st.done) p.st.text = dicBase }
 // бегущие линии, как в Claude (23.11.2026): каждые 70 мс громкость — новой полоской справа, старые уезжают влево; тишина — точки
-const WAVE_N = 30
+const WAVE_N = 24
 const wave = ref(Array(WAVE_N).fill(0))
 let waveTm = 0, micOn = false
 // 23.11.2026: лента едет плавно и в тишине (как у Claude): новая полоска раз в 70 мс, между ними — сдвиг на шаг (5 px) по кадрам
-const WAVE_STEP = 5, waveOff = ref(0)
+const WAVE_STEP = 7, waveOff = ref(0)
 let waveRaf = 0, waveAt = 0
 function waveRun(on) {
   clearInterval(waveTm); cancelAnimationFrame(waveRaf); waveTm = waveRaf = 0; waveOff.value = 0
@@ -105,7 +105,7 @@ function waveRun(on) {
   const f = (t) => { waveOff.value = Math.min(1, Math.max(0, (t - waveAt) / 70)) * WAVE_STEP; waveRaf = requestAnimationFrame(f) }
   waveRaf = requestAnimationFrame(f)
 }
-const waveH = (v) => 2 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 20
+const waveH = (v) => 3 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 21          // 24.11.2026: крупнее, как у Claude — точка 3 px, полоска до 24 px
 const micOffSnd = () => { if (micOn) { micOn = false; sfxMicOff() } }          // «тр-тр-тр» вниз — один раз на запись
 onBeforeUnmount(() => { clearInterval(waveTm); cancelAnimationFrame(waveRaf) })
 const canDic = computed(() => ai.keys.length > 0)
@@ -224,7 +224,14 @@ const dicShow = computed(() => { const t = dicDraft.value || (dic.value === 'liv
 
 // «· Gemini API» (20.11.2026, тест): проверка напрямую (utils/kpcheck.js), мост — запасной. Модель: в правке — у экрана,
 // в подвале перед проверкой — своя в этом браузере (главнее)
-const api = computed(() => props.step.engine === 'api' || props.step.engine === 'live')          // 'live' — убранный «Live (голос)»: идёт как Gemini API
+const api = computed(() => props.step.engine === 'api' || props.step.engine === 'live')
+// 24.11.2026: «думает» — пока идёт проверка, ответ уже пузырём наверху, а на месте результата — значок чата и бегущий текст (как у Claude / Gemini)
+const thinking = computed(() => p.st.busy && !p.st.done && !fileMode.value && !p.edit)
+const thinkWho = computed(() => (api.value ? 'Gemini' : bridge.value?.sites?.[0] || 'Gemini'))
+const thinkSec = ref(0)
+let thinkTm = 0
+watch(thinking, (on) => { clearInterval(thinkTm); thinkTm = 0; thinkSec.value = 0; if (on && props.part === 'body') { const t0 = Date.now(); thinkTm = setInterval(() => { thinkSec.value = Math.floor((Date.now() - t0) / 1000) }, 1000) } })
+onBeforeUnmount(() => clearInterval(thinkTm))          // 'live' — убранный «Live (голос)»: идёт как Gemini API
 // модель проверки — из JSON экрана (model); в редакторе курса пилюля пишет прямо в экран, у ученика — выбор только на это открытие
 const cModels = ref([]), cPick = ref(editor ? '' : getPick())
 onMounted(async () => { if (api.value && ai.keys[0]) cModels.value = await checkModels(ai.keys[0].key) })
@@ -377,7 +384,7 @@ function jsApply() {
     </div>
 
     <div class="kth">
-    <div v-if="fileMode || p.edit || p.st.done" class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
+    <div v-if="fileMode || p.edit || p.st.done || thinking" class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
       <button v-if="fileMode && !p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? (fileMode ? 'Включаю микрофон…' : 'Подключаюсь…') : dic === 'sending' ? 'Распознаю…' : fileMode ? 'Записать ответ' : 'Надиктовать с Gemini' }}</button>
       <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
@@ -389,9 +396,11 @@ function jsApply() {
       <!-- черновик диктовки — облаком поверх низа поля (21.11.2026): раньше строкой под полем — появлялась и пропадала, всё ниже прыгало -->
       <div v-if="dicCloud" class="kdd" :class="{ er: dicErr && !dicDraft }" aria-live="polite"><small>{{ dicErr && !dicDraft ? 'Диктовка' : dicWho }}</small>{{ dicShow }}</div>
     </div>
-    <div v-else-if="p.st.done" class="ka done">{{ p.st.text }}</div>          <!-- ответ «уходит вверх» пузырём — после проверки -->
+    <div v-else-if="p.st.done || thinking" class="ka done">{{ p.st.text }}</div>          <!-- ответ «уходит вверх» пузырём — после проверки -->
 
-    <div ref="resEl" class="kb miss" :class="look">
+    <div v-if="thinking" class="kthink" aria-live="polite"><span class="kthi"><img v-if="aiIcon(thinkWho)" :src="aiIcon(thinkWho)" alt="" /></span>
+      <span class="kthx">{{ thinkWho }} проверяет ответ</span><span class="kths">{{ thinkSec ? thinkSec + ' с' : '' }}</span></div>
+    <div v-else ref="resEl" class="kb miss" :class="look">
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
         <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.live"> Live · {{ lv?.name || by.model }}</template><template v-else-if="by.api"> API · {{ checkName(by.model) }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
       <p v-if="checked && r.note" class="ph kno">{{ r.note }}</p>
@@ -564,8 +573,8 @@ function jsApply() {
 .kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
 .kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kcgo.busy:disabled { background: #1cb0f6; color: #fff }
 .kspin { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: kspin .8s linear infinite } @keyframes kspin { to { transform: rotate(360deg) } }
-.kcwv { flex: none; width: 142px; height: 34px; margin-right: 6px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px); mask-image: linear-gradient(90deg, transparent, #000 28px) }          /* слева лента тает */
-.kcwvs { display: flex; align-items: center; gap: 3px; height: 100%; will-change: transform } .kcwv i { flex: none; width: 2px; min-height: 2px; border-radius: 1px; background: #8f8f8f }
+.kcwv { flex: none; width: 157px; height: 34px; margin-right: 6px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px); mask-image: linear-gradient(90deg, transparent, #000 28px) }          /* слева лента тает */
+.kcwvs { display: flex; align-items: center; gap: 4px; height: 100%; will-change: transform } .kcwv i { flex: none; width: 3px; min-height: 3px; border-radius: 2px; background: #6f6f6f }
 .kcwv i:nth-last-child(-n + 3) { background: #3a3a3a }          /* свежие полоски — темнее */
 .kcm, .kcst { width: 100%; box-sizing: border-box }
 .kcst { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; padding: 0 10px; font-size: 12px; line-height: 1.2 }
@@ -602,6 +611,13 @@ function jsApply() {
 .kth { display: flex; flex-direction: column; gap: 10px; min-width: 0 }
 .kth .kl, .kth .kl.pdf { margin-bottom: 0 }          /* без отрицательных отступов — из-за них подписи заезжали на соседей */
 .kth .ka.done { align-self: flex-end; width: auto; max-width: 88%; padding: 9px 13px; border: 0; border-radius: 16px 16px 4px 16px; background: #d7ffb8; overflow: visible }
+.kthink { align-self: flex-start; display: flex; align-items: center; gap: 9px; padding: 4px 2px; font-family: var(--font); font-size: 15px }
+.kthi { display: grid; place-items: center; width: 22px; height: 22px; animation: kthSpin 2.4s cubic-bezier(.6, 0, .4, 1) infinite } .kthi img { width: 20px; height: 20px }
+@keyframes kthSpin { 0% { transform: rotate(0) scale(1) } 50% { transform: rotate(180deg) scale(.82) } 100% { transform: rotate(360deg) scale(1) } }
+.kthx { font-weight: 600; color: transparent; background: linear-gradient(90deg, #8a7a66 0%, #8a7a66 35%, #e8d9c2 50%, #8a7a66 65%, #8a7a66 100%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; animation: kthShine 1.8s linear infinite }
+@keyframes kthShine { from { background-position: 100% 0 } to { background-position: -150% 0 } }
+.kths { font-size: 12px; color: #a8957c; font-variant-numeric: tabular-nums }
+.kcm.busy .kci { color: transparent !important; caret-color: transparent } .kcm.busy .kchl { visibility: hidden }          /* ответ ушёл пузырём наверх — в поле не дублируем */
 .kth .kb.miss { align-self: flex-start; box-sizing: border-box; max-width: 94%; padding: 10px 14px; border: 0; border-radius: 16px 16px 16px 4px; background: #fff; box-shadow: 0 1px 3px rgba(53, 26, 5, .14) }
 /* 22.11.2026: эталон — всплывающая подсказка поверх экрана, места в потоке не занимает */
 .krb { flex: none; margin-left: 6px; height: 34px; padding: 0 12px; border: 0; border-radius: 17px; background: #f2dab5; color: #7b4224; font-family: var(--font); font-size: 13px; font-weight: 800; cursor: pointer }
