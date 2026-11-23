@@ -149,11 +149,13 @@ function typeIn(t) {
 const dicUsed = ref('')                 // чем распознаётся сейчас (auto — уже развёрнутое имя)
 const dicOpts = ref([]), dicAuto = ref('')
 onMounted(async () => {
-  if (!editor || props.part !== 'tools' || fileMode.value || !ai.keys.length) return          // список нужен только на панели правки экрана
+  if (!editor || fileMode.value || !ai.keys.length) return          // список — только в редакторе курса: у кнопки «Надиктовать» и на панели правки
+  if (props.part !== 'tools' && (props.part !== 'fb' || p?.edit)) return
   const key = firstKey(); const [o, a] = await Promise.all([dicChoices(key), sttModel(key)]); dicOpts.value = o; dicAuto.value = a
 })
 const dicSel = computed(() => (props.step.dicModel && props.step.dicModel !== 'auto' ? props.step.dicModel : ''))
 function setDic(v) { if (v) props.step.dicModel = v; else delete props.step.dicModel; ed.changed() }
+const dicShort = (id) => dicName(id).replace(/^Gemini /, '').replace(/^Браузер \(Web Speech\)$/, 'Браузер')          // в подвале — коротко
 const DIC_GROUPS = [['stt', 'Расшифровка речи — только распознаёт'], ['live', 'Live-собеседник — молча, берём расшифровку'], ['browser', 'Без Gemini']]
 const dicWho = computed(() => (dicKind(dicUsed.value) === 'browser' ? 'Браузер слышит' : dicUsed.value ? dicName(dicUsed.value) + ' слышит' : 'Gemini слышит'))
 const dicCloud = computed(() => !p.edit && !fileMode.value && (dic.value === 'live' || !!dicDraft.value || !!dicErr.value))
@@ -376,9 +378,12 @@ function jsApply() {
     <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
+    <select v-if="editor && !fileMode && canDic" class="kms kdm" :value="dicSel" :title="'Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise'" @pointerdown.stop @change="setDic($event.target.value)"><option value="">🎙 авто{{ dicAuto ? ' · ' + dicShort(dicAuto) : '' }}</option><option v-if="dicSel && !dicOpts.some(o => o.id === dicSel)" :value="dicSel">🎙 {{ dicShort(dicSel) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">🎙 {{ dicShort(o.id) }}</option></optgroup></template></select>
   </template>
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit && bridge">
     <span class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
+    <!-- чем распознавать диктовку — видно и меняется в подвале (только в редакторе курса; пишется в экран, dicModel) -->
+    <select v-if="editor && !fileMode && canDic" class="kms kdm" :value="dicSel" :title="'Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise'" @pointerdown.stop @change="setDic($event.target.value)"><option value="">🎙 авто{{ dicAuto ? ' · ' + dicShort(dicAuto) : '' }}</option><option v-if="dicSel && !dicOpts.some(o => o.id === dicSel)" :value="dicSel">🎙 {{ dicShort(dicSel) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">🎙 {{ dicShort(o.id) }}</option></optgroup></template></select>
   </template>
   <template v-else-if="part === 'tools'">
     <span class="kjw">
@@ -432,6 +437,7 @@ function jsApply() {
 .kb { padding: 0; border: 0; border-radius: 0; overflow: visible }          /* 19.11.2026: без пунктирных рамок и прокрутки — блок высотой с текст */
 /* А · PDF: подписи — на подложке, как «Ответы» в домашке */
 .kl.pdf { margin-bottom: -4px; align-items: center }
+.kdm { margin-left: 8px; height: 24px; max-width: 140px; font-size: 11px }          /* модель диктовки — в подвале, рядом с мостом */
 .kdic { --l: 0; margin: 0 8px 0 auto; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 0; border-radius: 13px; background: linear-gradient(90deg, #4b8df8, #a35cf0); color: #fff; font-family: var(--font); font-size: 11.5px; font-weight: 800; text-transform: none; letter-spacing: 0; cursor: pointer; white-space: nowrap }
 .kdic svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .kdic.live { background: #e5484d; box-shadow: 0 0 0 calc(var(--l) * 8px) rgba(229, 72, 77, .22); font-variant-numeric: tabular-nums } .kdic.connecting { opacity: .7 } .kdic:disabled { opacity: .4; cursor: default }
