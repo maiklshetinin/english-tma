@@ -8,6 +8,7 @@
 // 19.11.2026: точь-в-точь как в ответах домашки — номер и вопрос на подложке #f2dab5, красная гранёная звезда у обязательных (step.star),
 // в эталоне оранжевые термины, жирный, курсив, абзацы с отступом и пункты (разметка: ==термин==, **жирный**, _курсив_, «• »).
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { sfxMicOn, sfxMicOff } from '../../composables/useSfx'          // «тр-тр-тр» микрофона (23.11.2026)
 import ExHead from '../parts/ExHead.vue'
 import ExText from '../parts/ExText.vue'
 import ExTool from '../parts/ExTool.vue'
@@ -85,7 +86,15 @@ onBeforeUnmount(() => clearInterval(syncTm))
 const dic = ref('idle'), dicDraft = ref(''), dicErr = ref(''), dicLvl = ref(0), dicT0 = ref(0), dicNow = ref(0)
 let dicS = null, dicTm = 0, dicBase = ''
 /** ✕ во время диктовки (как в Claude): остановить и выбросить продиктованное сейчас — поле как до нажатия микрофона */
-function dicCancel() { const s = dicS; dicDraft.value = ''; dicS = null; s?.stop(); clearInterval(dicTm); dic.value = 'idle'; dicLvl.value = 0; if (!p.st.done) p.st.text = dicBase }
+function dicCancel() { const s = dicS; dicDraft.value = ''; dicS = null; s?.stop(); clearInterval(dicTm); dic.value = 'idle'; dicLvl.value = 0; waveRun(false); micOffSnd(); if (!p.st.done) p.st.text = dicBase }
+// бегущие линии, как в Claude (23.11.2026): каждые 70 мс громкость — новой полоской справа, старые уезжают влево; тишина — точки
+const WAVE_N = 30
+const wave = ref(Array(WAVE_N).fill(0))
+let waveTm = 0, micOn = false
+function waveRun(on) { clearInterval(waveTm); waveTm = 0; if (on) waveTm = setInterval(() => { wave.value = [...wave.value.slice(1), dicLvl.value] }, 70); else wave.value = Array(WAVE_N).fill(0) }
+const waveH = (v) => 2 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 20
+const micOffSnd = () => { if (micOn) { micOn = false; sfxMicOff() } }          // «тр-тр-тр» вниз — один раз на запись
+onBeforeUnmount(() => clearInterval(waveTm))
 const canDic = computed(() => ai.keys.length > 0)
 const dicSec = computed(() => { const s = Math.max(0, Math.round((dicNow.value - dicT0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const addText = (t) => { const x = String(t || '').trim(); if (x && !p.st.done) p.st.text = ((p.st.text || '').trim() + ' ' + x).trim() }
@@ -109,7 +118,7 @@ async function dictate() {
   if (dic.value === 'live' || dic.value === 'connecting') { dicS?.stop(); return }
   const key = firstKey(); dicErr.value = ''
   if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
-  dic.value = 'connecting'; dicBase = p.st.text || ''          // ✕ — вернуть, как было до диктовки
+  dic.value = 'connecting'; dicBase = p.st.text || ''; sfxMicOn(); micOn = true          // ✕ — вернуть, как было до диктовки; «тр-тр-тр» — пошло
   { const el = ta.value; insSel = el && props.part === 'fb' ? [el.selectionStart ?? dicBase.length, el.selectionEnd ?? dicBase.length] : null }          // куда вставлять — где курсор
   // чем распознавать — dicModel экрана или курса (23.11.2026): auto — свежая …transcribe-live ключа; Live-собеседник — молча; browser — сам браузер
   const want = (!editor && dicPick.value) || kpCfg(props.step).dicModel, model = dicKind(want) === 'auto' ? await sttModel(key) : want
@@ -119,8 +128,8 @@ async function dictate() {
       if (s === 'live' && info) return
       dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s
       if (s === 'error') dicErr.value = info
-      if (s === 'live') { dicT0.value = dicNow.value = Date.now(); clearInterval(dicTm); dicTm = setInterval(() => { dicNow.value = Date.now() }, 500) }
-      if (s === 'ended' || s === 'error') { clearInterval(dicTm); dicLvl.value = 0; dicS = null; insText(dicDraft.value); dicDraft.value = '' }
+      if (s === 'live') { dicT0.value = dicNow.value = Date.now(); clearInterval(dicTm); dicTm = setInterval(() => { dicNow.value = Date.now() }, 500); waveRun(true) }
+      if (s === 'ended' || s === 'error') { clearInterval(dicTm); dicLvl.value = 0; dicS = null; insText(dicDraft.value); dicDraft.value = ''; waveRun(false); micOffSnd() }
     },
     interim: (t) => { dicDraft.value = t },
     final: (t) => { insText(t); dicDraft.value = '' },
@@ -422,7 +431,7 @@ function jsApply() {
       <div v-if="dicDraft || dic === 'live' || dic === 'connecting' || dicErr" class="kcd" :class="{ er: dicErr && !dicDraft && dic === 'idle' }" aria-live="polite">{{ dicDraft || (dic === 'connecting' ? 'Подключаюсь…' : dic === 'live' ? 'Говорите — ' + dicWho.replace(/ слышит$/, '') + ' слушает…' : dicErr) }}</div>
       <div class="kcr">
         <template v-if="dic === 'live' || dic === 'connecting'">
-          <span class="kcwv" :style="{ '--l': dicLvl }" :title="dicSec" aria-hidden="true"><i v-for="n in 15" :key="n" /></span>
+          <span class="kcwv" :title="dicSec" aria-hidden="true"><i v-for="(v, i) in wave" :key="i" :style="{ height: waveH(v) + 'px' }" /></span>
           <button type="button" class="kcx" title="Выбросить то, что продиктовали сейчас" aria-label="Выбросить" @click="dicCancel"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <button type="button" class="kcx" title="Остановить — текст останется" aria-label="Готово" @click="dictate"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button>
         </template>
@@ -542,8 +551,8 @@ function jsApply() {
 .kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
 .kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kcgo.busy:disabled { background: #1cb0f6; color: #fff }
 .kspin { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: kspin .8s linear infinite } @keyframes kspin { to { transform: rotate(360deg) } }
-.kcwv { display: flex; align-items: center; gap: 4px; height: 34px; margin-right: 6px; --l: 0 } .kcwv i { width: 2px; border-radius: 1px; background: #8f8f8f; height: calc(2px + var(--l) * 18px * var(--k, .45)); transition: height .12s }
-.kcwv i:nth-child(3n) { --k: 1 } .kcwv i:nth-child(3n + 1) { --k: .3 } .kcwv i:nth-child(4n) { --k: .7 } .kcwv i:nth-child(5n) { --k: .15 }
+.kcwv { display: flex; align-items: center; gap: 3px; height: 34px; margin-right: 6px } .kcwv i { flex: none; width: 2px; min-height: 2px; border-radius: 1px; background: #8f8f8f }
+.kcwv i:nth-last-child(-n + 3) { background: #3a3a3a }          /* свежие полоски — темнее */
 .kcm, .kcst { width: 100%; box-sizing: border-box }
 .kcst { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; padding: 0 10px; font-size: 12px; line-height: 1.2 }
 .kcst > * { flex: none } .kcst .kbr { white-space: nowrap }

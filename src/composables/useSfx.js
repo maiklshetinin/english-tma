@@ -28,5 +28,16 @@ export const sfxResult = (ok) => play((c, t) => {
   if (ok) { note(c, 880, t, 0.14); note(c, 1318.5, t + 0.09, 0.32); note(c, 2637, t + 0.09, 0.18, 'sine', 0.03) }
   else { note(c, 311.1, t, 0.16, 'triangle', 0.14); note(c, 233.1, t + 0.12, 0.26, 'triangle', 0.14) }
 })
+/** Микрофон (диктовка, как в Claude; 23.11.2026): включили — public/sfx/mic-on.mp3, выключили — mic-off.mp3. Не проигрался — тихо */
+const clips = {}
+function micSound(name) {
+  if (!sfxOn.value || typeof Audio === 'undefined') return
+  try {
+    const a = (clips[name] ??= Object.assign(new Audio(import.meta.env.BASE_URL + 'sfx/' + name + '.mp3'), { preload: 'auto' }))
+    a.currentTime = 0; a.play()?.catch?.(() => {})
+  } catch { /* без звука */ }
+}
+export const sfxMicOn = () => micSound('mic-on')
+export const sfxMicOff = () => micSound('mic-off')
 /** Маленький шаг верно (пара сошлась) — короткий тихий «тик» */
 export const sfxTick = () => play((c, t) => note(c, 1046.5, t, 0.09, 'sine', 0.08))
