@@ -78,6 +78,13 @@ ok(!ai.status().online, 'минуту не было опроса — мост н
   ok(got[got.length - 1] === 'off:', 'выключили последний — сразу «не в сети»')
   await a3.next('Gemini', () => {}); n3 += 61_000; a3.tick()
   ok(got.slice(-2).join('|') === 'on:Gemini|off:', 'вкладку закрыли без bye — «не в сети» после 60 с тишины')
-  a3.tick(); ok(got.length === 6, 'ничего не поменялось — не шлём') }
+  a3.tick(); ok(got.length === 6, 'ничего не поменялось — не шлём')
+  // выключили во вкладке: скрипт обрывает ожидание и шлёт bye — в любом порядке мост остаётся выключенным
+  for (const order of ['bye-first', 'close-first']) {
+    let gone = () => {}; const w = a3.next('Gemini', (f) => { gone = f })
+    if (order === 'bye-first') { a3.bye('Gemini'); gone() } else { gone(); a3.bye('Gemini') }
+    await w
+    ok(!a3.pub().online && got[got.length - 1] === 'off:', 'оборванный запрос после bye не возвращает «в сети» (' + order + ')')
+  } }
 
 if (fails) { console.log(`\n${fails} FAIL`); process.exit(1) } else console.log('\nвсё PASS')

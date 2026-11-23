@@ -104,14 +104,15 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
     /** Скрипт спрашивает задание: есть — сразу, нет — ждём до POLL мс. onGone — скрипт отключился до ответа: задание вернуть в очередь */
     async next(site: unknown, onGone: (f: () => void) => void): Promise<{ id: string; text: string } | null> {
       seen(site)
+      let gone = false          // скрипт оборвал запрос (его выключили — следом придёт bye): «видели» не отмечать, иначе чат снова «в сети» (23.11.2026)
       const j = await new Promise<Job | null>((res) => {
         let over = false
         const fin = (x: Job | null) => { if (over) { if (x) { x.taken = 0; give() } return } over = true; clearTimeout(tm); const i = waiting.indexOf(fin); if (i >= 0) waiting.splice(i, 1); res(x) }
         const tm = setTimeout(() => fin(null), POLL)
         waiting.push(fin); give()
-        onGone(() => fin(null))
+        onGone(() => { gone = true; fin(null) })
       })
-      seen(site)
+      if (!gone) seen(site)
       if (j) j.site = cut(site, 20)
       return j && { id: j.id, text: j.text }
     },
