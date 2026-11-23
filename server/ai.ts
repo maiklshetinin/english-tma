@@ -117,6 +117,15 @@ export function makeAi(o: { loadToken: () => Promise<string>; saveToken: (t: str
       j.done(body.error ? { error: cut(body.error, 200) } : { text: String(body.text ?? '') })
       return true
     },
+    /** Скрипт выключили во вкладке (мост 1.6, 23.11.2026): этого чата больше нет. Чатов не осталось — «не в сети» сразу (не ждём 60 с),
+     *  проверки, которые ещё никто не взял, — сразу ошибкой (не ждут 100 с). Взятую — дописывает тот же скрипт */
+    bye(site: unknown) {
+      const s = cut(site, 20); if (s) sites.delete(s)
+      if (live().length) return { online: true, sites: live() }
+      st.seenAt = 0
+      for (const j of [...queue]) if (!j.taken) j.done({ error: 'Мост выключили — проверка не ушла в чат' })
+      return { online: false, sites: [] }
+    },
     /** Для экрана ученика: в сети ли проверка и какие чаты подключены */
     pub() { const l = live(); return { online: now() - st.seenAt <= SEEN, sites: l } },
     status() { return { online: now() - st.seenAt <= SEEN, seenAt: st.seenAt, site: st.site, sites: live(), queue: queue.length, served: st.served, lastError: st.lastError, lastAt: st.lastAt, lastMs: st.lastMs } },

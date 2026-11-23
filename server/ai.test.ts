@@ -57,4 +57,14 @@ ok(nt.length >= 20 && store.token === nt && await ai.isToken(nt) && !(await ai.i
 now += 61_000
 ok(!ai.status().online, 'минуту не было опроса — мост не в сети')
 
+// мост 1.6: выключили во вкладке — чат сразу не в списке; последний — сразу «не в сети», невзятая проверка — сразу ошибкой
+{ let n2 = 1e9
+  const a2 = makeAi({ loadToken: async () => 'abc', saveToken: async () => {}, now: () => n2, jobMs: 100_000, pollMs: 50, seenMs: 60_000 })
+  await a2.next('ChatGPT', () => {}); await a2.next('Gemini', () => {})
+  ok(a2.bye('Gemini').online && a2.pub().sites.join() === 'ChatGPT', 'выключили Gemini — остался ChatGPT, мост в сети')
+  const t0 = Date.now(), pr = status(a2.check(Q0))
+  ok(!a2.bye('ChatGPT').online && !a2.pub().online, 'выключили последний — сразу не в сети')
+  ok(await pr === 502 && Date.now() - t0 < 1000, 'невзятая проверка — сразу ошибкой, не ждёт 100 с')
+  ok(await status(a2.check(Q0)) === 503, 'после выключения — сразу 503') }
+
 if (fails) { console.log(`\n${fails} FAIL`); process.exit(1) } else console.log('\nвсё PASS')

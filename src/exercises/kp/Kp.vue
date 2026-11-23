@@ -89,12 +89,28 @@ function dicCancel() { const s = dicS; dicDraft.value = ''; dicS = null; s?.stop
 const canDic = computed(() => ai.keys.length > 0)
 const dicSec = computed(() => { const s = Math.max(0, Math.round((dicNow.value - dicT0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const addText = (t) => { const x = String(t || '').trim(); if (x && !p.st.done) p.st.text = ((p.st.text || '').trim() + ' ' + x).trim() }
+// 23.11.2026: продиктованное — туда, где курсор (или вместо выделенного), а не в конец; следующие куски — следом.
+// Щёлкнули во время диктовки в другое место текста — дальше туда. insSel — [начало, конец] вставки; null — в конец
+let insSel = null
+function insText(t) {
+  const x = String(t || '').trim(); if (!x || p.st.done) return
+  const el = ta.value, cur = p.st.text || ''
+  if (el && document.activeElement === el) insSel = [el.selectionStart, el.selectionEnd]
+  if (!insSel || insSel[0] > cur.length) { addText(x); return }
+  const before = cur.slice(0, insSel[0]), after = cur.slice(Math.min(insSel[1], cur.length))
+  const sp1 = before && !/\s$/.test(before) ? ' ' : '', sp2 = after && !/^[\s.,!?;:)]/.test(after) ? ' ' : ''
+  p.st.text = before + sp1 + x + sp2 + after
+  const at = before.length + sp1.length + x.length
+  insSel = [at, at]
+  nextTick(() => { if (el && document.activeElement === el) el.setSelectionRange(at, at) })
+}
 async function dictate() {
   if (fileMode.value) return dictateFile()
   if (dic.value === 'live' || dic.value === 'connecting') { dicS?.stop(); return }
   const key = firstKey(); dicErr.value = ''
   if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
   dic.value = 'connecting'; dicBase = p.st.text || ''          // ✕ — вернуть, как было до диктовки
+  { const el = ta.value; insSel = el && props.part === 'fb' ? [el.selectionStart ?? dicBase.length, el.selectionEnd ?? dicBase.length] : null }          // куда вставлять — где курсор
   // чем распознавать — dicModel экрана или курса (23.11.2026): auto — свежая …transcribe-live ключа; Live-собеседник — молча; browser — сам браузер
   const want = (!editor && dicPick.value) || kpCfg(props.step).dicModel, model = dicKind(want) === 'auto' ? await sttModel(key) : want
   dicUsed.value = model
@@ -104,10 +120,10 @@ async function dictate() {
       dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s
       if (s === 'error') dicErr.value = info
       if (s === 'live') { dicT0.value = dicNow.value = Date.now(); clearInterval(dicTm); dicTm = setInterval(() => { dicNow.value = Date.now() }, 500) }
-      if (s === 'ended' || s === 'error') { clearInterval(dicTm); dicLvl.value = 0; dicS = null; addText(dicDraft.value); dicDraft.value = '' }
+      if (s === 'ended' || s === 'error') { clearInterval(dicTm); dicLvl.value = 0; dicS = null; insText(dicDraft.value); dicDraft.value = '' }
     },
     interim: (t) => { dicDraft.value = t },
-    final: (t) => { addText(t); dicDraft.value = '' },
+    final: (t) => { insText(t); dicDraft.value = '' },
     level: (v) => { dicLvl.value = dicLvl.value * 0.6 + v * 0.4 },
   } })
 }
@@ -176,6 +192,10 @@ const lessonDic = computed(() => { const m = kpCfg(props.step).dicModel; return 
 const dicVal = computed(() => (editor ? dicSel.value : dicPick.value))
 const dicShort = (id) => dicName(id).replace(/^Gemini /, '').replace(/^Браузер \(Web Speech\)$/, 'Браузер')          // в подвале — коротко
 const DIC_GROUPS = [['stt', 'Расшифровка речи — только распознаёт'], ['live', 'Live-собеседник — молча, берём расшифровку'], ['browser', 'Без Gemini']]
+// русские буквы в ответе (диктовка ошиблась языком) — розовым под текстом, чтобы сразу увидеть и поправить (23.11.2026)
+const CYR = /[А-Яа-яЁё]+(?:[\s,.\-–—]+[А-Яа-яЁё]+)*/g
+const cyrSegs = computed(() => { const s = p?.st?.text || '', out = []; let i = 0; for (const m of s.matchAll(CYR)) { if (m.index > i) out.push({ t: s.slice(i, m.index) }); out.push({ t: m[0], c: true }); i = m.index + m[0].length } if (i < s.length) out.push({ t: s.slice(i) }); return out })
+const cyrN = computed(() => cyrSegs.value.filter((x) => x.c).reduce((n, x) => n + x.t.split(/[\s,.\-–—]+/).filter(Boolean).length, 0))
 const dicWho = computed(() => (dicKind(dicUsed.value) === 'browser' ? 'Браузер слышит' : dicUsed.value ? dicName(dicUsed.value) + ' слышит' : 'Gemini слышит'))
 const dicCloud = computed(() => !p.edit && !fileMode.value && (dic.value === 'live' || !!dicDraft.value || !!dicErr.value))
 const dicShow = computed(() => { const t = dicDraft.value || (dic.value === 'live' ? '…' : dicErr.value); return t.length > 120 ? '…' + t.slice(-120) : t })
@@ -397,7 +417,8 @@ function jsApply() {
        Под строкой — тихо: мост, слова и порог, модель распознавания. «Целым аудио» — по-старому, поле наверху -->
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit">
     <div v-if="!fileMode" class="kcm" :class="[dic, { busy: p.st.busy, off: idle }]" @pointerdown.stop>
-      <textarea :id="'kpa-' + step.id" ref="ta" class="kci" rows="1" :readonly="p.st.busy" placeholder="Ответьте по-польски — напишите или нажмите микрофон" @input="p.st.text = $event.target.value; fit()" @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
+      <div class="kcw"><div class="kchl" aria-hidden="true"><template v-for="(sg, i) in cyrSegs" :key="i"><mark v-if="sg.c">{{ sg.t }}</mark><template v-else>{{ sg.t }}</template></template>{{ '\n' }}</div>
+      <textarea :id="'kpa-' + step.id" ref="ta" class="kci" rows="1" :readonly="p.st.busy" placeholder="Ответьте по-польски — напишите или нажмите микрофон" @input="p.st.text = $event.target.value; fit()" @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" /></div>
       <div v-if="dicDraft || dic === 'live' || dic === 'connecting' || dicErr" class="kcd" :class="{ er: dicErr && !dicDraft && dic === 'idle' }" aria-live="polite">{{ dicDraft || (dic === 'connecting' ? 'Подключаюсь…' : dic === 'live' ? 'Говорите — ' + dicWho.replace(/ слышит$/, '') + ' слушает…' : dicErr) }}</div>
       <div class="kcr">
         <template v-if="dic === 'live' || dic === 'connecting'">
@@ -418,6 +439,7 @@ function jsApply() {
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
       <span v-else-if="bridge" class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
       <span class="ksp" />
+      <span v-if="!fileMode && cyrN" class="kcyr" title="В ответе русские буквы — подсвечены розовым: диктовка ошиблась языком, поправьте">русские буквы: {{ cyrN }}</span>
       <span v-if="!fileMode" class="kcn" :title="'Зачёт — от ' + pass + ' % смысла эталона'">{{ words }} · от {{ pass }}%</span>
       <select v-if="idle && !fileMode && canDic" class="kms kdm" disabled><option>🎙 {{ dicSel ? dicShort(dicSel) : 'авто' }}</option></select>
       <select v-else-if="!fileMode && canDic" class="kms kdm" :value="dicVal" :title="editor ? 'Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise' : 'Чем распознавать диктовку — выбор только в этом браузере, урок не меняется'" @pointerdown.stop @change="pickDic($event.target.value)"><option value="">🎙 {{ dicShort((!editor && lessonDic) || dicAuto || STT_MODEL) }}</option><option v-if="dicVal && !dicOpts.some(o => o.id === dicVal)" :value="dicVal">🎙 {{ dicShort(dicVal) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">🎙 {{ dicShort(o.id) }}</option></optgroup></template></select>
@@ -507,6 +529,10 @@ function jsApply() {
 .kcm { display: flex; flex-direction: column; gap: 6px; padding: 14px 12px 10px 18px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 20px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .04); text-align: left; transition: border-color .15s, box-shadow .15s }
 .kcm:focus-within, .kcm.live { border-color: rgba(0, 0, 0, .18); box-shadow: 0 2px 14px rgba(0, 0, 0, .07) }
 .kci { display: block; width: 100%; min-height: 26px; box-sizing: border-box; margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; color: #1f1f1f; caret-color: #1a73e8; font-family: var(--font); font-size: 16px; font-weight: 500; line-height: 1.55; user-select: text }
+.kcw { position: relative } .kcw .kci { position: relative; z-index: 1 }
+.kchl { position: absolute; inset: 0; z-index: 0; margin: 0; padding: 0; color: transparent; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; font-family: var(--font); font-size: 16px; font-weight: 500; line-height: 1.55; pointer-events: none; user-select: none }
+.kchl mark { color: transparent; background: #ffd0e2; border-radius: 4px; box-shadow: 0 0 0 1px #ffd0e2 }
+.kcyr { color: #c2185b; font-size: 12px; font-weight: 700; white-space: nowrap }
 .kci::placeholder { color: #9b9b9b; font-weight: 500 }
 .kcd { color: #6f6f6f; font-family: var(--font); font-size: 15px; font-style: italic; font-weight: 500; line-height: 1.55 } .kcd.er { color: #b3261e; font-size: 12.5px; font-style: normal; font-weight: 700 }
 .kcr { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 34px }

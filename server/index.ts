@@ -384,6 +384,7 @@ app.get('/ai/bridge/next', requireBridge, wrap(async (req, res) => {
   if (j) res.json(j); else res.status(204).end()
 }))
 app.post('/ai/bridge/done', requireBridge, wrap(async (req, res) => res.json({ ok: ai.done(req.body?.id, req.body ?? {}) })))
+app.post('/ai/bridge/bye', requireBridge, wrap(async (req, res) => res.json(ai.bye(req.body?.site))))          // скрипт выключили во вкладке (мост 1.6)
 
 // Google Таблица → CSV (таблица должна быть открыта «по ссылке»). Адрес собираем сами из id, чужие URL не ходят.
 app.get('/sheets/csv', requireUser, requireTeacher, wrap(async (req, res) => {
