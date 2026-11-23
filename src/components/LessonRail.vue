@@ -161,7 +161,13 @@ const ro2 = new ResizeObserver((es) => { for (const e of es) if (e.target.datase
 const viewH = reactive({})
 // Правка выше живого экрана — не прокручиваем (17.11.2026): оба окна растут до большей из двух высот (editH — высота правки), размер один
 const editH = reactive({})
-const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.target.dataset; if (!d.id) continue; if (d.view === '1') viewH[d.id] = e.target.offsetHeight; else if (d.edit === '1') editH[d.id] = e.target.offsetHeight } })
+// высота загруженного экрана по типу упражнения (23.11.2026): у экранов одного шаблона стиль один — и «мёртвые» карточки этого типа
+// той же высоты; помнится в браузере между заходами
+const TPLH = 'lr.tplH'
+const tplH = reactive((() => { try { return JSON.parse(localStorage.getItem(TPLH) ?? '{}') ?? {} } catch { return {} } })())
+let tplT = 0
+function setTplH(k, h) { if (!k || !h || tplH[k] === h) return; tplH[k] = h; clearTimeout(tplT); tplT = setTimeout(() => { try { localStorage.setItem(TPLH, JSON.stringify(tplH)) } catch { /* приватный режим */ } }, 500) }
+const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.target.dataset; if (!d.id) continue; if (d.view === '1') { viewH[d.id] = e.target.offsetHeight; setTplH(d.tpl, e.target.offsetHeight) } else if (d.edit === '1') editH[d.id] = e.target.offsetHeight } })
 const cardEls = new WeakSet()
 const watchCard = (el) => { if (el && !cardEls.has(el)) { cardEls.add(el); ro3.observe(el) } }
 const typicalH = computed(() => { const v = Object.values(viewH).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 560 })
@@ -196,12 +202,15 @@ const stats = computed(() => {
 })
 // Сбросить один экран: ответы на нём стираются, прохождение ветки откатывается к нему
 const rk = reactive({})
-// Активный — только выбранный экран (23.11.2026): остальные видны как есть, но не реагируют на мышь и клавиатуру (inert)
-// и не работают в фоне (idle: таймеры шаблона — сверка поля, опрос моста — и анимация персонажа стоят),
-// пока их не выделишь. Нажали на экран — он выбран и активен. Проходят ветку — следующий экран активен сразу (act)
+// Живой — только выбранный экран (23.11.2026): остальные «мёртвые» — лёгкая карточка (тип, вопрос, «Нажмите — экран загрузится»),
+// сам экран (LessonPlayer и шаблон упражнения) не создаётся вовсе. Нажали — экран выбран и загружается; сняли выделение — выгружается.
+// Проходят ветку — следующий экран оживает сразу (act). Карточка — высотой с этот экран, если его уже открывали, иначе — как соседи
 const act = ref(null)
 watch(() => props.sel, () => { act.value = null })
 const isAct = (s) => props.sel === s.id || act.value === s.id
+const finAct = computed(() => props.sel === 'final' || !!(total.value && run.at >= total.value))
+const holdH = (id, tpl) => ({ minHeight: (viewH[id] ?? tplH[tpl] ?? typicalH.value) + 'px' })          // свой экран уже открывали — его высота; нет — высота этого типа
+const deadText = (s) => (s.kind === 'kp' && s.n ? s.n + '. ' : '') + String(s.text || s.word || s.phrase || s.head || '').replace(/==|\*\*|\[|\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 220)
 function resetStep(s) {
   const i = steps.value.indexOf(s); rk[s.id] = (rk[s.id] ?? 0) + 1; delete run.res[s.id]
   if (run.at > i) { run.at = i; run.t1 = 0 }
@@ -276,10 +285,12 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :readonly="readonly" :title="'JSON экрана · ' + tplTitle(s)" :sub="readonly ? 'Экран другого курса — только посмотреть и скопировать' : 'Своё у экрана — вопрос и эталон; остальное общее для курса («{ }» на плитке в меню Exercise)'" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)">
         <template #actions><button class="mcp" :class="{ ok: copied === s.id }" title="Скопировать экран — потом Ctrl+V на холсте или «Вставить» на ветке; JSON — образец для ИИ" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать экран' }}</button></template>
       </JsonModal>
-      <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: isEdit(s) }]" :data-id="s.id" :data-view="isEdit(s) ? 0 : 1" :data-edit="isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
+      <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: isEdit(s) }]" :data-id="s.id" :data-view="!isEdit(s) && isAct(s) ? 1 : 0" :data-edit="isEdit(s) ? 1 : 0" :data-tpl="tplOf(s)" :style="fixH(s) ?? (isAct(s) ? null : holdH(s.id, tplOf(s)))" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
       <!-- JSON экрана (кнопка «{ }») — вместо живого экрана, в той же карточке -->
-      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" :inert="!isAct(s)" :idle="!isAct(s)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
+      <!-- не выбран — «мёртвая» карточка: экран не загружен (нажатие выбирает его и загружает) -->
+      <div v-if="!isEdit(s) && !isAct(s)" class="dead"><span class="dk"><svg viewBox="0 0 24 24" v-html="KINDS[s.kind].ic" />{{ tplTitle(s) }}</span><b v-if="deadText(s)" class="dq">{{ deadText(s) }}</b><span class="dh">Нажмите — экран загрузится</span></div>
+      <LessonPlayer v-else-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
       <!-- Упражнения-шаблоны (src/exercises): правка = тот же живой экран (LessonPlayer edit) — один файл разметки, окно не меняет размер -->
       <LessonPlayer v-else-if="exOf(s) && pk.id !== s.id" :key="'e:' + s.id" embedded edit :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve">
         <template #foot><div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span class="fdk"><component :is="exOf(s).view" :step="s" part="tools" /></span><button class="go play" @click="save(s)">Сохранить</button></div></template>
@@ -354,17 +365,21 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
     <div v-if="!free" :ref="watchFrame" class="frame" :class="{ upb: up }" :data-id="'fin-' + item.id" :style="{ left: cx(finI) + 'px', top: (up ? y + TOP : y - TOP) + 'px', width: CW + 'px', '--c': FINAL.c }">
      <span class="stem" /><span class="node fin-n" :class="{ done: total && run.at >= total }" :title="finName + ' — всегда в конце ветки'"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
     <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>{{ finName }} · всегда в конце</b></div>
-    <div class="card fin" :class="{ on: sel === 'final', now: total && run.at >= total }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
+    <div :ref="watchCard" class="card fin" :class="{ on: sel === 'final', now: total && run.at >= total }" :data-id="'fin-' + item.id" :data-view="finAct ? 1 : 0" data-tpl="final" :style="total && !finAct ? holdH('fin-' + item.id, 'final') : null" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
       <div v-if="!total" class="fin0"><span class="fi"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>{{ finName }}</b><span>{{ isCk ? 'Здесь ученик увидит итог всей Chapter: что усвоено, что повторить. Появится, когда в чекпоинте будут экраны.' : 'Здесь ученик увидит результат: сколько верных ответов и за сколько времени. Появится, когда в уроке будут экраны.' }}</span></div>
-      <LessonPlayer v-else :key="'fin:' + run.key" :inert="sel !== 'final' && !(total && run.at >= total)" :idle="sel !== 'final' && !(total && run.at >= total)" embedded :steps="steps" :start="steps.length" :pct="pctAt(steps.length)" :stats="stats" :resolve="resolve" @restart="restart" @full="emit('play')" />
+      <div v-else-if="!finAct" class="dead"><span class="dk"><svg viewBox="0 0 24 24" v-html="FINAL.ic" />{{ finName }}</span><span class="dh">Нажмите — итог загрузится</span></div>
+      <LessonPlayer v-else :key="'fin:' + run.key" embedded :steps="steps" :start="steps.length" :pct="pctAt(steps.length)" :stats="stats" :resolve="resolve" @restart="restart" @full="emit('play')" />
     </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* экран не выбран — не активен (23.11.2026): нажатие попадает в карточку и выбирает экран */
-.card :deep(.lp[inert]) { pointer-events: none }
+/* «мёртвый» экран (23.11.2026): не выбран — не загружен; карточка той же высоты, что экран */
+.dead { flex: 1 1 auto; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; padding: 26px 28px; background: repeating-linear-gradient(-45deg, transparent 0 16px, rgba(0, 0, 0, .018) 16px 32px); cursor: pointer }
+.dead .dk { display: inline-flex; align-items: center; gap: 7px; color: var(--c, #777); font-size: 13px; font-weight: 800 } .dead .dk svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.dead .dq { color: #3c3c3c; font-size: 17px; font-weight: 700; line-height: 1.35 }
+.dead .dh { margin-top: auto; align-self: center; padding: 7px 14px; border: 1px dashed #cfcfcf; border-radius: 10px; color: #9a9a9a; font-size: 12.5px; font-weight: 700 }
 .mcp { flex: none; border: 0; border-radius: 10px; padding: 7px 12px; background: #f0f1f3; color: #4b4b4b; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; white-space: nowrap } .mcp:hover { background: #e6e8eb } .mcp.ok { background: #dff5d8; color: #3b8a11 }
 :global(.jm.dark) .mcp { background: #3a3d41; color: #ddd } :global(.jm.dark) .mcp.ok { background: #24402a; color: #9be08a }
 .lr { position: absolute; left: 0; top: 0; width: 0; height: 0 }
