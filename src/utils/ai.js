@@ -37,9 +37,12 @@ export async function bridgeStatus(request = apiRequest, fresh = false) {
 // 23.11.2026: у преподавателя статус приходит сам — по живому соединению /live (сервер шлёт при входе и при каждом включении/выключении
 // моста). Пока оно есть, экраны сервер не спрашивают (bridgePush); нет (ученик, сервер спит) — как раньше, запросом раз в 15 с
 const setBridge = (b) => { const v = { online: !!b?.online, sites: Array.isArray(b?.sites) ? b.sites.map(String) : [] }; stCache = { at: Date.now(), v }; bridgeLast.value = v }
-onLive('hello', (m) => { if (m.ai) setBridge(m.ai) })
-onLive('ai', setBridge)
-export const bridgePush = () => live.on && !!bridgeLast.value
+// pushOk — сервер правда шлёт статус (прислал его в hello). Старый сервер (ещё не задеплоился) его не шлёт — тогда экраны спрашивают сами,
+// иначе статус замёрз бы на первом ответе
+let pushOk = false
+onLive('hello', (m) => { pushOk = !!m.ai; if (m.ai) setBridge(m.ai) })
+onLive('ai', (m) => { pushOk = true; setBridge(m) })
+export const bridgePush = () => live.on && pushOk && !!bridgeLast.value
 /** Значок чата (файлы — public/ai/); нет — пусто, показываем только название */
 const AI_ICON = { ChatGPT: 'gpt.svg', Gemini: 'gemini.svg', Claude: 'Claude Spark - Clay.svg' }
 export const aiIcon = (site) => (AI_ICON[site] ? import.meta.env.BASE_URL + 'ai/' + encodeURIComponent(AI_ICON[site]) : '')

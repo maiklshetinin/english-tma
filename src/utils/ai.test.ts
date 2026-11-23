@@ -94,6 +94,8 @@ describe('Статус моста по /live', () => {
     let asked = 0
     expect(await bridgeStatus(async () => { asked++; return new Response('{}') })).toEqual({ online: false, sites: [] })
     expect(asked).toBe(0)          // только что пришло по /live — 15 с не спрашиваем
-    expect(bridgePush()).toBe(false); live.on = true; expect(bridgePush()).toBe(true); live.on = false
+    expect(bridgePush()).toBe(false); live.on = true; expect(bridgePush()).toBe(true)
+    w.emit({ t: 'hello' })          // старый сервер: статус не шлёт — экраны спрашивают сами
+    expect(bridgePush()).toBe(false); live.on = false
   })
 })
