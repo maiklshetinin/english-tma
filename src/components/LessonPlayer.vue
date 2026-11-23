@@ -258,6 +258,7 @@ const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !st
 // ---- книжные (экспериментальные): «Найди лишнее» и «Распредели по колонкам» ----
 const sortLeft = computed(() => (step.value?.kind !== 'sort' ? 0 : step.value.tw ? st.tw.flat().filter(v => !v.trim()).length : st.order.filter(k => st.place[k] == null).length))
 // «Заполни таблицу» (Настя, 18.11.2026): банк слов, образцы зачёркнуты; ученик вписывает форму в колонку — порядок в колонке не важен
+const chatKp = computed(() => step.value?.kind === 'kp' && step.value.dic !== 'file')          // строка ввода как в чате — в подвале экрана
 const canCheck = computed(() => { const k = step.value?.kind; return k === 'kp' ? !!st.text.trim() && !st.busy : k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
 function sortPick(k) { if (!st.done) st.sel = st.sel === k ? null : k }
 function sortPut(c) { if (st.done || st.sel == null) return; st.place = { ...st.place, [st.sel]: c }; st.sel = null; hapticTick?.() }
@@ -300,6 +301,7 @@ const ex = computed(() => (isFinal.value ? null : exOf(step.value)))
 providePlay(reactive({
   st, src, say, pick, right, later, answer, tap, put, back, rec, said, recToggle, again, setVid: (el) => { vid.value = el },
   fill, check, gapOkAt, sendText, sortPick, sortPut, sortBack, sortOkAt,
+  checkAny, canCheck,          // «Ответ по смыслу» (23.11.2026): «Проверить» — в его строке ввода, как «отправить» в чате
   edit: computed(() => props.edit), idle: computed(() => props.idle), single: computed(() => props.single), embedded: computed(() => props.embedded), track: computed(() => props.track),
   favKey, favOn, favToggle,
 }))
@@ -356,6 +358,7 @@ providePlay(reactive({
       <span v-if="fbState" :key="fbState + i" class="mk" aria-hidden="true"><svg v-if="fbState === 'good'" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg><svg v-else viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" /></svg></span>
       <span class="fb"><component :is="ex.view" v-if="ex" :step="step" part="fb" /></span>
       <template v-if="embedded && isFinal"><button class="go ghost" @click="emit('restart')">↺ Заново</button><button class="go" @click="emit('full')">Во весь экран</button></template>
+      <template v-else-if="needCheck && !single && chatKp" />          <!-- «Ответ по смыслу»: «Проверить» внутри строки ввода (Kp.vue) -->
       <button v-else-if="needCheck && !single" class="go" :disabled="!canCheck" @click="checkAny">Проверить</button>
       <button v-else-if="embedded" class="go" :disabled="!st.done" @click="next">Продолжить</button>
       <button v-else-if="isFinal" class="go" @click="emit('close')">{{ single ? 'Так увидит ученик' : 'Готово' }}</button>

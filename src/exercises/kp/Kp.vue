@@ -74,13 +74,18 @@ let syncTm = 0
 const syncRun = () => { clearInterval(syncTm); syncTm = 0; if (!idle.value) syncTm = setInterval(sync, 500) }
 onMounted(() => { if (ta.value) ta.value.value = p.st.text || ''; syncRun() })
 watch(idle, (v) => { if (v) sync(); syncRun() })          // уходят с экрана — последний раз сверить поле
-watch(() => p.st.text, (v) => { if (ta.value && ta.value.value !== (v || '')) ta.value.value = v || '' })
+watch(() => p.st.text, (v) => { if (ta.value && ta.value.value !== (v || '')) ta.value.value = v || ''; nextTick(fit) })
+// строка ввода в подвале растёт по тексту — без прокрутки внутри (23.11.2026)
+function fit() { const el = ta.value; if (!el || props.part !== 'fb') return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
+onMounted(() => nextTick(fit))
 watch(ta, (el) => { if (el) el.value = p.st.text || '' }, { flush: 'sync' })          // поле появилось заново (повтор вопроса) — со своим текстом
 onBeforeUnmount(() => clearInterval(syncTm))
 // «Надиктовать с Gemini» (20.11.2026): речь сырым звуком — в Gemini 3.5 Transcribe Live (польский закреплён), готовые куски
 // дописываются в поле ответа, черновик — серым под полем. Поле остаётся обычным: можно вставить текст или надиктовать по-старому
 const dic = ref('idle'), dicDraft = ref(''), dicErr = ref(''), dicLvl = ref(0), dicT0 = ref(0), dicNow = ref(0)
-let dicS = null, dicTm = 0
+let dicS = null, dicTm = 0, dicBase = ''
+/** ✕ во время диктовки (как в Claude): остановить и выбросить продиктованное сейчас — поле как до нажатия микрофона */
+function dicCancel() { const s = dicS; dicDraft.value = ''; dicS = null; s?.stop(); clearInterval(dicTm); dic.value = 'idle'; dicLvl.value = 0; if (!p.st.done) p.st.text = dicBase }
 const canDic = computed(() => ai.keys.length > 0)
 const dicSec = computed(() => { const s = Math.max(0, Math.round((dicNow.value - dicT0.value) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 const addText = (t) => { const x = String(t || '').trim(); if (x && !p.st.done) p.st.text = ((p.st.text || '').trim() + ' ' + x).trim() }
@@ -89,7 +94,7 @@ async function dictate() {
   if (dic.value === 'live' || dic.value === 'connecting') { dicS?.stop(); return }
   const key = firstKey(); dicErr.value = ''
   if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
-  dic.value = 'connecting'
+  dic.value = 'connecting'; dicBase = p.st.text || ''          // ✕ — вернуть, как было до диктовки
   // чем распознавать — dicModel экрана или курса (23.11.2026): auto — свежая …transcribe-live ключа; Live-собеседник — молча; browser — сам браузер
   const want = (!editor && dicPick.value) || kpCfg(props.step).dicModel, model = dicKind(want) === 'auto' ? await sttModel(key) : want
   dicUsed.value = model
@@ -290,7 +295,7 @@ function jsApply() {
 
 <template>
   <template v-if="part === 'body'">
-    <ExHead :step="step" :def="J.head" />
+    <ExHead v-if="p.edit || fileMode" :step="step" :def="J.head" />          <!-- 23.11.2026: у ученика без «Ответьте устно на вопрос» — вопрос сразу наверху; в правке — чтобы поменять -->
     <div class="kq">
       <div class="kqw">
         <button v-if="p.edit" type="button" class="kst" :class="{ off: !step.star }" :title="step.star ? 'Обязательный вопрос (звезда) — убрать' : 'Сделать обязательным (красная звезда)'" @click="toggleStar"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 50L38.4 3.4L35.4 37.8Z" class="s1" /><path d="M50 50L38.4 3.4L57.1 32.4Z" class="s2" /><path d="M50 50L90.7 24.6L57.1 32.4Z" class="s1" /><path d="M50 50L90.7 24.6L69.0 51.3Z" class="s2" /><path d="M50 50L86.8 80.9L69.0 51.3Z" class="s1" /><path d="M50 50L86.8 80.9L54.6 68.4Z" class="s2" /><path d="M50 50L32.0 94.5L54.6 68.4Z" class="s1" /><path d="M50 50L32.0 94.5L33.9 60.1Z" class="s2" /><path d="M50 50L2.1 46.7L33.9 60.1Z" class="s1" /><path d="M50 50L2.1 46.7L35.4 37.8Z" class="s2" /></svg></button>
@@ -330,19 +335,19 @@ function jsApply() {
     </div>
 
     <div class="kth">
-    <div class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
-      <button v-if="!p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
+    <div v-if="fileMode || p.edit || p.st.done" class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
+      <button v-if="fileMode && !p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? (fileMode ? 'Включаю микрофон…' : 'Подключаюсь…') : dic === 'sending' ? 'Распознаю…' : fileMode ? 'Записать ответ' : 'Надиктовать с Gemini' }}</button>
       <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
     <p v-if="fileMode && !p.st.done" class="kfn" :class="{ er: dicErr }">{{ dicErr || '🎙 Запись уходит в Gemini целым аудио после «Стоп» — не кусками; распознанный текст впишется в поле' }}</p>
     <VoiceNote v-if="fileMode && note && !p.edit" :url="note.url" :peaks="note.peaks" :sec="note.sec" :status="note.status" :model="note.model" :ms="note.ms" :err="note.err" @retry="sendNote" />
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
-    <div v-else-if="!p.st.done" class="kaw" :class="{ dic: dicCloud }">
+    <div v-else-if="!p.st.done && fileMode" class="kaw" :class="{ dic: dicCloud }">
       <textarea :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
       <!-- черновик диктовки — облаком поверх низа поля (21.11.2026): раньше строкой под полем — появлялась и пропадала, всё ниже прыгало -->
       <div v-if="dicCloud" class="kdd" :class="{ er: dicErr && !dicDraft }" aria-live="polite"><small>{{ dicErr && !dicDraft ? 'Диктовка' : dicWho }}</small>{{ dicShow }}</div>
     </div>
-    <div v-else class="ka done">{{ p.st.text }}</div>
+    <div v-else-if="p.st.done" class="ka done">{{ p.st.text }}</div>          <!-- ответ «уходит вверх» пузырём — после проверки -->
 
     <div ref="resEl" class="kb miss" :class="look">
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
@@ -387,21 +392,36 @@ function jsApply() {
   <template v-else-if="part === 'fb' && p.st.done && r">
     <small>{{ r.error ? 'Без проверки' : tierT[tier] }}</small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
   </template>
-  <!-- экран не выбран на холсте (idle, 23.11.2026): ничего не спрашивает и не показывает чужой статус моста — «не активен»; место то же -->
-  <template v-else-if="part === 'fb' && !p.st.done && !p.edit && idle">
-    <span class="kbr idle" title="Экран не выбран: мост не спрашиваем, скрипты стоят. Нажмите на экран — оживёт и спросит мост"><i />Мост не активен</span>
-    <select v-if="editor && !fileMode && canDic" class="kms kdm" disabled><option>🎙 {{ dicSel ? dicShort(dicSel) : 'авто' }}</option></select>
-  </template>
-  <template v-else-if="part === 'fb' && !p.st.done && !p.edit && api">
-    <span class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
+  <!-- 23.11.2026: строка ввода как в чате (Claude) — в подвале, где «Проверить». Внутри: текст (растёт по высоте, без прокрутки),
+       микрофон и «Проверить»; пока диктуют — то, что модель слышит, курсивом, волна, ✕ (выбросить продиктованное) и ✓ (остановить).
+       Под строкой — тихо: мост, слова и порог, модель распознавания. «Целым аудио» — по-старому, поле наверху -->
+  <template v-else-if="part === 'fb' && !p.st.done && !p.edit">
+    <div v-if="!fileMode" class="kcm" :class="[dic, { busy: p.st.busy, off: idle }]" @pointerdown.stop>
+      <textarea :id="'kpa-' + step.id" ref="ta" class="kci" rows="1" :readonly="p.st.busy" placeholder="Ответьте по-польски — напишите или нажмите микрофон" @input="p.st.text = $event.target.value; fit()" @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
+      <div v-if="dicDraft || dic === 'live' || dic === 'connecting' || dicErr" class="kcd" :class="{ er: dicErr && !dicDraft && dic === 'idle' }" aria-live="polite">{{ dicDraft || (dic === 'connecting' ? 'Подключаюсь…' : dic === 'live' ? 'Говорите — ' + dicWho.replace(/ слышит$/, '') + ' слушает…' : dicErr) }}</div>
+      <div class="kcr">
+        <template v-if="dic === 'live' || dic === 'connecting'">
+          <span class="kcwv" :style="{ '--l': dicLvl }" :title="dicSec" aria-hidden="true"><i v-for="n in 15" :key="n" /></span>
+          <button type="button" class="kcx" title="Выбросить то, что продиктовали сейчас" aria-label="Выбросить" @click="dicCancel"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+          <button type="button" class="kcx" title="Остановить — текст останется" aria-label="Готово" @click="dictate"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button>
+        </template>
+        <template v-else>
+          <button v-if="canDic" type="button" class="kcx mic" :disabled="p.st.busy || idle" :title="'Надиктовать — ' + dicWho.replace(/ слышит$/, '')" aria-label="Надиктовать" @click="dictate"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></button>
+          <button type="button" class="kcgo" :class="{ busy: p.st.busy }" :disabled="!p.canCheck || idle" :title="p.st.busy ? 'Проверяю…' : 'Проверить ответ'" aria-label="Проверить" @click="p.checkAny()"><svg v-if="!p.st.busy" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6" /></svg><i v-else class="kspin" /></button>
+        </template>
+      </div>
+    </div>
+    <div class="kst">
+      <span v-if="idle" class="kbr idle" title="Экран не выбран: мост не спрашиваем, скрипты стоят. Нажмите на экран — оживёт и спросит мост"><i />Мост не активен</span>
+      <span v-else-if="api" class="kbr api" @pointerdown.stop><i /><img v-if="gIcon" :src="gIcon" alt="" />Gemini API
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
-    <select v-if="!fileMode && canDic" class="kms kdm" :value="dicVal" :title="editor ? 'Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise' : 'Чем распознавать диктовку — выбор только в этом браузере, урок не меняется'" @pointerdown.stop @change="pickDic($event.target.value)"><option value="">🎙 {{ !editor && lessonDic ? dicShort(lessonDic) + ' · из урока' : 'авто' + (dicAuto ? ' · ' + dicShort(dicAuto) : '') }}</option><option v-if="dicVal && !dicOpts.some(o => o.id === dicVal)" :value="dicVal">🎙 {{ dicShort(dicVal) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">🎙 {{ dicShort(o.id) }}</option></optgroup></template></select>
-  </template>
-  <template v-else-if="part === 'fb' && !p.st.done && !p.edit && bridge">
-    <span class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
-    <!-- чем распознавать диктовку — видно и меняется в подвале (только в редакторе курса; пишется в экран, dicModel) -->
-    <select v-if="!fileMode && canDic" class="kms kdm" :value="dicVal" :title="editor ? 'Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise' : 'Чем распознавать диктовку — выбор только в этом браузере, урок не меняется'" @pointerdown.stop @change="pickDic($event.target.value)"><option value="">🎙 {{ !editor && lessonDic ? dicShort(lessonDic) + ' · из урока' : 'авто' + (dicAuto ? ' · ' + dicShort(dicAuto) : '') }}</option><option v-if="dicVal && !dicOpts.some(o => o.id === dicVal)" :value="dicVal">🎙 {{ dicShort(dicVal) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">🎙 {{ dicShort(o.id) }}</option></optgroup></template></select>
+      <span v-else-if="bridge" class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
+      <span class="ksp" />
+      <span v-if="!fileMode" class="kcn" :title="'Зачёт — от ' + pass + ' % смысла эталона'">{{ words }} · от {{ pass }}%</span>
+      <select v-if="idle && !fileMode && canDic" class="kms kdm" disabled><option>🎙 {{ dicSel ? dicShort(dicSel) : 'авто' }}</option></select>
+      <select v-else-if="!fileMode && canDic" class="kms kdm" :value="dicVal" :title="editor ? 'Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise' : 'Чем распознавать диктовку — выбор только в этом браузере, урок не меняется'" @pointerdown.stop @change="pickDic($event.target.value)"><option value="">🎙 {{ dicShort((!editor && lessonDic) || dicAuto || STT_MODEL) }}</option><option v-if="dicVal && !dicOpts.some(o => o.id === dicVal)" :value="dicVal">🎙 {{ dicShort(dicVal) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">🎙 {{ dicShort(o.id) }}</option></optgroup></template></select>
+    </div>
   </template>
   <template v-else-if="part === 'tools'">
     <span class="kjw">
@@ -487,6 +507,32 @@ function jsApply() {
 .ktx { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow: auto }
 .kbl { max-width: 88%; padding: 7px 11px; border-radius: 13px; font-family: var(--font); font-size: 14px; line-height: 1.4; white-space: pre-wrap }
 .kbl.ai { align-self: flex-start; background: rgba(75, 141, 248, .14); border-bottom-left-radius: 4px } .kbl.me { align-self: flex-end; background: #d7ffb8; border-bottom-right-radius: 4px }
+/* строка ввода как в чате Claude (23.11.2026): белая, тонкая серая рамка, крупное скругление; продиктованное — серым курсивом;
+   справа — серые квадратные кнопки и «отправить» со стрелкой; под строкой — мелко: мост, слова и порог, модель распознавания */
+.kcm { display: flex; flex-direction: column; gap: 6px; padding: 14px 12px 10px 18px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 20px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .04); text-align: left; transition: border-color .15s, box-shadow .15s }
+.kcm:focus-within, .kcm.live { border-color: rgba(0, 0, 0, .18); box-shadow: 0 2px 14px rgba(0, 0, 0, .07) }
+.kci { display: block; width: 100%; min-height: 24px; box-sizing: border-box; margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; color: #1f1f1f; font-family: var(--font); font-size: 15px; font-weight: 500; line-height: 1.55; user-select: text }
+.kci::placeholder { color: #9b9b9b; font-weight: 500 }
+.kcd { color: #6f6f6f; font-family: var(--font); font-size: 15px; font-style: italic; font-weight: 500; line-height: 1.55 } .kcd.er { color: #b3261e; font-size: 12.5px; font-style: normal; font-weight: 700 }
+.kcr { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 34px }
+.kcx { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #f0f0f0; color: #3a3a3a; cursor: pointer; transition: background .12s }
+.kcx:hover:not(:disabled) { background: #e5e5e5 } .kcx:disabled { opacity: .4; cursor: default }
+.kcx svg, .kcgo svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
+.kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kcgo.busy:disabled { background: #1cb0f6; color: #fff }
+.kspin { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: kspin .8s linear infinite } @keyframes kspin { to { transform: rotate(360deg) } }
+.kcwv { display: flex; align-items: center; gap: 4px; height: 34px; margin-right: 6px; --l: 0 } .kcwv i { width: 2px; border-radius: 1px; background: #8f8f8f; height: calc(2px + var(--l) * 18px * var(--k, .45)); transition: height .12s }
+.kcwv i:nth-child(3n) { --k: 1 } .kcwv i:nth-child(3n + 1) { --k: .3 } .kcwv i:nth-child(4n) { --k: .7 } .kcwv i:nth-child(5n) { --k: .15 }
+.kcm, .kst { width: 100%; box-sizing: border-box }
+.kst { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; padding: 0 10px; font-size: 12px; line-height: 1.2 }
+.kst > * { flex: none } .kst .kbr { white-space: nowrap }
+.ksp { flex: 1 1 0 !important } .kcn { color: #8f8f8f; font-size: 12.5px; font-weight: 500 }
+.kst .kdm { height: 28px; max-width: 165px; margin-left: 0; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: #3a3a3a; font-size: 12.5px; font-weight: 600; cursor: pointer } .kst .kdm:hover:not(:disabled) { background: #f0f0f0 } .kst .kdm:disabled { color: #b0b0b0; background: transparent }
+.kst .kbr { font-size: 12.5px; font-weight: 600 }
+:global(.foot:has(.kcm)) { align-items: flex-end }
+/* подвал тонкий, как у Claude: строка ввода и под ней строка мелкого текста — без полосы, рамки и больших отступов */
+:global(.lp .foot.foot:has(.kcm)) { padding: 6px 14px 8px; border-top: 0; background: transparent }
+:global(.lp.lp:not(.embedded):not(.single) .foot.foot:has(.kcm)) { padding: 8px max(20px, calc(50% - 390px)) 12px }
 .kbr { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #3d7a00 } .kbr.off { color: #b3261e } .kbr.idle { color: #a3a3a3 }
 .kbr i { width: 8px; height: 8px; border-radius: 50%; background: currentColor } .kbr img { width: 16px; height: 16px; margin-left: 4px; object-fit: contain }
 .kb ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-family: 'PT Serif', Georgia, serif; font-size: 15px; line-height: 1.35; color: #351a05 }

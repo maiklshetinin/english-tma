@@ -20,14 +20,14 @@ describe('«Ответ по смыслу»: экран у ученика', () =>
   it('до проверки: «Проверить» неактивна без ответа, «Не прозвучало» и эталон закрыты', async () => {
     const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
     expect(w.find('.kqt').text()).toBe(step.text)
-    expect(w.find('.foot .go').text()).toBe('Проверить'); expect(w.find('.foot .go').attributes('disabled')).toBeDefined()
+    expect(w.find('.kcgo').attributes('aria-label')).toBe('Проверить'); expect(w.find('.kcgo').attributes('disabled')).toBeDefined()          // «Проверить» — в строке ввода (23.11.2026)
     expect(w.find('.kb.ref').text()).toContain('не подглядывайте'); expect(w.text()).not.toContain(step.ideal)
-    await w.find('textarea.ka').setValue('Szóstego grudnia'); expect(w.find('.foot .go').attributes('disabled')).toBeUndefined()
+    await w.find('textarea.kci').setValue('Szóstego grudnia'); expect(w.find('.kcgo').attributes('disabled')).toBeUndefined()
   })
   it('проверка: процент, «Зачтено», пункты, эталон, отзыв в зелёном подвале; поле — тем же местом', async () => {
     g.next.push(res(64))
     const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
-    await w.find('textarea.ka').setValue('Szóstego grudnia, dzieci dostają prezenty'); await w.find('.foot .go').trigger('click'); await flushPromises()
+    await w.find('textarea.kci').setValue('Szóstego grudnia, dzieci dostają prezenty'); await w.find('.kcgo').trigger('click'); await flushPromises()
     expect(w.find('.kgv b').text()).toBe('64%'); expect(w.find('.kgv').text()).toContain('Зачтено')
     expect(w.find('.kb.miss li').text()).toBe('подарки в ботинках'); expect(w.find('.kb.ref').text()).toContain(step.ideal)
     expect(w.find('.ka.done').text()).toBe('Szóstego grudnia, dzieci dostają prezenty')
@@ -36,7 +36,7 @@ describe('«Ответ по смыслу»: экран у ученика', () =>
   it('мост не ответил — без оценки: эталон открыт, подвал не красный, в Review — ok: null', async () => {
     g.next.push(new Error('Мост с чатом не в сети — откройте вкладку с чатом и скриптом'))
     const w = mount(LessonPlayer, { props: { steps: [step], resolve, track: true } })
-    await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
+    await w.find('textarea.kci').setValue('coś'); await w.find('.kcgo').trigger('click'); await flushPromises()
     expect(w.find('.kb.miss').text()).toContain('Мост с чатом не в сети'); expect(w.find('.kb.ref').text()).toContain(step.ideal)
     expect(w.find('.foot').classes()).not.toContain('bad')
     expect(w.emitted('answer')!.at(-1)![0]).toMatchObject({ ok: null })
@@ -44,17 +44,17 @@ describe('«Ответ по смыслу»: экран у ученика', () =>
   it('меньше 60 % — вопрос один раз возвращается в конце урока; снова мимо — урок идёт дальше', async () => {
     g.next.push(res(30), res(45))
     const w = mount(LessonPlayer, { props: { steps: [step], resolve, track: true } })
-    const answer = async () => { await w.find('textarea.ka').setValue('nie wiem'); await w.find('.foot .go').trigger('click'); await flushPromises() }
+    const answer = async () => { await w.find('textarea.kci').setValue('nie wiem'); await w.find('.kcgo').trigger('click'); await flushPromises() }
     await answer(); expect(w.find('.foot').classes()).toContain('bad'); expect(w.emitted('answer')!.at(-1)![0]).toMatchObject({ ok: false })
     await w.find('.foot .go').trigger('click')                                // «Продолжить» → тот же вопрос ещё раз, поле пустое
-    expect(w.find('textarea.ka').exists()).toBe(true); expect((w.find('textarea.ka').element as HTMLTextAreaElement).value).toBe('')
+    expect(w.find('textarea.kci').exists()).toBe(true); expect((w.find('textarea.kci').element as HTMLTextAreaElement).value).toBe('')
     await answer(); await w.find('.foot .go').trigger('click')
     expect(w.find('.fin').exists()).toBe(true)                                // больше не крутим — итог урока
   })
   it('свой промпт и порог экрана уходят в проверку', async () => {
     g.next.push(res(70))
     const w = mount(LessonPlayer, { props: { steps: [{ ...step, prompt: 'Mój prompt', pass: 75 }], resolve, embedded: true } })
-    await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
+    await w.find('textarea.kci').setValue('coś'); await w.find('.kcgo').trigger('click'); await flushPromises()
     expect((checkAnswer as any).mock.calls.at(-1)[0]).toMatchObject({ prompt: 'Mój prompt', pass: 75 })
   })
 })
@@ -82,7 +82,7 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     const rich = { ...step, n: 5, star: true, ideal: '==Adwent== trwa **cztery tygodnie** _(na przykład)_.\nTradycje:\n• ==Choinka==: symbol życia\n• **Opłatek**' }
     const w = mount(LessonPlayer, { props: { steps: [rich], resolve, embedded: true } })
     expect(w.find('.kqt').text()).toBe('5.' + step.text); expect(w.find('.kst svg').exists()).toBe(true)
-    await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
+    await w.find('textarea.kci').setValue('coś'); await w.find('.kcgo').trigger('click'); await flushPromises()
     const ref = w.find('.kb.ref .kr')
     expect(ref.find('b.acc').text()).toBe('Adwent'); expect(ref.find('p b:not(.acc)').text()).toBe('cztery tygodnie'); expect(ref.find('i').text()).toBe('(na przykład)')
     expect(ref.findAll('li').map((x) => x.text())).toEqual(['Choinka: symbol życia', 'Opłatek']); expect(ref.text()).not.toContain('==')
@@ -95,10 +95,10 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
     await flushPromises(); expect(w.find('.kbr').text()).toBe('Мост подключёнGemini'); expect(w.find('.kbr img').attributes('src')).toBe('/ai/gemini.svg')          // до проверки — с кем мост, в подвале
     expect(w.find('.kby').exists()).toBe(false)
-    await w.find('textarea.ka').setValue('coś'); await w.find('.foot .go').trigger('click'); await flushPromises()
+    await w.find('textarea.kci').setValue('coś'); await w.find('.kcgo').trigger('click'); await flushPromises()
     expect(w.find('.kby').text()).toBe('проверилClaude');
     const w2 = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } }); g.next.push({ ...res(70, 'Gemini'), ms: 4830 })
-    await w2.find('textarea.ka').setValue('coś'); await w2.find('.foot .go').trigger('click'); await flushPromises()
+    await w2.find('textarea.kci').setValue('coś'); await w2.find('.kcgo').trigger('click'); await flushPromises()
     expect(w2.find('.kby').text()).toBe('проверилGemini · 4,8 с'); expect(w.find('.kby img').attributes('src')).toBe('/ai/Claude%20Spark%20-%20Clay.svg')
   })
   it('моста нет — в подвале «Мост не в сети»', async () => {
@@ -110,11 +110,11 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     vi.useFakeTimers()
     try {
       const w = mount(LessonPlayer, { props: { steps: [step], resolve, embedded: true } })
-      const el0 = w.find('textarea.ka').element as HTMLTextAreaElement
+      const el0 = w.find('textarea.kci').element as HTMLTextAreaElement
       el0.value = 'Adwent to czas oczekiwania'          // вставили напрямую, события нет
-      expect(w.find('.foot .go').attributes('disabled')).toBeDefined()
+      expect(w.find('.kcgo').attributes('disabled')).toBeDefined()
       await vi.advanceTimersByTimeAsync(600); await w.vm.$nextTick()
-      expect(w.find('.foot .go').attributes('disabled')).toBeUndefined(); expect(w.find('.kl span').text()).toBe('4 слова · зачёт от 60%')
+      expect(w.find('.kcgo').attributes('disabled')).toBeUndefined(); expect(w.find('.kcn').text()).toBe('4 слова · от 60%')
     } finally { vi.useRealTimers() }
   })
   it('вид и выделения: по умолчанию PDF с выделениями; «линии», «подложки», без выделений — простой текст', async () => {
@@ -124,7 +124,7 @@ describe('«Ответ по смыслу»: JSON экрана в правке', 
     expect(w.find('.kb.ref').classes()).toContain('pdf')
     const v = mount(LessonPlayer, { props: { steps: [{ ...rich, look: 'cards', plain: true }], resolve, embedded: true } })
     expect(v.find('.kb.miss').classes()).toContain('cards')
-    await v.find('textarea.ka').setValue('coś'); await v.find('.foot .go').trigger('click'); await flushPromises()
+    await v.find('textarea.kci').setValue('coś'); await v.find('.kcgo').trigger('click'); await flushPromises()
     expect(v.find('.kb.ref .kr').text()).toBe('Adwent trwa cztery tygodnie'); expect(v.find('.kb.ref b').exists()).toBe(false)
   })
 })
