@@ -20,8 +20,9 @@ let stCache = null
 // одновременные вопросы (много экранов сразу) — одним запросом (stWait)
 export const bridgeLast = ref(null)
 let stWait = null
-export async function bridgeStatus(request = apiRequest) {
-  if (stCache && Date.now() - stCache.at < 15_000) return stCache.v
+/** fresh — мимо 15-секундной памяти (экран только что выбрали: статус на этот момент) */
+export async function bridgeStatus(request = apiRequest, fresh = false) {
+  if (!fresh && stCache && Date.now() - stCache.at < 15_000) return stCache.v
   if (stWait) return stWait
   stWait = (async () => {
     const r = await request('/ai/status')
