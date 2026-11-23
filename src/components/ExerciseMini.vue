@@ -3,20 +3,45 @@
 // и «рыбой» шаблона (TEMPLATES в utils/lesson.ts), уменьшенный. Точь-в-точь как в уроке: полоска прогресса, экран, подвал с кнопкой.
 // Поменяли шаблон или плеер — поменялся и значок (18.11.2026). Нажатия выключены, звук и видео не грузятся.
 // size: 'tray' / 'rail' — 124×156, как в меню «Exercise». Не шаблон экрана (например, «Готовый урок») — стопка карточек.
-import { computed } from 'vue'
+// 23.11.2026: у всех плиток одного шаблона одна и та же картинка — живой LessonPlayer рисуется один раз на шаблон,
+// его разметка запоминается (MINI), остальные плитки — эта разметка. Раньше у каждого экрана на ветке был свой живой плеер.
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import LessonPlayer from './LessonPlayer.vue'
 import { TEMPLATES } from '../utils/lesson'
+import { MINI, clean } from '../utils/stills'
 const props = defineProps({ id: { type: String, required: true }, size: { type: String, default: 'tray' } })
 const ALIAS = { spell: 'order', speak: 'sayword' }          // старые id шаблонов
 const bid = computed(() => { const b = props.id.replace(/^pg_/, ''); return ALIAS[b] ?? b })
 const steps = computed(() => { const t = TEMPLATES.find(x => x.id === bid.value); if (!t) return null; const s = t.make(); if (props.id.startsWith('pg_')) s.bs = 'page'; return [s] })
 const resolve = (v, k) => (k === 'image' ? v : '')          // в значке — только картинки
 const small = computed(() => props.size === 'tray' || props.size === 'rail')
+// разметка шаблона: есть — показываем её; нет — живой плеер рисует только первая плитка шаблона (mine), остальные ждут
+const html = computed(() => MINI.get(props.id))
+const mine = ref(null), sc = ref(null)
+const snap = (again = false) => { const id = mine.value; if (id && (again || !MINI.has(id)) && sc.value?.innerHTML) MINI.set(id, clean(sc.value.innerHTML)) }
+// снимаем сразу после отрисовки (плеер рисуется синхронно — соседние плитки не ждут) и ещё раз через два кадра — если экран что-то дорисовал
+let up = false
+async function shoot(id) {
+  if (!up) return          // первую отрисовку снимет onMounted
+  await nextTick(); if (mine.value !== id) return; snap(); settle(id)
+}
+async function settle(id) {
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); if (mine.value === id) snap(true)
+  if (mine.value === id && !MINI.has(id)) MINI.set(id, null)          // снять не вышло — плитки рисуют сами
+}
+onMounted(() => { up = true; if (mine.value) { snap(); settle(mine.value) } })
+watch(() => props.id, (id) => {
+  snap()          // шаблон у плитки сменился раньше, чем сняли прежний
+  if (MINI.has(id) || MINI.taken.has(id)) { mine.value = null; return }
+  MINI.taken.add(id); mine.value = id; shoot(id)
+}, { immediate: true })
+onBeforeUnmount(() => snap())          // плитку убрали раньше, чем сняли (меню свернули) — снимаем сейчас, чтобы другие плитки не ждали
 </script>
 
 <template>
   <span v-if="steps" class="mini xmt" :class="size" inert aria-hidden="true">
-    <span class="sc" :class="{ big: !small }"><LessonPlayer :steps="steps" :resolve="resolve" embedded mini :pct="30" /></span>
+    <span v-if="html" class="sc" :class="{ big: !small }" v-html="html" />
+    <span v-else-if="mine === id || html === null" ref="sc" class="sc" :class="{ big: !small }"><LessonPlayer :steps="steps" :resolve="resolve" embedded mini :pct="30" /></span>
   </span>
   <span v-else class="mini" :class="[id, size]"><span class="ms"><i /><i /><i /></span></span>
 </template>

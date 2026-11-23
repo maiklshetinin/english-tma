@@ -7,7 +7,7 @@
 //  • Переставить экран — тянуть за шапку карточки вдоль рельса. Удалить — корзина в шапке или Delete.
 // Координаты — холста (родитель масштабирует .world); x, y — центр бусины урока на вертикальном рельсе.
 import { say } from '../composables/useDialog'
-import { ref, reactive, computed, nextTick, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, watchEffect, nextTick, onMounted, onUnmounted } from 'vue'
 import LessonPlayer from './LessonPlayer.vue'
 import { exOf } from '../exercises'
 import { provideEdit } from '../exercises/ctx'
@@ -15,6 +15,8 @@ import ExerciseMini from './ExerciseMini.vue'
 import { useDecksStore } from '../stores/decks'
 import { stepJson, applyStepJson, tplOf, tplTitle, tplDesc, SKILL_T, skillsOf, BOOK } from '../utils/lesson'
 import { assemble } from '../exercises/assemble'
+import { shots, turn, need, drop, done, put, clean, hash, heights, setHeight, far } from '../utils/stills'          // живой — один экран, остальные снимком (23.11.2026)
+import { presets } from '../exercises/presets'
 import JsonModal from './JsonModal.vue'          // правка JSON — большое окно «как в VS Code» (21.11.2026)
 import { KINDS, FINAL, STEPS_MAX, OPTS_MAX, PAIRS_MAX, stepIssue, stepRefs, cardToIntro, cardToOpt, cardToPair, stepMin, fmtMin, MIN_CHOICES, KIND_MIN, RAIL_X0 } from '../utils/lesson'
 
@@ -158,16 +160,16 @@ const ro2 = new ResizeObserver((es) => { for (const e of es) if (e.target.datase
 // Режимы экрана — один размер (17.11.2026): JSON и правка открываются в карточке той же высоты, что живой экран, — ничего не прыгает.
 // Высоту живого экрана запоминаем (viewH); в JSON и правке карточка той же высоты, лишнее прокручивается внутри.
 // Экран, ни разу не показанный живым (пустой — сразу в правке), — высотой как обычно у соседей.
-const viewH = reactive({})
+const viewH = heights          // 23.11.2026: высоты общие и помнятся между заходами (utils/stills.js) — место под снимок той же высоты
 // Правка выше живого экрана — не прокручиваем (17.11.2026): оба окна растут до большей из двух высот (editH — высота правки), размер один
 const editH = reactive({})
-const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.target.dataset; if (!d.id) continue; if (d.view === '1') viewH[d.id] = e.target.offsetHeight; else if (d.edit === '1') editH[d.id] = e.target.offsetHeight } })
+const ro3 = new ResizeObserver((es) => { for (const e of es) { const d = e.target.dataset; if (!d.id) continue; if (d.view === '1') setHeight(d.id, e.target.offsetHeight); else if (d.edit === '1') editH[d.id] = e.target.offsetHeight } })
 const cardEls = new WeakSet()
 const watchCard = (el) => { if (el && !cardEls.has(el)) { cardEls.add(el); ro3.observe(el) } }
-const typicalH = computed(() => { const v = Object.values(viewH).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 560 })
+const typicalH = computed(() => { const v = steps.value.map(s => viewH[s.id]).filter(Boolean).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 560 })
 const fixH = (s) => (isEdit(s) ? { minHeight: (viewH[s.id] ?? typicalH.value) + 'px' }
   : null)          // 20.11.2026: после правки живой экран — снова своей высоты (раньше оставался высотой правки, снизу пустота)
-const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.observe(el); ro2.observe(el) } }
+const watchFrame = (el) => { if (el && !frames.has(el)) { frames.add(el); ro.observe(el); ro2.observe(el); io?.observe(el) } }
 // ---------- Живая ветка: экраны проходятся прямо здесь, как у ученика ----------
 // Карандаш — экран правится; «Сохранить» — снова живой. Пустой (незаполненный) экран сразу открыт для правки.
 const editing = reactive({})
@@ -184,6 +186,7 @@ function advance(s, sc, i = steps.value.indexOf(s), a = null) {
   run.res[a ? 'r' + a.k : s.id] = { ok: sc.ok, all: sc.all }
   run.at = Math.max(run.at, i + 1)
   if (run.at >= total.value && !run.t1) run.t1 = Date.now()
+  act.value = steps.value[i + 1]?.id ?? null          // следующий экран ветки оживает — проходить подряд, не нажимая на каждый
   emit('focus', { x: cx(Math.min(i + 1, total.value)) + CW / 2, y: props.y + 200 })
 }
 // ошиблись на экране — сразу: повтор в конец ветки и экран в чекпоинт Chapter
@@ -205,7 +208,74 @@ function restart() { Object.assign(run, { at: 0, res: {}, t0: 0, t1: 0, key: run
 const doneX = computed(() => (!steps.value.length ? props.x : run.at >= total.value ? endX.value : run.at ? cx(run.at - 1) + CW / 2 : props.x))
 // Стрелки ‹ › в подписи — переставить экран на шаг
 function shift(s, d) { const a = props.item.steps, i = a.indexOf(s), j = i + d; if (j < 0 || j >= a.length) return; a.splice(i, 1); a.splice(j, 0, s); changed() }
-onUnmounted(() => { ro.disconnect(); ro2.disconnect(); cancelAnimationFrame(hT) })
+onUnmounted(() => { ro.disconnect(); ro2.disconnect(); ro3.disconnect(); io?.disconnect(); cancelAnimationFrame(hT); for (const k of asked) drop(k) })
+
+// ---------- Живой — один экран (23.11.2026) ----------
+// Живые (LessonPlayer) — только выбранный экран, тот, что правят, и следующий при прохождении ветки (act).
+// Остальные — снимок: разметка, снятая с живого экрана (utils/stills.js), без компонентов и обработчиков, той же высоты.
+// Нажали на снимок — экран выбран и оживает. Ушли с живого — его разметка (с ответами) становится снимком.
+// Экраны за краем холста (IntersectionObserver) — пустое место той же высоты; сильно отдалили (far) — цветные блоки.
+const root = ref(null)
+const act = ref(null)
+watch(() => props.sel, () => { act.value = null })
+const vis = reactive({})
+// корень — сам холст (.board): он обрезает всё за краем, и без него запас rootMargin не работал бы — экран снимался бы,
+// только когда уже на экране. С холстом-корнем снимаем заранее, за 600 px до края
+let io = null
+const ioOk = typeof IntersectionObserver === 'function'
+onMounted(() => {
+  if (!ioOk) return
+  io = new IntersectionObserver((es) => { for (const e of es) { const id = e.target.dataset.id; if (id) vis[id] = e.isIntersecting } }, { root: root.value?.closest('.board') ?? null, rootMargin: '600px' })
+  for (const el of frames) io.observe(el)
+})
+const seen = (id) => !ioOk || !!vis[id]
+// ключ снимка: поменяли экран, общие настройки упражнений, сбросили или начали ветку заново — снимок другой
+const preKey = computed(() => hash(JSON.stringify(presets)))
+const keys = computed(() => { const o = {}, n = total.value; for (const s of steps.value) o[s.id] = [s.id, run.key, rk[s.id] ?? 0, n, hash(JSON.stringify(s)), preKey.value].join(':'); return o })
+const finKey = computed(() => ['fin', props.item.id, run.key, total.value, hash(Object.values(keys.value).join('|'))].join(':'))
+const isLive = (s) => props.sel === s.id || act.value === s.id
+function mode(s) {
+  if (isEdit(s)) return 'edit'
+  if (far.value) return 'far'
+  const k = keys.value[s.id]
+  if (isLive(s) || turn.value === k || shots.get(k) === null) return 'live'
+  return seen(s.id) && shots.has(k) ? 'shot' : 'ph'
+}
+const finLive = computed(() => props.sel === 'final' || !!(total.value && run.at >= total.value))          // итог выбран или ветку прошли — итог живой
+const finMode = computed(() => {
+  if (far.value) return 'far'
+  const k = finKey.value
+  if (finLive.value || turn.value === k || shots.get(k) === null) return 'live'
+  return seen('fin-' + props.item.id) && shots.has(k) ? 'shot' : 'ph'
+})
+const holdH = (id) => ({ minHeight: (viewH[id] ?? typicalH.value) + 'px' })          // место под экран, пока снимка нет, и блок «издалека»
+// какие экраны ждут снимка: видны, не живые, снимка ещё нет
+const asked = new Set()
+watchEffect(() => {
+  const now = new Set()
+  if (!far.value) {
+    for (const s of steps.value) { const k = keys.value[s.id]; if (seen(s.id) && !isEdit(s) && !isLive(s) && !shots.has(k)) now.add(k) }
+    if (!props.free && total.value && !finLive.value && seen('fin-' + props.item.id) && !shots.has(finKey.value)) now.add(finKey.value)
+  }
+  for (const k of asked) if (!now.has(k)) drop(k)
+  asked.clear()
+  for (const k of now) { asked.add(k); need(k) }
+})
+const q = (k) => root.value?.querySelector(`[data-shot="${CSS.escape(k)}"]`)
+const frame2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+// очередь дошла до нашего экрана: он на миг живой — снимаем разметку
+watch(turn, async (k) => {
+  if (!k || !asked.has(k)) return
+  await nextTick(); await frame2()
+  if (turn.value !== k) return
+  const el = q(k)
+  done(k, el?.innerHTML ? clean(el.innerHTML) : null)
+})
+// живой экран перестал быть живым — его разметка (с ответами) становится снимком; до перерисовки, пока он ещё на месте
+const liveKeys = computed(() => [...steps.value.filter(s => !isEdit(s) && !far.value && isLive(s)).map(s => keys.value[s.id]), ...(finMode.value === 'live' ? [finKey.value] : [])])
+watch(liveKeys, (now, prev) => { for (const k of prev ?? []) if (!now.includes(k)) { const el = q(k); if (el?.innerHTML) put(k, clean(el.innerHTML)) } }, { flush: 'pre' })
+// «издалека»: название шаблона и вопрос / слово экрана без разметки
+const farText = (s) => String(s.text || s.word || s.phrase || s.head || '').replace(/==|\*\*|\[|\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140)
 
 
 // Колёсико над экраном прокручивает сам экран; Ctrl + колёсико (и щипок) — масштаб холста, а не всей страницы браузера
@@ -232,7 +302,7 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 </script>
 
 <template>
-  <div class="lr" @pointerdown.stop>
+  <div ref="root" class="lr" @pointerdown.stop>
     <input ref="fileIn" type="file" :accept="accept" hidden @change="onFile" />
     <!-- Рельс урока: от урока вправо, через все экраны к итогу -->
     <svg v-if="!free" class="line" :class="{ glow, hot }" :style="{ left: x + 'px', top: y + 'px' }" :width="endX - x" height="1"><line x1="34" y1="0" :x2="endX - x" y2="0" /><line v-if="steps.length && doneX > x + 34" class="done" x1="34" y1="0" :x2="doneX - x" y2="0" /></svg>
@@ -269,10 +339,14 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
       <JsonModal v-if="jsonEdit[s.id] != null" v-model="jsonEdit[s.id]" :readonly="readonly" :title="'JSON экрана · ' + tplTitle(s)" :sub="readonly ? 'Экран другого курса — только посмотреть и скопировать' : 'Своё у экрана — вопрос и эталон; остальное общее для курса («{ }» на плитке в меню Exercise)'" :how="hasHow(s) ? howOf(s) : null" :note="hasHow(s) ? ownNote(s) : ''" :error="jsonErr[s.id]" @apply="jsonApply(s)" @close="jsonStop(s)">
         <template #actions><button class="mcp" :class="{ ok: copied === s.id }" title="Скопировать экран — потом Ctrl+V на холсте или «Вставить» на ветке; JSON — образец для ИИ" @click="copyJson(s)">{{ copied === s.id ? 'Скопировано ✓' : 'Скопировать экран' }}</button></template>
       </JsonModal>
-      <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: isEdit(s) }]" :data-id="s.id" :data-view="isEdit(s) ? 0 : 1" :data-edit="isEdit(s) ? 1 : 0" :style="fixH(s)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
+      <div :ref="watchCard" class="card" :class="[s.kind, { book: !!(s.bk && BOOK[s.bk]), bkpg: !!(s.bk && BOOK[s.bk]) && s.bs === 'page', bkqa: s.bk === 'bkqa' && s.bs === 'page', on: sel === s.id, editing: isEdit(s), now: !isEdit(s) && i === run.at, fixh: isEdit(s) }]" :data-id="s.id" :data-shot="keys[s.id]" :data-view="mode(s) === 'live' || mode(s) === 'shot' ? 1 : 0" :data-edit="isEdit(s) ? 1 : 0" :style="fixH(s) ?? (mode(s) === 'far' || mode(s) === 'ph' ? holdH(s.id) : null)" @pointerdown.stop="emit('select', s.id); cardDown($event, s)" @wheel="ownWheel">
       <!-- Живой экран: можно пройти, как ученик -->
       <!-- JSON экрана (кнопка «{ }») — вместо живого экрана, в той же карточке -->
-      <LessonPlayer v-if="!isEdit(s)" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
+      <LessonPlayer v-if="mode(s) === 'live'" :key="s.id + ':' + run.key + ':' + (rk[s.id] ?? 0)" embedded :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve" again @next="advance(s, $event)" @miss="miss(s)" />
+      <!-- снимок живого экрана (23.11.2026): нажали — экран выбран и оживает -->
+      <div v-else-if="mode(s) === 'shot'" class="lshot" inert v-html="shots.get(keys[s.id])" />
+      <div v-else-if="mode(s) === 'far'" class="lfar"><b>{{ tplTitle(s) }}</b><span v-if="farText(s)">{{ farText(s) }}</span></div>
+      <div v-else-if="mode(s) === 'ph'" class="lph" />
       <!-- Упражнения-шаблоны (src/exercises): правка = тот же живой экран (LessonPlayer edit) — один файл разметки, окно не меняет размер -->
       <LessonPlayer v-else-if="exOf(s) && pk.id !== s.id" :key="'e:' + s.id" embedded edit :steps="steps" :start="steps.indexOf(s)" :pct="pctAt(i)" :resolve="resolve">
         <template #foot><div class="cf"><label class="mn" title="Примерное время на экран — суммируется во время урока, ученик видит его перед стартом">≈ <select :value="stepMin(s)" @change="setMin(s, +$event.target.value)"><option v-for="m in MIN_CHOICES" :key="m" :value="m">{{ fmtMin(m) }}</option></select> мин</label><span class="fdk"><component :is="exOf(s).view" :step="s" part="tools" /></span><button class="go play" @click="save(s)">Сохранить</button></div></template>
@@ -347,8 +421,11 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
     <div v-if="!free" :ref="watchFrame" class="frame" :class="{ upb: up }" :data-id="'fin-' + item.id" :style="{ left: cx(finI) + 'px', top: (up ? y + TOP : y - TOP) + 'px', width: CW + 'px', '--c': FINAL.c }">
      <span class="stem" /><span class="node fin-n" :class="{ done: total && run.at >= total }" :title="finName + ' — всегда в конце ветки'"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span>
     <div class="flab fix"><span class="kc"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>{{ finName }} · всегда в конце</b></div>
-    <div class="card fin" :class="{ on: sel === 'final', now: total && run.at >= total }" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
+    <div class="card fin" :class="{ on: sel === 'final', now: total && run.at >= total }" :ref="watchCard" :data-id="'fin-' + item.id" :data-view="finMode === 'live' || finMode === 'shot' ? 1 : 0" :data-shot="finKey" :style="total && finMode !== 'live' && finMode !== 'shot' ? holdH('fin-' + item.id) : null" @pointerdown.stop="emit('select', 'final')" @wheel="ownWheel">
       <div v-if="!total" class="fin0"><span class="fi"><svg viewBox="0 0 24 24" v-html="FINAL.ic" /></span><b>{{ finName }}</b><span>{{ isCk ? 'Здесь ученик увидит итог всей Chapter: что усвоено, что повторить. Появится, когда в чекпоинте будут экраны.' : 'Здесь ученик увидит результат: сколько верных ответов и за сколько времени. Появится, когда в уроке будут экраны.' }}</span></div>
+      <div v-else-if="finMode === 'shot'" class="lshot" inert v-html="shots.get(finKey)" />
+      <div v-else-if="finMode === 'far'" class="lfar"><b>{{ finName }}</b></div>
+      <div v-else-if="finMode === 'ph'" class="lph" />
       <LessonPlayer v-else :key="'fin:' + run.key" embedded :steps="steps" :start="steps.length" :pct="pctAt(steps.length)" :stats="stats" :resolve="resolve" @restart="restart" @full="emit('play')" />
     </div>
     </div>
@@ -356,6 +433,11 @@ function copyJson(s) { emit('json', s); copied.value = s.id; setTimeout(() => { 
 </template>
 
 <style scoped>
+/* снимок экрана (23.11.2026): разметка живого экрана как есть, без нажатий; «издалека» — цветной блок, читается и при 25 % */
+.lshot { display: contents } .lshot :deep(*) { pointer-events: none }
+.lph { min-height: inherit; background: repeating-linear-gradient(-45deg, transparent 0 14px, rgba(0, 0, 0, .025) 14px 28px) }
+.lfar { display: flex; flex-direction: column; gap: 14px; min-height: inherit; box-sizing: border-box; padding: 30px 32px; background: color-mix(in srgb, var(--c, #1cb0f6) 12%, var(--card)); border-top: 10px solid var(--c, #1cb0f6) }
+.lfar b { font-size: 44px; font-weight: 900; line-height: 1.1; color: var(--c, #1cb0f6) } .lfar span { font-size: 30px; font-weight: 700; line-height: 1.25; color: #3c3c3c; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical }
 .mcp { flex: none; border: 0; border-radius: 10px; padding: 7px 12px; background: #f0f1f3; color: #4b4b4b; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; white-space: nowrap } .mcp:hover { background: #e6e8eb } .mcp.ok { background: #dff5d8; color: #3b8a11 }
 :global(.jm.dark) .mcp { background: #3a3d41; color: #ddd } :global(.jm.dark) .mcp.ok { background: #24402a; color: #9be08a }
 .lr { position: absolute; left: 0; top: 0; width: 0; height: 0 }
