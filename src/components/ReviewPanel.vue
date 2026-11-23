@@ -48,7 +48,9 @@ const cfgNow = computed(() => ({ retention: algo.retention, maxDays: algo.maxDay
 async function pick(key) { filter.value = 'all'; openKey.value = key; await nextTick(); document.querySelector(`[data-rk="${CSS.escape(key)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
 // весь словарь: слова и фразы — вкладка «Словарь», навыки и темы — «Грамматика и навыки»
 const all = computed(() => props.items ?? review.items)
-const dict = computed(() => wordsOnly(all.value)), tags = computed(() => tagsOnly(all.value))
+// 24.11.2026: в «Словаре» две сущности — слова (и фразы) и упражнения: у каждого упражнения своя память и срок повторения (ключ screen:…)
+const isScreen = (x) => x.kind === 'screen'
+const dict = computed(() => { const o = wordsOnly(all.value); for (const [k, x] of Object.entries(all.value)) if (isScreen(x)) o[k] = x; return o }), tags = computed(() => tagsOnly(all.value))
 const sec = ref((() => { try { return localStorage.getItem('tma.review.sec') || 'words' } catch { return 'words' } })())
 watch(sec, (v) => { try { localStorage.setItem('tma.review.sec', v) } catch { /* приватный режим */ } })
 const list = computed(() => { const now = Date.now(), cfg = { ...algo }; return Object.values(dict.value).map(x => { const st = stateOf(x, now, cfg); return { ...x, st, lv: st.level } })
@@ -63,7 +65,7 @@ const toAsk = computed(() => shown.value.filter(askable).sort((a, b) => (a.st.is
 const prSteps = ref(null)
 function practice() { const s = practiceSteps(toAsk.value, Object.values(dict.value)); if (s.length) prSteps.value = s; else showToast('Не из чего составить тренировку — нужно хотя бы два слова с переводом') }
 const onPrAnswer = (a) => recordStep(a.step, a, { lesson: 'Повторение слов', noTags: true })
-const FILTERS = computed(() => [['all', 'Все'], ['fav', '★ Избранное'], ['word', 'Слова'], ['phrase', 'Фразы'], ['weak', 'Слабые'], ['medium', 'Средние'], ['strong', 'Сильные']]
+const FILTERS = computed(() => [['all', 'Все'], ['fav', '★ Избранное'], ['word', 'Слова'], ['phrase', 'Фразы'], ['screen', 'Упражнения'], ['weak', 'Слабые'], ['medium', 'Средние'], ['strong', 'Сильные']]
   .map(([k, t]) => ({ k, t: `${t} (${k === 'all' ? list.value.length : k === 'fav' ? favN.value : list.value.filter(x => x.kind === k || x.lv === k).length})` })))
 let au = null
 const play = (x) => { if (!x.audio) return; au?.pause(); au = new Audio(props.resolve(x.audio, 'audio')); au.play().catch(() => {}) }
@@ -127,20 +129,20 @@ async function reset() {
         <template v-if="!readonly"><button class="ghost" title="Только для проверки алгоритма" @click="reset">Очистить</button>
         <button class="go" :disabled="!toAsk.length" :title="toAsk.length ? `Короткая тренировка: до 10 слов из списка, сначала слабые` : 'В списке нет слов с переводом или звуком'" @click="practice">Повторить эти слова</button></template>
       </div>
-      <p v-if="!list.length && readonly" class="empty">Пока пусто — слова появятся, когда ученик пройдёт уроки курса.</p>
-      <p v-else-if="!list.length" class="empty">Пока пусто. Пройдите урок курса — слова и фразы из его экранов появятся здесь: новые — слабыми, верные ответы делают их сильнее.</p>
+      <p v-if="!list.length && readonly" class="empty">Пока пусто — слова и упражнения появятся, когда ученик пройдёт уроки курса.</p>
+      <p v-else-if="!list.length" class="empty">Пока пусто. Пройдите урок курса — слова, фразы и сами упражнения появятся здесь: новые — слабыми, верные ответы делают их сильнее, у каждого — когда повторить.</p>
       <div v-else class="tbl">
-        <div class="th"><span /><span>Английский</span><span>Перевод</span><span>Сила</span><span /></div>
+        <div class="th"><span /><span>Слово или упражнение</span><span>Перевод · урок</span><span>Сила</span><span /></div>
         <template v-for="x in shown" :key="x.key">
           <div class="tr" :data-rk="x.key" :class="{ on: openKey === x.key }" role="button" tabindex="0" @click="openKey = openKey === x.key ? null : x.key">
-            <span class="pic"><img v-if="x.image && resolve(x.image, 'image')" :src="resolve(x.image, 'image')" alt="" /><i v-else>{{ x.kind === 'phrase' ? 'Фр' : 'Сл' }}</i></span>
+            <span class="pic"><img v-if="x.image && resolve(x.image, 'image')" :src="resolve(x.image, 'image')" alt="" /><i v-else :class="{ ex: x.kind === 'screen' }">{{ x.kind === 'phrase' ? 'Фр' : x.kind === 'screen' ? 'Уп' : 'Сл' }}</i></span>
             <span class="w"><button v-if="x.audio" class="pl" title="Послушать" @click.stop="play(x)"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" /></svg></button><span class="wt">{{ x.text }}<small v-if="x.tr" class="mt">{{ x.tr }}</small></span></span>
             <span class="t">{{ x.tr }}</span>
             <span class="str" :class="x.lv"><i v-for="n in 3" :key="n" :class="{ f: !x.st.isNew && n <= LV[x.lv].n }" />{{ x.st.isNew ? 'Новое' : LV[x.lv].t }}</span>
             <button v-if="!readonly" class="star" :class="{ on: x.fav }" :aria-pressed="!!x.fav" :title="x.fav ? 'Убрать из избранного' : 'В избранное'" @click.stop="toggleFav(x.key)">★</button><span v-else class="star ro" :class="{ on: x.fav }" :title="x.fav ? 'В избранном у ученика' : ''">{{ x.fav ? '★' : '' }}</span>
           </div>
           <div v-if="openKey === x.key" class="det">
-            <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : 'слово' }}</p>
+            <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : x.kind === 'screen' ? 'упражнение' : 'слово' }}</p>
             <WordCurve v-if="!x.st.isNew" :item="x" :cfg="cfgNow" />
             <!-- заголовок истории: счёт ответов (остальное — в показателях над графиком) -->
             <p v-if="!x.st.isNew" class="sm">верно {{ x.ok }} · ошибок {{ x.bad }}</p>
@@ -189,7 +191,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .th { font-size: 12px; font-weight: 700; color: var(--hint) }
 .tr { cursor: pointer; border-radius: 10px } .tr:hover, .tr.on { background: var(--surface) }
 .pic { width: 52px; height: 36px; border-radius: 7px; overflow: hidden; background: var(--border); display: grid; place-items: center }
-.pic img { width: 100%; height: 100%; object-fit: cover } .pic i { font-style: normal; font-size: 11px; font-weight: 900; color: var(--hint) }
+.pic img { width: 100%; height: 100%; object-fit: cover } .pic i { font-style: normal; font-size: 11px; font-weight: 900; color: var(--hint) } .pic i.ex { color: #1278b0 }
 .w { display: flex; align-items: center; gap: 8px; font-weight: 800; min-width: 0; overflow-wrap: anywhere }
 .pl { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 0; background: #1cb0f6; display: grid; place-items: center; cursor: pointer; padding: 0 }
 .pl svg { width: 13px; height: 13px; fill: #fff }
