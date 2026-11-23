@@ -11,7 +11,7 @@ describe('«Ответ по смыслу»: настройки проверки 
   it('через мост: в JSON экрана — только своё; общее (промпт, message, format, порог) — kpShown, на плитке меню', () => {
     const j: any = stepJson({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })
     expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A' })
-    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL' })
+    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL', dicModel: 'auto' })
   })
 
   it('мост: в JSON ровно то, что уходит в чат — prompt, message, format (с {id}); свой format без {id} не принимается', () => {

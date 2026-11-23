@@ -15,7 +15,7 @@ import { usePlay, useEdit, inEditor } from '../ctx'
 import { PASS, SYSTEM, bridgeStatus, aiIcon, kpPlain } from '../../utils/ai'
 import TtsDialog from '../../components/TtsDialog.vue'
 import { modelName } from '../../utils/tts'
-import { startTranscribe, sttModel, firstKey, startTalk, liveModels, liveName } from '../../utils/live'
+import { sttModel, firstKey, startTalk, liveModels, liveName, startDictation, dicChoices, dicName, dicKind } from '../../utils/live'
 import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/kpcheck'
 import { kpLive } from '../../utils/kplive'
 import { recordMic, transcribeFile } from '../../utils/sttfile'
@@ -80,7 +80,10 @@ async function dictate() {
   const key = firstKey(); dicErr.value = ''
   if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
   dic.value = 'connecting'
-  dicS = startTranscribe({ key, model: await sttModel(key), lang: kpCfg(props.step).lang, on: {          // язык — из JSON экрана (lang)
+  // чем распознавать — dicModel экрана или курса (23.11.2026): auto — свежая …transcribe-live ключа; Live-собеседник — молча; browser — сам браузер
+  const want = kpCfg(props.step).dicModel, model = dicKind(want) === 'auto' ? await sttModel(key) : want
+  dicUsed.value = model
+  dicS = startDictation({ key, model, lang: kpCfg(props.step).lang, on: {          // язык — из JSON экрана (lang)
     state: (s, info) => {
       if (s === 'live' && info) return
       dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s
@@ -135,6 +138,17 @@ function typeIn(t) {
   typeTm = setInterval(() => { if (p.st.done) return clearInterval(typeTm); i += step; p.st.text = base + add.slice(0, i); if (i >= add.length) clearInterval(typeTm) }, 25)
 }
 // облачко над полем: пока идёт диктовка (пусто — «…»), или ошибка; длинный черновик — его хвост
+// ---------- Модель диктовки (23.11.2026): выбор в правке экрана — пишется в экран (dicModel); на весь курс — «{ }» на плитке ----------
+const dicUsed = ref('')                 // чем распознаётся сейчас (auto — уже развёрнутое имя)
+const dicOpts = ref([]), dicAuto = ref('')
+onMounted(async () => {
+  if (!editor || props.part !== 'tools' || fileMode.value || !ai.keys.length) return          // список нужен только на панели правки экрана
+  const key = firstKey(); const [o, a] = await Promise.all([dicChoices(key), sttModel(key)]); dicOpts.value = o; dicAuto.value = a
+})
+const dicSel = computed(() => (props.step.dicModel && props.step.dicModel !== 'auto' ? props.step.dicModel : ''))
+function setDic(v) { if (v) props.step.dicModel = v; else delete props.step.dicModel; ed.changed() }
+const DIC_GROUPS = [['stt', 'Расшифровка речи — только распознаёт'], ['live', 'Live-собеседник — молча, берём расшифровку'], ['browser', 'Без Gemini']]
+const dicWho = computed(() => (dicKind(dicUsed.value) === 'browser' ? 'Браузер слышит' : dicUsed.value ? dicName(dicUsed.value) + ' слышит' : 'Gemini слышит'))
 const dicCloud = computed(() => !p.edit && !fileMode.value && (dic.value === 'live' || !!dicDraft.value || !!dicErr.value))
 const dicShow = computed(() => { const t = dicDraft.value || (dic.value === 'live' ? '…' : dicErr.value); return t.length > 120 ? '…' + t.slice(-120) : t })
 
@@ -304,7 +318,7 @@ function jsApply() {
     <div v-else-if="!p.st.done" class="kaw" :class="{ dic: dicCloud }">
       <textarea :id="'kpa-' + step.id" ref="ta" class="ka" @input="p.st.text = $event.target.value" :readonly="p.st.busy" placeholder="Надиктуйте или напишите ответ по-польски…" @pointerdown.stop @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" />
       <!-- черновик диктовки — облаком поверх низа поля (21.11.2026): раньше строкой под полем — появлялась и пропадала, всё ниже прыгало -->
-      <div v-if="dicCloud" class="kdd" :class="{ er: dicErr && !dicDraft }" aria-live="polite"><small>{{ dicErr && !dicDraft ? 'Диктовка' : 'Gemini слышит' }}</small>{{ dicShow }}</div>
+      <div v-if="dicCloud" class="kdd" :class="{ er: dicErr && !dicDraft }" aria-live="polite"><small>{{ dicErr && !dicDraft ? 'Диктовка' : dicWho }}</small>{{ dicShow }}</div>
     </div>
     <div v-else class="ka done">{{ p.st.text }}</div>
 
@@ -364,6 +378,7 @@ function jsApply() {
       <ExTool title="Вид экрана: PDF (как в домашке) → линии → подложки" @click="nextLook">Вид: {{ LOOKS[look] }}</ExTool>
       <ExTool :on="!step.plain" title="Выделения в эталоне: оранжевые термины, жирный, курсив — включить / выключить" @click="toggleMarks">Выделения{{ step.plain ? ' выкл' : ' ✓' }}</ExTool>
       <select v-if="api" class="kms ed" :value="step.model || ''" title="Модель проверки у этого экрана (Gemini API)" @pointerdown.stop @change="setModelF($event.target.value)"><option value="">Модель: авто{{ cModels[0] ? ' · ' + checkName(cModels[0]) : '' }}</option><option value="live">Live · голосом</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
+      <select v-if="!fileMode" class="kms ed" :value="dicSel" title="Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise" @pointerdown.stop @change="setDic($event.target.value)"><option value="">Диктовка: авто{{ dicAuto ? ' · ' + dicName(dicAuto) : '' }}</option><option v-if="dicSel && !dicOpts.some(o => o.id === dicSel)" :value="dicSel">Диктовка: {{ dicName(dicSel) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">Диктовка: {{ dicName(o.id) }}</option></optgroup></template></select>
       <ExTool :on="!!step.autoplay" title="Звук вопроса сам играет, когда ученик открывает экран (если вопрос озвучен)" @click="toggleAuto">Автозвук{{ step.autoplay ? ' ✓' : ' выкл' }}</ExTool>
       <ExTool :on="jsOpen" title="Экран текстом: вопрос, эталон, порог и промпт для Gemini" @click="jsToggle">JSON{{ step.prompt || step.pass ? ' ✓' : '' }}</ExTool>
       <span v-if="jsOpen" class="kj" @pointerdown.stop @keydown.stop>

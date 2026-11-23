@@ -25,6 +25,7 @@ const LANG_RU: Record<KpLang, string> = { 'pl-PL': 'польский', 'en-US': 
 
 export interface KpCfg {
   prompt: string; pass: number; lang: KpLang; message: string; format: string
+  dicModel: string          // «Надиктовать с Gemini» (потоком): auto — свежая …transcribe-live ключа; модель Live API; browser — распознавание браузера (23.11.2026)
   model: string; temperature: number | null; thinking: boolean
   livePrompt: string; liveAsk: string; liveMore: string; liveTool: string; liveModel: string; voice: string
   discussPrompt: string; discussOpener: string; discussNone: string
@@ -79,6 +80,8 @@ const okPass = (v: unknown): v is number => Number.isInteger(v) && (v as number)
 const okTemp = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 2
 const okLang = (v: unknown): v is KpLang => LANGS.includes(v as KpLang)
 const okModel = (v: unknown) => typeof v === 'string' && /^[a-z0-9.-]{3,80}$/.test(v.trim())
+/** модель диктовки: auto, browser или имя модели */
+export const DIC_AUTO = 'auto'
 
 /** «Gemini API» у экрана (engine 'api'; старое 'live' идёт так же) — у него есть модель и все промпты, у моста — prompt, message, format */
 export const kpApi = (s: any) => s?.engine === 'api' || s?.engine === 'live'
@@ -97,6 +100,7 @@ function kpCode(s: any): KpCfg {
   const b = base(s), f = own(s, 'format')
   const o: any = {
     prompt: own(s, 'prompt')?.trim() ?? SYSTEM, pass: okPass(s?.pass) ? s.pass : PASS, lang: okLang(s?.lang) ? s.lang : 'pl-PL',
+    dicModel: okModel(s?.dicModel) ? s.dicModel.trim() : DIC_AUTO,
     message: own(s, 'message') ?? b.message, format: f !== undefined && okFormat(s, f) ? f : b.format,
     model: okModel(s?.model) ? s.model.trim() : DEF.model, temperature: okTemp(s?.temperature) ? s.temperature : DEF.temperature, thinking: s?.thinking === true,
     liveModel: okModel(s?.liveModel) ? s.liveModel.trim() : DEF.liveModel, voice: typeof s?.voice === 'string' && /^[A-Za-z]{2,20}$/.test(s.voice) ? s.voice : DEF.voice,
@@ -117,8 +121,9 @@ export function kpCfg(s: any): KpCfg {
 /** Что показывать в JSON экрана — ровно то, что уходит у этой формы: мост — prompt, message, format; Gemini API — всё; «целым аудио» — + sttPrompt, sttAsk */
 export function kpShown(s: any): Partial<KpCfg> {
   const c = kpCfg(s)
-  const o: any = kpApi(s) ? { ...c } : { prompt: c.prompt, message: c.message, format: c.format, pass: c.pass, lang: c.lang }
+  const o: any = kpApi(s) ? { ...c } : { prompt: c.prompt, message: c.message, format: c.format, pass: c.pass, lang: c.lang, dicModel: c.dicModel }
   for (const k of STT_TEXTS) { if (kpFile(s)) o[k] = c[k]; else delete o[k] }
+  if (kpFile(s)) delete o.dicModel          // «целым аудио» распознаёт Flash Lite файлом — потоковая модель ему не нужна
   return o
 }
 

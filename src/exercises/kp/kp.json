@@ -41,6 +41,11 @@
       "default": "pl-PL",
       "label": "Язык ответа: диктовка, проверка голосом, разбор"
     },
+    "dicModel": {
+      "type": "text",
+      "default": "auto",
+      "label": "«Надиктовать с Gemini» (потоком): чем распознавать — auto (свежая …transcribe-live), модель Live API (gemini-3.8-live…) или browser"
+    },
     "model": {
       "type": "text",
       "default": "auto",

@@ -205,3 +205,80 @@ export async function sttModel(key, fetcher = fetch) {
   } catch { return STT_MODEL }
 }
 export const firstKey = () => ai.keys.find((x) => !(x.until > Date.now()))?.key ?? ai.keys[0]?.key ?? ''
+
+// ---------- Диктовка: чем распознавать (23.11.2026) ----------
+// Выбор для «Надиктовать с Gemini» в «Ответе по смыслу»: auto — самая свежая …transcribe-live ключа (как было);
+// модель расшифровки (…transcribe-live) — только распознаёт, черновик на лету; Live-собеседник (Gemini 3.8 Live, 3 Flash Live,
+// 2.5 Native Audio…) — молча: его голос не играем и просим не отвечать, берём только расшифровку того, что сказали;
+// browser — распознавание самого браузера (Web Speech, Chrome / Edge / Android; язык у него закреплён жёстко).
+const TK = 'tma.stt.models'
+/** Модели расшифровки потоком (…transcribe…live, умеют bidiGenerateContent): новее — выше. Кэш на сутки */
+export async function sttModels(key, fetcher = fetch) {
+  const c = rd(TK, { at: 0, list: [] })
+  if (c.list.length && Date.now() - c.at < 864e5) return c.list
+  try {
+    const r = await fetcher(API + '?pageSize=1000', { headers: { 'x-goog-api-key': key } })
+    if (!r.ok) return c.list
+    const list = (JSON.parse(await r.text()).models ?? []).filter((m) => (m.supportedGenerationMethods ?? []).includes('bidiGenerateContent'))
+      .map((m) => String(m.name).replace(/^models\//, '')).filter((n) => /transcribe/i.test(n) && /live/i.test(n))
+      .sort((a, b) => ver(b) - ver(a) || a.length - b.length)
+    if (list.length) wr(TK, { at: Date.now(), list })
+    return list.length ? list : c.list
+  } catch { return c.list }
+}
+export const DIC_BROWSER = 'browser'
+const browserSR = () => (typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null)
+export const hasBrowserStt = () => !!browserSR()
+/** что это за выбор: 'auto' | 'stt' (модель расшифровки) | 'live' (собеседник, молча) | 'browser' */
+export const dicKind = (id) => (!id || id === 'auto' ? 'auto' : id === DIC_BROWSER ? 'browser' : /transcribe/i.test(id) ? 'stt' : 'live')
+/** имя для людей */
+export const dicName = (id) => (dicKind(id) === 'auto' ? 'авто' : id === DIC_BROWSER ? 'Браузер (Web Speech)' : liveName(id).replace(/\bTranscribe\b/i, 'Transcribe'))
+/** Варианты для списка: модели расшифровки, потом Live-собеседники, потом браузер. → [{ id, kind }] */
+export async function dicChoices(key, fetcher = fetch) {
+  const [s, l] = await Promise.all([key ? sttModels(key, fetcher) : [], key ? liveModels(key, fetcher) : []])
+  return [...s.map((id) => ({ id, kind: 'stt' })), ...l.map((id) => ({ id, kind: 'live' })), ...(hasBrowserStt() ? [{ id: DIC_BROWSER, kind: 'browser' }] : [])]
+}
+
+const STENO = 'Ты — стенографист. Тебя не слышат и не ждут ответа: никогда ничего не говори и не отвечай — молчи. ' +
+  'Твоя задача только слушать; расшифровку сказанного делает система.'
+/** Диктовка выбранным способом — тот же вид, что у startTranscribe: on { state(s, info), interim(text), final(text), level(0..1) } → { stop() }.
+ *  model — уже не 'auto' (его разворачивает вызывающий через sttModel) */
+export function startDictation({ key, model, lang = 'pl-PL', on = {} }) {
+  const k = dicKind(model)
+  if (k === 'browser') return startBrowserStt({ lang, on })
+  if (k !== 'live') return startTranscribe({ key, model, lang, on })
+  // Live-собеседник: голос не играем (quiet); куски расшифровки копим черновиком, конец реплики (turnComplete) — готовый кусок
+  let buf = ''
+  const s = startTalk({ key, model, system: STENO, lang, quiet: true, on: {
+    state: (st, info) => on.state?.(st, info),
+    level: (v) => on.level?.(v),
+    text: (role, t) => { if (role === 'me') { buf += t; on.interim?.(buf.trim()) } },
+    turn: () => { const t = buf.trim(); buf = ''; if (t) on.final?.(t); on.interim?.('') },
+  } })
+  return { stop: () => s.stop() }
+}
+/** Распознавание браузера (Web Speech API): язык закреплён, черновик на лету. Chrome сам останавливается после паузы — перезапускаем */
+export function startBrowserStt({ lang = 'pl-PL', on = {} }) {
+  const SR = browserSR()
+  let done = false, stopping = false
+  const fin = (reason = '') => { if (done) return; done = true; on.state?.(reason ? 'error' : 'ended', reason) }
+  on.state?.('connecting')
+  if (!SR) { fin('Этот браузер не умеет распознавать речь — выберите Gemini'); return { stop: () => {} } }
+  const r = new SR()
+  r.lang = lang; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1
+  let started = false
+  r.onstart = () => { if (!started) { started = true; on.state?.('live') } }
+  r.onresult = (e) => {
+    let interim = ''
+    for (let i = e.resultIndex; i < e.results.length; i++) { const x = e.results[i]; if (x.isFinal) on.final?.(x[0].transcript); else interim += x[0].transcript }
+    on.interim?.(interim.trim())
+  }
+  r.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return
+    stopping = true
+    fin(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'Нет доступа к микрофону — разрешите его в браузере' : e.error === 'network' ? 'Распознавание браузера: нет связи с сервером' : 'Распознавание браузера: ' + e.error)
+  }
+  r.onend = () => { if (!stopping && !done) { try { r.start(); return } catch { /* не перезапустился — закончим */ } } fin('') }
+  try { r.start() } catch (e) { fin('Распознавание браузера не запустилось: ' + (e?.message || e)) }
+  return { stop: () => { stopping = true; try { r.stop() } catch { fin('') } } }
+}

@@ -27,7 +27,6 @@ import { showToast } from '../../composables/useToast'
 import { live, liveSend, setWhere, onLive } from '../../composables/useLive'
 import PresenceBar from '../../components/PresenceBar.vue'
 import LessonRail from '../../components/LessonRail.vue'
-import { far, FAR_Z } from '../../utils/stills'          // сильно отдалили — экраны блоками (23.11.2026)
 import ExerciseMini from '../../components/ExerciseMini.vue'
 import JsonModal from '../../components/JsonModal.vue'
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
@@ -949,10 +948,6 @@ const screens = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'экран' : [
 // ---------- Холст: сдвиг и масштаб ----------
 const board = ref(null), W = ref(innerWidth), H = ref(innerHeight)
 const view = reactive({ x: innerWidth / 2, y: 330, z: 1 })
-// 23.11.2026: меньше FAR_Z (40 %) текст экранов не читается — экраны уроков рисуются цветными блоками с названием (LessonRail),
-// а не живыми экранами и снимками; с запасом ±2 %, чтобы на границе не переключалось туда-обратно
-watch(() => view.z, (z) => { if (z < FAR_Z - 0.02) far.value = true; else if (z > FAR_Z + 0.02) far.value = false }, { immediate: true })
-onUnmounted(() => { far.value = false })
 const phone = computed(() => W.value < 720)
 const toWorld = (cx, cy) => { if (!board.value) return { x: 0, y: 0 }; const r = board.value.getBoundingClientRect()          /* ушли со страницы посреди перетаскивания */; return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z } }
 const toScreen = (p) => ({ x: p.x * view.z + view.x, y: p.y * view.z + view.y })
