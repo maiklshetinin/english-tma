@@ -29,12 +29,25 @@ const emit = defineEmits(['remove'])
 // Удалить слово из словаря — только преподаватель (и разработчик): в своём Review и в карточке ученика (там удаляет StudentReview)
 const auth = useAuthStore()
 const canDel = computed(() => auth.role === 'teacher')
+// 24.11.2026: удалить слово, фразу или упражнение — корзиной в строке; «Удалить показанные» — всё, что сейчас в списке (по фильтру)
+const kindW = (x) => (x.kind === 'phrase' ? 'Фраза' : x.kind === 'screen' ? 'Упражнение' : 'Слово')
+async function dropKeys(keys) {
+  if (props.items) { emit('remove', keys); return true }
+  for (let i = 0; i < keys.length; i += 200) if (!(await removeReview(keys.slice(i, i + 200)))) return false          // сервер берёт до 200 за раз
+  return true
+}
 async function delWord(x) {
-  if (!(await ask(`Удалить «${x.text}» из словаря?`, { text: `${props.items ? 'Слово пропадёт из словаря ученика' : 'Слово пропадёт из словаря'} вместе с историей ответов и силой. Если оно снова встретится в уроке — появится заново, как новое.`, ok: 'Удалить', danger: true }))) return
-  openKey.value = null
-  if (props.items) return emit('remove', [x.key])
-  if (await removeReview([x.key])) showToast('Слово удалено')
+  if (!(await ask(`Удалить «${x.text}» из словаря?`, { text: `${kindW(x)} пропадёт из словаря${props.items ? ' ученика' : ''} вместе с историей ответов и силой. Если снова встретится в уроке — появится заново, как новое.`, ok: 'Удалить', danger: true }))) return
+  if (openKey.value === x.key) openKey.value = null
+  if (await dropKeys([x.key])) { if (!props.items) showToast(x.kind === 'phrase' ? 'Фраза удалена' : `${kindW(x)} удалено`) }
   else showToast('Не удалось удалить на сервере — попробуйте ещё раз', null, 'bad')
+}
+async function delShown() {
+  const keys = shown.value.map((x) => x.key), n = keys.length; if (!n) return
+  const what = FILTERS.value.find((f) => f.k === filter.value)?.t.replace(/\s*\(\d+\)$/, '') ?? ''
+  if (!(await ask(`Удалить из словаря ${n} ${n % 10 === 1 && n % 100 !== 11 ? 'запись' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'записи' : 'записей'}?`, { text: `${filter.value === 'all' ? 'Всё, что в списке' : `Всё, что в списке «${what}»`}, — вместе с историей ответов и силой. Встретятся в уроке снова — появятся заново, как новые.`, ok: 'Удалить', danger: true }))) return
+  openKey.value = null
+  if (await dropKeys(keys)) { if (!props.items) showToast(`Удалено: ${n}`) } else showToast('Не удалось удалить на сервере — попробуйте ещё раз', null, 'bad')
 }
 const LV = { weak: { t: 'Слабое', n: 1 }, medium: { t: 'Среднее', n: 2 }, strong: { t: 'Сильное', n: 3 } }
 const filter = ref('all'), openKey = ref(null), how = ref(false)
@@ -126,13 +139,14 @@ async function reset() {
         <select id="rv-filter" v-model="filter"><option v-for="f in FILTERS" :key="f.k" :value="f.k">{{ f.t }}</option></select>
         <span class="sp" />
         <slot name="actions" />          <!-- карточка ученика: «Сбросить прогресс» -->
+        <button v-if="canDel && filter !== 'all' && shown.length" class="ghost dsh" :title="'Удалить из словаря всё, что сейчас в списке'" @click="delShown">Удалить показанные ({{ shown.length }})</button>
         <template v-if="!readonly"><button class="ghost" title="Только для проверки алгоритма" @click="reset">Очистить</button>
         <button class="go" :disabled="!toAsk.length" :title="toAsk.length ? `Короткая тренировка: до 10 слов из списка, сначала слабые` : 'В списке нет слов с переводом или звуком'" @click="practice">Повторить эти слова</button></template>
       </div>
       <p v-if="!list.length && readonly" class="empty">Пока пусто — слова и упражнения появятся, когда ученик пройдёт уроки курса.</p>
       <p v-else-if="!list.length" class="empty">Пока пусто. Пройдите урок курса — слова, фразы и сами упражнения появятся здесь: новые — слабыми, верные ответы делают их сильнее, у каждого — когда повторить.</p>
       <div v-else class="tbl">
-        <div class="th"><span /><span>Слово или упражнение</span><span>Перевод · урок</span><span>Сила</span><span /></div>
+        <div class="th"><span /><span>Слово или упражнение</span><span>Перевод · урок</span><span>Сила</span><span /><span /></div>
         <template v-for="x in shown" :key="x.key">
           <div class="tr" :data-rk="x.key" :class="{ on: openKey === x.key }" role="button" tabindex="0" @click="openKey = openKey === x.key ? null : x.key">
             <span class="pic"><img v-if="x.image && resolve(x.image, 'image')" :src="resolve(x.image, 'image')" alt="" /><i v-else :class="{ ex: x.kind === 'screen' }">{{ x.kind === 'phrase' ? 'Фр' : x.kind === 'screen' ? 'Уп' : 'Сл' }}</i></span>
@@ -140,6 +154,7 @@ async function reset() {
             <span class="t">{{ x.tr }}</span>
             <span class="str" :class="x.lv"><i v-for="n in 3" :key="n" :class="{ f: !x.st.isNew && n <= LV[x.lv].n }" />{{ x.st.isNew ? 'Новое' : LV[x.lv].t }}</span>
             <button v-if="!readonly" class="star" :class="{ on: x.fav }" :aria-pressed="!!x.fav" :title="x.fav ? 'Убрать из избранного' : 'В избранное'" @click.stop="toggleFav(x.key)">★</button><span v-else class="star ro" :class="{ on: x.fav }" :title="x.fav ? 'В избранном у ученика' : ''">{{ x.fav ? '★' : '' }}</span>
+            <button v-if="canDel" class="rdl" :title="'Удалить из словаря'" :aria-label="'Удалить «' + x.text + '»'" @click.stop="delWord(x)"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg></button><span v-else />
           </div>
           <div v-if="openKey === x.key" class="det">
             <p v-if="x.st.isNew"><b>Новое</b> — только встречалось; первый ответ в уроке запустит отсчёт · {{ x.kind === 'phrase' ? 'фраза' : x.kind === 'screen' ? 'упражнение' : 'слово' }}</p>
@@ -187,7 +202,7 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
 .go { background: #1cb0f6; color: #fff } .go:disabled { opacity: .45; cursor: default } .ghost { background: var(--border); color: var(--hint) }
 .empty { margin: 0; color: var(--hint); font-weight: 600; font-size: 14px; line-height: 1.45 }
 .tbl { display: grid; font-size: 14px }
-.th, .tr { display: grid; grid-template-columns: 52px minmax(0, 1.3fr) minmax(0, 1fr) 118px 28px; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border) }
+.th, .tr { display: grid; grid-template-columns: 52px minmax(0, 1.3fr) minmax(0, 1fr) 118px 28px 28px; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border) }
 .th { font-size: 12px; font-weight: 700; color: var(--hint) }
 .tr { cursor: pointer; border-radius: 10px } .tr:hover, .tr.on { background: var(--surface) }
 .pic { width: 52px; height: 36px; border-radius: 7px; overflow: hidden; background: var(--border); display: grid; place-items: center }
@@ -210,12 +225,17 @@ h2 { margin: 0; font-size: 24px; font-weight: 900 }
   .hdr .vt { margin-left: 0 }          /* 21.11.2026: убраны старые мини-баночки (.jar 14×34) — они сплющивали новые баночки на телефоне */
   .rbar .sp { flex-basis: 100%; height: 0 } .rbar .go, .rbar .ghost { flex: 1; padding: 9px 10px }
   .mt { display: block }
-  .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px 26px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
+  .th, .tr { grid-template-columns: 40px minmax(0, 1fr) 88px 26px 26px } .th span:nth-child(3), .tr .t { display: none } .pic { width: 40px } .det { padding-left: 8px } }
 /* баночки (как «Your vocabulary» в Busuu) */
 .jars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 16px; border-radius: 18px; background: var(--card); box-shadow: 0 1px 0 rgba(0, 0, 0, .04), 0 6px 22px rgba(0, 0, 0, .05) }
 .jar { display: flex; align-items: center; gap: 12px; padding: 4px; border: 0; border-radius: 12px; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer } .jar:hover, .jar.on { background: var(--surface) }
 .jb { position: relative; flex: none; width: 62px; height: 82px; border-radius: 8px; box-shadow: inset 0 0 0 1.5px var(--border); background: var(--card); overflow: hidden } .jb i { position: absolute; left: 0; right: 0; bottom: 0; min-height: 3px }
 .jt { display: grid; font-size: 14px; font-weight: 700; color: var(--hint) } .jt b { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1.1 }
+.rdl { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: none; display: grid; place-items: center; color: #c4c8cd; cursor: pointer; opacity: 0; transition: opacity .12s }
+.rdl svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.tr:hover .rdl, .tr.on .rdl, .rdl:focus-visible { opacity: 1 } .rdl:hover { color: #d92d20; background: #fdecea }
+@media (hover: none) { .rdl { opacity: 1 } }          /* телефон: наведения нет — корзина видна всегда */
+.dsh { color: #d92d20 !important }
 .star { width: 26px; height: 26px; padding: 0; border: 0; background: none; font-size: 19px; line-height: 1; color: #cfd3d8; cursor: pointer } .star.on { color: #ff9600 } .star:hover:not(.ro) { color: #ffb84d } .star.ro { cursor: default; display: grid; place-items: center }
 /* тренировка «Повторить эти слова» — во весь экран, как урок */
 .prc { position: fixed; inset: 0; z-index: 3000; display: grid; background: var(--card); overflow: auto }
