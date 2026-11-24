@@ -14,6 +14,7 @@
     python tools/make-json.py --list                   # все типы
     python tools/make-json.py talkvn                   # все PDF из tools/pdf/ → tools/json/<папка типа>/<урок>/
     python tools/make-json.py kpball "ДЗ 8.pdf"        # рядом появится папка «ДЗ 8.kpball» — по файлу на вопрос
+    python tools/make-json.py kpballive "ДЗ 8.pdf"    # то же для «шара Live» (папка json/шар live/)
     python tools/make-json.py talkptt "json/мост/ДЗ 8. Кухня.json"   # можно из готового JSON
 PDF разбирает tools/lib/kp-json.py — вопросы, эталоны и звёзды у всех типов одинаковые. Новый тип — одна строка в TYPES.
 """
@@ -29,6 +30,7 @@ TYPES = {
     'pl-kpapi':    ('Ответ по смыслу · Gemini API',        'gemini-live'),
     'pl-kpfile':   ('Ответ по смыслу · целым аудио',       'запись целиком'),
     'pl-kpball':   ('Ответ по смыслу · шар',               'шар'),
+    'pl-kpballive': ('Ответ по смыслу · шар Live',          'шар live'),
     'pl-talk':     ('Разговор с Gemini',                   'разговор без персонажа'),
     'pl-talkava':  ('Разговор с персонажем',               'разговор'),
     'pl-talkptt':  ('Разговор · рация',                    'рация'),
