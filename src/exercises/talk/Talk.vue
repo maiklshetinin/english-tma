@@ -265,6 +265,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', infoAway, true
 watchEffect(() => {
   if (props.part !== 'body') return          // пишет только сам экран — подвал (part="fb") только рисует
   const c = C.value; if (!c) return
+  c.live = st.value === 'live'          // подвал — отдельный экземпляр: «идёт ли разговор» берёт отсюда, не из своего st
   const n = [], s = st.value, liveNm = liveName(used.value || pickName.value || 'Live').replace(/^Gemini /, '')
   n.push({ k: 'live', name: 'Live · ' + liveNm, st: s === 'connecting' ? 'busy' : s === 'live' ? (c.pt === 'wait' ? 'busy' : 'on') : 'off',
     txt: s === 'connecting' ? 'подключаюсь' : s === 'live' ? (c.pt === 'talk' ? 'слышит вас' : c.pt === 'wait' ? 'отвечает' : 'соединение открыто') : s === 'ended' ? 'соединение закрыто' : 'не подключена' })
@@ -371,7 +372,7 @@ const waveH = (v) => 3 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 21
         </template>
         <template v-else>
           <span v-if="C.stt" class="kcm-s">🎙 {{ C.stt }}</span>
-          <button type="button" class="kcx mic" :disabled="st !== 'live'" title="Сказать голосом — Gemini услышит произношение" aria-label="Надиктовать" @click="C.mic()"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></button>
+          <button type="button" class="kcx mic" :disabled="!C.live" title="Сказать голосом — Gemini услышит произношение" aria-label="Надиктовать" @click="C.mic()"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></button>
           <button type="button" class="kcgo" :disabled="!C.text.trim()" title="Отправить текстом (Enter)" aria-label="Отправить" @click="C.send()"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6" /></svg></button>
         </template>
       </div>

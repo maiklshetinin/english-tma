@@ -87,10 +87,12 @@ watch(ta, (el) => { if (el) el.value = p.st.text || '' }, { flush: 'sync' })    
 onBeforeUnmount(() => clearInterval(syncTm))
 // «Надиктовать с Gemini» (20.11.2026): речь сырым звуком — в Gemini 3.5 Transcribe Live (польский закреплён), готовые куски
 // дописываются в поле ответа, черновик — серым под полем. Поле остаётся обычным: можно вставить текст или надиктовать по-старому
+// dicNet (24.11.2026): соединение с нейросетью диктовки — для строки под полем: off | connecting | open | closed | error
+const dicNet = ref('off')
 const dic = ref('idle'), dicDraft = ref(''), dicErr = ref(''), dicLvl = ref(0), dicT0 = ref(0), dicNow = ref(0)
 let dicS = null, dicTm = 0, dicBase = ''
 /** ✕ во время диктовки (как в Claude): остановить и выбросить продиктованное сейчас — поле как до нажатия микрофона */
-function dicCancel() { const s = dicS; dicDraft.value = ''; dicS = null; s?.stop(); clearInterval(dicTm); dic.value = 'idle'; dicLvl.value = 0; waveRun(false); micOffSnd(); if (!p.st.done) p.st.text = dicBase }
+function dicCancel() { if (dicNet.value === 'open' || dicNet.value === 'connecting') dicNet.value = 'closed'; const s = dicS; dicDraft.value = ''; dicS = null; s?.stop(); clearInterval(dicTm); dic.value = 'idle'; dicLvl.value = 0; waveRun(false); micOffSnd(); if (!p.st.done) p.st.text = dicBase }
 // бегущие линии, как в Claude (23.11.2026): каждые 70 мс громкость — новой полоской справа, старые уезжают влево; тишина — точки
 const WAVE_N = 24
 const wave = ref(Array(WAVE_N).fill(0))
@@ -132,7 +134,7 @@ async function dictate() {
   if (dic.value === 'live' || dic.value === 'connecting') { dicS?.stop(); return }
   const key = firstKey(); dicErr.value = ''
   if (!key) { dicErr.value = 'Нужен ключ Gemini в профиле'; return }
-  dic.value = 'connecting'; dicBase = p.st.text || ''; sfxMicOn(); micOn = true          // ✕ — вернуть, как было до диктовки; «тр-тр-тр» — пошло
+  dic.value = 'connecting'; dicNet.value = 'connecting'; dicBase = p.st.text || ''; sfxMicOn(); micOn = true          // ✕ — вернуть, как было до диктовки; «тр-тр-тр» — пошло
   { const el = ta.value; insSel = el && props.part === 'fb' ? [el.selectionStart ?? dicBase.length, el.selectionEnd ?? dicBase.length] : null }          // куда вставлять — где курсор
   // чем распознавать — dicModel экрана или курса (23.11.2026): auto — свежая …transcribe-live ключа; Live-собеседник — молча; browser — сам браузер
   const want = (!editor && dicPick.value) || kpCfg(props.step).dicModel, model = dicKind(want) === 'auto' ? await sttModel(key) : want
@@ -141,8 +143,9 @@ async function dictate() {
     state: (s, info) => {
       if (s === 'live' && info) return
       dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s
-      if (s === 'error') dicErr.value = info
-      if (s === 'live') { dicT0.value = dicNow.value = Date.now(); clearInterval(dicTm); dicTm = setInterval(() => { dicNow.value = Date.now() }, 500); waveRun(true) }
+      if (s === 'error') { dicErr.value = info; dicNet.value = 'error' }
+      if (s === 'ended') dicNet.value = 'closed'
+      if (s === 'live') { dicNet.value = 'open'; dicT0.value = dicNow.value = Date.now(); clearInterval(dicTm); dicTm = setInterval(() => { dicNow.value = Date.now() }, 500); waveRun(true) }
       if (s === 'ended' || s === 'error') { clearInterval(dicTm); dicLvl.value = 0; dicS = null; insText(dicDraft.value); dicDraft.value = ''; waveRun(false); micOffSnd() }
     },
     interim: (t) => { dicDraft.value = t },
@@ -470,9 +473,11 @@ function jsApply() {
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
       <span v-else-if="bridge" class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
+      <span v-if="p.st.busy && !fileMode" class="knt connecting" :title="api ? 'Ответ ушёл на проверку в Gemini API' : 'Ответ ушёл на проверку через мост в чат'"><i />проверка · запрос ушёл<em class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span class="ksp" />
       <span v-if="!fileMode && cyrN" class="kcyr" title="В ответе русские буквы — подсвечены розовым: диктовка ошиблась языком, поправьте">русские буквы: {{ cyrN }}</span>
       <span v-if="!fileMode" class="kcn" :title="'Зачёт — от ' + pass + ' % смысла эталона'">{{ words }} · от {{ pass }}%</span>
+      <span v-if="!fileMode && canDic && !idle" class="knt" :class="dicNet" :title="'Соединение с нейросетью диктовки (' + dicShort(dicUsed || dicSel || dicAuto || STT_MODEL) + '): открывается на каждое нажатие микрофона и закрывается после ✓'"><i />{{ { off: 'соединение закрыто', connecting: 'подключаюсь', open: 'соединение открыто · слушает', closed: 'соединение закрыто', error: 'соединение оборвалось' }[dicNet] }}<em v-if="dicNet === 'connecting'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <select v-if="idle && !fileMode && canDic" class="kms kdm" disabled><option>🎙 {{ dicSel ? dicShort(dicSel) : 'авто' }}</option></select>
       <select v-else-if="!fileMode && canDic" class="kms kdm" :value="dicVal" :title="editor ? 'Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise' : 'Чем распознавать диктовку — выбор только в этом браузере, урок не меняется'" @pointerdown.stop @change="pickDic($event.target.value)"><option value="">🎙 {{ dicShort((!editor && lessonDic) || dicAuto || STT_MODEL) }}</option><option v-if="dicVal && !dicOpts.some(o => o.id === dicVal)" :value="dicVal">🎙 {{ dicShort(dicVal) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">🎙 {{ dicShort(o.id) }}</option></optgroup></template></select>
     </div>
@@ -583,6 +588,15 @@ function jsApply() {
 .ksp { flex: 1 1 0 !important } .kcn { color: #8f8f8f; font-size: 12.5px; font-weight: 500 }
 .kcst .kdm { height: 28px; max-width: 165px; margin-left: 0; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: #3a3a3a; font-size: 12.5px; font-weight: 600; cursor: pointer } .kcst .kdm:hover:not(:disabled) { background: #f0f0f0 } .kcst .kdm:disabled { color: #b0b0b0; background: transparent }
 .kcst .kbr { font-size: 12.5px; font-weight: 600 }
+/* соединение с нейросетью (24.11.2026): серая точка — закрыто, синяя мигает — подключаюсь / запрос ушёл, зелёная — открыто, красная — оборвалось */
+.knt { display: inline-flex; align-items: center; gap: 5px; color: #8f8f8f; font-size: 12px; font-weight: 600; white-space: nowrap }
+.knt i { width: 7px; height: 7px; border-radius: 50%; background: #c4c4c4; flex: none }
+.knt.open { color: #1f7a3a } .knt.open i { background: #2bb34a; box-shadow: 0 0 0 3px rgba(43, 179, 74, .16) }
+.knt.connecting { color: #1a73e8 } .knt.connecting i { background: #1a73e8; animation: kntp 1s ease-in-out infinite }
+.knt.error { color: #b3261e } .knt.error i { background: #d93025 }
+.kdd b { font-weight: inherit; animation: kddb 1.2s infinite } .kdd b:nth-child(2) { animation-delay: .2s } .kdd b:nth-child(3) { animation-delay: .4s }
+@keyframes kntp { 50% { opacity: .35 } } @keyframes kddb { 0%, 100% { opacity: .2 } 40% { opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { .knt.connecting i, .kdd b { animation: none } }
 :global(.foot:has(.kcm)) { align-items: flex-end }
 /* подвал тонкий, как у Claude: строка ввода и под ней строка мелкого текста — без полосы, рамки и больших отступов */
 :global(.lp .foot.foot:has(.kcm)) { padding: 6px 14px 8px; border-top: 0; background: transparent }
