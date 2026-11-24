@@ -62,7 +62,7 @@ registerProcessor('tma-mic', Mic)`
  *  quiet — не проигрывать голос (расшифровка всё равно идёт). Возврат: { stop, mute, quiet(v), send(text), listen() } */
 /** silenceMs — пауза до «договорил», endSens — 'low' | 'high' (чувствительность конца речи), temperature — null: как у модели,
  *  noiseSuppression — шумодав браузера (по умолчанию выкл.: режет sz, cz, ś, ć). Умолчания — как было до 20.11.2026 (kp, kplive) */
-export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, manual = false, extra = null, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
+export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, manual = false, tap = null, extra = null, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
   let talking = false          // manual (рация, 21.11.2026): голос уходит в модель только между talkStart() и talkEnd()
   let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, outAn = null, outBuf = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
@@ -98,6 +98,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
       for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = muted ? 0 : v * 32767 }
       on.level?.(muted ? 0 : Math.min(1, Math.sqrt(sum / f.length) * 4))
       if (rec && !muted && !(ctxOut && ctxOut.currentTime < nextAt + 0.2)) rec(pcm, Math.sqrt(sum / f.length))          // пока звучит Gemini (и 0,2 с после) — не пишем
+      if (tap && !muted) tap(pcm)          // рация (24.11.2026): тот же звук — в расшифровку; второй микрофон не открываем (Chrome отдавал звук только второму, Live получала тишину)
       ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64(new Uint8Array(pcm.buffer)), mimeType: 'audio/pcm;rate=16000' } } }))
     }
   }
@@ -161,9 +162,10 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
  *  (заменяется), и inputTranscription — готовый кусок после паузы (дописывается). Сессия — до 10 минут.
  *  on: { state(s, info), interim(text), final(text), level(0..1) } → { stop() } */
 export const STT_MODEL = 'gemini-3.5-transcribe-live'
-export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = null, extra = null, on = {} }) {          // rec — массив: сюда же копятся куски звука (Int16Array) — для «Теста речи»
+export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = null, extra = null, feed = false, on = {} }) {          // feed — без своего микрофона: звук приносят push(pcm) (рация: тот же, что слышит Live)          // rec — массив: сюда же копятся куски звука (Int16Array) — для «Теста речи»
   let held = false
   let ws = null, mic = null, ctx = null, node = null, src = null, done = false, ready = false
+  const queue = []          // feed: звук до готовности сессии — копим, потом отправляем
   function stop(reason = '') {
     if (done) return; done = true
     try { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) } catch { /* */ }
@@ -192,6 +194,7 @@ export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = 
     let m; try { m = JSON.parse(typeof e.data === 'string' ? e.data : await e.data.text()) } catch { return }
     if (m.setupComplete) {
       ready = true
+      if (feed) { on.state?.('live'); for (const p of queue.splice(0)) send(p); return }
       try { await startMic() } catch (err) { return stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) }
       on.state?.('live'); return
     }
@@ -206,7 +209,10 @@ export function startTranscribe({ key, model = STT_MODEL, lang = 'pl-PL', rec = 
     const r = e.reason || ''
     stop(e.code === 1000 ? '' : /API key|key not valid/i.test(r) ? 'Ключ не принят Google' : /quota|exhaust|limit/i.test(r) ? 'Лимит модели расшифровки исчерпан' : !ready && /model|not found|not supported/i.test(r) ? `Модель «${model}» недоступна этому ключу: ${r}` : `Соединение закрылось (${e.code})${r ? ': ' + r : ''}`)
   }
+  function send(pcm) { if (done || held || ws?.readyState !== 1) return; rec?.push(pcm); ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64(new Uint8Array(pcm.buffer)), mimeType: 'audio/pcm;rate=16000' } } })) }
   return { stop: () => stop(''), hold: (v) => { held = !!v },
+    /** feed: кусок звука (Int16Array, 16 кГц) — сюда; до готовности сессии копится (не больше ~10 с) */
+    push: (pcm) => { if (done || held) return; if (!ready) { if (queue.length < 100) queue.push(pcm); return } send(pcm) },
     /** Звук кончился (рация: нажали «отправить») — распознать хвост сразу, не дожидаясь паузы; потом можно слать снова */
     flush: () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) } }
 }

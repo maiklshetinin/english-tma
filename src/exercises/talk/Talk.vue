@@ -104,7 +104,7 @@ async function start() {
   const c = cfg.value
   mkCtl()
   sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: talkRole(c, props.step), opener: c.opener, manual: ptt.value,
-    silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, extra: reqOf(c, 'live'), rec: evalOn.value || vn.value ? onPcm : null, on: {
+    silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, extra: reqOf(c, 'live'), tap: ptt.value && !vn.value ? (pcm) => { if (tr) tr.push(pcm); else if (trPre && trPre.length < 100) trPre.push(pcm) } : null, rec: evalOn.value || vn.value ? onPcm : null, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
       st.value = s === 'error' ? 'ended' : s
@@ -142,7 +142,7 @@ const fmtS = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart
 const CYR = /[Ѐ-ӿ]/
 const C = computed(() => tp.ctl[props.step.id] || null)          // общее с подвалом (prefs.js)
 const WAVE_N = 24, WAVE_STEP = 7
-let tr = null, trTok = 0, trFinT = 0, vLine = null, waveTm = 0, waveRaf = 0, waveAt = 0, micOn = false
+let tr = null, trPre = null, trTok = 0, trFinT = 0, vLine = null, waveTm = 0, waveRaf = 0, waveAt = 0, micOn = false
 function mkCtl() {
   tp.ctl[props.step.id] = { pt: 'idle', conn: false, text: '', said: '', draft: '', err: '', stt: '', wave: Array(WAVE_N).fill(0), off: 0,
     mic: micToggle, vn: vn.value, lv: 0, dur: '0:00', trs: 'off', net: [] }
@@ -171,11 +171,11 @@ async function micStart() {
   sfxMicOn(); micOn = true
   if (!vn.value) { lines.value.push({ role: 'me', t: '', closed: false, draft: true }); vLine = lines.value.at(-1); atEnd.value = true; nextTick(() => toEnd(false)) }          // облачко «Transcribe Live пишет…» — сразу в чате
   if (vn.value) { vnPcm = []; vnLv = []; vnT0 = Date.now(); c.dur = '0:00'; c.conn = false; waveRun(true); return }          // голосовое — без распознавания
-  waveRun(true); c.trs = 'connecting'
+  waveRun(true); c.trs = 'connecting'; trPre = []          // пока расшифровка подключается — звук копим, чтобы начало фразы не пропало
   const model = await sttModel(key)
-  if (tok !== trTok) return
+  if (tok !== trTok) { trPre = null; return }
   c.stt = liveName(model)
-  tr = startTranscribe({ key, model, lang: lang.value, extra: reqOf(cfg.value, 'transcribe'), on: {
+  tr = startTranscribe({ key, model, lang: lang.value, extra: reqOf(cfg.value, 'transcribe'), feed: true, on: {
     state: (s, info) => {
       if (tok !== trTok) return
       if (s === 'live' && !info) { c.conn = false; c.trs = 'open' }
@@ -185,6 +185,8 @@ async function micStart() {
     interim: (t) => { if (tok !== trTok) return; c.draft = t; if (vLine) vLine.t = heard(c) || '…' },
     final: (t) => { if (tok !== trTok) return; c.said = (c.said + ' ' + t).trim(); c.draft = ''; if (vLine) { vLine.t = heard(c); clearTimeout(trFinT); trFinT = setTimeout(() => trDone(tok), 350) } },
   } })
+  for (const p of trPre ?? []) tr.push(p)
+  trPre = null
 }
 /** Микрофон ещё раз — договорил: activityEnd → Gemini отвечает на голос; хвост расшифровки дописывается в облачко до 1,5 с */
 function voiceSend() {
