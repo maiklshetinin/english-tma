@@ -42,30 +42,34 @@ async function remove(c) {
 </script>
 <template>
   <div class="cl">
-    <div class="ch"><h2>Курсы</h2><button class="btn sm" @click="open('new')"><AppIcon name="plus" :size="16" /> Новый курс</button></div>
+    <!-- 24.11.2026: курсы — в шапке: слева плитки (вылезают к рейлу навигации, прокрутка — при наведении), справа «Новый курс»; заголовка «Курсы» нет -->
+    <div class="ch">
+      <div v-if="list === null" class="card sk" />
+      <div v-else-if="list.length" class="grid">
+        <div v-for="c in list" :key="c.id" class="card cc" :class="{ on: c.id === selected }" role="button" tabindex="0" :title="`Нажмите — посмотреть ниже, дважды — открыть в редакторе${c.updatedAt ? ' · изменён ' + ago(c.updatedAt) : ''}`"
+          @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
+          <span class="ic"><AppIcon name="route" :size="16" /></span>
+          <span class="tx"><b>{{ c.title }}</b><small>{{ c.count }} {{ word(c.count) }}<template v-if="c.updatedAt"> · {{ ago(c.updatedAt) }}</template></small></span>
+          <!-- как везде: справа карандаш (редактор) и корзина -->
+          <button class="icon-btn" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="13" /></button>
+          <button class="icon-btn danger" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="13" /></button>
+        </div>
+      </div>
+      <span v-else class="sp" />
+      <button class="btn sm" @click="open('new')"><AppIcon name="plus" :size="16" /> Новый курс</button>
+    </div>
     <p v-if="err" class="hint">Не удалось загрузить курсы {{ err }}</p>
-    <div v-if="list === null" class="card sk" />
-    <div v-else-if="!list.length" class="card empty">
+    <div v-if="list && !list.length" class="card empty">
       <b>Курсов пока нет</b><span>Курс — это путь ученика: задания по порядку на одной линии, кружки из Telegram, фото. Собирается на холсте, как во Figma.</span>
       <button class="btn" @click="open('new')">Создать первый курс</button>
-    </div>
-    <div v-else class="grid">
-      <div v-for="c in list" :key="c.id" class="card cc" :class="{ on: c.id === selected }" role="button" tabindex="0" :title="`Нажмите — посмотреть ниже, дважды — открыть в редакторе${c.updatedAt ? ' · изменён ' + ago(c.updatedAt) : ''}`"
-        @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
-        <span class="ic"><AppIcon name="route" :size="16" /></span>
-        <span class="tx"><b>{{ c.title }}</b><small>{{ c.count }} {{ word(c.count) }}<template v-if="c.updatedAt"> · {{ ago(c.updatedAt) }}</template></small></span>
-        <!-- как везде: справа карандаш (редактор) и корзина -->
-        <button class="icon-btn" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="13" /></button>
-        <button class="icon-btn danger" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="13" /></button>
-      </div>
     </div>
   </div>
 </template>
 <style scoped>
 .cl { display: grid; gap: 6px; margin-bottom: 12px }
-.ch { display: flex; align-items: center; justify-content: space-between; gap: 10px } .ch h2 { margin: 0 }
-.grid { --bleed: max(0px, calc((100vw - 8px - 100%) / 2)); display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; padding: 3px 12px; margin: -3px calc(-1 * var(--bleed)) 0 }          /* 24.11.2026: курсы — одна строка на всю ширину экрана (вылезает за поля страницы); полоса прокрутки — только при наведении и только если не влезло */
-@media (min-width: 1024px) { .grid { --bleed: max(0px, calc((100vw - 132px - 100%) / 2)) } }          /* слева — рейл навигации (124px) */
+.ch { --bleed: max(0px, calc((100vw - 8px - 100%) / 2)); display: flex; align-items: center; gap: 10px; margin-left: calc(-1 * var(--bleed)) } .ch .btn { flex: none } .sp, .ch .sk { flex: 1 }
+.grid { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; flex: 1; min-width: 0; padding: 3px 12px 3px 12px }          /* 24.11.2026: курсы — одна строка на всю ширину экрана (вылезает за поля страницы); полоса прокрутки — только при наведении и только если не влезло */
+@media (min-width: 1024px) { .ch { --bleed: max(0px, calc((100vw - 132px - 100%) / 2)) } }          /* слева — рейл навигации (124px) */
 .grid::-webkit-scrollbar { height: 6px; background: transparent } .grid::-webkit-scrollbar-thumb { background: transparent }
 .grid:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .28) } html[data-theme='dark'] .grid:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .3) }
 .grid > .cc { flex: 0 0 225px; box-sizing: border-box }          /* на четверть уже прежних 300px */
