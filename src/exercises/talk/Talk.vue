@@ -5,21 +5,18 @@
 // Без оценки: «Продолжить» доступна сразу (как у «Подсказки»).
 // Язык — из JSON экрана (lang: pl-PL, en-US, en-GB; 21.11.2026). Всё, что уходит в Live-модель (роль, замок языка, первая реплика, пауза, чувствительность, температура, шумодав), — в JSON экрана
 // (кнопка «{ }»), умолчания — defaults.ts (talkCfg); в экране хранятся только отличия (20.11.2026).
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, watchEffect } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import ExHead from '../parts/ExHead.vue'
 import { reqOf } from '../../utils/overlay'
 import ExText from '../parts/ExText.vue'
 import { usePlay, useEdit, inEditor } from '../ctx'
 import { startTalk, startTranscribe, sttModel, liveModels, liveName, firstKey } from '../../utils/live'
-import { sfxMicOn, sfxMicOff } from '../../composables/useSfx'
 import { ai } from '../../utils/gemini'
 import { aiIcon } from '../../utils/ai'
 import { VOICES } from '../../utils/tts'
 import SpeechReport from '../../components/SpeechReport.vue'
-import VoiceNote from '../../components/VoiceNote.vue'
-import { bars } from '../../utils/sttfile'
 import TalkAvatar from './TalkAvatar.vue'
-import { assessSpeech, wavOf, getSpeechPick, checkName } from '../../utils/speech'
+import { assessSpeech, wavOf } from '../../utils/speech'
 import J from './talk.json'
 import { LANGS, talkCfg, talkRole } from './defaults'
 import { tp, setPick, setVoice as setVPick, setEval, loadModels } from './prefs'
@@ -31,20 +28,7 @@ const icon = aiIcon('Gemini')
 const cfg = computed(() => talkCfg(props.step))          // действующие настройки: свои поля экрана поверх умолчаний
 const models = computed(() => tp.models), voice = computed(() => cfg.value.voice)
 const lessonModel = computed(() => (cfg.value.model === 'auto' ? '' : cfg.value.model))          // 'auto' — самая свежая Live-модель ключа
-onMounted(() => { if (!p?.idle) loadModels(); if (p?.mini && props.part === 'body') demo() })
-// Миниатюра в меню «Exercise» (24.11.2026): экран «в работе» — разговор идёт, в чате видно, чем вариант отличается:
-// рация — облачко «Transcribe Live пишет…», рация · голосовые — голосовое, обычный разговор — текстом. Без сети и микрофона
-function demo() {
-  const pl = lang.value === 'pl-PL'
-  const ai1 = pl ? 'Dzień dobry. Proszę powiedzieć, czym jest dla Pana Adwent?' : 'Hello! Tell me, what do you usually do at the weekend?'
-  const me1 = pl ? 'Adwent to czas oczekiwania na Boże Narodzenie.' : 'I usually meet my friends and go hiking.'
-  mkCtl(); const c = C.value
-  st.value = 'live'; t0.value = Date.now() - 21000; now.value = Date.now(); used.value = 'gemini-3.8-flash-live'
-  lines.value = [{ role: 'ai', t: ai1, closed: true }]
-  if (vn.value) lines.value.push({ role: 'me', t: '', closed: true, vn: { url: '#', sec: 9, peaks: [.3, .6, .9, .5, .8, 1, .6, .4, .8, .9, .5, .7, .3, .6, .9, .4, .7, .3, .5, .3, .6, .8, .4, .3], model: 'Gemini 3.8 Live' } })
-  else if (ptt.value) { lines.value.push({ role: 'me', t: me1, closed: false, draft: true }); c.pt = 'talk'; c.lv = .5; c.stt = 'Transcribe Live'; c.trs = 'open' }
-  else lines.value.push({ role: 'me', t: me1, closed: true })
-}          // экран не выбран на холсте (idle, 23.11.2026) — Google не спрашиваем
+onMounted(() => { if (!p?.idle) loadModels() })          // экран не выбран на холсте (idle, 23.11.2026) — Google не спрашиваем
 watch(() => p?.idle, (v) => { if (!v) loadModels() })
 // модель и голос перед разговором (20.11.2026): свой выбор ученика (запоминается в браузере), по умолчанию — из правки или самая свежая.
 // 21.11.2026: выбираются в подвале (part="fb"), «Оценивать речь» — вверху экрана; состояние общее — prefs.js
@@ -53,7 +37,7 @@ const editor = inEditor()
 const pick = computed(() => (editor ? '' : tp.pick)), vpick = computed(() => (editor ? '' : tp.voice))
 const vSel = computed(() => vpick.value || voice.value)
 // в редакторе: совпало с умолчанием (код ← настройки курса) — поле экрана убрать, иначе записать
-const base = () => talkCfg({ ptt: props.step.ptt, avatar: props.step.avatar, busuu: props.step.busuu, exam: props.step.exam, vn: props.step.vn, lang: props.step.lang })
+const base = () => talkCfg({ ptt: props.step.ptt, avatar: props.step.avatar, busuu: props.step.busuu, exam: props.step.exam, lang: props.step.lang })
 function onVoice(v) { if (editor) setF('voice', v === base().voice ? '' : v); else setVPick(v === voice.value ? '' : v) }
 function onModel(v) { if (editor) setF('model', (v || 'auto') === base().model ? '' : v || 'auto'); else setPick(v === lessonModel.value ? '' : v) }
 // надписи на «таблетках» подвала — коротко (список под ними — полный)
@@ -93,7 +77,7 @@ function onScroll() {
 function toEnd(smooth = true) { const b = box.value; if (b) { b.scrollTo({ top: b.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); atEnd.value = true } }
 async function start() {
   if (st.value === 'connecting' || st.value === 'live') return
-  err.value = ''; note.value = ''; dropNotes(); lines.value = []; atEnd.value = true; resetEval()
+  err.value = ''; note.value = ''; lines.value = []; atEnd.value = true; resetEval()
   const key = firstKey()
   if (!key) { err.value = 'Нужен ключ Gemini — добавьте его в профиле, раздел «Ключи Gemini»'; return }
   let m = pick.value || lessonModel.value
@@ -102,116 +86,64 @@ async function start() {
   if (!m) { err.value = 'Google не дал этому ключу ни одной Live-модели'; return }
   usedV.value = vpick.value || voice.value
   const c = cfg.value
-  mkCtl()
+  if (ptt.value) startTr(key)
   sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: talkRole(c, props.step), opener: c.opener, manual: ptt.value,
-    silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, extra: reqOf(c, 'live'), tap: ptt.value && !vn.value ? (pcm) => { if (tr) tr.push(pcm); else if (trPre && trPre.length < 100) trPre.push(pcm) } : null, rec: evalOn.value || vn.value ? onPcm : null, on: {
+    silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, extra: reqOf(c, 'live'), rec: evalOn.value ? onRec : null, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }
       st.value = s === 'error' ? 'ended' : s
       if (s === 'error') err.value = info
       if (s === 'live') { t0.value = now.value = Date.now(); clearInterval(clock); clock = setInterval(() => { now.value = Date.now() }, 500) }
-      if (s === 'ended' || s === 'error') { clearInterval(clock); level.value = 0; sess = null; trDone(trTok); waveRun(false); micOffSnd(); if (evalOn.value && speechSec.value - sentAt >= 8) sendEval(true) }          // хвост речи — последней оценкой
+      if (s === 'ended' || s === 'error') { clearInterval(clock); level.value = 0; sess = null; stopTr(); if (evalOn.value && speechSec.value - sentAt >= 8) sendEval(true) }          // хвост речи — последней оценкой
     },
     text: (role, t) => { if (ptt.value && role === 'me') return; push(role, t); if (ptt.value && role === 'ai') aiGuard() },          // рация: свою речь пишет Transcribe
-    turn: () => { const l = lines.value.at(-1); if (l) l.closed = true; if (C.value?.pt === 'wait') C.value.pt = 'idle' },
-    level: (v) => { level.value = level.value * 0.6 + v * 0.4 },          // рация: громкость — с микрофона самой Live (идёт только пока нажато) — волна в подвале
+    turn: () => { const l = lines.value.at(-1); if (l && !l.draft) l.closed = true; if (ptt.value && pt.value === 'wait') pt.value = 'idle' },
+    level: (v) => { if (!ptt.value) level.value = level.value * 0.6 + v * 0.4 },
   } })
   st.value = 'connecting'
 }
-function stop() { if (C.value?.pt === 'talk') voiceSend(); trDone(trTok); sess?.stop() }
-// «Разговор · рация» (21.11.2026, тест; step.ptt): одна нейросеть — Gemini Live слышит твой ГОЛОС сырым звуком (произношение),
-// «договорил» решает кнопка (manual: activityStart / activityEnd). 24.11.2026 — строка ввода в подвале, как у «Ответа по смыслу»:
-// микрофон → голос идёт в Live, а Gemini Transcribe Live параллельно показывает, что услышано (курсивом, волна); ✓ / ↑ — реплика
-// ушла, Gemini отвечает; ✕ — отменить (ответ на отменённое не показываем и не озвучиваем). Можно и написать — тогда уходит текстом.
-// Расшифровка — своя сессия на каждое нажатие: одна сессия на весь разговор простаивала между репликами и Google её обрывал
-// («Соединение закрылось (1008)») — пузыри оставались «…».
-// Язык: реплика с кириллицей — подсказка «по-польски»; Gemini ответила не по-польски — просим по-польски
+function stop() { if (pt.value === 'talk') pttEnd(); sess?.stop() }
+// «Разговор · рация» (21.11.2026, тест; step.ptt): нажал — говоришь сколько нужно, нажал ещё раз — реплика уходит, Gemini отвечает.
+// Две модели: свою речь пишет Gemini Transcribe Live (точнее распознаёт, язык закреплён настройкой), отвечает Gemini Live —
+// она слышит тот же голос (manual: activityStart / activityEnd — «договорил» решает кнопка, а не пауза). Нажатие, пока Gemini
+// говорит, — перебить. Язык: реплика с кириллицей — подсказка «по-польски»; Gemini ответила не по-польски — просим по-польски
 const ptt = computed(() => !!props.step.ptt)
-// «Рация · голосовые» (24.11.2026, тест; step.vn): то же самое, но без распознавания — реплика ложится в чат голосовым, как в Telegram
-// (▶ — переслушать себя). Пишется тот же звук, что слышит Gemini Live (её микрофон, между нажатиями). Расшифровку подключим потом
-const vn = computed(() => ptt.value && !!props.step.vn)
-let vnPcm = null, vnLv = null, vnT0 = 0
-const urls = []
-function dropNotes() { urls.splice(0).forEach((u) => URL.revokeObjectURL(u)) }
-/** звук с микрофона Live (только пока нажато): в голосовое и в «Оценивать речь» */
-function onPcm(pcm, rms) {
-  if (vnPcm) { vnPcm.push(pcm); vnLv.push(Math.min(1, rms * 4)) }
-  if (evalOn.value) onRec(pcm, rms)
+const pt = ref('idle')          // idle — можно говорить; talk — говорю; wait — отправил, жду ответ
+let tr = null, trAcc = '', trDraft = '', trLine = null, flushT = 0, aiWarned = null
+const CYR = /[\u0400-\u04FF]/
+function startTr(key) {
+  sttModel(key).then((model) => {
+    if (!sess) return
+    tr = startTranscribe({ key, model, lang: lang.value, extra: reqOf(cfg.value, 'transcribe'), on: {
+      state: (s, info) => { if (s === 'error') note.value = 'расшифровка: ' + info },
+      interim: (t) => { trDraft = t; trShow() },
+      final: (t) => { trAcc = (trAcc + ' ' + t).trim(); trDraft = ''; trShow() },
+      level: (v) => { level.value = level.value * 0.6 + v * 0.4 },
+    } })
+    tr.hold(true)
+  })
 }
-const fmtS = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
-const CYR = /[Ѐ-ӿ]/
-const C = computed(() => tp.ctl[props.step.id] || null)          // общее с подвалом (prefs.js)
-const WAVE_N = 24, WAVE_STEP = 7
-let tr = null, trPre = null, trTok = 0, trFinT = 0, vLine = null, waveTm = 0, waveRaf = 0, waveAt = 0, micOn = false
-function mkCtl() {
-  tp.ctl[props.step.id] = { pt: 'idle', conn: false, text: '', said: '', draft: '', err: '', stt: '', wave: Array(WAVE_N).fill(0), off: 0,
-    mic: micToggle, vn: vn.value, lv: 0, dur: '0:00', trs: 'off', net: [] }
+function stopTr() { tr?.stop(); tr = null; clearTimeout(flushT); pt.value = 'idle'; if (trLine) { trCommit() } }
+function trShow() { if (trLine) trLine.t = (trAcc + ' ' + trDraft).trim() }
+function pttStart() {
+  if (!sess || st.value !== 'live') return
+  if (pt.value === 'talk') return pttEnd()
+  clearTimeout(flushT); if (trLine) trCommit()
+  trAcc = ''; trDraft = ''
+  lines.value.push({ role: 'me', t: '', closed: false, draft: true }); trLine = lines.value.at(-1)
+  if (atEnd.value) nextTick(() => toEnd(false))
+  sess.talkStart(); tr?.hold(false); pt.value = 'talk'
 }
-// бегущие полоски, как в Claude и «Ответе по смыслу»: раз в 70 мс громкость — новой полоской справа
-function waveRun(on) {
-  clearInterval(waveTm); cancelAnimationFrame(waveRaf); waveTm = waveRaf = 0
-  const c = C.value; if (!c) return
-  c.off = 0
-  if (!on) { c.wave = Array(WAVE_N).fill(0); c.lv = 0; return }
-  waveAt = performance.now()
-  waveTm = setInterval(() => { c.lv = level.value; c.wave = [...c.wave.slice(1), level.value]; waveAt = performance.now(); if (vnT0) c.dur = fmtS((Date.now() - vnT0) / 1000) }, 70)
-  const f = (t) => { c.off = Math.min(1, Math.max(0, (t - waveAt) / 70)) * WAVE_STEP; waveRaf = requestAnimationFrame(f) }
-  waveRaf = requestAnimationFrame(f)
+function pttEnd() {
+  if (pt.value !== 'talk') return
+  sess?.talkEnd(); tr?.flush(); tr?.hold(true); pt.value = 'wait'; level.value = 0
+  clearTimeout(flushT); flushT = setTimeout(trCommit, 1500)          // хвост расшифровки приходит после «отправить»
 }
-const micOffSnd = () => { if (micOn) { micOn = false; sfxMicOff() } }
-const heard = (c) => ((c.said || '') + ' ' + (c.draft || '')).trim()
-function micToggle() { const c = C.value; if (!c) return; if (c.pt === 'talk') voiceSend(); else micStart() }
-async function micStart() {
-  const c = C.value; if (!c || !sess || st.value !== 'live' || c.pt === 'talk') return
-  if (vLine) trDone(trTok)          // хвост прошлой реплики ещё дописывался — закрыть
-  const key = firstKey(); if (!key) { c.err = 'Нужен ключ Gemini в профиле'; return }
-  const tok = ++trTok
-  sess.talkStart()          // Gemini замолкает сразу (перебить), голос пошёл в Live
-  c.err = ''; c.said = ''; c.draft = ''; c.pt = 'talk'; c.conn = true
-  sfxMicOn(); micOn = true
-  if (!vn.value) { lines.value.push({ role: 'me', t: '', closed: false, draft: true }); vLine = lines.value.at(-1); atEnd.value = true; nextTick(() => toEnd(false)) }          // облачко «Transcribe Live пишет…» — сразу в чате
-  if (vn.value) { vnPcm = []; vnLv = []; vnT0 = Date.now(); c.dur = '0:00'; c.conn = false; waveRun(true); return }          // голосовое — без распознавания
-  waveRun(true); c.trs = 'connecting'; trPre = []          // пока расшифровка подключается — звук копим, чтобы начало фразы не пропало
-  const model = await sttModel(key)
-  if (tok !== trTok) { trPre = null; return }
-  c.stt = liveName(model)
-  tr = startTranscribe({ key, model, lang: lang.value, extra: reqOf(cfg.value, 'transcribe'), feed: true, on: {
-    state: (s, info) => {
-      if (tok !== trTok) return
-      if (s === 'live' && !info) { c.conn = false; c.trs = 'open' }
-      if (s === 'error') { c.trs = 'error'; c.err = 'Показ расшифровки: ' + info + ' — Gemini вас всё равно слышит'; c.conn = false; if (c.pt !== 'talk') trDone(tok) }
-      if (s === 'ended' && c.pt !== 'talk') trDone(tok)
-    },
-    interim: (t) => { if (tok !== trTok) return; c.draft = t; if (vLine) vLine.t = heard(c) || '…' },
-    final: (t) => { if (tok !== trTok) return; c.said = (c.said + ' ' + t).trim(); c.draft = ''; if (vLine) { vLine.t = heard(c); clearTimeout(trFinT); trFinT = setTimeout(() => trDone(tok), 350) } },
-  } })
-  for (const p of trPre ?? []) tr.push(p)
-  trPre = null
-}
-/** Микрофон ещё раз — договорил: activityEnd → Gemini отвечает на голос; хвост расшифровки дописывается в облачко до 1,5 с */
-function voiceSend() {
-  const c = C.value; if (!c || c.pt !== 'talk') return
-  sess?.talkEnd(); sess?.quiet(false)
-  if (vn.value) {
-    const pcm = vnPcm || [], lv = vnLv || []; vnPcm = vnLv = null; vnT0 = 0
-    c.pt = 'wait'; waveRun(false); level.value = 0; micOffSnd()
-    if (!pcm.length) return
-    const { blob, sec: s } = wavOf(pcm), url = URL.createObjectURL(blob); urls.push(url)
-    lines.value.push({ role: 'me', t: '', closed: true, vn: { url, sec: s, peaks: bars(lv), model: liveName(used.value || 'Gemini Live') } })          // под голосовым — какая модель услышала (Gemini 3.8 Live); atEnd.value = true; nextTick(() => toEnd(false))
-    return
-  }
-  c.pt = 'wait'; waveRun(false); level.value = 0; micOffSnd()
-  const tok = trTok
-  if (tr) { tr.hold(true); tr.flush(); c.trs = 'closing' }
-  clearTimeout(trFinT); trFinT = setTimeout(() => trDone(tok), 1500)
-}
-function trDone(tok) {
-  if (tok !== trTok) return
-  trTok++; clearTimeout(trFinT)
-  const c = C.value, t = tr; tr = null; t?.stop()
-  if (c && vLine) { vLine.t = heard(c) || vLine.t || '…'; vLine.draft = false; vLine.closed = true; if (CYR.test(vLine.t)) vLine.warn = 'похоже, по-русски — говорите ' + L.value.how }
-  vLine = null
-  if (c) { c.said = ''; c.draft = ''; c.conn = false; if (c.trs !== 'error' && c.trs !== 'off') c.trs = 'closed' }
+function trCommit() {
+  const l = trLine; trLine = null; if (!l) return
+  l.t = (trAcc + ' ' + trDraft).trim() || l.t; l.draft = false; l.closed = true
+  if (!l.t) l.t = '…'
+  if (CYR.test(l.t)) l.warn = 'похоже, по-русски — говорите ' + L.value.how
 }
 /** Gemini ответила не по-польски — один раз за реплику просим по-польски и помечаем пузырь */
 function aiGuard() {
@@ -245,49 +177,24 @@ async function sendEval(final = false) {
 }
 function resetEval() { recA.length = 0; segs.value = []; speechSec.value = 0; sentAt = 0 }
 function mute() { muted.value = !muted.value; sess?.mute(muted.value) }
-onBeforeUnmount(() => { if (props.part !== 'body') return; trDone(trTok); waveRun(false); sess?.stop(); dropNotes(); clearInterval(clock); clearTimeout(scT); delete tp.busy[props.step.id]; delete tp.ctl[props.step.id] })
+onBeforeUnmount(() => { sess?.stop(); clearInterval(clock); clearTimeout(scT); delete tp.busy[props.step.id] })
 const hasKeys = computed(() => ai.keys.length > 0)
-const qText = computed(() => (props.step.n ? props.step.n + '. ' : '') + (props.step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски'))
-const anyBusy = computed(() => busy.value || !!tp.busy[props.step.id])          // подвал — свой экземпляр: «идёт разговор» — общий флаг
-// ⓘ у «Оценивать речь» (24.11.2026): облачко — сколько нейросетей работает и какие: собеседник, текст речи, экзаменатор
-const info = ref(false), infoEl = ref(null)
-const evalName = computed(() => { const m = C.value?.evm || lastRep.value?.model || getSpeechPick(); return m ? checkName(m) : 'Flash Lite (авто)' })
-function infoAway(e) { if (infoEl.value && !infoEl.value.contains(e.target)) info.value = false }
-watch(info, (v) => { if (v) document.addEventListener('pointerdown', infoAway, true); else document.removeEventListener('pointerdown', infoAway, true) })
-onBeforeUnmount(() => document.removeEventListener('pointerdown', infoAway, true))
-// Нейросети в подвале (24.11.2026): кто сейчас работает — соединение открыто / закрыто, запрос ушёл (точки), ответ пришёл.
-// st: on — на связи, busy — работает (точки), off — ждёт / закрыто, err — ошибка
-watchEffect(() => {
-  if (props.part !== 'body') return          // пишет только сам экран — подвал (part="fb") только рисует
-  const c = C.value; if (!c) return
-  c.live = st.value === 'live'; c.evm = lastRep.value?.model || ''          // подвал — отдельный экземпляр: «идёт ли разговор» берёт отсюда, не из своего st
-  const n = [], s = st.value, liveNm = liveName(used.value || pickName.value || 'Live').replace(/^Gemini /, '')
-  n.push({ k: 'live', name: 'Live · ' + liveNm, st: s === 'connecting' ? 'busy' : s === 'live' ? (c.pt === 'wait' ? 'busy' : 'on') : 'off',
-    txt: s === 'connecting' ? 'подключаюсь' : s === 'live' ? (c.pt === 'talk' ? 'слышит вас' : c.pt === 'wait' ? 'отвечает' : 'соединение открыто') : s === 'ended' ? 'соединение закрыто' : 'не подключена' })
-  if (ptt.value && !vn.value) {
-    const t = c.trs
-    n.push({ k: 'tr', name: c.stt || 'Transcribe Live', st: t === 'connecting' || t === 'closing' ? 'busy' : t === 'open' ? 'on' : t === 'error' ? 'err' : 'off',
-      txt: t === 'connecting' ? 'подключаюсь' : t === 'open' ? 'пишет текст' : t === 'closing' ? 'дописывает' : t === 'closed' ? 'закрыта до микрофона' : t === 'error' ? 'оборвалась' : 'ждёт микрофон' })
-  }
-  if (evalOn.value) {
-    const g = segs.value.at(-1), left = Math.max(0, Math.ceil(STEP - (speechSec.value - sentAt)))
-    n.push({ k: 'ev', name: evalName.value, st: g?.st === 'sent' ? 'busy' : g?.st === 'err' ? 'err' : g?.st === 'done' ? 'on' : 'off',
-      txt: g?.st === 'sent' ? 'запрос ушёл, оценивает' : g?.st === 'err' ? 'ошибка оценки' : g?.st === 'done' ? `≈ ${g.rep.level}${g.rep.plus ? '+' : ''} · след. через ${left} с речи` : `ждёт ${left} с речи` })
-  }
-  c.net = n
-})
-// подвал рации: строка ввода — пока идёт разговор; растёт по тексту, Enter — отправить, Shift+Enter — новая строка
 </script>
 
 <template>
   <template v-if="part === 'body'">
-    <!-- 24.11.2026: у ученика заголовок «Поговорите с Gemini голосом» и описание не показываем — экран выше, микрофон ближе.
-         Во всех вариантах разговора, и у собеседования (вопрос консул задаёт сам, в чате). В правке — остаются (их можно поменять) -->
-    <ExHead v-if="p.edit" :step="step" :def="J.head" />
-    <ExText v-if="p.edit" v-model="step.text" tag="p" class="tk" ph="Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски" multi>{{ step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }}</ExText>
-    <!-- 24.11.2026: вверху — одна маленькая строка, всегда одинаковая: текст экрана (вопрос или задание; ★ — обязательный).
-         Голос, PL и «Оценивать речь» — в подвале -->
-    <p v-if="!p.edit" class="tq" :title="qText"><b v-if="step.star" class="tqs">★</b>{{ qText }}</p>
+    <ExHead :step="step" :def="J.head" />
+    <ExText v-model="step.text" tag="p" class="tk" ph="Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски" multi>{{ step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }}</ExText>
+    <div v-if="!p.edit" class="thd" @pointerdown.stop>          <!-- вверху (21.11.2026): голос и «Оценивать речь»; пока идёт разговор — не меняются -->
+      <label class="ev" :class="{ off: busy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="busy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
+      <span v-if="ptt" class="lk" :title="`Язык закреплён: ${L.ru} — и для распознавания (Transcribe Live), и для ответа Gemini (lang в JSON экрана)`"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>{{ L.code }}</span>
+      <label class="pill" :class="{ off: busy }" :title="editor ? 'Голос Gemini — пишется в экран (voice в JSON)' : 'Голос Gemini — из урока; выбор здесь — только на этот раз'">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
+        <select :value="vSel" :disabled="busy" aria-label="Голос" @change="onVoice($event.target.value)">
+          <option v-if="!VOICES.some((x) => x[0] === voice)" :value="voice">{{ voice }} · из урока</option>
+          <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup>
+          <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup></select></label>
+    </div>
 
     <template v-if="p.edit">
       <label class="tl">Роль Gemini <small>видит только ИИ · пусто — консул на Карту поляка</small></label>
@@ -300,19 +207,18 @@ watchEffect(() => {
     </template>
 
     <div v-else class="tv" :class="st" @pointerdown.stop>
-      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" :idle="!!p?.mini || (!!p?.idle && st !== 'live' && st !== 'connecting')" />
+      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" :idle="!!p?.idle && st !== 'live' && st !== 'connecting'" />
       <div class="tc">
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ st === 'ended' ? 'Поговорить ещё раз' : 'Начать разговор' }}</button>
-        <div v-else-if="ptt" class="pt" :class="C?.pt">          <!-- рация: большой микрофон под персонажем (вернули 24.11.2026 — внизу неудобно). Нажал — говоришь, нажал ещё раз — Gemini отвечает -->
+        <div v-else-if="ptt" class="pt" :class="pt">          <!-- рация: одна большая кнопка — нажал, говоришь, нажал — отправил -->
           <button type="button" class="pr" @click="stop">Завершить</button>
-          <button type="button" class="pb" :style="{ '--l': C?.lv || 0 }" :disabled="st !== 'live'" :aria-label="C?.pt === 'talk' ? 'Отправить реплику' : 'Нажмите и говорите'" @click="micToggle">
-            <svg v-if="C?.pt === 'talk'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5" /></svg>
+          <button type="button" class="pb" :style="{ '--l': level }" :disabled="st !== 'live'" :aria-label="pt === 'talk' ? 'Отправить реплику' : 'Нажмите и говорите'" @click="pttStart">
+            <svg v-if="pt === 'talk'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5" /></svg>
             <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
           </button>
           <span class="pi">{{ st === 'live' ? sec : '' }}</span>
-          <p class="pc"><b>{{ st === 'connecting' ? 'Подключаюсь к Gemini…' : C?.pt === 'talk' ? (vn ? '● Запись ' + C.dur : 'Говорите') : C?.pt === 'wait' ? 'Gemini отвечает' : 'Нажмите и говорите' }}</b>
-            <small>{{ st === 'connecting' ? '' : C?.pt === 'talk' ? 'нажмите ещё раз — реплика уйдёт в Gemini' : C?.pt === 'wait' ? 'нажмите — перебить и сказать своё' : 'нажмите ещё раз — Gemini ответит' }}<template v-if="note"> · {{ note }}</template></small>
-            <small v-if="C?.err" class="fme">{{ C.err }}</small></p>
+          <p class="pc"><b>{{ st === 'connecting' ? 'Подключаюсь к Gemini…' : pt === 'talk' ? 'Говорите' : pt === 'wait' ? 'Gemini отвечает' : 'Нажмите и говорите' }}</b>
+            <small>{{ st === 'connecting' ? '' : pt === 'talk' ? 'нажмите ещё раз — реплика уйдёт в Gemini' : pt === 'wait' ? 'нажмите — перебить и сказать своё' : 'нажмите ещё раз — Gemini ответит' }}<template v-if="note"> · {{ note }}</template></small></p>
         </div>
         <template v-else>
           <span class="orb" :style="{ '--l': level }"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></span>
@@ -331,40 +237,17 @@ watchEffect(() => {
       <p v-if="err" class="er">{{ err }}</p>
       <div v-if="lines.length" class="txw">
         <div ref="box" class="tx" :class="{ sc: scrolling }" @scroll.passive="onScroll">
-          <template v-for="(l, i) in lines" :key="i"><VoiceNote v-if="l.vn" class="vnb" :url="l.vn.url" :peaks="l.vn.peaks" :sec="l.vn.sec" status="live" :model="l.vn.model" via="голосом прямо в Live · без расшифровки" /><div v-else class="b" :class="[l.role, { dr: l.draft }]"><small v-if="l.draft" class="bl">{{ C?.stt || 'Transcribe Live' }} пишет…</small>{{ l.t || (l.draft ? '…' : '') }}<small v-if="l.warn" class="bw">⚠ {{ l.warn }}</small></div></template>
+          <div v-for="(l, i) in lines" :key="i" class="b" :class="[l.role, { dr: l.draft }]"><small v-if="l.draft" class="bl">Transcribe Live пишет…</small>{{ l.t || (l.draft ? '…' : '') }}<small v-if="l.warn" class="bw">⚠ {{ l.warn }}</small></div>
         </div>
         <button v-if="!atEnd" type="button" class="tdn" aria-label="Вниз, к новым репликам" @click="toEnd()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
       </div>
     </div>
   </template>
   <!-- подвал (21.11.2026): модель — «таблеткой» слева от «Продолжить»; пока идёт разговор — не меняется (голос — вверху) -->
-  <!-- подвал (24.11.2026): модель и статусы нейросетей (соединение открыто / закрыто, запрос ушёл) — слева от «Продолжить» -->
   <div v-else-if="part === 'fb' && !p.edit" class="tf" @pointerdown.stop>
-    <div class="tfl">
-      <div class="tpl">          <!-- голос, PL, «Оценивать речь» (были вверху экрана); пока идёт разговор — не меняются -->
-        <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" :title="editor ? 'Модель разговора — пишется в экран (model в JSON)' : 'Модель разговора — из урока; выбор здесь — только на этот раз'">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg><span class="pv">{{ pickName }}</span>
-        <select :value="pick || lessonModel" :disabled="tp.busy[step.id]" aria-label="Модель" @change="onModel($event.target.value)"><option value="">авто · {{ liveName(models[0]) }}{{ !editor && !lessonModel ? ' · из урока' : '' }}</option><option v-if="lessonModel && !models.includes(lessonModel)" :value="lessonModel">{{ liveName(lessonModel) }} · из урока</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ !editor && m === lessonModel ? ' · из урока' : '' }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
-        <span ref="infoEl" class="evw"><label class="ev" :class="{ off: anyBusy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="anyBusy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
-          <button type="button" class="evi" :class="{ on: info }" aria-label="Как это работает" title="Как это работает" @click="info = !info">i</button>
-          <span v-if="info" class="evp" role="dialog">
-            <b>Здесь работают {{ ptt && !vn ? 'три' : 'две' }} нейросети</b>
-            <span class="evr"><i>🗣</i><span><b>Собеседник — Gemini Live</b> · {{ pickName }}<br />Слышит ваш голос сырым звуком (с произношением) и отвечает голосом.{{ ptt ? '' : ' Текст вашей речи в чате пишет тоже она.' }}</span></span>
-            <span v-if="vn" class="evr"><i>🎧</i><span><b>Ваши реплики — голосовыми, как в Telegram</b><br />Без распознавания: ▶ — переслушать, что сказали. Это тот же звук, что услышала Gemini.</span></span>
-            <span v-if="ptt && !vn" class="evr"><i>✍️</i><span><b>Текст вашей речи — Gemini Transcribe Live</b><br />Только показывает внизу и в чате, что услышано. Собеседнику не передаётся — он слушает сам звук.</span></span>
-            <span class="evr"><i>📊</i><span><b>Экзаменатор — {{ evalName }}</b> · отдельная модель, включается этим переключателем<br />Каждые {{ STEP }} с вашей речи переслушивает запись (последние 3 мин) и расшифровку: уровень A1–C2, понятность, словарь, грамматика, связность, беглость, произношение, ошибки. Реплики собеседника — только контекст. Меньше 20 с речи — не оценивает; чем короче запись, тем ниже уверенность.</span></span>
-            <small>Как оценивать — промпт evalPrompt в JSON экрана («{ }»)</small>
-          </span></span>
-        <span v-if="ptt" class="lk" :title="`Язык зашит в тип упражнения: ${L.ru} — и распознавание (Transcribe Live), и ответ Gemini. Поменять нельзя`"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>{{ L.code }}</span>
-        <label class="pill" :class="{ off: anyBusy }" :title="editor ? 'Голос Gemini — пишется в экран (voice в JSON)' : 'Голос Gemini — из урока; выбор здесь — только на этот раз'">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
-          <select :value="vSel" :disabled="anyBusy" aria-label="Голос" @change="onVoice($event.target.value)">
-            <option v-if="!VOICES.some((x) => x[0] === voice)" :value="voice">{{ voice }} · из урока</option>
-            <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup>
-            <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup></select></label>
-      </div>
-      <div v-if="C?.net?.length" class="net" aria-live="polite"><span v-for="x in C.net" :key="x.k" class="nt" :class="x.st" :title="x.name + ' — ' + x.txt"><i class="nd" /><b>{{ x.name }}</b> {{ x.txt }}<em v-if="x.st === 'busy'" class="dd"><i>.</i><i>.</i><i>.</i></em></span></div>
-    </div>
+    <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" :title="editor ? 'Модель разговора — пишется в экран (model в JSON)' : 'Модель разговора — из урока; выбор здесь — только на этот раз'">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg><span class="pv">{{ pickName }}</span>
+      <select :value="pick || lessonModel" :disabled="tp.busy[step.id]" aria-label="Модель" @change="onModel($event.target.value)"><option value="">авто · {{ liveName(models[0]) }}{{ !editor && !lessonModel ? ' · из урока' : '' }}</option><option v-if="lessonModel && !models.includes(lessonModel)" :value="lessonModel">{{ liveName(lessonModel) }} · из урока</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ !editor && m === lessonModel ? ' · из урока' : '' }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
   </div>
 </template>
 
@@ -377,26 +260,10 @@ watchEffect(() => {
 .tn { margin: 4px 0 0; font-size: 11.5px; font-weight: 600; color: var(--hint) }
 .tv { display: grid; gap: 10px }
 .ev { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer }
-.tq { margin: -4px 0 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center; font-size: 15px; font-weight: 800; line-height: 1.35; color: var(--text) } .tqs { margin-right: 4px; color: #e5484d }          /* строка вопроса вверху */
-.tpl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px }          /* подвал: модель, голос, PL, «Оценивать речь» */
+.thd { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin: -4px 0 8px }          /* вверху под заданием: «Оценивать речь» слева, голос справа */
 .ev.off { opacity: .5; cursor: default }
-.evw { position: relative; display: inline-flex; align-items: center; gap: 6px }
-.evi { width: 20px; height: 20px; padding: 0; border: 1.5px solid #b9c6dc; border-radius: 50%; background: var(--card); color: #6b7a99; font: italic 800 12px/1 Georgia, serif; cursor: pointer } .evi:hover, .evi.on { border-color: #2f6fe0; color: #2f6fe0 }
-.evp { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20; display: grid; gap: 9px; width: min(360px, 86vw); padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); box-shadow: 0 8px 28px rgba(0, 0, 0, .16); font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--text); text-align: left; animation: evp .15s ease-out }
-.evp::before { content: ''; position: absolute; left: 22px; bottom: -6px; width: 10px; height: 10px; background: var(--card); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); transform: rotate(45deg) }          /* облачко — над подвалом */
-.evp > b { font-size: 13.5px } .evr { display: grid; grid-template-columns: 20px 1fr; gap: 6px } .evr i { font-style: normal } .evr b { font-weight: 800 } .evp small { color: var(--hint); font-size: 11.5px }
-@keyframes evp { from { opacity: 0; transform: translateY(4px) } } @media (prefers-reduced-motion: reduce) { .evp { animation: none } }
 /* «таблетки» (21.11.2026): голос — вверху, модель — в подвале */
-.tf { display: flex; align-items: center; gap: 12px; min-width: 0 }
-.tfl { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0 }
-.tfl .nt { max-width: 100%; overflow: hidden; text-overflow: ellipsis }
-.net { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 0 4px; font-size: 12px; font-weight: 600; line-height: 1.3; color: #8f8f8f }
-.nt { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap } .nt b { color: #3a3a3a; font-weight: 700 }
-.nd { width: 7px; height: 7px; border-radius: 50%; background: #c4c4c4; flex: none }
-.nt.on .nd { background: #2bb34a; box-shadow: 0 0 0 3px rgba(43, 179, 74, .16) } .nt.busy .nd { background: #1a73e8; animation: ndp 1s ease-in-out infinite } .nt.err .nd { background: #d93025 } .nt.err { color: #b3261e }
-.dd i { font-style: normal; animation: ddb 1.2s infinite } .dd i:nth-child(2) { animation-delay: .2s } .dd i:nth-child(3) { animation-delay: .4s }
-@keyframes ndp { 50% { opacity: .35 } } @keyframes ddb { 0%, 100% { opacity: .2 } 40% { opacity: 1 } }
-@media (prefers-reduced-motion: reduce) { .nt.busy .nd, .dd i { animation: none } }          /* в одну строку: таблетка — по ширине своей надписи */
+.tf { display: flex; gap: 6px; min-width: 0 }          /* в одну строку: таблетка — по ширине своей надписи */
 .pill { position: relative; flex: 0 1 auto; display: inline-flex; align-items: center; min-width: 0; height: 30px; padding: 0 22px 0 9px; border: 1px solid #d6e4fb; border-radius: 15px; background: #f3f7ff; color: #2f6fe0; cursor: pointer }
 .pill::after { content: ''; position: absolute; right: 10px; top: 11px; width: 5px; height: 5px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); pointer-events: none }
 .pill svg { flex: none; width: 13px; height: 13px; margin-right: 4px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round }
@@ -418,7 +285,6 @@ watchEffect(() => {
 .er { margin: 0; font-size: 13px; font-weight: 700; color: var(--red-d) }
 .txw { position: relative }
 /* рация (21.11.2026) */
-/* рация: большой микрофон под персонажем — как было (76 px) */
 .tc:has(.pt) { padding: 12px 10px } .pt { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px 10px }
 .pr { justify-self: start; height: 34px; padding: 0 12px; border: 1px solid #f1c7c7; border-radius: 17px; background: var(--card); color: #c0392b; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer }
 .pi { justify-self: end; font-size: 12px; font-weight: 700; color: var(--hint); font-variant-numeric: tabular-nums }
@@ -426,11 +292,10 @@ watchEffect(() => {
 .pb svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round } .pb:disabled { opacity: .5; cursor: default }
 .pt.talk .pb { background: #e5484d; box-shadow: 0 0 0 calc(6px + var(--l) * 14px) rgba(229, 72, 77, .18), 0 0 0 calc(14px + var(--l) * 24px) rgba(229, 72, 77, .07) }
 .pt.wait .pb { background: #eef1f6; color: #6b7a99; box-shadow: none }
-.pc { grid-column: 1 / -1; margin: 0; text-align: center; font-size: 14px } .pc small { display: block; font-size: 12px; font-weight: 700; color: var(--hint) } .pt.talk .pc b { color: #c0392b; font-variant-numeric: tabular-nums }
-.pc .fme { color: #b3261e; font-weight: 600 }
+.pc { grid-column: 1 / -1; margin: 0; text-align: center; font-size: 14px } .pc small { display: block; font-size: 12px; font-weight: 700; color: var(--hint) } .pt.talk .pc b { color: #c0392b }
 .b.dr { background: #f2fbe9; border: 1.5px dashed #9ad07a; color: #4f7a3c } .bl { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #5aa33a }
 .bw { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 800; color: #c0392b }
-.lk { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
+.lk { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
 .tx { display: flex; flex-direction: column; gap: 5px; max-height: max(340px, 52vh); overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px 4px 2px;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px);          /* верх растворяется */
   scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color .3s }
