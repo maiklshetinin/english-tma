@@ -622,8 +622,8 @@ const XGROUPS_PAGE = XGROUPS_BOOK.map(g => ({ ...g, k: 'p' + g.k, items: g.ids.m
 const XGROUPS_KP = [{ k: 'S', t: 'Ответ по смыслу', d: 'проверяет ИИ по эталону', items: TPL.filter(v => v.id === 'kp') }, { k: 'S', t: 'Ответ по смыслу · целым аудио', d: 'запись целиком → Gemini, не кусками · тест', items: TPL.filter(v => v.id === 'kpfile') }, { k: 'S', t: 'Ответ по смыслу · Gemini API', d: 'напрямую, без моста · тест', items: TPL.filter(v => v.id === 'kpapi') }, { k: 'S', t: 'Ответ по смыслу · шар', d: 'шар смысловых блоков · тест', items: TPL.filter(v => v.id === 'kpball') }, { k: 'S', t: 'Разговор с Gemini', d: 'живой голос сразу в Gemini, не текст', items: TPL.filter(v => v.id === 'talk') }, { k: 'S', t: 'Разговор с персонажем', d: 'тот же разговор, персонаж говорит · тест', items: TPL.filter(v => v.id === 'talkava') }, { k: 'S', t: 'Разговор · рация', d: 'нажал — говоришь, нажал — ответ · тест', items: TPL.filter(v => v.id === 'talkptt') }, { k: 'S', t: 'Рация · голосовые', d: 'реплики — голосовыми, как в Telegram · тест', items: TPL.filter(v => v.id === 'talkvn') }, { k: 'S', t: 'Собеседование · рация', d: 'консул спрашивает вопрос из домашки, оценка речи · тест', items: TPL.filter(v => v.id === 'talkexam') }, { k: 'S', t: 'Транскрипция', d: 'сказать — увидеть текст · эксперимент', items: TPL.filter(v => v.id === 'stt') }]
 // «Испанский» (24.11.2026): разговоры с Gemini по-испански — язык зашит в тип (es-talk, es-talkptt)
 const XGROUPS_ES = [{ k: 'S', t: 'Разговор с Gemini', d: 'живой голос, по-испански', items: TPL.filter(v => v.id === 'es_talk') }, { k: 'S', t: 'Разговор · рация', d: 'нажал — говоришь, по-испански', items: TPL.filter(v => v.id === 'es_talkptt') }]
-// язык вкладки (24.11.2026) — он же первый в ID типа: en-choice, pl-kp, es-talk
-const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu', lg: 'EN' }, { k: 'book', t: 'Настины · из учебника', exp: true, lg: 'EN' }, { k: 'page', t: 'Как в учебнике', exp: true, lg: 'EN' }, { k: 'kp', t: 'Karta Polaka', exp: true, lg: 'PL' }, { k: 'es', t: 'Испанский', lg: 'ES' }, { k: 'arch', t: 'Архив' }]
+// язык вкладки (24.11.2026) — он же первый в ID типа с ИИ: pl-kp, es-talk (у обычных упражнений языка нет)
+const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'kp', t: 'Karta Polaka', exp: true, lg: 'PL' }, { k: 'es', t: 'Испанский', lg: 'ES' }, { k: 'arch', t: 'Архив' }]
 const ONE_TABS = ['kp', 'es', 'arch']          // вкладки, где у каждой плитки своя группа — заголовок группы не показываем
 const trayTab = ref((() => { try { const v = localStorage.getItem('ce.trayTab'); return TRAY_TABS.some(b => b.k === v) ? v : 'app' } catch { return 'app' } })())          // была вкладка «Мои» (конструктор убран 18.11.2026) — откроется «Как в Busuu»
 watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })
@@ -779,7 +779,7 @@ function sdMove(e) {
 }
 async function sdUp(e) {
   removeEventListener('pointermove', sdMove); removeEventListener('pointercancel', sdUp); removeEventListener('pointerup', sdUp)
-  const P = sdP; sdP = null; const mc = maskClick; maskClick = false
+  const P = sdP; sdP = null; const mc = maskClick; maskClick = false; maskDrag.value = false
   if (!sd.on && mc) { oneLive.value = pick.step; return }
   if (!sd.on) { if (P?.tileOff?.pvn) return placeStart(P.tray, e, P.tileOff.pvn); if (P?.tray && PRESET_SET.has(P.tray)) { pvOpen.value = pvOpen.value === P.tray ? '' : P.tray; return } if (P?.tray) placeStart(P.tray, e); else if (P?.extra) msel.value = []; return }     // нажатие по выделению — снять его (дальше можно нажимать внутри)
   sdDrop(e)
@@ -970,9 +970,13 @@ const mqStyle = computed(() => { const m = mq.value, r = board.value?.getBoundin
 // рамка вокруг выделенного (с квадратиками по углам) — в координатах холста
 // один выбранный экран — рамка с квадратиками по углам, как в Figma (по самой карточке; тянуть — за любое место карточки)
 const oneBox = computed(() => {
-  if (sd.on || msel.value.length || !pick.step || pick.step === 'final' || !board.value) return null
+  if ((sd.on && !maskDrag.value) || msel.value.length || !pick.step || pick.step === 'final' || !board.value) return null
   void (view.x + view.y + view.z + (railHs[pick.lesson] ?? 0) + boxTick.value)        // пересчёт при сдвиге, масштабе и правках
-  const w = cardBox(pick.step); if (!w) return null
+  let w = cardBox(pick.step); if (!w) return null
+  if (sd.on) {          // тянем за маску (24.11.2026): маска едет вместе с экраном; по ветке едет плитка — маску не показываем
+    const m = sdMoving.value; if (!m || m.tile) return null
+    w = { x0: w.x0 + m.dx, y0: w.y0 + m.dy, x1: w.x1 + m.dx, y1: w.y1 + m.dy }
+  }
   const a = toScreen({ x: w.x0, y: w.y0 }), b = toScreen({ x: w.x1, y: w.y1 })
   return { left: Math.round(a.x - 6) + 'px', top: Math.round(a.y - 6) + 'px', width: Math.round(b.x - a.x + 12) + 'px', height: Math.round(b.y - a.y + 12) + 'px' }
 })
@@ -980,11 +984,12 @@ const oneBox = computed(() => {
 const oneLive = ref(null)
 watch(() => pick.step, () => { oneLive.value = null })
 let maskClick = false
+const maskDrag = ref(false)          // тянем экран за маску — маска и курсор-рука не пропадают
 function oneDown(e) {
   if (e.button !== 0) return
   const st = [...lessonRails.value.map(r => r.x), ...doc.items, ...doc.loose].flatMap(x => x.steps ?? []).find(v => v.id === pick.step)
   if (!st) { oneLive.value = pick.step; return }
-  maskClick = true; grabStep({ e, s: st })
+  maskClick = true; grabStep({ e, s: st }); maskDrag.value = !!sdP
 }
 const selBox = computed(() => {
   if (chapSel.value && !sd.on) {             // выбрана глава — рамка вокруг всей главы
@@ -1788,7 +1793,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 </script>
 
 <template>
-  <div class="ce" :class="{ dragging: drag.on }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
+  <div class="ce" :class="{ dragging: drag.on || maskDrag }" @dragover="fileOver" @dragleave="fileLeave" @drop="fileDrop">
     <input ref="fileInput" type="file" :accept="pickKind === 'photo' ? 'image/*' : 'video/*'" multiple hidden @change="onPicked" />
     <div ref="board" class="board" :class="{ settling, panning, wheeling, moving: sd.on, dragging: drag.on && drag.from === 'loose', placing: noteTool, hand: handOn, pen: tool === 'pen' && !handOn && !noteTool }" :style="[dots, tool === 'pen' && !handOn && !noteTool ? { cursor: penCursor } : null]" @pointerdown="boardDown" @pointermove="boardMove" @pointerup="boardUp" @pointercancel="boardUp" @pointerleave="ghost = null" @wheel="onWheel" @contextmenu.prevent="onCtx">
       <div v-if="settling" class="opening"><i />Открываю курс…</div>
@@ -2003,7 +2008,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
       </div>
       <!-- Рамка вокруг выделенного, с квадратиками по углам -->
-      <div v-if="oneBox" class="selbox" :style="oneBox"><b v-if="oneLive !== pick.step" class="selmask" title="Тяните за любое место — переставить экран. Нажмите — пройти упражнение" @pointerdown.stop.prevent="oneDown" /><i /><i /><i /><i /></div>          <!-- 24.11.2026: выбранный экран — под голубой маской -->
+      <div v-if="oneBox" class="selbox" :style="oneBox"><b v-if="oneLive !== pick.step" class="selmask" :class="{ on: maskDrag }" title="Тяните за любое место — переставить экран. Нажмите — пройти упражнение" @pointerdown.stop.prevent="oneDown" /><i /><i /><i /><i /></div>          <!-- 24.11.2026: выбранный экран — под голубой маской -->
       <div v-if="selBox" class="selbox" :style="selBox"><b v-if="canMask" class="selmask" title="Тяните — выделенное поедет вместе (на ветку, другой урок или по доске)" @pointerdown.stop.prevent="maskDown" /><i /><i /><i /><i /></div>
       <div v-if="mq" class="mq" :style="mqStyle" />
     </div>
@@ -2083,7 +2088,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <div class="xrow" :class="{ wrap: ONE_TABS.includes(trayTab) }">
         <p v-if="trayTab === 'arch' && !XGROUPS.length" class="xarn">В архиве пусто. Наведите на плашку в другой вкладке и нажмите значок архива справа сверху — она переедет сюда.</p>          <!-- Karta Polaka: группы по одной плашке — переносятся рядами по ширине окна, без горизонтального скролла (21.11.2026) -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div v-if="!ONE_TABS.includes(trayTab)" class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">
-        <div v-for="t in g.items" :key="t.id" class="miw" :class="{ pvon: pvOpen === t.id }"><span class="mtag"><code :class="{ on: copiedId === typeId(t.id) }" :title="copiedId === typeId(t.id) ? 'Скопировано' : 'ID упражнения: сначала язык (pl, en, es), потом тип — так оно называется в JSON (type) и в tools/make-json.py. Язык зашит в тип. Нажмите — скопировать'" @pointerdown.stop @click.stop="copyId(typeId(t.id))">{{ copiedId === typeId(t.id) ? '✓ ' + typeId(t.id) : typeId(t.id) }}</code><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button><button class="mar" :class="{ back: trayTab === 'arch' }" :title="trayTab === 'arch' ? 'Вернуть в меню. ID шаблона: ' + t.id + ' — совсем убрать: src/utils/lesson.ts → TEMPLATES' : 'В архив — убрать из меню (вернуть можно на вкладке «Архив»)'" :aria-label="trayTab === 'arch' ? 'Вернуть «' + t.t + '» в меню' : 'Убрать «' + t.t + '» в архив'" @pointerdown.stop @click.stop="trayTab === 'arch' ? fromArch(t.id) : toArch(t.id)"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg></button></span><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : PRESET_SET.has(t.id) ? 'Нажмите — пресеты сверху. Потяните — на доску' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
+        <div v-for="t in g.items" :key="t.id" class="miw" :class="{ pvon: pvOpen === t.id }"><span class="mtag"><code :class="{ on: copiedId === typeId(t.id) }" :title="copiedId === typeId(t.id) ? 'Скопировано' : (typeId(t.id) !== t.id ? 'ID упражнения: язык (зашит в тип) и тип' : 'ID упражнения') + ' — так оно называется в JSON (type) и в tools/make-json.py. Нажмите — скопировать'" @pointerdown.stop @click.stop="copyId(typeId(t.id))">{{ copiedId === typeId(t.id) ? '✓ ' + typeId(t.id) : typeId(t.id) }}</code><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button><button class="mar" :class="{ back: trayTab === 'arch' }" :title="trayTab === 'arch' ? 'Вернуть в меню. ID шаблона: ' + t.id + ' — совсем убрать: src/utils/lesson.ts → TEMPLATES' : 'В архив — убрать из меню (вернуть можно на вкладке «Архив»)'" :aria-label="trayTab === 'arch' ? 'Вернуть «' + t.t + '» в меню' : 'Убрать «' + t.t + '» в архив'" @pointerdown.stop @click.stop="trayTab === 'arch' ? fromArch(t.id) : toArch(t.id)"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg></button></span><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : PRESET_SET.has(t.id) ? 'Нажмите — пресеты сверху. Потяните — на доску' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>          <!-- 24.11.2026: серое описание под названием вернули; сверху — тег-ID -->
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i><span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span></span>          <!-- 19.11.2026: «Ответ по смыслу» — значки чатов в строку с навыком -->
@@ -2146,7 +2151,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ink path { fill: none; stroke-linecap: round; stroke-linejoin: round } .ink path.on { filter: drop-shadow(0 0 2px #0d99ff) drop-shadow(0 0 1px #0d99ff) }
 .mq { position: absolute; z-index: 20; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }
 .selbox { position: absolute; z-index: 19; border: 2px solid #0d99ff; pointer-events: none }
-.selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; border-radius: 4px; background: rgba(13, 153, 255, .12) } .selmask:hover { background: rgba(13, 153, 255, .16) } .selmask:active { cursor: grabbing }
+.selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; border-radius: 4px; background: rgba(13, 153, 255, .12) } .selmask:hover, .selmask.on { background: rgba(13, 153, 255, .16) } .selmask:active { cursor: grabbing }
 .selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: var(--card) }
 .selbox i:nth-of-type(1) { left: -7px; top: -7px } .selbox i:nth-of-type(2) { right: -7px; top: -7px } .selbox i:nth-of-type(3) { left: -7px; bottom: -7px } .selbox i:nth-of-type(4) { right: -7px; bottom: -7px }
 /* стрелка и рука на панели */
