@@ -6,7 +6,7 @@
 // Данные — GET /progress/log (server/learn.ts → lessonLogs); пишет просмотр курса по ходу урока (utils/runlog.js). Без сервера — этот браузер.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { apiRequest, isDemo, API, fb } from '../firebase'
-import { readLocal, removeLocal, dur, exList, exDays, exWord } from '../utils/runlog'
+import { readLocal, removeLocal, saveLocal, isDone, dur, durExact, exList, exDays, exWord } from '../utils/runlog'
 import { useAuthStore } from '../stores/auth'
 import { ask } from '../composables/useDialog'
 import { showToast } from '../composables/useToast'
@@ -43,6 +43,17 @@ async function drop() {
   if (!r?.ok) return showToast('Не удалось очистить — попробуйте ещё раз', null, 'bad')
   runs.value = []; showToast('Журнал очищен')
 }
+// удалить одну запись (одно упражнение из захода) — без подтверждения, как смахнуть строку; прогресс курса не меняется
+async function dropOne(e) {
+  if (!online) {
+    const all = readLocal(), r = all.find((x) => x.run === e.run)
+    if (r) { const steps = (r.steps ?? []).filter((x) => String(x.id) !== String(e.id)); removeLocal([e.run]); if (steps.some(isDone)) saveLocal({ ...r, steps }) }
+    return load()
+  }
+  const r = await apiRequest('/progress/log/remove', { method: 'POST', body: JSON.stringify({ run: e.run, step: e.id, ...(props.studentId != null ? { studentId: String(props.studentId) } : {}) }) }).catch(() => null)
+  if (!r?.ok) return showToast('Не удалось удалить — попробуйте ещё раз', null, 'bad')
+  showToast('Запись удалена'); load(true)
+}
 const list = computed(() => exList(runs.value))
 const days = computed(() => exDays(list.value))
 const week = computed(() => { const from = Date.now() - 7 * 864e5, e = list.value.filter(x => x.at >= from), g = e.filter(x => x.ok !== null); return { n: e.length, sec: e.reduce((a, x) => a + (x.sec || 0), 0), ok: g.filter(x => x.ok).length, all: g.length } })
@@ -67,18 +78,19 @@ const kindName = (e) => (e.kind ? exName(e) : 'Экран')
     <p v-else-if="!list.length" class="empty">Журнал пуст. Каждое упражнение, на которое ответили, появится здесь сразу — даже если урок не закончен: результат и сколько времени.</p>
     <template v-else>
       <ExerciseCharts :list="list" />
-      <div class="wk"><span>За 7 дней</span><b>{{ week.n }}</b> {{ exWord(week.n) }}<i>·</i><b>{{ dur(week.sec) }}</b><template v-if="week.all"><i>·</i><b>{{ week.ok }}/{{ week.all }}</b> зачтено</template><button v-if="canDel" class="clr" @click="drop()">Очистить журнал</button></div>
+      <div class="wk"><span>За 7 дней</span><b>{{ week.n }}</b> {{ exWord(week.n) }}<i>·</i><b>{{ durExact(week.sec) }}</b><template v-if="week.all"><i>·</i><b>{{ week.ok }}/{{ week.all }}</b> зачтено</template><button v-if="canDel" class="clr" @click="drop()">Очистить журнал</button></div>
       <section v-for="d in days" :key="d.day" class="day">
         <header class="dh">
           <h3>{{ dayName(d.day) }}</h3>
-          <span class="ds"><b>{{ d.ex.length }}</b> {{ exWord(d.ex.length) }}<i>·</i><b>{{ dur(d.sec) }}</b><template v-if="d.all"><i>·</i><b>{{ d.ok }}/{{ d.all }}</b> зачтено</template></span>
+          <span class="ds"><b>{{ d.ex.length }}</b> {{ exWord(d.ex.length) }}<i>·</i><b>{{ durExact(d.sec) }}</b><template v-if="d.all"><i>·</i><b>{{ d.ok }}/{{ d.all }}</b> зачтено</template></span>
         </header>
         <div class="runs">
           <div v-for="e in d.ex" :key="e.key" class="run rh">
             <span class="tm">{{ hm(e.at) }}</span>
             <span class="tt"><b>{{ kindName(e) }}<template v-if="e.w"> · {{ e.w }}</template></b><small>{{ [e.courseTitle, e.title].filter(Boolean).join(' · ') }}</small></span>
             <span class="rs"><b :class="tone(e)">{{ res(e) }}</b><small>{{ resT(e) }}</small></span>
-            <span class="du">{{ dur(e.sec) }}</span>
+            <span class="du">{{ durExact(e.sec) }}</span>
+            <button v-if="canDel" type="button" class="x1" title="Удалить запись" aria-label="Удалить запись" @click="dropOne(e)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           </div>
         </div>
       </section>
@@ -101,8 +113,10 @@ const kindName = (e) => (e.kind ? exName(e) : 'Экран')
 .ds { font-size: 13px; font-weight: 700; color: var(--hint); white-space: nowrap }
 .runs { display: grid }
 .run { border-top: 1px solid var(--border) }
-.rh { box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 52px; align-items: center; gap: 10px; padding: 10px 16px }
+.rh { box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 52px 26px; align-items: center; gap: 10px; padding: 10px 16px }
 .rh:hover { background: var(--surface) }
+.x1 { width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--hint); cursor: pointer; opacity: .55 } .x1:hover { opacity: 1; background: #fdecea; color: #d92d20 }
+.x1 svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round }
 .tm { font-size: 13px; font-weight: 800; color: var(--hint); font-variant-numeric: tabular-nums }
 .tt { display: grid; min-width: 0 } .tt b { font-size: 14.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .tt small { font-size: 12px; color: var(--hint); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
@@ -110,7 +124,7 @@ const kindName = (e) => (e.kind ? exName(e) : 'Экран')
 .try.no { visibility: hidden }
 .rs { display: grid; justify-items: end; line-height: 1.15 } .rs b { font-size: 14px; font-weight: 900; white-space: nowrap } .rs small { font-size: 11.5px; color: var(--hint); font-weight: 700; white-space: nowrap }
 .g { color: #2e8b00 } .m { color: #c2590a } .b { color: #d92d20 } .z { color: var(--hint) } .ip { color: #c2590a }
-.du { font-size: 13px; font-weight: 800; color: var(--hint); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums }
+.du { min-width: 44px; font-size: 13px; font-weight: 800; color: var(--hint); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums }
 .ch { width: 16px; height: 16px; fill: none; stroke: var(--hint); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s } .run.on .ch { transform: rotate(90deg) }
 .st { list-style: none; margin: 0; padding: 2px 16px 12px 70px; display: grid; gap: 2px }
 .st li { display: grid; grid-template-columns: 20px 22px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 0; border-top: 1px dashed var(--border); font-size: 13.5px }
@@ -120,7 +134,7 @@ const kindName = (e) => (e.kind ? exName(e) : 'Экран')
 .sw { min-width: 0; overflow-wrap: anywhere } .sw b { font-weight: 800 } .sw small { display: block; font-size: 12px; color: var(--hint); font-weight: 600; margin-top: 1px }
 .sm { font-size: 12px; color: var(--hint); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums }
 @media (max-width: 560px) {
-  .rh { grid-template-columns: 40px minmax(0, 1fr) auto 44px; gap: 8px; padding: 10px 12px }
+  .rh { grid-template-columns: 40px minmax(0, 1fr) auto 44px 26px; gap: 8px; padding: 10px 12px }
   .dh { padding: 12px 12px 8px } .st { padding: 2px 12px 10px 12px } .rdel { padding: 0 12px 10px } .tt b { white-space: normal; line-height: 1.2 }
 }
 </style>

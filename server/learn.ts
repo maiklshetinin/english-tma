@@ -203,8 +203,22 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
     /** Преподаватель: стереть журнал — { runs: [id захода] } выбранные заходы, без runs — весь; studentId — ученика, без — свой.
      *  Прогресс курса, словарь и чекпоинты не меняются. */
     async removeLogs(user: TokenUser, input: unknown) {
-      const b = (input ?? {}) as { studentId?: unknown; runs?: unknown }
+      const b = (input ?? {}) as { studentId?: unknown; runs?: unknown; run?: unknown; step?: unknown }
       const who = await whoOf(user, b.studentId)
+      if (b.step != null) {          // одна запись журнала — одно упражнение из захода (25.11.2026): { run, step }
+        const rid = String(b.run ?? ''), sid = String(b.step)
+        if (!RUN_RE.test(rid) || !sid || sid.length > 64) throw fail(400, 'bad step')
+        const ref = logs().doc(`${who}_${rid}`)          // id начинается с who — чужой заход так не тронуть
+        await db.runTransaction(async (tx) => {
+          const old = (await tx.get(ref)).data() as RunLog | undefined
+          if (!old || !(sid in old.steps)) return
+          const steps = { ...old.steps }; delete steps[sid]
+          const vals = Object.values(steps), answered = vals.some((x) => x.ok !== null || !!x.x || x.sc != null || x.t > 0)
+          if (!answered) { tx.delete(ref); return }          // отвеченных экранов не осталось — заход пустой
+          tx.set(ref, { ...old, steps, sec: vals.reduce((a, x) => a + (x.sec || 0), 0), ok: vals.filter((x) => x.ok === true).length, all: vals.filter((x) => x.ok !== null).length })
+        })
+        return { ok: true }
+      }
       if (b.runs == null) { await dropLogs(who); return { ok: true } }
       if (!Array.isArray(b.runs) || !b.runs.length || b.runs.length > 300) throw fail(400, 'bad runs')
       const ids = [...new Set(b.runs.map(String))]

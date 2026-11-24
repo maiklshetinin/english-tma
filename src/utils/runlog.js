@@ -99,6 +99,8 @@ export function byDay(runs) {
 }
 /** «1 ч 05 мин», «12 мин», «40 с» */
 export const dur = (sec) => { const s = Math.round(sec || 0); if (s < 60) return `${s} с`; const m = Math.round(s / 60); return m < 60 ? `${m} мин` : `${Math.floor(m / 60)} ч ${String(m % 60).padStart(2, '0')} мин` }
+/** точное время без округления (25.11.2026, как «время выполнения» в уроке): «6:49», «1:02:03» */
+export const durExact = (sec) => { const s = Math.max(0, Math.round(sec || 0)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), c = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${c}` : `${m}:${c}` }
 /** сколько экранов пройдено в заходе (были на экране) */
 export const seen = (r) => (r.steps ?? []).filter((s) => s.ok !== undefined || s.sec != null).length
 
