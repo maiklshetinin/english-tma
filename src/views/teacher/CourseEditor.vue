@@ -98,31 +98,28 @@ const preName = (id) => { const k = splitKey(id), b = TEMPLATES.find(t => t.id =
 // каждый — только свои отличия от базового и имя. Счётчик на плитке → сверху ряд пресетов: выбрать (с ним плитка ляжет на урок),
 // «{ }» — настройки пресета, корзина, ＋ — копия выбранного под следующим номером. Выбор пресета на плитке — в этом браузере
 const pvOpen = ref('')
-const PV_K = 'ce.pv'
-const pvSel = ref((() => { try { const v = JSON.parse(localStorage.getItem(PV_K) || '{}'); return v && typeof v === 'object' ? v : {} } catch { return {} } })())
-watch(pvSel, (v) => { try { localStorage.setItem(PV_K, JSON.stringify(v)) } catch {} })
 const pvList = (tpl) => variantsOf(doc.presets, tpl)
-const pvOf = (tpl) => { const n = Number(pvSel.value[tpl]) || 0; return n && doc.presets?.[`${tpl}-${n}`] ? n : 0 }
-const pvKey = (tpl) => (pvOf(tpl) ? `${tpl}-${pvOf(tpl)}` : tpl)
+const pvKey = (tpl) => tpl
 const pvCount = (tpl) => pvList(tpl).length + 1
 const pvNext = (tpl) => { const l = pvList(tpl); for (let n = 1; n < 100; n++) if (!l.some(v => v.n === n)) return n; return 0 }
-function pvPick(tpl, n) { pvSel.value = { ...pvSel.value, [tpl]: n } }
 function pvAdd(tpl) {
   const n = pvNext(tpl); if (!n || pvList(tpl).length >= 20) return showToast('Больше 20 пресетов у одного типа нельзя')
-  const src = pvOf(tpl), from = src ? { ...(doc.presets[`${tpl}-${src}`] ?? {}) } : {}
-  const name = src ? pvList(tpl).find(v => v.n === src)?.name + ' · копия' : `Пресет ${n}`
-  doc.presets = { ...(doc.presets ?? {}), [`${tpl}-${n}`]: { ...from, name } }; save()
-  pvPick(tpl, n); showToast(`Пресет ${tpl}-${n} создан${src ? ' — копия «' + pvList(tpl).find(v => v.n === src)?.name + '»' : ''}. Поменяйте промпт в «{ }»`)
+  doc.presets = { ...(doc.presets ?? {}), [`${tpl}-${n}`]: { name: `Пресет ${n}` } }; save()
+  showToast(`Пресет ${tpl}-${n} создан. Поменяйте промпт в «{ }» и тяните на доску`)
 }
 async function pvDel(tpl, n) {
   // удаление — полностью (24.11.2026): пресет стирается из курса, у его экранов — номер пресета (pv), они на базовом. Не архив, вернуть нельзя
-  const k = `${tpl}-${n}`, nm = pvList(tpl).find(v => v.n === n)?.name ?? k
+  const k = `${tpl}-${n}`, nm = k
   const used = [...doc.items, ...doc.loose].flatMap(x => x.steps ?? []).filter(st => tplOf(st) === tpl && st.pv === n)
   if (!(await ask(`Удалить пресет «${nm}» (${k}) насовсем?`, { text: (used.length ? `${used.length} экранов на нём перейдут на базовый. ` : 'Экранов на нём нет. ') + 'Его промпт и настройки сотрутся — вернуть будет нельзя.', ok: 'Удалить насовсем', danger: true }))) return
   for (const st of used) delete st.pv
   const all = { ...(doc.presets ?? {}) }; delete all[k]; doc.presets = all; save()
   showToast(`Пресет «${nm}» удалён${used.length ? ` · ${used.length} экранов — на базовом` : ''}`)
-  if (pvOf(tpl) === n) pvPick(tpl, 0)
+}
+const pvT = computed(() => (pvOpen.value ? TPL.find(v => v.id === pvOpen.value) : null))
+function pvDown(e, n) {            // плитка пресета — тянется на доску сразу этим пресетом (выбирать не нужно); нажатие — экран едет за курсором
+  if (e.button !== 0) return
+  const b = e.currentTarget.getBoundingClientRect(); sdStart(e, null, pvOpen.value, null, null, { dx: e.clientX - b.left, dy: e.clientY - b.top, pvn: n })
 }
 function pvRename(tpl, n, name) { const k = `${tpl}-${n}`, nm = String(name || '').trim().slice(0, 60) || `Пресет ${n}`; if (doc.presets?.[k]?.name === nm) return; doc.presets = { ...doc.presets, [k]: { ...doc.presets[k], name: nm } }; save() }
 const PV_LABEL = { prompt: 'промпт', system: 'роль', voice: 'голос', model: 'модель', message: 'сообщение', format: 'формат ответа', temperature: 'температура', opener: 'первая реплика', evalPrompt: 'промпт оценки', pass: 'порог', lang: 'язык', topic: 'тема', dicModel: 'модель диктовки', request: 'запрос' }
@@ -648,10 +645,10 @@ const XGROUPS = computed(() => (trayTab.value === 'arch'
 const NEW_MINI = [...BOOK_TPL, ...PAGE_TPL]          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
 const skillsT = (t) => SKILLS[t.id] ?? []
 /** Экраны по плитке меню: «Готовый урок» или шаблон */
-function makeTpl(id) {
+function makeTpl(id, n = 0) {
   if (id === 'lesson') return fishLesson()
-  const s = TEMPLATES.find(t => t.id === id).make(), n = pvOf(id)
-  if (n) s.pv = n          // выбранный пресет плитки (24.11.2026)
+  const s = TEMPLATES.find(t => t.id === id).make()
+  if (n) s.pv = n          // пресет — с плитки пресета (24.11.2026)
   return [s]
 }
 function addScreen(id) {
@@ -765,7 +762,7 @@ function sdMove(e) {
   if (!sd.on) {
     if (Math.hypot(e.clientX - sdP.sx, e.clientY - sdP.sy) < 6) return
     const first = sdP.list?.find(o => o.at.x || o.at.y)?.at
-    const preview = sdP.tray ? makeTpl(sdP.tray) : []
+    const preview = sdP.tray ? makeTpl(sdP.tray, sdP.tileOff?.pvn || 0) : []
     Object.assign(sd, { on: true, rail: sdP.rail ?? null, tileOff: sdP.tileOff ?? null, asTile: !!sdP.tray, tray: sdP.tray, preview, list: sdP.list ?? [], extra: sdP.extra, s0: sdP.w, ox: first ? sdP.w.x - first.x : SCR_W / 2, oy: first ? sdP.w.y - first.y : 24 })
   }
   sd.w = toWorld(e.clientX, e.clientY); sd.cx = e.clientX; sd.cy = e.clientY
@@ -778,14 +775,14 @@ function sdMove(e) {
 async function sdUp(e) {
   removeEventListener('pointermove', sdMove); removeEventListener('pointercancel', sdUp); removeEventListener('pointerup', sdUp)
   const P = sdP; sdP = null
-  if (!sd.on) { if (P?.tray && PRESET_SET.has(P.tray)) { pvOpen.value = pvOpen.value === P.tray ? '' : P.tray; return } if (P?.tray) placeStart(P.tray, e); else if (P?.extra) msel.value = []; return }     // нажатие по выделению — снять его (дальше можно нажимать внутри)
+  if (!sd.on) { if (P?.tileOff?.pvn) return placeStart(P.tray, e, P.tileOff.pvn); if (P?.tray && PRESET_SET.has(P.tray)) { pvOpen.value = pvOpen.value === P.tray ? '' : P.tray; return } if (P?.tray) placeStart(P.tray, e); else if (P?.extra) msel.value = []; return }     // нажатие по выделению — снять его (дальше можно нажимать внутри)
   sdDrop(e)
 }
 // Нажали мини-окошко (не тянули) — как стикер в FigJam: экран едет за курсором, нажатие ставит его (на ветку, кружок урока или доску)
 let placing = false
-function placeStart(id, e) {
+function placeStart(id, e, n = 0) {
   const w = toWorld(e.clientX, e.clientY)
-  Object.assign(sd, { on: true, rail: null, tileOff: { dx: 66, dy: 80 }, asTile: true, cx: e.clientX, cy: e.clientY, tray: id, preview: makeTpl(id), list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
+  Object.assign(sd, { on: true, rail: null, tileOff: { dx: 66, dy: 80 }, asTile: true, cx: e.clientX, cy: e.clientY, tray: id, preview: makeTpl(id, n), list: [], extra: null, s0: w, w, ox: SCR_W / 2, oy: 24, to: null })
   placing = true          // меню не закрываем: над ним плитка остаётся плиткой, закроется, когда экран поставят
   addEventListener('pointermove', sdMove); addEventListener('pointerdown', placeDown, true)
 }
@@ -2055,16 +2052,14 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-else-if="tray === 'inter'">
         <!-- пресеты типа (24.11.2026): выезжают сверху по счётчику на плитке -->
         <div v-if="pvOpen && tray === 'inter'" class="pvr" @pointerdown.stop>
-          <div class="pvh"><b>Пресеты</b><code>{{ pvOpen }}</code><small>{{ preName(pvOpen) }} · {{ pvList(pvOpen).length ? pvList(pvOpen).length + ' · выбранный идёт в меню, нажмите ещё раз — снять' : 'пока нет — нажмите «＋»' }}</small><button type="button" class="pvx" aria-label="Закрыть пресеты" @click="pvOpen = ''">✕</button></div>
-          <div class="pvt">
-            <div v-for="v in pvList(pvOpen)" :key="v.n" class="pvc" :class="{ sel: pvOf(pvOpen) === v.n }" role="button" tabindex="0" @click="pvPick(pvOpen, pvOf(pvOpen) === v.n ? 0 : v.n)" @keydown.enter.self="pvPick(pvOpen, pvOf(pvOpen) === v.n ? 0 : v.n)">
-              <span class="mtag"><code>{{ pvOpen }}-{{ v.n }}</code><button class="mjs" :title="'Настройки пресета ' + pvOpen + '-' + v.n" @click.stop="preOpen(pvOpen + '-' + v.n)">{ }</button><button class="mar pvdel" title="Удалить пресет насовсем" :aria-label="'Удалить пресет ' + pvOpen + '-' + v.n" @click.stop="pvDel(pvOpen, v.n)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></button></span>
-              <div class="pvm"><ExerciseMini :id="pvOpen" /></div>
-              <input class="pvn pvi" :value="v.name" maxlength="60" placeholder="Название пресета" :title="'Название — видно на плитке меню под названием упражнения'" :aria-label="'Название пресета ' + v.n" @click.stop @keydown.enter="$event.target.blur()" @change="pvRename(pvOpen, v.n, $event.target.value)" />
-              <small class="pvd">{{ pvDiff(v.fields) ? 'Свой: ' + pvDiff(v.fields) : 'Как базовый — поменяйте в «{ }»' }}</small>
-              <div class="pva"><button type="button" @click.stop="$event.currentTarget.closest('.pvc').querySelector('.pvi').select()">✎ Название</button><button type="button" class="del" @click.stop="pvDel(pvOpen, v.n)">Удалить</button></div>          <!-- 24.11.2026: явные кнопки -->
-            </div>
-            <button type="button" class="pvadd" :disabled="!pvNext(pvOpen)" @click="pvAdd(pvOpen)"><span>＋</span>Новый пресет<small>{{ pvOf(pvOpen) ? 'копия выбранного' : 'как в упражнении' }} → {{ pvOpen }}-{{ pvNext(pvOpen) }}</small></button>
+          <div class="pvh"><b>Пресеты</b><code>{{ pvOpen }}</code><small>{{ preName(pvOpen) }} · {{ pvList(pvOpen).length ? 'тяните пресет на доску' : 'пока нет — нажмите «＋»' }}</small><button type="button" class="pvx" aria-label="Закрыть пресеты" @click="pvOpen = ''">✕</button></div>
+          <div class="pvt">          <!-- 24.11.2026: пресет — такая же плитка, как в меню; меняется только промпт («{ }») и номер в теге -->
+            <div v-for="v in pvList(pvOpen)" :key="v.n" class="xg S"><div class="miw"><span class="mtag"><code :class="{ on: copiedId === pvOpen + '-' + v.n }" title="ID пресета — тип в JSON. Нажмите — скопировать" @pointerdown.stop @click.stop="copyId(pvOpen + '-' + v.n)">{{ copiedId === pvOpen + '-' + v.n ? '✓ ' : '' }}{{ pvOpen }}-{{ v.n }}</code><button class="mjs" :class="{ on: !!pvDiff(v.fields) }" :title="'Промпт и настройки пресета ' + pvOpen + '-' + v.n" @pointerdown.stop @click.stop="preOpen(pvOpen + '-' + v.n)">{ }</button><button class="mar pvdel" title="Удалить пресет насовсем" :aria-label="'Удалить пресет ' + pvOpen + '-' + v.n" @pointerdown.stop @click.stop="pvDel(pvOpen, v.n)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></button></span><button class="mi" :title="'Потяните на доску — встанет экран с пресетом ' + pvOpen + '-' + v.n" @pointerdown.prevent="pvDown($event, v.n)">
+              <ExerciseMini :id="pvT?.base || pvOpen" size="rail" />
+              <small><b>{{ pvT?.t }}</b></small>
+              <span v-if="pvT && skillsT(pvT).length" class="skl"><i v-for="k in skillsT(pvT)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
+            </button></div></div>
+            <div class="xg S pvaddw"><button type="button" class="pvadd" :disabled="!pvNext(pvOpen)" @click="pvAdd(pvOpen)"><span>＋</span>Новый пресет<small>→ {{ pvOpen }}-{{ pvNext(pvOpen) }}</small></button></div>
           </div>
         </div>
         <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i><i v-if="b.k === 'arch' && arch.length">{{ arch.length }}</i></button></div>
@@ -2072,9 +2067,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <div class="xrow" :class="{ wrap: trayTab === 'kp' || trayTab === 'arch' }">
         <p v-if="trayTab === 'arch' && !XGROUPS.length" class="xarn">В архиве пусто. Наведите на плашку в другой вкладке и нажмите значок архива справа сверху — она переедет сюда.</p>          <!-- Karta Polaka: группы по одной плашке — переносятся рядами по ширине окна, без горизонтального скролла (21.11.2026) -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div v-if="trayTab !== 'kp' && trayTab !== 'arch'" class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">
-        <div v-for="t in g.items" :key="t.id" class="miw" :class="{ pvon: pvOpen === t.id }"><span class="mtag"><code :class="{ on: copiedId === t.id }" :title="copiedId === pvKey(t.id) ? 'Скопировано' : 'ID упражнения — так оно называется в JSON (тип), в окне «{ }» и в tools/make-json.py. Нажмите — скопировать'" @pointerdown.stop @click.stop="copyId(pvKey(t.id))">{{ copiedId === pvKey(t.id) ? '✓ ' + pvKey(t.id) : pvKey(t.id) }}</code><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button><button class="mar" :class="{ back: trayTab === 'arch' }" :title="trayTab === 'arch' ? 'Вернуть в меню. ID шаблона: ' + t.id + ' — совсем убрать: src/utils/lesson.ts → TEMPLATES' : 'В архив — убрать из меню (вернуть можно на вкладке «Архив»)'" :aria-label="trayTab === 'arch' ? 'Вернуть «' + t.t + '» в меню' : 'Убрать «' + t.t + '» в архив'" @pointerdown.stop @click.stop="trayTab === 'arch' ? fromArch(t.id) : toArch(t.id)"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg></button></span><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : PRESET_SET.has(t.id) ? 'Нажмите — пресеты сверху. Потяните — на доску' + (pvOf(t.id) ? ' (пресет ' + pvKey(t.id) + ')' : '') : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
+        <div v-for="t in g.items" :key="t.id" class="miw" :class="{ pvon: pvOpen === t.id }"><span class="mtag"><code :class="{ on: copiedId === t.id }" :title="copiedId === pvKey(t.id) ? 'Скопировано' : 'ID упражнения — так оно называется в JSON (тип), в окне «{ }» и в tools/make-json.py. Нажмите — скопировать'" @pointerdown.stop @click.stop="copyId(pvKey(t.id))">{{ copiedId === pvKey(t.id) ? '✓ ' + pvKey(t.id) : pvKey(t.id) }}</code><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button><button class="mar" :class="{ back: trayTab === 'arch' }" :title="trayTab === 'arch' ? 'Вернуть в меню. ID шаблона: ' + t.id + ' — совсем убрать: src/utils/lesson.ts → TEMPLATES' : 'В архив — убрать из меню (вернуть можно на вкладке «Архив»)'" :aria-label="trayTab === 'arch' ? 'Вернуть «' + t.t + '» в меню' : 'Убрать «' + t.t + '» в архив'" @pointerdown.stop @click.stop="trayTab === 'arch' ? fromArch(t.id) : toArch(t.id)"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg></button></span><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : PRESET_SET.has(t.id) ? 'Нажмите — пресеты сверху. Потяните — на доску' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
-          <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span v-if="pvOf(t.id)" class="mpn">{{ pvList(t.id).find(v => v.n === pvOf(t.id))?.name }}</span></small>          <!-- 24.11.2026: описание — только в подсказке; сверху — тег-ID -->
+          <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b></small>          <!-- 24.11.2026: описание — только в подсказке; сверху — тег-ID -->
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i><span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span></span>          <!-- 19.11.2026: «Ответ по смыслу» — значки чатов в строку с навыком -->
         </button>
         </div>
@@ -2465,6 +2460,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .miw { position: relative; display: grid }
 /* пресеты (24.11.2026): счётчик на плитке и ряд сверху */
 .miw.pvon .mi { box-shadow: 0 0 0 2px #1f1f1f }
+.pvt .xg { flex: none } .pvaddw { display: flex } .pvaddw .pvadd { width: 132px; min-height: 100% }
 .mpv { position: absolute; left: 6px; right: 6px; bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 5px; height: 22px; border: 0; border-radius: 8px; background: rgba(255,255,255,.75); color: #4a4f57; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer } .mpp { font-style: normal; font-size: 15px; font-weight: 900; line-height: 1; color: #1f1f1f } .mpv b { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #e2e5ea; font-size: 10.5px; line-height: 16px } .mpv.many b { background: #1f1f1f; color: #fff } .mpv:hover, .mpv.on { background: #fff; box-shadow: 0 0 0 1.5px #9aa3b0 }
 .mpc { flex: none; min-width: 20px; height: 20px; padding: 0 5px; border: 0; border-radius: 10px; background: #e2e5ea; color: #4a4f57; font: 800 11px/20px inherit; cursor: pointer } .mpc.many { background: #1f1f1f; color: #fff } .mpc.on, .mpc:hover { box-shadow: 0 0 0 2px #9aa3b0 }
 .mpn { display: block; font-size: 11.5px; font-weight: 600; color: #6b7280 }
