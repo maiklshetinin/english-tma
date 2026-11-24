@@ -85,12 +85,19 @@ function push(role, chunk) {
 // верх растворяется; отмотали вверх — круглая «↓» внизу справа
 const atEnd = ref(true), scrolling = ref(false)
 let scT = 0
+// 24.11.2026: скролл один — крутится вся страница урока (.body), как чат в Claude: новые реплики внизу, страница сама едет к ним.
+// В редакторе (там .body не прокручивается) чат остаётся со своей прокруткой — тогда крутим сам .tx.
+const sc = () => { const b = box.value; return b && getComputedStyle(b).overflowY === 'visible' ? b.closest('.body') || b : b }
+let bound = null
+function bind() { const e = sc(); if (e === bound) return; bound?.removeEventListener('scroll', onScroll); bound = e; e?.addEventListener('scroll', onScroll, { passive: true }) }
+watch(() => lines.value.length, () => nextTick(bind), { flush: 'post' })
+onBeforeUnmount(() => bound?.removeEventListener('scroll', onScroll))
 function onScroll() {
-  const b = box.value; if (!b) return
+  const b = sc(); if (!b) return
   atEnd.value = b.scrollHeight - b.scrollTop - b.clientHeight < 40
   scrolling.value = true; clearTimeout(scT); scT = setTimeout(() => { scrolling.value = false }, 1000)
 }
-function toEnd(smooth = true) { const b = box.value; if (b) { b.scrollTo({ top: b.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); atEnd.value = true } }
+function toEnd(smooth = true) { bind(); const b = sc(); if (b) { b.scrollTo({ top: b.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); atEnd.value = true } }
 async function start() {
   if (st.value === 'connecting' || st.value === 'live') return
   err.value = ''; note.value = ''; dropNotes(); lines.value = []; atEnd.value = true; resetEval()
@@ -373,7 +380,7 @@ watchEffect(() => {
 .trow { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 4px } .trow label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--hint) }
 .trow select { max-width: 190px; height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
 .tn { margin: 4px 0 0; font-size: 11.5px; font-weight: 600; color: var(--hint) }
-.tv { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0 } .tv > * { flex: none }          /* 24.11.2026: два скролла → один: чат занимает остаток высоты экрана и крутится сам, страница урока — нет */
+.tv { display: grid; gap: 10px }
 .ev { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer }
 .tq { margin: -4px 0 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center; font-size: 15px; font-weight: 800; line-height: 1.35; color: var(--text) } .tqs { margin-right: 4px; color: #e5484d }          /* строка вопроса вверху */
 .tpl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px }          /* подвал: модель, голос, PL, «Оценивать речь» */
@@ -414,7 +421,8 @@ watchEffect(() => {
 .ts { flex: 1; min-width: 0; display: flex; flex-direction: column } .ts b { font-size: 14px } .ts small { font-size: 12px; color: var(--hint); font-variant-numeric: tabular-nums }
 .sm { flex: none; height: 34px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer } .sm.on { background: #fff4d6 } .sm.red { color: var(--red-d) }
 .er { margin: 0; font-size: 13px; font-weight: 700; color: var(--red-d) }
-.txw { position: relative; flex: 1 1 0 !important; min-height: 160px; display: flex; flex-direction: column }
+.txw { position: relative; display: flex; flex-direction: column }
+.tv > .tc { position: sticky; top: 0; z-index: 3; box-shadow: 0 -12px 0 var(--card) }          /* микрофон остаётся сверху, пока чат листается под ним */
 /* рация (21.11.2026) */
 /* рация: большой микрофон под персонажем — как было (76 px) */
 .tc:has(.pt) { padding: 12px 10px } .pt { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px 10px }
@@ -429,14 +437,12 @@ watchEffect(() => {
 .b.dr { background: #f2fbe9; border: 1.5px dashed #9ad07a; color: #4f7a3c } .bl { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #5aa33a }
 .bw { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 800; color: #c0392b }
 .lk { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
-.tx { display: flex; flex-direction: column; gap: 5px; flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px 4px 2px;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px);          /* верх растворяется */
-  scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color .3s }
-:global(.embedded) .txw { flex: none !important } :global(.embedded) .tx { flex: none; max-height: max(340px, 52vh) }          /* в редакторе страница не фиксированной высоты — прежний потолок */
+.tx { display: flex; flex-direction: column; gap: 5px; padding: 14px 6px 4px 2px }          /* без своей прокрутки */
+:global(.embedded) .tx { max-height: max(340px, 52vh); overflow-y: auto; overscroll-behavior: contain; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px); scrollbar-width: thin }          /* в редакторе страница не прокручивается — чат со своей прокруткой */
 .tx:hover, .tx.sc { scrollbar-color: rgba(0, 0, 0, .28) transparent }          /* полоска — только пока мышь над чатом или его крутят */
 .tx::-webkit-scrollbar { width: 6px } .tx::-webkit-scrollbar-track { background: transparent } .tx::-webkit-scrollbar-thumb { border-radius: 3px; background: transparent }
 .tx:hover::-webkit-scrollbar-thumb, .tx.sc::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .28) }
-.tdn { position: absolute; right: 10px; bottom: 8px; width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--card); color: var(--hint); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); cursor: pointer; animation: tdn .18s ease-out }
+.tdn { position: sticky; bottom: 10px; align-self: flex-end; margin: -38px 10px 0 0; z-index: 2; width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--card); color: var(--hint); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); cursor: pointer; animation: tdn .18s ease-out }
 .tdn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round } .tdn:hover { color: var(--text) }
 @keyframes tdn { from { opacity: 0; transform: scale(.8) } } @media (prefers-reduced-motion: reduce) { .tdn { animation: none } }
 .b { max-width: 82%; padding: 7px 11px; border-radius: 14px; font-size: 14px; line-height: 1.4; white-space: pre-wrap }
