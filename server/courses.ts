@@ -30,8 +30,9 @@ export interface Course { id: string; title: string; mode: 'wave' | 'line'; prog
 // смыслу» и «Разговора» на весь курс. Хранятся как поля экрана своего шаблона — те же проверки, что у экрана, без вопроса и эталона
 export const PRESET_TPLS: Record<string, Record<string, unknown>> = { kp: { kind: 'kp' }, kpfile: { kind: 'kp', dic: 'file' }, kpapi: { kind: 'kp', engine: 'api' },
   talk: { kind: 'talk' }, talkava: { kind: 'talk', avatar: true }, talkptt: { kind: 'talk', avatar: true, ptt: true }, talkptt2: { kind: 'talk', avatar: true, ptt: true, busuu: true },
+  talkvn: { kind: 'talk', avatar: true, ptt: true, vn: true },          // 24.11.2026: «Рация · голосовые»
   talkexam: { kind: 'talk', avatar: true, ptt: true, exam: true } }          // 24.11.2026: «Собеседование · рация»
-const PRESET_DROP = ['id', 'kind', 'text', 'ideal', 'head', 'star', 'n', 'look', 'plain', 'autoplay', 'engine', 'dic', 'avatar', 'ptt', 'busuu', 'exam', 'image', 'audio', 'video', 'exAudio', 'audioBy', 'skills', 'min', 'topic']
+const PRESET_DROP = ['id', 'kind', 'text', 'ideal', 'head', 'star', 'n', 'look', 'plain', 'autoplay', 'engine', 'dic', 'avatar', 'ptt', 'busuu', 'vn', 'exam', 'image', 'audio', 'video', 'exAudio', 'audioBy', 'skills', 'min', 'topic']
 export const INK_MAX = 300, INK_POINTS = 4000, TEMPLATES_MAX = 30          // TEMPLATES_MAX — своих упражнений из конструктора в курсе
 export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 
@@ -95,7 +96,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       // 20.11.2026: всё, что уходит в Live-модель, из JSON экрана (src/exercises/talk/defaults.ts; только отличия от умолчаний) и персонаж (шаблон «Разговор с персонажем»)
       putT(o, 'lock', r.lock, 2000); putT(o, 'opener', r.opener, 500); putT(o, 'guard', r.guard, 500); putT(o, 'evalPrompt', r.evalPrompt, 6000); putT(o, 'evalAsk', r.evalAsk, 2000)          // guard, eval* — 21.11.2026
       put(o, 'silenceMs', within(r.silenceMs, 200, 5000, true)); if (r.endSens === 'high') o.endSens = 'high'; put(o, 'temperature', within(r.temperature, 0, 2))
-      if (r.noiseSuppression === true) o.noiseSuppression = true; if (r.avatar === true) o.avatar = true; if (r.ptt === true) o.ptt = true; if (r.busuu === true) o.busuu = true
+      if (r.noiseSuppression === true) o.noiseSuppression = true; if (r.avatar === true) o.avatar = true; if (r.ptt === true) o.ptt = true; if (r.busuu === true) o.busuu = true; if (r.vn === true) o.vn = true
       putReq(o, r.request)
       if (r.exam === true) { o.exam = true; o.ptt = true; put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n } } }          // «Собеседование · рация» (24.11.2026): эталон, звезда, номер
     // «Транскрипция» (Gemini 3.5 Transcribe Live, 20.11.2026, эксперимент): подсказка, язык

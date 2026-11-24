@@ -41,6 +41,7 @@ const EXTRA: Record<string, SKey[]> = {
     { key: 'engine', type: 'select', options: ['api'], label: 'Проверка напрямую через Gemini API (нет — через мост)' },
   ],
   talk: [{ key: 'busuu', type: 'bool', label: 'Рация «как в Busuu» — свои настройки курса' },
+    { key: 'vn', type: 'bool', label: 'Рация · голосовые: реплики ученика — голосовыми, как в Telegram (без распознавания)' },
     { key: 'exam', type: 'bool', label: 'Собеседование · рация: вопрос (text), эталон (ideal) и звезда — в роль консула метками {question}, {reference}, {star}' },
     { key: 'ideal', type: 'text', label: 'Эталон ответа — консул сверяет с ним (собеседование)' },
     { key: 'star', type: 'bool', label: 'Красная звезда — ответ знать обязательно (собеседование)' },

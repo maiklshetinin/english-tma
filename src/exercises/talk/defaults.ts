@@ -86,7 +86,7 @@ const okTemp = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 
 /** Действующие настройки экрана: свои поля поверх умолчаний */
 /** шаблон экрана — по нему настройки курса (presets): рация, с персонажем, обычный */
-export const talkTpl = (s: any) => (s?.exam ? 'talkexam' : s?.ptt ? (s.busuu ? 'talkptt2' : 'talkptt') : s?.avatar ? 'talkava' : 'talk')
+export const talkTpl = (s: any) => (s?.exam ? 'talkexam' : s?.ptt ? (s.vn ? 'talkvn' : s.busuu ? 'talkptt2' : 'talkptt') : s?.avatar ? 'talkava' : 'talk')
 /** Действующие настройки: умолчания кода ← настройки упражнения в курсе (src/exercises/presets.ts) ← свои поля экрана */
 export function talkCfg(s: any): TalkCfg {
   const own: any = {}
@@ -121,7 +121,7 @@ function talkCode(s: any): TalkCfg {
 export function talkFields(raw: any): Partial<TalkCfg> {
   const o: any = {}
   if (!raw || typeof raw !== 'object') return o
-  const form = { ptt: raw.ptt, avatar: raw.avatar, busuu: raw.busuu, exam: raw.exam }
+  const form = { ptt: raw.ptt, avatar: raw.avatar, busuu: raw.busuu, vn: raw.vn, exam: raw.exam }
   const x: any = talkCode(raw), d0: any = talkCfg(form)
   const d: any = talkCfg({ ...form, lang: x.lang })          // умолчания роли / замка / реплики — для языка из JSON
   for (const k of Object.keys(x)) {

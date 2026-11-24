@@ -1,10 +1,10 @@
 // Настройки упражнений курса (21.11.2026): «{ }» на плитке меню Exercise — промпты и настройки этого упражнения для всего курса.
 // Экран хранит только свои отличия, поэтому настройки курса сразу действуют на все его экраны этого упражнения, где поле не меняли
 // вручную, и на новые. Порядок: умолчания в коде (их видно в JSON) ← настройки курса ← свои поля экрана. Других текстов нет.
-// Ключ — id шаблона (src/utils/lesson.ts TEMPLATES): kp, kpfile, kpapi, talk, talkava, talkptt, talkptt2, talkexam (собеседование-рация, 24.11.2026). Хранятся в курсе (server/courses.ts → presets).
+// Ключ — id шаблона (src/utils/lesson.ts TEMPLATES): kp, kpfile, kpapi, talk, talkava, talkptt, talkptt2, talkvn (рация · голосовые), talkexam (собеседование-рация, 24.11.2026). Хранятся в курсе (server/courses.ts → presets).
 import { reactive } from 'vue'
 
-export const PRESET_TPLS = ['kp', 'kpfile', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkptt2', 'talkexam'] as const
+export const PRESET_TPLS = ['kp', 'kpfile', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkptt2', 'talkvn', 'talkexam'] as const
 export type PresetTpl = typeof PRESET_TPLS[number]
 export type Presets = Partial<Record<PresetTpl, Record<string, unknown>>>
 

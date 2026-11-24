@@ -4,7 +4,8 @@
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
 const props = defineProps({
   url: { type: String, required: true }, peaks: { type: Array, default: () => [] }, sec: { type: Number, default: 0 },
-  status: { type: String, default: 'sending' },          // sending | done | error
+  status: { type: String, default: 'sending' },          // sending | done | error | live (24.11.2026, рация · голосовые: голос ушёл в Gemini Live, без распознавания)
+  via: { type: String, default: '' },          // подпись под голосовым вместо «целым аудио → модель»
   model: { type: String, default: '' }, ms: { type: Number, default: 0 }, err: { type: String, default: '' },
 })
 const emit = defineEmits(['retry'])
@@ -36,11 +37,12 @@ onBeforeUnmount(stop)
         <span class="vs" aria-live="polite">
           <template v-if="status === 'sending'"><svg class="clk" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>отправляю в Gemini<b class="dots"><i>.</i><i>.</i><i>.</i></b></template>
           <template v-else-if="status === 'done'"><svg class="tk" viewBox="0 0 28 24" aria-hidden="true"><path d="M2 13l5 5L18 6M11 16l2 2L24 6" /></svg>распознано{{ ms ? ' · ' + (ms / 1000).toFixed(1).replace('.', ',') + ' с' : '' }}</template>
+          <template v-else-if="status === 'live'"><svg class="tk" viewBox="0 0 28 24" aria-hidden="true"><path d="M2 13l5 5L18 6M11 16l2 2L24 6" /></svg>услышала Gemini</template>
           <template v-else><b class="ex">!</b>не распознано · <button type="button" class="rt" @click="emit('retry')">Повторить</button></template>
         </span>
       </div>
       <p v-if="status === 'error' && err" class="ve">{{ err }}</p>
-      <p class="vc">целым аудио → {{ model || 'Gemini Flash Lite' }}</p>
+      <p class="vc">{{ via || 'целым аудио → ' + (model || 'Gemini Flash Lite') }}</p>
     </div>
   </div>
 </template>

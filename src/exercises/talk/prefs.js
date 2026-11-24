@@ -6,7 +6,8 @@ import { reactive } from 'vue'
 import { liveModels, firstKey } from '../../utils/live'
 const rd = (k) => { try { return localStorage.getItem(k) || '' } catch { return '' } }
 const wr = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k) } catch { /* приватный режим */ } }
-export const tp = reactive({ pick: '', voice: '', eval: rd('tma.talk.eval') === '1', models: [], busy: {} })
+// ctl[id экрана] (24.11.2026) — строка ввода «рации» в подвале: текст, черновик распознавания, волна и кнопки; живёт в экземпляре экрана, рисует подвал
+export const tp = reactive({ pick: '', voice: '', eval: rd('tma.talk.eval') === '1', models: [], busy: {}, ctl: {} })
 wr('tma.live.pick', ''); wr('tma.live.voice', '')          // старый выбор из браузера больше не перебивает урок
 export const setPick = (v) => { tp.pick = v }
 export const setVoice = (v) => { tp.voice = v }
