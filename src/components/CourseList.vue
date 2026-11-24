@@ -52,11 +52,11 @@ async function remove(c) {
     <div v-else class="grid">
       <div v-for="c in list" :key="c.id" class="card cc" :class="{ on: c.id === selected }" role="button" tabindex="0" title="Нажмите — посмотреть ниже, дважды — открыть в редакторе"
         @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
-        <span class="ic"><AppIcon name="route" :size="24" /></span>
+        <span class="ic"><AppIcon name="route" :size="20" /></span>
         <span class="tx"><b>{{ c.title }}</b><small>{{ c.count }} {{ word(c.count) }}<template v-if="c.updatedAt"> · изменён {{ ago(c.updatedAt) }}</template></small></span>
         <!-- как везде: справа карандаш (редактор) и корзина -->
-        <button class="icon-btn" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="20" /></button>
-        <button class="icon-btn danger" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="20" /></button>
+        <button class="icon-btn" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="16" /></button>
+        <button class="icon-btn danger" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="16" /></button>
       </div>
     </div>
   </div>
@@ -64,13 +64,14 @@ async function remove(c) {
 <style scoped>
 .cl { display: grid; gap: 10px; margin-bottom: 18px }
 .ch { display: flex; align-items: center; justify-content: space-between; gap: 10px } .ch h2 { margin: 0 }
-.grid { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 3px 3px 8px; margin: -3px -3px 0 }          /* 24.11.2026: курсы — в одну строку во всю ширину, не влезло — прокрутка вбок (раньше два ряда занимали пол-экрана); padding/margin — чтобы рамка выбранного курса не обрезалась */
-.grid > .cc { flex: 0 0 300px; scroll-snap-align: start; box-sizing: border-box }
-.cc { user-select: none; display: flex; align-items: center; gap: 10px; padding: 14px 16px; margin: 0; cursor: pointer; transition: border-color .1s }
+.grid { --bleed: max(0px, calc((100vw - 8px - 100%) / 2)); display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 3px var(--bleed) 8px; margin: -3px calc(-1 * var(--bleed)) 0; scroll-padding-inline: var(--bleed) }          /* 24.11.2026: курсы — в одну строку, полоса прокрутки на всю ширину экрана (вылезает за поля страницы; первая карточка стоит на линии заголовка); padding/margin — чтобы рамка выбранного курса не обрезалась */
+@media (min-width: 1024px) { .grid { --bleed: max(0px, calc((100vw - 132px - 100%) / 2)) } }          /* слева — рейл навигации (124px) */
+.grid > .cc { flex: 0 0 225px; scroll-snap-align: start; box-sizing: border-box }          /* на четверть уже прежних 300px */
+.cc { user-select: none; display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 12px; margin: 0; cursor: pointer; transition: border-color .1s }
 .cc:hover { border-color: var(--blue) }
-.cc .icon-btn { --ib: 40px; color: var(--hint) }
-.ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--purple); color: #fff }
-.tx { flex: 1; display: grid; min-width: 0 } .tx b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tx small { font-size: 13px; font-weight: 600; color: var(--hint) }
+.cc .icon-btn { --ib: 30px; color: var(--hint) }
+.ic { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--purple); color: #fff }
+.tx { flex: 1; display: grid; min-width: 0 } .tx b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tx small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .cc.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) }
 .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 24px } .empty span { max-width: 420px; color: var(--hint); font-size: 14px }
 .sk { height: 74px; opacity: .5 }
