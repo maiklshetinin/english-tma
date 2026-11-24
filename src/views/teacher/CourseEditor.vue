@@ -110,9 +110,9 @@ function pvPick(tpl, n) { pvSel.value = { ...pvSel.value, [tpl]: n } }
 function pvAdd(tpl) {
   const n = pvNext(tpl); if (!n || pvList(tpl).length >= 20) return showToast('Больше 20 пресетов у одного типа нельзя')
   const src = pvOf(tpl), from = src ? { ...(doc.presets[`${tpl}-${src}`] ?? {}) } : {}
-  const name = (src ? pvList(tpl).find(v => v.n === src)?.name : 'Базовый') + ' · копия'
+  const name = src ? pvList(tpl).find(v => v.n === src)?.name + ' · копия' : `Пресет ${n}`
   doc.presets = { ...(doc.presets ?? {}), [`${tpl}-${n}`]: { ...from, name } }; save()
-  pvPick(tpl, n); showToast(`Пресет ${tpl}-${n} — копия «${src ? pvList(tpl).find(v => v.n === src)?.name : 'Базовый'}». Поменяйте промпт в «{ }»`)
+  pvPick(tpl, n); showToast(`Пресет ${tpl}-${n} создан${src ? ' — копия «' + pvList(tpl).find(v => v.n === src)?.name + '»' : ''}. Поменяйте промпт в «{ }»`)
 }
 async function pvDel(tpl, n) {
   // удаление — полностью (24.11.2026): пресет стирается из курса, у его экранов — номер пресета (pv), они на базовом. Не архив, вернуть нельзя
@@ -123,12 +123,6 @@ async function pvDel(tpl, n) {
   const all = { ...(doc.presets ?? {}) }; delete all[k]; doc.presets = all; save()
   showToast(`Пресет «${nm}» удалён${used.length ? ` · ${used.length} экранов — на базовом` : ''}`)
   if (pvOf(tpl) === n) pvPick(tpl, 0)
-}
-async function pvReset(tpl) {
-  // базовый не удаляется (это сам тип), но его свои настройки в курсе стираются полностью
-  if (!doc.presets?.[tpl]) return
-  if (!(await ask(`Сбросить базовый «${preName(tpl)}» к умолчаниям?`, { text: 'Свои настройки курса (' + pvDiff(doc.presets[tpl]) + ') сотрутся. Пресеты ' + tpl + '-1, -2… останутся.', ok: 'Сбросить', danger: true }))) return
-  const all = { ...doc.presets }; delete all[tpl]; doc.presets = all; save(); showToast('Базовый — как в приложении')
 }
 function pvRename(tpl, n, name) { const k = `${tpl}-${n}`, nm = String(name || '').trim().slice(0, 60) || `Пресет ${n}`; if (doc.presets?.[k]?.name === nm) return; doc.presets = { ...doc.presets, [k]: { ...doc.presets[k], name: nm } }; save() }
 const PV_LABEL = { prompt: 'промпт', system: 'роль', voice: 'голос', model: 'модель', message: 'сообщение', format: 'формат ответа', temperature: 'температура', opener: 'первая реплика', evalPrompt: 'промпт оценки', pass: 'порог', lang: 'язык', topic: 'тема', dicModel: 'модель диктовки', request: 'запрос' }
@@ -2061,21 +2055,16 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <template v-else-if="tray === 'inter'">
         <!-- пресеты типа (24.11.2026): выезжают сверху по счётчику на плитке -->
         <div v-if="pvOpen && tray === 'inter'" class="pvr" @pointerdown.stop>
-          <div class="pvh"><b>Пресеты</b><code>{{ pvOpen }}</code><small>{{ preName(pvOpen) }} · {{ pvCount(pvOpen) }}</small><button type="button" class="pvx" aria-label="Закрыть пресеты" @click="pvOpen = ''">✕</button></div>
+          <div class="pvh"><b>Пресеты</b><code>{{ pvOpen }}</code><small>{{ preName(pvOpen) }} · {{ pvList(pvOpen).length ? pvList(pvOpen).length + ' · выбранный идёт в меню, нажмите ещё раз — снять' : 'пока нет — нажмите «＋»' }}</small><button type="button" class="pvx" aria-label="Закрыть пресеты" @click="pvOpen = ''">✕</button></div>
           <div class="pvt">
-            <div class="pvc" :class="{ sel: !pvOf(pvOpen) }" role="button" tabindex="0" @click="pvPick(pvOpen, 0)" @keydown.enter="pvPick(pvOpen, 0)">
-              <span class="mtag"><code>{{ pvOpen }}</code><button class="mjs" title="Настройки базового" @click.stop="preOpen(pvOpen)">{ }</button></span>
-              <div class="pvm"><ExerciseMini :id="pvOpen" /></div>
-              <b class="pvn">Базовый</b><small class="pvd">{{ doc.presets?.[pvOpen] ? 'Свои в курсе: ' + pvDiff(doc.presets[pvOpen]) : 'Умолчания приложения' }}</small><div class="pva"><button type="button" class="del" :disabled="!doc.presets?.[pvOpen]" :title="doc.presets?.[pvOpen] ? 'Стереть свои настройки курса — базовый станет как в приложении' : 'Базовый — сам тип упражнения, его не удалить. Своих настроек в курсе нет'" @click.stop="pvReset(pvOpen)">Сбросить к умолчаниям</button></div>
-            </div>
-            <div v-for="v in pvList(pvOpen)" :key="v.n" class="pvc" :class="{ sel: pvOf(pvOpen) === v.n }" role="button" tabindex="0" @click="pvPick(pvOpen, v.n)" @keydown.enter.self="pvPick(pvOpen, v.n)">
+            <div v-for="v in pvList(pvOpen)" :key="v.n" class="pvc" :class="{ sel: pvOf(pvOpen) === v.n }" role="button" tabindex="0" @click="pvPick(pvOpen, pvOf(pvOpen) === v.n ? 0 : v.n)" @keydown.enter.self="pvPick(pvOpen, pvOf(pvOpen) === v.n ? 0 : v.n)">
               <span class="mtag"><code>{{ pvOpen }}-{{ v.n }}</code><button class="mjs" :title="'Настройки пресета ' + pvOpen + '-' + v.n" @click.stop="preOpen(pvOpen + '-' + v.n)">{ }</button><button class="mar pvdel" title="Удалить пресет насовсем" :aria-label="'Удалить пресет ' + pvOpen + '-' + v.n" @click.stop="pvDel(pvOpen, v.n)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></button></span>
               <div class="pvm"><ExerciseMini :id="pvOpen" /></div>
               <input class="pvn pvi" :value="v.name" maxlength="60" placeholder="Название пресета" :title="'Название — видно на плитке меню под названием упражнения'" :aria-label="'Название пресета ' + v.n" @click.stop @keydown.enter="$event.target.blur()" @change="pvRename(pvOpen, v.n, $event.target.value)" />
               <small class="pvd">{{ pvDiff(v.fields) ? 'Свой: ' + pvDiff(v.fields) : 'Как базовый — поменяйте в «{ }»' }}</small>
               <div class="pva"><button type="button" @click.stop="$event.currentTarget.closest('.pvc').querySelector('.pvi').select()">✎ Название</button><button type="button" class="del" @click.stop="pvDel(pvOpen, v.n)">Удалить</button></div>          <!-- 24.11.2026: явные кнопки -->
             </div>
-            <button type="button" class="pvadd" :disabled="!pvNext(pvOpen)" @click="pvAdd(pvOpen)"><span>＋</span>Новый пресет<small>копия выбранного → {{ pvOpen }}-{{ pvNext(pvOpen) }}</small></button>
+            <button type="button" class="pvadd" :disabled="!pvNext(pvOpen)" @click="pvAdd(pvOpen)"><span>＋</span>Новый пресет<small>{{ pvOf(pvOpen) ? 'копия выбранного' : 'как в упражнении' }} → {{ pvOpen }}-{{ pvNext(pvOpen) }}</small></button>
           </div>
         </div>
         <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i><i v-if="b.k === 'arch' && arch.length">{{ arch.length }}</i></button></div>
@@ -2088,7 +2077,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span v-if="pvOf(t.id)" class="mpn">{{ pvList(t.id).find(v => v.n === pvOf(t.id))?.name }}</span></small>          <!-- 24.11.2026: описание — только в подсказке; сверху — тег-ID -->
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i><span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span></span>          <!-- 19.11.2026: «Ответ по смыслу» — значки чатов в строку с навыком -->
         </button>
-        <button v-if="PRESET_SET.has(t.id)" type="button" class="mpv" :class="{ on: pvOpen === t.id, many: pvCount(t.id) > 1 }" :title="'Пресеты «' + t.t + '» — варианты с другим промптом. Открыть ряд сверху'" :aria-label="'Пресеты ' + t.id + ': ' + pvCount(t.id)" @pointerdown.stop @click.stop="pvOpen = pvOpen === t.id ? '' : t.id"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="13" height="13" rx="2" /><path d="M4 16V5a1 1 0 0 1 1-1h11" /></svg>Пресеты<b>{{ pvCount(t.id) }}</b></button>          <!-- 24.11.2026: вход в пресеты — полоской внизу плитки, тег-ID сверху не режется -->
+        <button v-if="PRESET_SET.has(t.id)" type="button" class="mpv" :class="{ on: pvOpen === t.id, many: pvList(t.id).length > 0 }" :title="'Пресеты «' + t.t + '» — варианты с другим промптом. Открыть ряд сверху'" :aria-label="'Пресеты ' + t.id + ': ' + pvList(t.id).length" @pointerdown.stop @click.stop="pvOpen = pvOpen === t.id ? '' : t.id"><i class="mpp">＋</i>Пресеты<b v-if="pvList(t.id).length">{{ pvList(t.id).length }}</b></button>          <!-- 24.11.2026: вход в пресеты — полоской внизу плитки, тег-ID сверху не режется -->
         </div>
         </div></div>
         </div>
@@ -2476,7 +2465,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea } .xg.book { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }          /* книжные — экспериментальные */          /* группы упражнений — рядом, по горизонтали */
 .miw { position: relative; display: grid }
 /* пресеты (24.11.2026): счётчик на плитке и ряд сверху */
-.mpv { position: absolute; left: 6px; right: 6px; bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 5px; height: 22px; border: 0; border-radius: 8px; background: rgba(255,255,255,.75); color: #4a4f57; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer } .mpv svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2 } .mpv b { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #e2e5ea; font-size: 10.5px; line-height: 16px } .mpv.many b { background: #1f1f1f; color: #fff } .mpv:hover, .mpv.on { background: #fff; box-shadow: 0 0 0 1.5px #9aa3b0 }
+.mpv { position: absolute; left: 6px; right: 6px; bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 5px; height: 22px; border: 0; border-radius: 8px; background: rgba(255,255,255,.75); color: #4a4f57; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer } .mpp { font-style: normal; font-size: 15px; font-weight: 900; line-height: 1; color: #1f1f1f } .mpv b { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #e2e5ea; font-size: 10.5px; line-height: 16px } .mpv.many b { background: #1f1f1f; color: #fff } .mpv:hover, .mpv.on { background: #fff; box-shadow: 0 0 0 1.5px #9aa3b0 }
 .miw:has(.mpv) .mi { padding-bottom: 30px }
 .mpc { flex: none; min-width: 20px; height: 20px; padding: 0 5px; border: 0; border-radius: 10px; background: #e2e5ea; color: #4a4f57; font: 800 11px/20px inherit; cursor: pointer } .mpc.many { background: #1f1f1f; color: #fff } .mpc.on, .mpc:hover { box-shadow: 0 0 0 2px #9aa3b0 }
 .mpn { display: block; font-size: 11.5px; font-weight: 600; color: #6b7280 }
