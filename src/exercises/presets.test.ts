@@ -38,6 +38,12 @@ describe('настройки упражнения курса («{ }» на пл�
     expect(talkCfg({ ptt: true, avatar: true, busuu: true })).toMatchObject({ voice: 'Kore', lang: 'en-US', guard: 'Please reply only in English.' })          // у копии своих настроек нет — умолчания кода; язык — английский (тип en-talkptt2)
     expect(presetJson('talkptt2')).not.toMatchObject({ voice: 'KP' })
   })
+  it('роль и первая реплика курса на чужом языке у польской рации не берутся — умолчания польские', () => {
+    setPresets({ talkptt: { opener: "Hello! Let's talk about traveling in Spain. Have you ever been to Spain, or is it on your travel bucket list?" }, 'talkptt-1': { prompt: 'Jesteś życzliwą nauczycielką.' } })
+    expect(talkCfg({ ptt: true, avatar: true, pv: 1 })).toMatchObject({ opener: 'Dzień dobry. Proszę zacząć rozmowę.', prompt: 'Jesteś życzliwą nauczycielką.' })
+    setPresets({ talkptt: { opener: 'Dzień dobry! Proszę zacząć.' } })
+    expect(talkCfg({ ptt: true, avatar: true }).opener).toBe('Dzień dobry! Proszę zacząć.')
+  })
   it('испанский — свой тип: es_talk, es_talkptt; язык из пресета не меняется', () => {
     setPresets({ es_talkptt: { voice: 'Puck' }, talkptt: { lang: 'es-ES' } })
     expect(talkCfg({ ptt: true, avatar: true, lang: 'es-ES' })).toMatchObject({ lang: 'es-ES', voice: 'Puck', guard: 'Responde solo en español.' })

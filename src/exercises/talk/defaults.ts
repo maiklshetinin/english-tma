@@ -92,6 +92,9 @@ export function talkCfg(s: any): TalkCfg {
   const own: any = {}
   for (const [k, v] of Object.entries(s ?? {})) if (v !== undefined && v !== null) own[k] = v
   const { lang: _l, lock: _k, guard: _g, ...pre } = presetFor(talkTpl(s), s?.pv) as any          // язык, замок и просьба — только из типа (24.11.2026)
+  // роль и первая реплика из настроек курса на чужом языке (остались с тех пор, как язык меняли: «Let's talk about Spain» у польской рации) — не берём
+  const alien = LANGS[hardLang(s)].alien
+  for (const k of ['prompt', 'opener']) if (typeof pre[k] === 'string' && (pre[k].match(alien) ?? []).length >= 2) delete pre[k]
   return talkCode({ ...pre, ...own })          // pv — пресет типа (talkexam-2), 24.11.2026
 }
 /** текстовые поля: свои — как есть, даже пустые (стёрли в JSON — пусто, умолчание не подставляем; 21.11.2026) */
