@@ -43,8 +43,9 @@ async function drop() {
   if (!r?.ok) return showToast('Не удалось очистить — попробуйте ещё раз', null, 'bad')
   runs.value = []; showToast('Журнал очищен')
 }
-// удалить одну запись (одно упражнение из захода) — без подтверждения, как смахнуть строку; прогресс курса не меняется
+// удалить одну запись (одно упражнение из захода) — с подтверждением, как «Очистить журнал»; прогресс курса не меняется
 async function dropOne(e) {
+  if (!(await ask('Удалить запись?', { text: `«${[kindName(e), e.w].filter(Boolean).join(' · ')}» пропадёт из журнала. Прохождение курса, словарь и ошибки для чекпоинта не меняются.`, ok: 'Удалить', danger: true }))) return
   if (!online) {
     const all = readLocal(), r = all.find((x) => x.run === e.run)
     if (r) { const steps = (r.steps ?? []).filter((x) => String(x.id) !== String(e.id)); removeLocal([e.run]); if (steps.some(isDone)) saveLocal({ ...r, steps }) }

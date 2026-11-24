@@ -149,7 +149,7 @@ const fmtS = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart
 const CYR = /[Ѐ-ӿ]/
 const C = computed(() => tp.ctl[props.step.id] || null)          // общее с подвалом (prefs.js)
 const WAVE_N = 24, WAVE_STEP = 7
-let tr = null, trTok = 0, trFinT = 0, vLine = null, waveTm = 0, waveRaf = 0, waveAt = 0, micOn = false
+let aiWarned = null, tr = null, trTok = 0, trFinT = 0, vLine = null, waveTm = 0, waveRaf = 0, waveAt = 0, micOn = false
 function mkCtl() {
   tp.ctl[props.step.id] = { pt: 'idle', conn: false, text: '', said: '', draft: '', err: '', stt: '', wave: Array(WAVE_N).fill(0), off: 0,
     mic: micToggle, vn: vn.value, lv: 0, dur: '0:00', trs: 'off', net: [] }
