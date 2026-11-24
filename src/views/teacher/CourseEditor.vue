@@ -681,6 +681,9 @@ const freeOf = (st, x, y) => ({ id: freshId('f'), type: 'screen', title: '', x: 
 const sd = reactive({ on: false, rail: null, tileOff: null, asTile: false, cx: 0, cy: 0, list: [], tray: null, preview: [], extra: null, ox: 0, oy: 0, s0: { x: 0, y: 0 }, w: { x: 0, y: 0 }, to: null })
 let sdP = null
 // тащим сами окна, в полный размер (как в FigJam): сдвиг для экранов на ветках и на доске
+// 24.11.2026: «что тащим» — только той ветке / экрану, где эти экраны: остальные ветки не перерисовываются на каждое движение мыши
+// (раньше перерисовывались все — экран отставал от курсора и «подъезжал»)
+const movFor = (x) => { const m = sdMoving.value; return m && (x.steps ?? []).some(v => m.ids.includes(v.id)) ? m : null }
 const sdMoving = computed(() => (sd.on && !sd.tray ? (sd.rail ? { ids: sd.list.map(o => o.s.id), dx: tileDx(), dy: 0, tile: true } : { ids: sd.list.map(o => o.s.id), dx: sd.w.x - sd.s0.x, dy: sd.w.y - sd.s0.y }) : null))
 // тянут плитку экрана с ветки (17.11.2026): плитка едет только по линии своей ветки, от первого до последнего места; увели далеко вверх/вниз — дальше тянется сам экран, как раньше
 const TILE_OFF = 220
@@ -974,11 +977,11 @@ const mqStyle = computed(() => { const m = mq.value, r = board.value?.getBoundin
 const oneBox = computed(() => {
   if ((sd.on && !maskDrag.value) || msel.value.length || !pick.step || pick.step === 'final' || !board.value) return null
   void (view.x + view.y + view.z + (railHs[pick.lesson] ?? 0) + boxTick.value)        // пересчёт при сдвиге, масштабе и правках
-  let w = cardBox(pick.step); if (!w) return null
-  if (sd.on) {          // тянем за маску (24.11.2026): маска едет вместе с экраном; по ветке едет плитка — маску не показываем
-    const m = sdMoving.value; if (!m || m.tile) return null
-    w = { x0: w.x0 + m.dx, y0: w.y0 + m.dy, x1: w.x1 + m.dx, y1: w.y1 + m.dy }
-  }
+  let w
+  if (sd.on) {          // тянем за маску (24.11.2026): маска едет вместе с экраном (рамка — с начала перетаскивания, без замеров на каждое движение); по ветке едет плитка — маску не показываем
+    const m = sdMoving.value, b = maskBox; if (!m || m.tile || !b) return null
+    w = { x0: b.x0 + m.dx, y0: b.y0 + m.dy, x1: b.x1 + m.dx, y1: b.y1 + m.dy }
+  } else { w = cardBox(pick.step); if (!w) return null }
   const a = toScreen({ x: w.x0, y: w.y0 }), b = toScreen({ x: w.x1, y: w.y1 })
   return { left: Math.round(a.x - 6) + 'px', top: Math.round(a.y - 6) + 'px', width: Math.round(b.x - a.x + 12) + 'px', height: Math.round(b.y - a.y + 12) + 'px' }
 })
@@ -986,12 +989,13 @@ const oneBox = computed(() => {
 const oneLive = ref(null)
 watch(() => pick.step, () => { oneLive.value = null })
 let maskClick = false
+let maskBox = null
 const maskDrag = ref(false)          // тянем экран за маску — маска и курсор-рука не пропадают
 function oneDown(e) {
   if (e.button !== 0) return
   const st = [...lessonRails.value.map(r => r.x), ...doc.items, ...doc.loose].flatMap(x => x.steps ?? []).find(v => v.id === pick.step)
   if (!st) { oneLive.value = pick.step; return }
-  maskClick = true; grabStep({ e, s: st }); maskDrag.value = !!sdP
+  maskBox = cardBox(st.id); maskClick = true; grabStep({ e, s: st }); maskDrag.value = !!sdP
 }
 const selBox = computed(() => {
   if (chapSel.value && !sd.on) {             // выбрана глава — рамка вокруг всей главы
@@ -1850,10 +1854,10 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <LessonRail v-for="r in lessonRails" :key="'lr' + r.x.id" :style="layerSt(r.x.id)" :item="r.x" :up="r.x.type === 'checkpoint'" :hot="sd.on && sd.to?.L?.id === r.x.id" :glow="sd.on" :x="r.p.x" :y="r.p.y" :sel="pick.lesson === r.x.id ? pick.step : null" :to-world="toWorld"
           :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct"
           :can-paste="!!clip?.steps" @copy="copyStep" @json="copyJson" @paste="pasteStep(r.x.id, $event)" :auto="autoCk[r.x.id]" :to-ck="!!ckFor(r.x.id)" @weak="onWeak(r.x, $event)" @unauto="unAuto(r.x.id, $event)"
-          @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="sdMoving" @grab="grabStep" />
+          @focus="showPoint" @change="save" @height="railHs[r.x.id] = $event" @select="selectStep(r.x.id, $event)" @play="run = r.x.id" @add="sel = r.x.id; tray = 'inter'" :moving="movFor(r.x)" @grab="grabStep" />
         <!-- Экраны прямо на доске (унесли с ветки или положили из «Интерактива») -->
         <LessonRail v-for="f in freeScreens" :key="'fs' + f.id" :style="layerSt(f.id)" free :item="f" :x="f.x" :y="f.y" :sel="pick.lesson === f.id ? pick.step : null" :to-world="toWorld"
-          :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :moving="sdMoving"
+          :resolve="resolveRef" :put-file="putStepFile" :drop-files="dropRefs" :up-pct="upPct" :moving="movFor(f)"
           @copy="copyStep" @json="copyJson" @change="save" @height="railHs[f.id] = $event" @select="selectStep(f.id, $event)" @grab="grabStep" />
         <!-- Тянем экраны: место на ветке, кружок урока, призраки карточек -->
         <!-- ветка урока: стыки между экранами; ближайший к экрану «магнитит» -->
