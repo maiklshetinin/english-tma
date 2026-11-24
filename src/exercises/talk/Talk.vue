@@ -99,7 +99,7 @@ async function start() {
       if (s === 'live') { t0.value = now.value = Date.now(); clearInterval(clock); clock = setInterval(() => { now.value = Date.now() }, 500) }
       if (s === 'ended' || s === 'error') { clearInterval(clock); level.value = 0; sess = null; trDone(trTok); waveRun(false); micOffSnd(); if (evalOn.value && speechSec.value - sentAt >= 8) sendEval(true) }          // хвост речи — последней оценкой
     },
-    text: (role, t) => { if (ptt.value && role === 'me') return; if (role === 'ai' && skipAi) return; push(role, t); if (ptt.value && role === 'ai') aiGuard() },          // рация: свою речь пишет Transcribe
+    text: (role, t) => { if (ptt.value && role === 'me') return; push(role, t); if (ptt.value && role === 'ai') aiGuard() },          // рация: свою речь пишет Transcribe
     turn: () => { const l = lines.value.at(-1); if (l) l.closed = true; if (C.value?.pt === 'wait') C.value.pt = 'idle' },
     level: (v) => { level.value = level.value * 0.6 + v * 0.4 },          // рация: громкость — с микрофона самой Live (идёт только пока нажато) — волна в подвале
   } })
@@ -129,19 +129,19 @@ const fmtS = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart
 const CYR = /[Ѐ-ӿ]/
 const C = computed(() => tp.ctl[props.step.id] || null)          // общее с подвалом (prefs.js)
 const WAVE_N = 24, WAVE_STEP = 7
-let tr = null, trTok = 0, trFinT = 0, vLine = null, skipAi = false, waveTm = 0, waveRaf = 0, waveAt = 0, micOn = false
+let tr = null, trTok = 0, trFinT = 0, vLine = null, waveTm = 0, waveRaf = 0, waveAt = 0, micOn = false
 function mkCtl() {
   tp.ctl[props.step.id] = { pt: 'idle', conn: false, text: '', said: '', draft: '', err: '', stt: '', wave: Array(WAVE_N).fill(0), off: 0,
-    mic: micToggle, done: voiceSend, cancel: micCancel, send: sendText, vn: vn.value, dur: '0:00', trs: 'off', net: [] }
+    mic: micToggle, vn: vn.value, lv: 0, dur: '0:00', trs: 'off', net: [] }
 }
 // бегущие полоски, как в Claude и «Ответе по смыслу»: раз в 70 мс громкость — новой полоской справа
 function waveRun(on) {
   clearInterval(waveTm); cancelAnimationFrame(waveRaf); waveTm = waveRaf = 0
   const c = C.value; if (!c) return
   c.off = 0
-  if (!on) { c.wave = Array(WAVE_N).fill(0); return }
+  if (!on) { c.wave = Array(WAVE_N).fill(0); c.lv = 0; return }
   waveAt = performance.now()
-  waveTm = setInterval(() => { c.wave = [...c.wave.slice(1), level.value]; waveAt = performance.now(); if (vnT0) c.dur = fmtS((Date.now() - vnT0) / 1000) }, 70)
+  waveTm = setInterval(() => { c.lv = level.value; c.wave = [...c.wave.slice(1), level.value]; waveAt = performance.now(); if (vnT0) c.dur = fmtS((Date.now() - vnT0) / 1000) }, 70)
   const f = (t) => { c.off = Math.min(1, Math.max(0, (t - waveAt) / 70)) * WAVE_STEP; waveRaf = requestAnimationFrame(f) }
   waveRaf = requestAnimationFrame(f)
 }
@@ -153,10 +153,10 @@ async function micStart() {
   if (vLine) trDone(trTok)          // хвост прошлой реплики ещё дописывался — закрыть
   const key = firstKey(); if (!key) { c.err = 'Нужен ключ Gemini в профиле'; return }
   const tok = ++trTok
-  skipAi = false; sess.quiet(false)
   sess.talkStart()          // Gemini замолкает сразу (перебить), голос пошёл в Live
   c.err = ''; c.said = ''; c.draft = ''; c.pt = 'talk'; c.conn = true
   sfxMicOn(); micOn = true
+  if (!vn.value) { lines.value.push({ role: 'me', t: '', closed: false, draft: true }); vLine = lines.value.at(-1); atEnd.value = true; nextTick(() => toEnd(false)) }          // облачко «Transcribe Live пишет…» — сразу в чате
   if (vn.value) { vnPcm = []; vnLv = []; vnT0 = Date.now(); c.dur = '0:00'; c.conn = false; waveRun(true); return }          // голосовое — без распознавания
   waveRun(true); c.trs = 'connecting'
   const model = await sttModel(key)
@@ -173,7 +173,7 @@ async function micStart() {
     final: (t) => { if (tok !== trTok) return; c.said = (c.said + ' ' + t).trim(); c.draft = ''; if (vLine) { vLine.t = heard(c); clearTimeout(trFinT); trFinT = setTimeout(() => trDone(tok), 350) } },
   } })
 }
-/** ✓ / ↑ — договорил: activityEnd → Gemini отвечает на голос; расшифровка — пузырём, хвост дописывается до 1,5 с */
+/** Микрофон ещё раз — договорил: activityEnd → Gemini отвечает на голос; хвост расшифровки дописывается в облачко до 1,5 с */
 function voiceSend() {
   const c = C.value; if (!c || c.pt !== 'talk') return
   sess?.talkEnd(); sess?.quiet(false)
@@ -182,11 +182,9 @@ function voiceSend() {
     c.pt = 'wait'; waveRun(false); level.value = 0; micOffSnd()
     if (!pcm.length) return
     const { blob, sec: s } = wavOf(pcm), url = URL.createObjectURL(blob); urls.push(url)
-    lines.value.push({ role: 'me', t: '', closed: true, vn: { url, sec: s, peaks: bars(lv) } }); atEnd.value = true; nextTick(() => toEnd(false))
+    lines.value.push({ role: 'me', t: '', closed: true, vn: { url, sec: s, peaks: bars(lv), model: liveName(used.value || 'Gemini Live') } })          // под голосовым — какая модель услышала (Gemini 3.8 Live); atEnd.value = true; nextTick(() => toEnd(false))
     return
   }
-  vLine = { role: 'me', t: heard(c) || '…', closed: true }
-  lines.value.push(vLine); vLine = lines.value.at(-1); atEnd.value = true; nextTick(() => toEnd(false))
   c.pt = 'wait'; waveRun(false); level.value = 0; micOffSnd()
   const tok = trTok
   if (tr) { tr.hold(true); tr.flush(); c.trs = 'closing' }
@@ -196,29 +194,9 @@ function trDone(tok) {
   if (tok !== trTok) return
   trTok++; clearTimeout(trFinT)
   const c = C.value, t = tr; tr = null; t?.stop()
-  if (c && vLine) { vLine.t = heard(c) || vLine.t || '…'; if (CYR.test(vLine.t)) vLine.warn = 'похоже, по-русски — говорите ' + L.value.how }
+  if (c && vLine) { vLine.t = heard(c) || vLine.t || '…'; vLine.draft = false; vLine.closed = true; if (CYR.test(vLine.t)) vLine.warn = 'похоже, по-русски — говорите ' + L.value.how }
   vLine = null
   if (c) { c.said = ''; c.draft = ''; c.conn = false; if (c.trs !== 'error' && c.trs !== 'off') c.trs = 'closed' }
-}
-/** ✕ — отменить реплику: голос в Live уже ушёл, поэтому ответ Gemini на неё прячем (не звучит, не пишется) до следующей реплики */
-function micCancel() {
-  const c = C.value, was = c?.pt === 'talk'
-  trTok++; clearTimeout(trFinT); const t = tr; tr = null; t?.stop(); vnPcm = vnLv = null; vnT0 = 0
-  waveRun(false); level.value = 0; micOffSnd()
-  if (!c) return
-  c.said = ''; c.draft = ''; c.conn = false; if (c.trs !== 'error' && c.trs !== 'off') c.trs = 'closed'
-  if (was) { c.pt = 'idle'; sess?.talkEnd(); skipAi = true; sess?.quiet(true) }
-}
-/** Написали руками — ↑ / Enter: уходит текстом (голос в микрофон — через кнопку микрофона) */
-function sendText() {
-  const c = C.value; if (!c || !sess || st.value !== 'live') return
-  if (c.pt === 'talk') return voiceSend()
-  const t = (c.text || '').trim(); if (!t) return
-  const l = { role: 'me', t, closed: true }
-  if (CYR.test(t)) l.warn = 'похоже, по-русски — пишите ' + L.value.how
-  lines.value.push(l); atEnd.value = true; nextTick(() => toEnd(false))
-  c.text = ''; c.err = ''
-  skipAi = false; sess.quiet(false); sess.send(t); c.pt = 'wait'
 }
 /** Gemini ответила не по-польски — один раз за реплику просим по-польски и помечаем пузырь */
 function aiGuard() {
@@ -283,11 +261,6 @@ watchEffect(() => {
 })
 // подвал рации: строка ввода — пока идёт разговор; растёт по тексту, Enter — отправить, Shift+Enter — новая строка
 const showCm = computed(() => props.part === 'fb' && ptt.value && !!C.value && !!tp.busy[props.step.id])
-const ta = ref(null)
-function fit() { const el = ta.value; if (!el) return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
-watch(() => C.value?.text, () => nextTick(fit))
-function onKey(e) { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); C.value?.send() } }
-const waveH = (v) => 3 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 21
 </script>
 
 <template>
@@ -330,8 +303,8 @@ const waveH = (v) => 3 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 21
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ st === 'ended' ? 'Поговорить ещё раз' : 'Начать разговор' }}</button>
         <div v-else-if="ptt" class="pt" :class="C?.pt">          <!-- рация (24.11.2026): отвечают в строке ввода внизу (подвал), здесь — только «Завершить», состояние и время -->
           <button type="button" class="pr" @click="stop">Завершить</button>
-          <p class="pc"><b>{{ st === 'connecting' ? 'Подключаюсь к Gemini…' : C?.pt === 'talk' ? 'Говорите — Gemini слушает' : C?.pt === 'wait' ? 'Gemini отвечает' : 'Ваш ответ — внизу' }}</b>
-            <small>{{ st === 'connecting' ? '' : C?.pt === 'talk' ? '✓ или микрофон ещё раз — отправить, ✕ — отменить' : C?.pt === 'wait' ? 'нажмите микрофон — перебить и сказать своё' : 'микрофон внизу — голосом, или напишите текстом' }}<template v-if="note"> · {{ note }}</template></small></p>
+          <p class="pc"><b>{{ st === 'connecting' ? 'Подключаюсь к Gemini…' : C?.pt === 'talk' ? 'Говорите — Gemini слушает' : C?.pt === 'wait' ? 'Gemini отвечает' : 'Ваша очередь' }}</b>
+            <small>{{ st === 'connecting' ? '' : C?.pt === 'talk' ? 'микрофон внизу — нажмите ещё раз, Gemini ответит' : C?.pt === 'wait' ? 'микрофон внизу — нажмите, чтобы перебить' : 'нажмите микрофон внизу' }}<template v-if="note"> · {{ note }}</template></small></p>
           <span class="pi">{{ st === 'live' ? sec : '' }}</span>
         </div>
         <template v-else>
@@ -351,36 +324,30 @@ const waveH = (v) => 3 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 21
       <p v-if="err" class="er">{{ err }}</p>
       <div v-if="lines.length" class="txw">
         <div ref="box" class="tx" :class="{ sc: scrolling }" @scroll.passive="onScroll">
-          <template v-for="(l, i) in lines" :key="i"><VoiceNote v-if="l.vn" class="vnb" :url="l.vn.url" :peaks="l.vn.peaks" :sec="l.vn.sec" status="live" :via="'голосом → ' + (liveName(used) || 'Gemini Live')" /><div v-else class="b" :class="l.role">{{ l.t }}<small v-if="l.warn" class="bw">⚠ {{ l.warn }}</small></div></template>
+          <template v-for="(l, i) in lines" :key="i"><VoiceNote v-if="l.vn" class="vnb" :url="l.vn.url" :peaks="l.vn.peaks" :sec="l.vn.sec" status="live" :model="l.vn.model" via="голосом прямо в Live · без расшифровки" /><div v-else class="b" :class="[l.role, { dr: l.draft }]"><small v-if="l.draft" class="bl">{{ C?.stt || 'Transcribe Live' }} пишет…</small>{{ l.t || (l.draft ? '…' : '') }}<small v-if="l.warn" class="bw">⚠ {{ l.warn }}</small></div></template>
         </div>
         <button v-if="!atEnd" type="button" class="tdn" aria-label="Вниз, к новым репликам" @click="toEnd()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
       </div>
     </div>
   </template>
   <!-- подвал (21.11.2026): модель — «таблеткой» слева от «Продолжить»; пока идёт разговор — не меняется (голос — вверху) -->
-  <div v-else-if="part === 'fb' && !p.edit" class="tf" :class="{ cm: showCm }" @pointerdown.stop>
-    <!-- рация (24.11.2026): строка ввода как в чате — как у «Ответа по смыслу» (Kp.vue). Текст растёт по высоте; пока диктуют —
-         то, что слышит Transcribe Live, курсивом под полем, волна, ✕ (выбросить продиктованное) и ✓ (остановить) -->
-    <div v-if="showCm" class="kcm" :class="C.pt">
-      <textarea v-show="C.pt !== 'talk'" ref="ta" class="kci" rows="1" :value="C.text" :placeholder="'Ответьте ' + L.how + ' — нажмите микрофон или напишите'" @input="C.text = $event.target.value; fit()" @keydown="onKey" />
-      <div v-if="C.pt === 'talk' || C.err" class="kcd" :class="{ er: C.err && C.pt !== 'talk', rec: C.vn && C.pt === 'talk' }" aria-live="polite">{{ C.pt === 'talk' && C.vn ? '● Запись ' + C.dur + ' — Gemini слышит вас' : C.pt === 'talk' ? (heard(C) || (C.conn ? 'Подключаюсь…' : 'Говорите — Gemini слышит вас, ' + (C.stt || 'Transcribe Live') + ' показывает текст…')) : C.err }}</div>
-      <div class="kcr">
-        <template v-if="C.pt === 'talk'">
-          <span class="kcwv" aria-hidden="true"><span class="kcwvs" :style="{ transform: `translateX(${-C.off}px)` }"><i v-for="(v, i) in C.wave" :key="i" :style="{ height: waveH(v) + 'px' }" /></span></span>
-          <button type="button" class="kcx" title="Отменить реплику — Gemini на неё не ответит" aria-label="Отменить" @click="C.cancel()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-          <button type="button" class="kcx" title="Готово — реплика уйдёт, Gemini ответит" aria-label="Отправить реплику" @click="C.done()"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button>
-        </template>
-        <template v-else>
-          <span v-if="C.stt" class="kcm-s">🎙 {{ C.stt }}</span>
-          <button type="button" class="kcx mic" :disabled="!C.live" title="Сказать голосом — Gemini услышит произношение" aria-label="Надиктовать" @click="C.mic()"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg></button>
-          <button type="button" class="kcgo" :disabled="!C.text.trim()" title="Отправить текстом (Enter)" aria-label="Отправить" @click="C.send()"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6" /></svg></button>
-        </template>
-      </div>
-    </div>
-    <div v-if="C?.net?.length" class="net" aria-live="polite"><span v-for="x in C.net" :key="x.k" class="nt" :class="x.st" :title="x.name + ' — ' + x.txt"><i class="nd" /><b>{{ x.name }}</b> {{ x.txt }}<em v-if="x.st === 'busy'" class="dd"><i>.</i><i>.</i><i>.</i></em></span></div>
-    <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" :title="editor ? 'Модель разговора — пишется в экран (model в JSON)' : 'Модель разговора — из урока; выбор здесь — только на этот раз'">
+  <!-- подвал (24.11.2026), высота — как была: слева модель и статусы нейросетей, по центру — большой микрофон рации
+       (нажал — говоришь, нажал ещё раз — Gemini отвечает; пока отвечает — нажать = перебить), справа от него — коротко, что идёт.
+       Что распознано — облачком в чате, править нечего: Gemini слышит сам звук -->
+  <div v-else-if="part === 'fb' && !p.edit" class="tf" @pointerdown.stop>
+    <div class="tfl">
+      <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" :title="editor ? 'Модель разговора — пишется в экран (model в JSON)' : 'Модель разговора — из урока; выбор здесь — только на этот раз'">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg><span class="pv">{{ pickName }}</span>
       <select :value="pick || lessonModel" :disabled="tp.busy[step.id]" aria-label="Модель" @change="onModel($event.target.value)"><option value="">авто · {{ liveName(models[0]) }}{{ !editor && !lessonModel ? ' · из урока' : '' }}</option><option v-if="lessonModel && !models.includes(lessonModel)" :value="lessonModel">{{ liveName(lessonModel) }} · из урока</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ !editor && m === lessonModel ? ' · из урока' : '' }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
+      <div v-if="C?.net?.length" class="net" aria-live="polite"><span v-for="x in C.net" :key="x.k" class="nt" :class="x.st" :title="x.name + ' — ' + x.txt"><i class="nd" /><b>{{ x.name }}</b> {{ x.txt }}<em v-if="x.st === 'busy'" class="dd"><i>.</i><i>.</i><i>.</i></em></span></div>
+    </div>
+    <div v-if="showCm" class="fm" :class="C.pt">
+      <button type="button" class="pb" :style="{ '--l': C.lv }" :disabled="!C.live" :title="C.pt === 'talk' ? 'Нажмите ещё раз — Gemini ответит' : C.pt === 'wait' ? 'Нажмите — перебить и сказать своё' : 'Нажмите и говорите'" :aria-label="C.pt === 'talk' ? 'Отправить реплику' : 'Нажмите и говорите'" @click="C.mic()">
+        <svg v-if="C.pt === 'talk'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5" /></svg>
+        <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+      </button>
+    </div>
+    <p v-if="showCm" class="fmt" :class="C.pt"><b>{{ !C.live ? 'Подключаюсь…' : C.pt === 'talk' ? (C.vn ? '● ' + C.dur : '● Говорите') : C.pt === 'wait' ? 'Gemini отвечает' : '' }}</b><small v-if="C.err" class="fme">{{ C.err }}</small></p>
   </div>
 </template>
 
@@ -402,8 +369,9 @@ const waveH = (v) => 3 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 21
 .evp > b { font-size: 13.5px } .evr { display: grid; grid-template-columns: 20px 1fr; gap: 6px } .evr i { font-style: normal } .evr b { font-weight: 800 } .evp small { color: var(--hint); font-size: 11.5px }
 @keyframes evp { from { opacity: 0; transform: translateY(-4px) } } @media (prefers-reduced-motion: reduce) { .evp { animation: none } }
 /* «таблетки» (21.11.2026): голос — вверху, модель — в подвале */
-.tf { display: flex; gap: 6px; min-width: 0 } .tf.cm, .tf:has(.net) { flex-direction: column; align-items: stretch; gap: 6px } .tf.cm > .pill, .tf:has(.net) > .pill { align-self: flex-start }
-.net { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 6px; font-size: 12px; font-weight: 600; line-height: 1.3; color: #8f8f8f }
+.tf { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0 }
+.tfl { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0 }
+.net { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 0 4px; font-size: 12px; font-weight: 600; line-height: 1.3; color: #8f8f8f }
 .nt { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap } .nt b { color: #3a3a3a; font-weight: 700 }
 .nd { width: 7px; height: 7px; border-radius: 50%; background: #c4c4c4; flex: none }
 .nt.on .nd { background: #2bb34a; box-shadow: 0 0 0 3px rgba(43, 179, 74, .16) } .nt.busy .nd { background: #1a73e8; animation: ndp 1s ease-in-out infinite } .nt.err .nd { background: #d93025 } .nt.err { color: #b3261e }
@@ -435,24 +403,15 @@ const waveH = (v) => 3 + Math.min(1, Math.sqrt(Math.max(0, v)) * 1.5) * 21
 .pr { justify-self: start; height: 34px; padding: 0 12px; border: 1px solid #f1c7c7; border-radius: 17px; background: var(--card); color: #c0392b; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer }
 .pi { justify-self: end; font-size: 12px; font-weight: 700; color: var(--hint); font-variant-numeric: tabular-nums }
 .pc { margin: 0; text-align: center; font-size: 14px } .pc small { display: block; font-size: 12px; font-weight: 700; color: var(--hint) } .pt.talk .pc b { color: #c0392b }
-/* строка ввода рации в подвале (24.11.2026) — как у «Ответа по смыслу» (Kp.vue) */
-.kcm { display: flex; flex-direction: column; gap: 6px; width: 100%; box-sizing: border-box; padding: 12px 10px 8px 16px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 20px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .04); text-align: left; transition: border-color .15s, box-shadow .15s }
-.kcm:focus-within, .kcm.talk { border-color: rgba(0, 0, 0, .18); box-shadow: 0 2px 14px rgba(0, 0, 0, .07) }
-.kci { display: block; width: 100%; min-height: 26px; max-height: 40vh; box-sizing: border-box; margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow-y: auto; background: transparent; color: #1f1f1f; caret-color: #1a73e8; font-family: var(--font); font-size: 16px; font-weight: 500; line-height: 1.55; user-select: text }
-.kci::placeholder { color: #9b9b9b; font-weight: 500 }
-.kcd.rec { color: #c0392b; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums }
-.vnb { margin: 0 0 0 auto; flex: none }
-.kcd { min-height: 26px; color: #6f6f6f; font-family: var(--font); font-size: 16px; font-style: italic; font-weight: 500; line-height: 1.55; white-space: pre-wrap } .kcd.er { color: #b3261e; font-size: 12.5px; font-style: normal; font-weight: 700 }
-.kcr { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 34px }
-.kcm-s { margin-right: auto; color: #8f8f8f; font-size: 12px; font-weight: 600; white-space: nowrap }
-.kcx { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #f0f0f0; color: #3a3a3a; cursor: pointer; transition: background .12s }
-.kcx:hover:not(:disabled) { background: #e5e5e5 } .kcx:disabled { opacity: .4; cursor: default }
-.kcx svg, .kcgo svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
-.kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default }
-.kcwv { flex: none; width: 157px; height: 34px; margin-right: 6px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px); mask-image: linear-gradient(90deg, transparent, #000 28px) }
-.kcwvs { display: flex; align-items: center; gap: 4px; height: 100%; will-change: transform } .kcwv i { flex: none; width: 3px; min-height: 3px; border-radius: 2px; background: #6f6f6f }
-.kcwv i:nth-last-child(-n + 3) { background: #3a3a3a }
+/* большой микрофон рации — в подвале (24.11.2026) */
+.fm { display: grid; place-items: center }          /* микрофон — по центру подвала */
+.pb { --l: 0; flex: none; width: 52px; height: 52px; display: grid; place-items: center; border: 0; border-radius: 50%; background: linear-gradient(135deg, #4b8df8, #a35cf0); color: #fff; box-shadow: 0 6px 18px rgba(91, 108, 240, .35); cursor: pointer; transition: background .2s, box-shadow .15s; touch-action: manipulation }
+.pb svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round } .pb:disabled { opacity: .5; cursor: default }
+.fm.talk .pb { background: #e5484d; box-shadow: 0 0 0 calc(6px + var(--l) * 14px) rgba(229, 72, 77, .18), 0 0 0 calc(14px + var(--l) * 24px) rgba(229, 72, 77, .07) }
+.fm.wait .pb { background: #eef1f6; color: #6b7a99; box-shadow: none }
+.fmt { margin: 0; min-width: 0; font-size: 13px; text-align: left; white-space: nowrap } .fmt b { color: var(--hint) } .fmt.talk b { color: #c0392b; font-variant-numeric: tabular-nums }
+.fmt .fme { display: block; color: #b3261e; font-size: 11.5px; font-weight: 600; white-space: normal }
+.b.dr { background: #f2fbe9; border: 1.5px dashed #9ad07a; color: #4f7a3c } .bl { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #5aa33a }
 .bw { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 800; color: #c0392b }
 .lk { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
 .tx { display: flex; flex-direction: column; gap: 5px; max-height: max(340px, 52vh); overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px 4px 2px;
