@@ -8,6 +8,12 @@ import { useEdit } from '../ctx'
 import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf } from '../../utils/kpball'
 const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, final: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })          // text — всё сказанное (с черновиком), final — только готовые («чёрные») куски
 const ed = useEdit()
+// Темы шара (24.11.2026): белая (тест), «Космос» — тёмная панель со звёздами, слова светятся; «Как у Марии» — бежево-коричневая, цвета домашек
+// Марии Кобрыни. Выбор — кружками над шаром, помнится в браузере
+const THEMES = [{ k: 'white', t: 'Белая' }, { k: 'space', t: 'Космос' }, { k: 'book', t: 'Как у Марии' }]
+const TK = 'tma.ball.theme'
+const theme = ref((() => { try { const v = localStorage.getItem(TK); return THEMES.some((x) => x.k === v) ? v : 'white' } catch { return 'white' } })())
+watch(theme, (v) => { try { localStorage.setItem(TK, v) } catch { /* */ } })
 
 const own = computed(() => (Array.isArray(props.step.keys) && props.step.keys.length ? props.step.keys : null))
 const blocks = ref(own.value || quickBlocks(props.step.ideal))
@@ -105,7 +111,8 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(coverTm); clearI
 </script>
 
 <template>
-  <div class="kball" :class="{ idle }" @pointerdown.stop>
+  <div class="kball" :class="['th-' + theme, { idle }]" @pointerdown.stop>
+    <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
     <div ref="box" class="kbs" aria-hidden="true">
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
@@ -132,7 +139,26 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(coverTm); clearI
 <style scoped>
 .kball { margin: 4px 0 10px }
 /* тест — на белом (24.11.2026): весь экран упражнения с шаром белый, подвал — тоже (кроме зелёного / красного итога) */
-:global(.lp:has(.kball:not(.idle))), :global(.lp:has(.kball:not(.idle)) .body), :global(.lp:has(.kball:not(.idle)) .foot:not(.good):not(.bad)) { background: #fff !important }
+:global(.lp:has(.kball.th-white:not(.idle))), :global(.lp:has(.kball.th-white:not(.idle)) .body), :global(.lp:has(.kball.th-white:not(.idle)) .foot:not(.good):not(.bad)),
+:global(.lp:has(.kball.th-space:not(.idle))), :global(.lp:has(.kball.th-space:not(.idle)) .body), :global(.lp:has(.kball.th-space:not(.idle)) .foot:not(.good):not(.bad)) { background: #fff !important }
+/* «Как у Марии»: фон страницы домашки (#ffeccf), текст — тёмно-коричневый, акцент — оранжевый (tools/lib/kp-json.py → style.colors) */
+:global(.lp:has(.kball.th-book:not(.idle))), :global(.lp:has(.kball.th-book:not(.idle)) .body), :global(.lp:has(.kball.th-book:not(.idle)) .foot:not(.good):not(.bad)) { background: #ffeccf !important }
+.kball { position: relative }
+.kbth { position: absolute; right: 0; top: 0; z-index: 60; display: flex; gap: 5px }
+.kbt { width: 16px; height: 16px; padding: 0; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #d0d4da; cursor: pointer } .kbt.on { box-shadow: 0 0 0 2px #1a73e8 }
+.kbt.t-white { background: #fff } .kbt.t-space { background: radial-gradient(circle at 35% 35%, #4b5cff, #0b1020 70%) } .kbt.t-book { background: #f2dab5; border-color: #ffeccf }
+/* Космос: тёмная панель со звёздами, слова светятся */
+.th-space .kbs { border-radius: 18px; background: radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 78% 30%, #cfe1ff, transparent), radial-gradient(1.5px 1.5px at 44% 72%, #fff, transparent), radial-gradient(1px 1px at 88% 82%, #fff, transparent), radial-gradient(1px 1px at 22% 88%, #bcd, transparent), radial-gradient(1.5px 1.5px at 62% 12%, #fff, transparent), radial-gradient(1px 1px at 6% 52%, #dde, transparent), radial-gradient(ellipse at 50% 55%, #1b2a6b 0%, #0b1020 62%, #05070f 100%) }
+.th-space .kbw { color: #8fa2d6; background: rgba(255, 255, 255, .04) }
+.th-space .kbw.ok { background: rgba(43, 179, 74, .18); color: #8dffb6; text-shadow: 0 0 8px rgba(141, 255, 182, .7) }
+.th-space .kbw.hit { box-shadow: 0 0 0 2px #8dffb6, 0 0 18px rgba(141, 255, 182, .55) }
+.th-space .kbw.miss { background: rgba(255, 80, 80, .12); color: #ff9c9c; box-shadow: inset 0 0 0 1.5px rgba(255, 120, 120, .6) }
+.th-space .kbw.fx::before { color: #ffd27a }
+.th-space .kbth { right: 8px; top: 8px }
+/* Как у Марии: коричневые слова, засчитанное — оранжевым */
+.th-book .kbw { color: #9a6f4a } .th-book .kbw.ok { background: #fbe3bd; color: #351a05 } .th-book .kbw.hit { box-shadow: 0 0 0 2px #cd8a30 }
+.th-book .kbw.miss { background: #fff7ea; color: #b3261e } .th-book .kbp b { color: #cd8a30 } .th-book .kbbar { background: #f4dcb8 } .th-book .kbbar i { background: #cd8a30 }
+.th-book .kbl li { background: #fff4e2 } .th-book .kbl b { color: #7b4224 } .th-book .kbgo { border-color: #e6c08f; color: #7b4224; background: #fff8ee }
 .kbs { position: relative; height: 210px; overflow: hidden; user-select: none }
 .kball.idle .kbs { height: 170px }
 .kbw { position: absolute; transition: background .3s, color .3s, box-shadow .3s, filter .4s; left: 0; top: 0; padding: 3px 10px; border-radius: 12px; white-space: nowrap; font-size: 14px; font-weight: 700; color: #7b8494; will-change: transform }
