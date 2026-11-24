@@ -10,9 +10,10 @@ const props = defineProps({ step: { type: Object, required: true }, text: { type
 const ed = useEdit()
 // Темы шара (24.11.2026): белая (тест), «Космос» — тёмная панель со звёздами, слова светятся; «Как у Марии» — бежево-коричневая, цвета домашек
 // Марии Кобрыни. Выбор — кружками над шаром, помнится в браузере
-const THEMES = [{ k: 'white', t: 'Белая' }, { k: 'space', t: 'Космос' }, { k: 'book', t: 'Как у Марии' }]
+// «Сфера» (24.11.2026) — тёмная, как «Голосовая сфера слов»: блоки-пилюли, засчитанное — голубым свечением, только что засчитанное — розово-голубым, шар можно крутить мышью
+const THEMES = [{ k: 'sphere', t: 'Сфера' }, { k: 'white', t: 'Белая' }, { k: 'space', t: 'Космос' }, { k: 'book', t: 'Как у Марии' }]
 const TK = 'tma.ball.theme'
-const theme = ref((() => { try { const v = localStorage.getItem(TK); return THEMES.some((x) => x.k === v) ? v : 'white' } catch { return 'white' } })())
+const theme = ref((() => { try { const v = localStorage.getItem(TK); return THEMES.some((x) => x.k === v) ? v : 'sphere' } catch { return 'sphere' } })())
 watch(theme, (v) => { try { localStorage.setItem(TK, v) } catch { /* */ } })
 
 const own = computed(() => (Array.isArray(props.step.keys) && props.step.keys.length ? props.step.keys : null))
@@ -25,7 +26,7 @@ const missing = computed(() => blocks.value.map((b, i) => (ok.value.has(i) ? nul
 
 // ---------- сфера ----------
 const box = ref(null), els = []
-let pts = [], ya = 0, xa = 0, tY = null, tX = null, hitAt = 0, raf = 0, missI = 0, missTm = 0
+let pts = [], ya = 0, xa = 0.2, tY = null, tX = null, hitAt = 0, raf = 0, missI = 0, missTm = 0, drag = null, fq = [], fqTm = 0
 function layout() {
   const n = blocks.value.length
   pts = blocks.value.map((_, i) => { const y = 1 - ((i + 0.5) / n) * 2, r = Math.sqrt(1 - y * y), a = i * 2.399963; return { x: Math.cos(a) * r, y, z: Math.sin(a) * r } })
@@ -34,46 +35,60 @@ function face(i) { const p = pts[i]; if (!p) return; tY = Math.atan2(-p.x, p.z);
 const near = (c, t) => { let d = t - c; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return c + d * 0.08 }
 function draw() {
   const b = box.value; if (!b) return
-  if (tY !== null) { ya = near(ya, tY); xa = near(xa, tX); if (performance.now() - hitAt > 1700) { tY = tX = null; hit.value = -1 } } else if (!props.idle) ya += 0.004
-  const W = b.clientWidth, H = b.clientHeight, R = Math.min(H / 2 - 14, W / 3.2), cy = Math.cos(ya), sy = Math.sin(ya), cx = Math.cos(xa), sx = Math.sin(xa)
+  if (drag) { /* крутят мышью */ } else if (tY !== null) { ya = near(ya, tY); xa = near(xa, tX); if (performance.now() - hitAt > 1700) { tY = tX = null; hit.value = -1 } } else if (!props.idle) ya += 0.004
+  const sph = theme.value === 'sphere', W = b.clientWidth, H = b.clientHeight, R = sph ? Math.min(H / 2 - 22, W / 2.6) : Math.min(H / 2 - 14, W / 3.2), kx = sph ? 1.15 : 1.45, cy = Math.cos(ya), sy = Math.sin(ya), cx = Math.cos(xa), sx = Math.sin(xa)
   pts.forEach((p, i) => {
     const el = els[i]; if (!el) return
     const x1 = p.x * cy + p.z * sy, z1 = -p.x * sy + p.z * cy, y2 = p.y * cx - z1 * sx, z2 = p.y * sx + z1 * cx
-    const s = 0.62 + 0.38 * (z2 + 1) / 2 + (i === hit.value ? 0.35 : 0)
-    el.style.transform = `translate(${W / 2 + x1 * R * 1.45 - el.offsetWidth / 2}px, ${H / 2 + y2 * R - el.offsetHeight / 2}px) scale(${s.toFixed(3)})`
-    el.style.opacity = (0.25 + 0.75 * (z2 + 1) / 2).toFixed(2); el.style.zIndex = String(Math.round((z2 + 1) * 50))
+    const s = i === hit.value ? 1.32 : 0.65 + 0.55 * (z2 + 1) / 2
+    el.style.transform = `translate(${W / 2 + x1 * R * kx - el.offsetWidth / 2}px, ${H / 2 + y2 * R - el.offsetHeight / 2}px) scale(${s.toFixed(3)})`
+    el.style.opacity = i === hit.value ? '1' : (0.22 + 0.78 * (z2 + 1) / 2).toFixed(2); el.style.zIndex = i === hit.value ? '200' : String(Math.round((z2 + 1) * 50))
   })
 }
 function loop() { draw(); raf = requestAnimationFrame(loop) }
 function run() { cancelAnimationFrame(raf); if (props.idle) nextTick(draw); else raf = requestAnimationFrame(loop) }          // миниатюра — один кадр
 watch(blocks, () => { layout(); nextTick(draw) })
+watch(theme, () => nextTick(draw))
+/** крутить шар мышью или пальцем */
+function grab(e) {
+  if (props.idle || e.button > 0) return
+  drag = { x: e.clientX, y: e.clientY }; tY = tX = null
+  const mv = (ev) => { if (!drag) return; ya += (ev.clientX - drag.x) * 0.006; xa -= (ev.clientY - drag.y) * 0.006; drag = { x: ev.clientX, y: ev.clientY } }
+  const up = () => { drag = null; removeEventListener('pointermove', mv); removeEventListener('pointerup', up); removeEventListener('pointercancel', up) }
+  addEventListener('pointermove', mv); addEventListener('pointerup', up); addEventListener('pointercancel', up)
+}
 watch(() => props.idle, run)
 
 // ---------- сверка ----------
 function light(idx, ai) {
   const s = new Set(ok.value), a = new Set(byAi.value); let first = -1
-  for (const i of idx) if (!s.has(i)) { s.add(i); if (ai) a.add(i); if (first < 0) first = i }
-  if (first >= 0) { ok.value = s; byAi.value = a; face(first) }
+  const fresh = []
+  for (const i of idx) if (!s.has(i)) { s.add(i); if (ai) a.add(i); fresh.push(i) }
+  if (!fresh.length) return
+  ok.value = s; byAi.value = a
+  const wasIdle = !fq.length && !fqTm; fq.push(...fresh); if (wasIdle) faceNext()          // шар поворачивается к каждому засчитанному по очереди
 }
-// 24.11.2026: в чат — когда фраза распознана окончательно (готовый, «чёрный» кусок; 3+ новых слова) или кнопкой «Сверить сейчас».
-// Один запрос за раз: пока чат отвечает, новые куски копятся и уходят следующим запросом
+function faceNext() { fqTm = 0; const i = fq.shift(); if (i == null) return; face(i); if (fq.length) fqTm = setTimeout(faceNext, 1500) }
+// 24.11.2026: в чат — кнопкой «Отправить на проверку» (сказал, помолчал — отправил) и последний раз — по «Проверить».
+// Один запрос за раз: нажали, пока чат отвечает, — следующий уйдёт сразу после ответа
 let sentWords = 0, busy = false, again = false
 const asking = ref(false)
 const wc = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0)
+const sentN = ref(0)          // сколько слов уже ушло — для кнопки (есть ли новое)
+const hasNew = computed(() => wc(props.final || props.text) > sentN.value)
 function onText() {
   if (props.edit || props.idle) return
   light(matchLocal(props.text, blocks.value), false)          // мгновенно — дословные совпадения (и по черновику)
 }
-function onFinal() {
-  if (props.edit || props.idle || props.done) return
-  if (wc(props.final) - sentWords >= 3) cover()
-}
+/** «Отправить на проверку»: в чат — только новый кусок (сказанное после прошлой отправки), блоки — с пометкой уже засчитанных */
 async function cover() {
   if (busy) { again = true; return }
-  const text = (props.final || props.text).trim(); if (!text) return
-  busy = true; asking.value = true; sentWords = wc(text)
+  const all = (props.final || props.text).trim(), w = all ? all.split(/\s+/) : []
+  if (w.length <= sentWords) return
+  const before = w.slice(0, sentWords).join(' '), chunk = w.slice(sentWords).join(' ')
+  busy = true; asking.value = true; sentWords = sentN.value = w.length
   try {
-    const r = await coverBlocks({ id: props.step.id, question: props.step.text || '', blocks: blocks.value, text })
+    const r = await coverBlocks({ id: props.step.id, question: props.step.text || '', blocks: blocks.value, text: chunk, done: [...ok.value], before })
     const inf = { ...info.value }, at = Date.now()
     r.forEach((x, k) => { inf[x.i] = { said: x.said, fix: x.fix, note: x.note, at: at - k } })
     info.value = inf
@@ -82,10 +97,9 @@ async function cover() {
   finally { busy = false; asking.value = false; if (again) { again = false; if (wc(props.final || props.text) > sentWords) cover() } }
 }
 watch(() => props.text, onText)
-watch(() => props.final, onFinal)
 watch(() => props.done, async (d) => {
   clearInterval(missTm)
-  if (!d) { ok.value = new Set(); byAi.value = new Set(); info.value = {}; sentWords = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; return }
+  if (!d) { ok.value = new Set(); byAi.value = new Set(); info.value = {}; sentWords = sentN.value = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; return }
   if (wc(props.text) > sentWords) await cover()          // последняя сверка — по всему ответу
   missTm = setInterval(() => { const m = blocks.value.map((_, i) => i).filter((i) => !ok.value.has(i)); if (m.length) { face(m[missI++ % m.length]); hit.value = -1 } }, 1800)          // по очереди — что не прозвучало
 })
@@ -94,7 +108,7 @@ watch(() => props.done, async (d) => {
 const cutting = ref(false), cutErr = ref('')
 async function load() {
   if (own.value || props.idle || props.edit) return
-  try { const b = await splitBlocks({ id: props.step.id, question: props.step.text || '', ideal: props.step.ideal || '' }); blocks.value = b; fast.value = false; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sentWords = 0; onText() }
+  try { const b = await splitBlocks({ id: props.step.id, question: props.step.text || '', ideal: props.step.ideal || '' }); blocks.value = b; fast.value = false; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sentWords = sentN.value = 0; onText() }
   catch { /* остаются быстрые блоки; статус — в подвале */ }
 }
 /** правка: Gemini режет эталон заново — блоки пишутся в экран (keys) */
@@ -107,19 +121,19 @@ function dropOwn() { delete props.step.keys; blocks.value = quickBlocks(props.st
 watch(() => props.step.keys, (k) => { if (Array.isArray(k) && k.length) { blocks.value = k; fast.value = false } })
 
 onMounted(() => { layout(); run(); if (!props.idle && !props.edit) { netOf(props.step.id); load() } })
-onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(coverTm); clearInterval(missTm) })
+onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInterval(missTm) })
 </script>
 
 <template>
   <div class="kball" :class="['th-' + theme, { idle }]" @pointerdown.stop>
     <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
-    <div ref="box" class="kbs" aria-hidden="true">
+    <div ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
     <div class="kbp" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
       <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
       <small>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
-      <button v-if="!edit && !idle && !done" type="button" class="kbgo" :disabled="asking || !text.trim()" :title="'Отправить сказанное в чат через мост — какие блоки раскрыты и где ошибки'" @click="cover">{{ asking ? 'Чат сверяет…' : 'Сверить сейчас' }}</button>
+      <button v-if="!edit && !idle && !done" type="button" class="kbgo" :disabled="asking || !hasNew" :title="'Отправить всё сказанное в чат через мост: какие смысловые блоки засчитаны и где ошибки'" @click="cover"><i class="kbdot" />{{ asking ? 'Чат сверяет…' : 'Отправить на проверку' }}</button>
     </div>
     <!-- что засчитал чат: блок ✓ — что ты сказал → как правильно (что исправлено); новое — сверху -->
     <ul v-if="got.length && !edit && !idle" class="kbl">
@@ -140,7 +154,8 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(coverTm); clearI
 .kball { margin: 4px 0 10px }
 /* тест — на белом (24.11.2026): весь экран упражнения с шаром белый, подвал — тоже (кроме зелёного / красного итога) */
 :global(.lp:has(.kball.th-white:not(.idle))), :global(.lp:has(.kball.th-white:not(.idle)) .body), :global(.lp:has(.kball.th-white:not(.idle)) .foot:not(.good):not(.bad)),
-:global(.lp:has(.kball.th-space:not(.idle))), :global(.lp:has(.kball.th-space:not(.idle)) .body), :global(.lp:has(.kball.th-space:not(.idle)) .foot:not(.good):not(.bad)) { background: #fff !important }
+:global(.lp:has(.kball.th-space:not(.idle))), :global(.lp:has(.kball.th-space:not(.idle)) .body), :global(.lp:has(.kball.th-space:not(.idle)) .foot:not(.good):not(.bad)),
+:global(.lp:has(.kball.th-sphere:not(.idle))), :global(.lp:has(.kball.th-sphere:not(.idle)) .body), :global(.lp:has(.kball.th-sphere:not(.idle)) .foot:not(.good):not(.bad)) { background: #fff !important }
 /* «Как у Марии»: фон страницы домашки (#ffeccf), текст — тёмно-коричневый, акцент — оранжевый (tools/lib/kp-json.py → style.colors) */
 :global(.lp:has(.kball.th-book:not(.idle))), :global(.lp:has(.kball.th-book:not(.idle)) .body), :global(.lp:has(.kball.th-book:not(.idle)) .foot:not(.good):not(.bad)) { background: #ffeccf !important }
 .kball { position: relative }
@@ -181,5 +196,22 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(coverTm); clearI
 .kbc { height: 30px; padding: 0 12px; border: 1px solid #d6e4fb; border-radius: 15px; background: #fff; color: #2f6fe0; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer } .kbc:disabled { opacity: .5; cursor: default }
 .kbc.x { border-color: #f1c7c7; color: #b3261e }
 .kbm.er { margin: 0 }
+/* «Сфера» (24.11.2026): тёмная панель с ореолом, как «Голосовая сфера слов» */
+.th-sphere { padding: 12px 14px 14px; border-radius: 18px; background: #090b10 radial-gradient(circle at 50% 42%, #161d2f 0%, #090b10 72%); color: #f1f5f9 }
+.th-sphere .kbs { height: 290px; cursor: grab; touch-action: none } .th-sphere .kbs:active { cursor: grabbing } .kball.th-sphere.idle .kbs { height: 170px }
+.kbhalo { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; margin: -120px 0 0 -120px; border-radius: 50%; background: radial-gradient(circle, rgba(56, 189, 248, .14) 0%, rgba(244, 114, 182, .05) 45%, transparent 70%); filter: blur(8px); pointer-events: none }
+.th-sphere .kbw { padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .06); background: rgba(255, 255, 255, .03); color: #f1f5f9; font-size: 15px; font-weight: 500; letter-spacing: .02em }
+.th-sphere .kbw.ok { color: #7dd3fc; background: rgba(56, 189, 248, .16); border-color: rgba(56, 189, 248, .55); box-shadow: 0 0 18px rgba(56, 189, 248, .3) }
+.th-sphere .kbw.hit { color: #fff; font-weight: 700; background: linear-gradient(135deg, rgba(56, 189, 248, .45), rgba(244, 114, 182, .45)); border-color: #f472b6; box-shadow: 0 0 28px rgba(244, 114, 182, .75), 0 0 55px rgba(56, 189, 248, .65) }
+.th-sphere .kbw.miss { color: #fda4af; background: rgba(251, 113, 133, .1); border-color: rgba(251, 113, 133, .5); box-shadow: none }
+.th-sphere .kbw.fx::before { color: #fbbf24 } .th-sphere .kbw.ai::after { color: #38bdf8 }
+.th-sphere .kbth { right: 10px; top: 10px }
+.th-sphere .kbp b { color: #7dd3fc } .th-sphere .kbbar { background: rgba(255, 255, 255, .08) } .th-sphere .kbbar i { background: linear-gradient(90deg, #38bdf8, #f472b6) } .th-sphere .kbp small { color: #8b9bb4 }
+.th-sphere .kbgo { height: 32px; padding: 0 14px; display: inline-flex; align-items: center; gap: 7px; border-color: rgba(56, 189, 248, .4); border-radius: 12px; background: rgba(56, 189, 248, .15); color: #7dd3fc }
+.kbdot { display: none } .th-sphere .kbdot { display: block; width: 7px; height: 7px; border-radius: 50%; background: currentColor } .th-sphere .kbgo:disabled .kbdot { animation: kbpulse 1.2s infinite ease-in-out }
+@keyframes kbpulse { 0%, 100% { transform: scale(.9); opacity: .6 } 50% { transform: scale(1.45); opacity: 1 } }
+.th-sphere .kbl li { background: rgba(255, 255, 255, .05) } .th-sphere .kbl li.fx { background: rgba(251, 191, 36, .08) } .th-sphere .kbl b { color: #7dd3fc } .th-sphere .kbs1 { color: #cbd5e1 } .th-sphere .kbf { color: #fbbf24 } .th-sphere .kbl small { color: #8b9bb4 }
+.th-sphere .kbm { color: #fda4af } .th-sphere .kbe { background: rgba(255, 255, 255, .05) } .th-sphere .kbe small { color: #8b9bb4 }
+.kbt.t-sphere { background: radial-gradient(circle at 35% 35%, #f472b6, #38bdf8 45%, #090b10 75%) }
 @media (prefers-reduced-motion: reduce) { .kbw { transition: none } }
 </style>
