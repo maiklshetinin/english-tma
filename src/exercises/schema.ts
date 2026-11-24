@@ -40,7 +40,11 @@ const EXTRA: Record<string, SKey[]> = {
     { key: 'audio', type: 'file', label: 'Звук вопроса (озвучка)' },
     { key: 'engine', type: 'select', options: ['api'], label: 'Проверка напрямую через Gemini API (нет — через мост)' },
   ],
-  talk: [{ key: 'busuu', type: 'bool', label: 'Рация «как в Busuu» — свои настройки курса' }],
+  talk: [{ key: 'busuu', type: 'bool', label: 'Рация «как в Busuu» — свои настройки курса' },
+    { key: 'exam', type: 'bool', label: 'Собеседование · рация: вопрос (text), эталон (ideal) и звезда — в роль консула метками {question}, {reference}, {star}' },
+    { key: 'ideal', type: 'text', label: 'Эталон ответа — консул сверяет с ним (собеседование)' },
+    { key: 'star', type: 'bool', label: 'Красная звезда — ответ знать обязательно (собеседование)' },
+    { key: 'n', type: 'number', label: 'Номер вопроса, как в домашке (собеседование)' }],
 }
 // обязательные у экрана (кроме kind)
 const REQ: Record<string, string[]> = { kp: ['text'], talk: [], stt: [] }

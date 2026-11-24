@@ -16,7 +16,7 @@
 import { aiIcon } from '../../utils/ai'
 import { ask, say, askText, dialog } from '../../composables/useDialog'
 import { setPresets, PRESET_TPLS } from '../../exercises/presets'
-import { presetJson, presetFromJson, presetKeys } from '../../exercises/presetJson'
+import { presetJson, presetFromJson, presetKeys, PRESET_FORM } from '../../exercises/presetJson'
 import { assemble } from '../../exercises/assemble'
 import { requests } from '../../exercises/requests'
 import { useAuthStore } from '../../stores/auth'
@@ -97,8 +97,8 @@ function preOpen(tpl) { tray.value = null; preT.value = tpl; preText.value = JSO
 // «Запрос в API» (24.11.2026): что уйдёт по сети с этими общими настройками; JSON не разбирается — последний верный
 let preLast = []
 const preReqs = computed(() => { try { return (preLast = requests({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), ...preForm.value })) } catch { return preLast } })
-const preForm = computed(() => ({ kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(preT.value === 'kpapi' ? { engine: 'api' } : preT.value === 'kpfile' ? { dic: 'file' } : preT.value === 'talkptt2' ? { ptt: true, avatar: true, busuu: true } : preT.value === 'talkptt' ? { ptt: true, avatar: true } : preT.value === 'talkava' ? { avatar: true } : {}) }))
-const preAsm = computed(() => { try { return assemble({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(preT.value === 'kpapi' ? { engine: 'api' } : preT.value === 'kpfile' ? { dic: 'file' } : preT.value === 'talkptt2' ? { ptt: true, avatar: true, busuu: true } : preT.value === 'talkptt' ? { ptt: true, avatar: true } : preT.value === 'talkava' ? { avatar: true } : {}) }) } catch { return { parts: [], warn: ['JSON пока не разбирается'], own: [] } } })
+const preForm = computed(() => ({ kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(PRESET_FORM[preT.value] ? (({ kind: _k, ...f }) => f)(PRESET_FORM[preT.value]) : {}) }))          // форма шаблона — из presetJson.ts (PRESET_FORM)
+const preAsm = computed(() => { try { return assemble({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), ...preForm.value }) } catch { return { parts: [], warn: ['JSON пока не разбирается'], own: [] } } })
 function preSave() {
   const r = presetFromJson(preT.value, preText.value); if (r.error) { preErr.value = r.error; return }
   const all = { ...(doc.presets ?? {}) }
@@ -569,7 +569,7 @@ const XGROUPS_STD = (() => {
     { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
-  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpfile', 'kpapi', 'talk', 'talkava', 'talkptt', 'stt'])          // kp, talkava и talkptt — на своей вкладке «Karta Polaka»; talkptt2 (копия рации) — в «Как в Busuu», в «Речи»
+  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpfile', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkexam', 'stt'])          // kp, talkava и talkptt — на своей вкладке «Karta Polaka»; talkptt2 (копия рации) — в «Как в Busuu», в «Речи»
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
@@ -582,7 +582,7 @@ const XGROUPS_BOOK = [
 // «Как в учебнике» (18.11.2026) — те же 8 типов, но вид максимально как страница учебника (bs: 'page'); Настины остаются отдельной вкладкой
 const XGROUPS_PAGE = XGROUPS_BOOK.map(g => ({ ...g, k: 'p' + g.k, items: g.ids.map(id => TPL.find(v => v.id === 'pg_' + id)).filter(Boolean) }))
 // «Karta Polaka» (19.11.2026) — упражнения курса к собеседованию: ответ своими словами, проверяет Gemini по эталону
-const XGROUPS_KP = [{ k: 'S', t: 'Ответ по смыслу', d: 'проверяет ИИ по эталону', items: TPL.filter(v => v.id === 'kp') }, { k: 'S', t: 'Ответ по смыслу · целым аудио', d: 'запись целиком → Gemini, не кусками · тест', items: TPL.filter(v => v.id === 'kpfile') }, { k: 'S', t: 'Ответ по смыслу · Gemini API', d: 'напрямую, без моста · тест', items: TPL.filter(v => v.id === 'kpapi') }, { k: 'S', t: 'Разговор с Gemini', d: 'живой голос сразу в Gemini, не текст', items: TPL.filter(v => v.id === 'talk') }, { k: 'S', t: 'Разговор с персонажем', d: 'тот же разговор, персонаж говорит · тест', items: TPL.filter(v => v.id === 'talkava') }, { k: 'S', t: 'Разговор · рация', d: 'нажал — говоришь, нажал — ответ · тест', items: TPL.filter(v => v.id === 'talkptt') }, { k: 'S', t: 'Транскрипция', d: 'сказать — увидеть текст · эксперимент', items: TPL.filter(v => v.id === 'stt') }]
+const XGROUPS_KP = [{ k: 'S', t: 'Ответ по смыслу', d: 'проверяет ИИ по эталону', items: TPL.filter(v => v.id === 'kp') }, { k: 'S', t: 'Ответ по смыслу · целым аудио', d: 'запись целиком → Gemini, не кусками · тест', items: TPL.filter(v => v.id === 'kpfile') }, { k: 'S', t: 'Ответ по смыслу · Gemini API', d: 'напрямую, без моста · тест', items: TPL.filter(v => v.id === 'kpapi') }, { k: 'S', t: 'Разговор с Gemini', d: 'живой голос сразу в Gemini, не текст', items: TPL.filter(v => v.id === 'talk') }, { k: 'S', t: 'Разговор с персонажем', d: 'тот же разговор, персонаж говорит · тест', items: TPL.filter(v => v.id === 'talkava') }, { k: 'S', t: 'Разговор · рация', d: 'нажал — говоришь, нажал — ответ · тест', items: TPL.filter(v => v.id === 'talkptt') }, { k: 'S', t: 'Собеседование · рация', d: 'консул спрашивает вопрос из домашки, оценка речи · тест', items: TPL.filter(v => v.id === 'talkexam') }, { k: 'S', t: 'Транскрипция', d: 'сказать — увидеть текст · эксперимент', items: TPL.filter(v => v.id === 'stt') }]
 const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'kp', t: 'Karta Polaka', exp: true }]
 const trayTab = ref((() => { try { const v = localStorage.getItem('ce.trayTab'); return TRAY_TABS.some(b => b.k === v) ? v : 'app' } catch { return 'app' } })())          // была вкладка «Мои» (конструктор убран 18.11.2026) — откроется «Как в Busuu»
 watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })

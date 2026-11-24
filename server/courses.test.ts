@@ -131,6 +131,17 @@ await C.put(me, 'k20', { ...course, presets: { kpapi: { prompt: 'Общий пр
     && p.talkptt.guard === '' && p.talkptt.lock === 'L' && p.talkptt.voice === 'Puck' && !('ptt' in p.talkptt) && !p.nope) }
 { const p = (await C.get('k20')).presets as any
   ok('копия рации для «Как в Busuu»: свои настройки курса, не мешают «рации»; служебный флаг не хранится', p.talkptt2.guard === 'Busuu' && !('busuu' in p.talkptt2) && !('ptt' in p.talkptt2) && p.talkptt.guard === '') }
+// 24.11.2026: испанский, тема, чем диктовать, свои поля запросов — сохраняются; «Собеседование · рация» — вопрос, эталон, звезда, номер
+await C.put(me, 'k21', { ...course, items: [{ id: 'l1', type: 'lesson', title: 'L', steps: [
+  { id: 'a1', kind: 'kp', text: 'Q', ideal: 'A', lang: 'es-ES', topic: 'Entrevista', dicModel: 'browser', request: { check: { generationConfig: { topP: 0.9 } } } },
+  { id: 'a2', kind: 'talk', text: 'Kiedy?', ideal: '**6** grudnia', exam: true, star: true, n: 3, lang: 'es-ES', request: { live: { generationConfig: { maxOutputTokens: 100 } } } },
+  { id: 'a3', kind: 'talk', text: 'x', ideal: 'не берём без exam', request: 'строка — нет' }] }],
+  presets: { talkexam: { prompt: 'Rola {question} / {reference}', exam: true, ideal: 'нет', request: { eval: { a: 1 } } } } })
+{ const c = await C.get('k21') as any, [a1, a2, a3] = c.items[0].steps
+  ok('Ответ по смыслу: es-ES, тема, диктовка, request сохраняются', a1.lang === 'es-ES' && a1.topic === 'Entrevista' && a1.dicModel === 'browser' && a1.request.check.generationConfig.topP === 0.9)
+  ok('Собеседование · рация: exam (и ptt), эталон, звезда, номер, request', a2.exam === true && a2.ptt === true && a2.ideal === '**6** grudnia' && a2.star === true && a2.n === 3 && a2.lang === 'es-ES' && a2.request.live.generationConfig.maxOutputTokens === 100)
+  ok('обычный разговор: эталон не берём; request не объект — нет', !('ideal' in a3) && !('request' in a3))
+  ok('настройки «Собеседования» в курсе: роль-шаблон и request; служебный флаг и эталон — нет', c.presets.talkexam.prompt === 'Rola {question} / {reference}' && c.presets.talkexam.request.eval.a === 1 && !('exam' in c.presets.talkexam) && !('ideal' in c.presets.talkexam)) }
 ok('удалить, потом — 404', (await C.remove('k1'), !store.has('courses/k1')) && await code(C.get('k1')) === 404)
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nвсё ок')

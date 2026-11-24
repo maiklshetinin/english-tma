@@ -9,6 +9,7 @@ import type { PresetTpl } from './presets'
 export const PRESET_FORM: Record<PresetTpl, Record<string, unknown>> = {
   kp: { kind: 'kp' }, kpfile: { kind: 'kp', dic: 'file' }, kpapi: { kind: 'kp', engine: 'api' },
   talk: { kind: 'talk' }, talkava: { kind: 'talk', avatar: true }, talkptt: { kind: 'talk', avatar: true, ptt: true }, talkptt2: { kind: 'talk', avatar: true, ptt: true, busuu: true },
+  talkexam: { kind: 'talk', avatar: true, ptt: true, exam: true },
 }
 const isKp = (tpl: PresetTpl) => PRESET_FORM[tpl].kind === 'kp'
 const formOnly = (tpl: PresetTpl) => { const { kind: _k, ...f } = PRESET_FORM[tpl]; return f }

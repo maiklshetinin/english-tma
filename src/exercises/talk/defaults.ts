@@ -50,6 +50,14 @@ export const LANGS = {
 export type Lang = keyof typeof LANGS
 export const langOf = (v: unknown): Lang => (typeof v === 'string' && v in LANGS ? v as Lang : LANG)
 /** умолчания текста для языка (польские — ниже, у них свои константы) */
+// «Собеседование · рация» (24.11.2026): консул спрашивает ОДИН вопрос из домашки и сверяет с эталоном — у экрана только вопрос (text),
+// эталон (ideal) и звезда (star); роль — общий шаблон с метками {question}, {reference}, {star} (правится на плитке курса для всех экранов)
+export const EXAM_PROMPT = 'Jesteś konsulem RP. Prowadzisz rozmowę kwalifikacyjną na Kartę Polaka. Mówisz tylko po polsku, spokojnie i życzliwie. ' +
+  'W tej rozmowie omawiasz tylko jedno pytanie: «{question}». Na początku zadaj to pytanie (możesz je lekko przeformułować) i czekaj na odpowiedź. ' +
+  'Porównuj odpowiedź z wzorcową odpowiedzią poniżej: jeśli brakuje czegoś ważnego — dopytaj (najwyżej 2–3 pytania pomocnicze) albo krótko podpowiedz. ' +
+  'Jeśli rozmówca robi błąd językowy — delikatnie popraw jednym zdaniem. {star}' +
+  'Na koniec krótko oceń odpowiedź: co było dobrze, czego zabrakło — i powiedz, że można przejść do następnego pytania.\n\nWzorcowa odpowiedź:\n{reference}'
+export const EXAM_STAR = 'To pytanie jest bardzo ważne — uczeń musi znać odpowiedź. '
 const defsOf = (l: Lang) => (l === 'pl-PL' ? { prompt: DEF_PROMPT, lock: LOCK, opener: OPENER } : { prompt: LANGS[l].prompt, lock: LANGS[l].lock, opener: LANGS[l].opener })
 
 /** «Оценивать речь» (после разговора — запись ученика в Flash Lite): промпт, {lang} — язык словами */
@@ -78,7 +86,7 @@ const okTemp = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 
 /** Действующие настройки экрана: свои поля поверх умолчаний */
 /** шаблон экрана — по нему настройки курса (presets): рация, с персонажем, обычный */
-export const talkTpl = (s: any) => (s?.ptt ? (s.busuu ? 'talkptt2' : 'talkptt') : s?.avatar ? 'talkava' : 'talk')
+export const talkTpl = (s: any) => (s?.exam ? 'talkexam' : s?.ptt ? (s.busuu ? 'talkptt2' : 'talkptt') : s?.avatar ? 'talkava' : 'talk')
 /** Действующие настройки: умолчания кода ← настройки упражнения в курсе (src/exercises/presets.ts) ← свои поля экрана */
 export function talkCfg(s: any): TalkCfg {
   const own: any = {}
@@ -92,7 +100,7 @@ function talkCode(s: any): TalkCfg {
   const lang = langOf(s?.lang), d = defsOf(lang)
   return {
     lang,
-    prompt: ownT(s, 'prompt')?.trim() ?? d.prompt,
+    prompt: ownT(s, 'prompt')?.trim() ?? (s?.exam ? EXAM_PROMPT : d.prompt),
     lock: ownT(s, 'lock') ?? d.lock,
     opener: ownT(s, 'opener') ?? d.opener,
     voice: txt(s?.voice).trim() || DEF.voice,
@@ -113,7 +121,7 @@ function talkCode(s: any): TalkCfg {
 export function talkFields(raw: any): Partial<TalkCfg> {
   const o: any = {}
   if (!raw || typeof raw !== 'object') return o
-  const form = { ptt: raw.ptt, avatar: raw.avatar, busuu: raw.busuu }
+  const form = { ptt: raw.ptt, avatar: raw.avatar, busuu: raw.busuu, exam: raw.exam }
   const x: any = talkCode(raw), d0: any = talkCfg(form)
   const d: any = talkCfg({ ...form, lang: x.lang })          // умолчания роли / замка / реплики — для языка из JSON
   for (const k of Object.keys(x)) {
@@ -127,6 +135,11 @@ export function talkFields(raw: any): Partial<TalkCfg> {
 
 /** Роль целиком для Live-модели: замок языка + роль */
 export const talkSystem = (c: Pick<TalkCfg, 'lock' | 'prompt'>) => [c.lock.trim(), c.prompt.trim()].filter(Boolean).join(' ')
+/** эталон без разметки оформления (**жирный**, ==термин==, _курсив_, «• ») — так его видит модель (как kpPlain в utils/ai.js) */
+const plainRef = (t: unknown) => String(t ?? '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1').replace(/(^|[^\p{L}\d])_(.+?)_(?![\p{L}\d])/gu, '$1$2').replace(/^• /gm, '- ').trim()
+/** Роль, которая уходит в Live-модель: замок + роль, метки {question}, {reference}, {star} — из экрана (собеседование; у остальных их нет) */
+export const talkRole = (c: Pick<TalkCfg, 'lock' | 'prompt'>, s?: { text?: string; ideal?: string; star?: boolean } | null) =>
+  talkSystem(c).replace(/\{(question|reference|star)\}/g, (_m, k) => (k === 'question' ? String(s?.text ?? '').trim() || '‹вопрос›' : k === 'reference' ? plainRef(s?.ideal) || '‹эталон›' : s?.star ? EXAM_STAR : ''))
 
 /** умолчания кода для формы (без настроек курса) — от них считаются отличия настроек упражнения курса (presetJson.ts) */
 export const talkDefaults = (form: any): TalkCfg => talkCode(form)

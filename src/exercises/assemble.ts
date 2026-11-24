@@ -2,7 +2,7 @@
 // целым аудио, разговор, рация). Те же функции, что и при проверке (kpCfg, fill, talkCfg, talkSystem), — показ не расходится с отправкой.
 // Вместо ответа ученика и т. п. — метки ‹…›. warn — чего не хватает, чтобы работало как задумано.
 import { kpCfg, kpApi, kpFile, kpShown, fill, langRu } from './kp/defaults'
-import { talkCfg, talkSystem, LANGS } from './talk/defaults'
+import { talkCfg, talkSystem, talkRole, LANGS } from './talk/defaults'
 
 export interface Part { to: string; text: string }
 const plain = (t: unknown) => String(t ?? '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1').replace(/^• /gm, '- ')
@@ -45,7 +45,7 @@ export function assemble(raw: any): { parts: Part[]; warn: string[]; own: string
     }
   } else if (raw.kind === 'talk') {
     const c = talkCfg(raw)
-    parts.push({ to: 'Gemini Live · роль (systemInstruction): lock + prompt', text: talkSystem(c) })
+    parts.push({ to: 'Gemini Live · роль (systemInstruction): lock + prompt', text: talkRole(c, raw) })
     parts.push({ to: 'Первая реплика (от ученика, чтобы Gemini начала): opener', text: c.opener || '‹нет — Gemini ждёт, пока ученик заговорит›' })
     parts.push({ to: 'Голос, модель, язык (не текст)', text: `${c.voice} · ${c.model} · ${c.lang}` })
     if (raw.ptt) parts.push({ to: 'Рация: Gemini ответила не на языке разговора — отправим guard', text: c.guard || '‹пусто — не просим›' })

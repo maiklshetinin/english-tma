@@ -18,7 +18,7 @@ import SpeechReport from '../../components/SpeechReport.vue'
 import TalkAvatar from './TalkAvatar.vue'
 import { assessSpeech, wavOf } from '../../utils/speech'
 import J from './talk.json'
-import { LANGS, talkCfg, talkSystem } from './defaults'
+import { LANGS, talkCfg, talkRole } from './defaults'
 import { tp, setPick, setVoice as setVPick, setEval, loadModels } from './prefs'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -37,7 +37,7 @@ const editor = inEditor()
 const pick = computed(() => (editor ? '' : tp.pick)), vpick = computed(() => (editor ? '' : tp.voice))
 const vSel = computed(() => vpick.value || voice.value)
 // в редакторе: совпало с умолчанием (код ← настройки курса) — поле экрана убрать, иначе записать
-const base = () => talkCfg({ ptt: props.step.ptt, avatar: props.step.avatar, busuu: props.step.busuu, lang: props.step.lang })
+const base = () => talkCfg({ ptt: props.step.ptt, avatar: props.step.avatar, busuu: props.step.busuu, exam: props.step.exam, lang: props.step.lang })
 function onVoice(v) { if (editor) setF('voice', v === base().voice ? '' : v); else setVPick(v === voice.value ? '' : v) }
 function onModel(v) { if (editor) setF('model', (v || 'auto') === base().model ? '' : v || 'auto'); else setPick(v === lessonModel.value ? '' : v) }
 // надписи на «таблетках» подвала — коротко (список под ними — полный)
@@ -87,7 +87,7 @@ async function start() {
   usedV.value = vpick.value || voice.value
   const c = cfg.value
   if (ptt.value) startTr(key)
-  sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: talkSystem(c), opener: c.opener, manual: ptt.value,
+  sess = startTalk({ key, model: m, voice: usedV.value, lang: lang.value, system: talkRole(c, props.step), opener: c.opener, manual: ptt.value,
     silenceMs: c.silenceMs, endSens: c.endSens, temperature: c.temperature, noiseSuppression: c.noiseSuppression, extra: reqOf(c, 'live'), rec: evalOn.value ? onRec : null, on: {
     state: (s, info) => {
       if (s === 'live' && info) { note.value = info; return }

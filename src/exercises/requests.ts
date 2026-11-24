@@ -3,7 +3,7 @@
 // с подставленными промптами и своими полями из request — показ не расходится с отправкой.
 // Вместо ответа ученика, звука и т. п. — метки ‹…›; ключ API не показываем.
 import { kpCfg, kpReady, kpApi, kpFile, fill, DIC_AUTO } from './kp/defaults'
-import { talkCfg, talkSystem } from './talk/defaults'
+import { talkCfg, talkRole } from './talk/defaults'
 import { liveSetup, sttSetup, micOpts, audioMsg, LIVE_URL, STENO, dicKind } from '../utils/live'
 import { checkBody, checkText } from '../utils/kpcheck'
 import { bridgeBody, bridgeChat, kpPlain } from '../utils/ai'
@@ -55,7 +55,7 @@ export function requests(raw: any): Req[] {
     }
   } else if (raw.kind === 'talk') {
     const c: any = talkCfg(raw), ptt = raw.ptt === true
-    out.push({ to: 'Разговор · Live API', via: ws, body: liveSetup({ model: auto(c.model, 'auto: модель из подвала или свежая Live-модель ключа'), system: talkSystem(c), voice: c.voice, lang: c.lang, temperature: c.temperature, silenceMs: c.silenceMs, endSens: c.endSens, manual: ptt, extra: reqOf(c, 'live') }), own: 'live',
+    out.push({ to: 'Разговор · Live API', via: ws, body: liveSetup({ model: auto(c.model, 'auto: модель из подвала или свежая Live-модель ключа'), system: talkRole(c, raw), voice: c.voice, lang: c.lang, temperature: c.temperature, silenceMs: c.silenceMs, endSens: c.endSens, manual: ptt, extra: reqOf(c, 'live') }), own: 'live',
       note: 'Модель не приняла язык и паузы — переподключаемся без них' })
     if (c.opener) out.push({ to: 'Первая реплика (чтобы Gemini начала)', via: 'WebSocket, второе сообщение', body: { realtimeInput: { text: c.opener } } })
     out.push({ to: 'Голос ученика', via: 'WebSocket, каждые 100 мс' + (ptt ? ' — пока зажата кнопка' : ''), body: ptt ? [{ realtimeInput: { activityStart: {} } }, audioMsg(PCM), { realtimeInput: { activityEnd: {} } }] : audioMsg(PCM) })

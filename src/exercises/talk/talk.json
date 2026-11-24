@@ -6,7 +6,8 @@
     "talk",
     "talkava",
     "talkptt",
-    "talkptt2"
+    "talkptt2",
+    "talkexam"
   ],
   "fields": {
     "head": {
@@ -123,6 +124,10 @@
       "L"
     ],
     "talkptt2": [
+      "S",
+      "L"
+    ],
+    "talkexam": [
       "S",
       "L"
     ]

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { stepJson, applyStepJson, stepsFromJson, tplOf, TEMPLATES, type Step } from '../../utils/lesson'
-import { DEF_PROMPT, LOCK, OPENER, EN_PROMPT, EN_LOCK, EN_OPENER, LANGS, EVAL_PROMPT, EVAL_ASK, talkCfg, talkFields, talkSystem } from './defaults'
+import { DEF_PROMPT, LOCK, OPENER, EN_PROMPT, EN_LOCK, EN_OPENER, LANGS, EVAL_PROMPT, EVAL_ASK, talkCfg, talkFields, talkSystem, talkRole, EXAM_PROMPT, EXAM_STAR } from './defaults'
+import { requests } from '../requests'
 
 // «Разговор с Gemini» (только польский): JSON экрана показывает всё, что уходит в Live-модель, а в экране хранятся только отличия (20.11.2026)
 describe('«Разговор с Gemini»: JSON экрана', () => {
@@ -63,5 +64,29 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     expect(s.kind).toBe('talk'); expect(s.avatar).toBe(true); expect(tplOf(s)).toBe('talkava'); expect(tplOf({ id: 'x', kind: 'talk' })).toBe('talk')
     expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), silenceMs: 1500 }))).toBe('')
     expect(s.avatar).toBe(true); expect(s.silenceMs).toBe(1500)
+  })
+})
+
+describe('«Собеседование · рация» (24.11.2026)', () => {
+  it('из JSON: вопрос, эталон, звезда, номер — у экрана; шаблон talkexam; роль — шаблон курса', () => {
+    const s: any = stepsFromJson(JSON.stringify([{ kind: 'talk', exam: true, text: 'Kiedy obchodzimy Mikołajki?', ideal: '==Mikołajki== są **6 grudnia**.\n• prezenty', star: true, n: 2 }]))!.steps[0]
+    expect(s).toMatchObject({ exam: true, ptt: true, star: true, n: 2, text: 'Kiedy obchodzimy Mikołajki?' })
+    expect(tplOf(s)).toBe('talkexam'); expect(TEMPLATES.some((x) => x.id === 'talkexam')).toBe(true)
+    const c = talkCfg(s)
+    expect(c.prompt).toBe(EXAM_PROMPT)
+    const role = talkRole(c, s)
+    expect(role).toContain('«Kiedy obchodzimy Mikołajki?»'); expect(role).toContain('Mikołajki są 6 grudnia.\n- prezenty'); expect(role).toContain(EXAM_STAR)
+    expect(role).not.toMatch(/\{(question|reference|star)\}/)
+    expect(talkRole(c, { ...s, star: false })).not.toContain(EXAM_STAR)
+  })
+  it('обычная рация — роль без меток, как раньше; в «Запросе в API» — роль с вопросом', () => {
+    expect(talkRole(talkCfg({ ptt: true }), { text: 'x' })).toBe(talkSystem(talkCfg({ ptt: true })))
+    const r = requests({ kind: 'talk', exam: true, ptt: true, text: 'Q?', ideal: 'A' })
+    expect((r[0].body as any).setup.systemInstruction.parts[0].text).toContain('«Q?»')
+  })
+  it('JSON экрана: эталон и звезда остаются при «Применить»', () => {
+    const s: any = stepsFromJson(JSON.stringify([{ kind: 'talk', exam: true, text: 'Q', ideal: 'A', star: true }]))!.steps[0]
+    expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), ideal: 'B' }))).toBe('')
+    expect(s).toMatchObject({ exam: true, ideal: 'B', star: true, ptt: true })
   })
 })
