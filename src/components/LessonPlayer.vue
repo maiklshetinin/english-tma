@@ -302,7 +302,8 @@ providePlay(reactive({
   st, src, say, pick, right, later, answer, tap, put, back, rec, said, recToggle, again, setVid: (el) => { vid.value = el },
   fill, check, gapOkAt, sendText, sortPick, sortPut, sortBack, sortOkAt,
   checkAny, canCheck,          // «Ответ по смыслу» (23.11.2026): «Проверить» — в его строке ввода, как «отправить» в чате
-  edit: computed(() => props.edit), idle: computed(() => props.idle), single: computed(() => props.single), embedded: computed(() => props.embedded), track: computed(() => props.track),
+  edit: computed(() => props.edit), idle: computed(() => props.idle), mini: computed(() => props.mini),          // mini — миниатюра в меню (шаблон может показать себя «в работе», 24.11.2026)
+  single: computed(() => props.single), embedded: computed(() => props.embedded), track: computed(() => props.track),
   favKey, favOn, favToggle,
 }))
 </script>

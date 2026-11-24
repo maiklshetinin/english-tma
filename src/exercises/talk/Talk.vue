@@ -31,7 +31,20 @@ const icon = aiIcon('Gemini')
 const cfg = computed(() => talkCfg(props.step))          // действующие настройки: свои поля экрана поверх умолчаний
 const models = computed(() => tp.models), voice = computed(() => cfg.value.voice)
 const lessonModel = computed(() => (cfg.value.model === 'auto' ? '' : cfg.value.model))          // 'auto' — самая свежая Live-модель ключа
-onMounted(() => { if (!p?.idle) loadModels() })          // экран не выбран на холсте (idle, 23.11.2026) — Google не спрашиваем
+onMounted(() => { if (!p?.idle) loadModels(); if (p?.mini && props.part === 'body') demo() })
+// Миниатюра в меню «Exercise» (24.11.2026): экран «в работе» — разговор идёт, в чате видно, чем вариант отличается:
+// рация — облачко «Transcribe Live пишет…», рация · голосовые — голосовое, обычный разговор — текстом. Без сети и микрофона
+function demo() {
+  const pl = lang.value === 'pl-PL'
+  const ai1 = pl ? 'Dzień dobry. Proszę powiedzieć, czym jest dla Pana Adwent?' : 'Hello! Tell me, what do you usually do at the weekend?'
+  const me1 = pl ? 'Adwent to czas oczekiwania na Boże Narodzenie.' : 'I usually meet my friends and go hiking.'
+  mkCtl(); const c = C.value
+  st.value = 'live'; t0.value = Date.now() - 21000; now.value = Date.now(); used.value = 'gemini-3.8-flash-live'
+  lines.value = [{ role: 'ai', t: ai1, closed: true }]
+  if (vn.value) lines.value.push({ role: 'me', t: '', closed: true, vn: { url: '#', sec: 9, peaks: [.3, .6, .9, .5, .8, 1, .6, .4, .8, .9, .5, .7, .3, .6, .9, .4, .7, .3, .5, .3, .6, .8, .4, .3], model: 'Gemini 3.8 Live' } })
+  else if (ptt.value) { lines.value.push({ role: 'me', t: me1, closed: false, draft: true }); c.pt = 'talk'; c.lv = .5; c.stt = 'Transcribe Live'; c.trs = 'open' }
+  else lines.value.push({ role: 'me', t: me1, closed: true })
+}          // экран не выбран на холсте (idle, 23.11.2026) — Google не спрашиваем
 watch(() => p?.idle, (v) => { if (!v) loadModels() })
 // модель и голос перед разговором (20.11.2026): свой выбор ученика (запоминается в браузере), по умолчанию — из правки или самая свежая.
 // 21.11.2026: выбираются в подвале (part="fb"), «Оценивать речь» — вверху экрана; состояние общее — prefs.js
@@ -285,7 +298,7 @@ watchEffect(() => {
     </template>
 
     <div v-else class="tv" :class="st" @pointerdown.stop>
-      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" :idle="!!p?.idle && st !== 'live' && st !== 'connecting'" />
+      <TalkAvatar v-if="step.avatar" :state="st" :out="outLevel" :inp="muted ? 0 : level" :idle="!!p?.mini || (!!p?.idle && st !== 'live' && st !== 'connecting')" />
       <div class="tc">
         <button v-if="st !== 'live' && st !== 'connecting'" type="button" class="go" :disabled="!hasKeys" @click="start"><img v-if="icon" :src="icon" alt="" />{{ st === 'ended' ? 'Поговорить ещё раз' : 'Начать разговор' }}</button>
         <div v-else-if="ptt" class="pt" :class="C?.pt">          <!-- рация: большой микрофон под персонажем (вернули 24.11.2026 — внизу неудобно). Нажал — говоришь, нажал ещё раз — Gemini отвечает -->
