@@ -64,7 +64,8 @@ async function remove(c) {
 <style scoped>
 .cl { display: grid; gap: 10px; margin-bottom: 18px }
 .ch { display: flex; align-items: center; justify-content: space-between; gap: 10px } .ch h2 { margin: 0 }
-.grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) }
+.grid { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 3px 3px 8px; margin: -3px -3px 0 }          /* 24.11.2026: курсы — в одну строку во всю ширину, не влезло — прокрутка вбок (раньше два ряда занимали пол-экрана); padding/margin — чтобы рамка выбранного курса не обрезалась */
+.grid > .cc { flex: 0 0 300px; scroll-snap-align: start; box-sizing: border-box }
 .cc { user-select: none; display: flex; align-items: center; gap: 10px; padding: 14px 16px; margin: 0; cursor: pointer; transition: border-color .1s }
 .cc:hover { border-color: var(--blue) }
 .cc .icon-btn { --ib: 40px; color: var(--hint) }
