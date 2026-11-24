@@ -100,7 +100,7 @@ function talkCode(s: any): TalkCfg {
   const lang = langOf(s?.lang), d = defsOf(lang)
   return {
     lang,
-    prompt: ownT(s, 'prompt')?.trim() ?? (s?.exam ? EXAM_PROMPT : d.prompt),
+    prompt: ownT(s, 'prompt')?.trim() ?? (s?.exam || txt(s?.ideal) ? EXAM_PROMPT : d.prompt),          // 24.11.2026: есть эталон у экрана — роль консула с вопросом и эталоном (как у собеседования), во всех разговорах
     lock: ownT(s, 'lock') ?? d.lock,
     opener: ownT(s, 'opener') ?? d.opener,
     voice: txt(s?.voice).trim() || DEF.voice,

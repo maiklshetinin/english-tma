@@ -100,7 +100,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       put(o, 'silenceMs', within(r.silenceMs, 200, 5000, true)); if (r.endSens === 'high') o.endSens = 'high'; put(o, 'temperature', within(r.temperature, 0, 2))
       if (r.noiseSuppression === true) o.noiseSuppression = true; if (r.avatar === true) o.avatar = true; if (r.ptt === true) o.ptt = true; if (r.busuu === true) o.busuu = true; if (r.vn === true) o.vn = true
       putReq(o, r.request)
-      if (r.exam === true) { o.exam = true; o.ptt = true; put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n } } }          // «Собеседование · рация» (24.11.2026): эталон, звезда, номер
+      put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n }          // 24.11.2026: вопрос (text), эталон, звезда, номер — у всех разговоров, не только у собеседования
+      if (r.exam === true) { o.exam = true; o.ptt = true } }          // «Собеседование · рация» (24.11.2026): эталон, звезда, номер
     // «Транскрипция» (Gemini 3.5 Transcribe Live, 20.11.2026, эксперимент): подсказка, язык
     if (kind === 'stt') { put(o, 'text', str(r.text, 300)); if (['en-US', 'es-ES'].includes(String(r.lang))) o.lang = r.lang }
     // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.

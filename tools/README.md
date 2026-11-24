@@ -19,35 +19,44 @@
 
 ## Быстрый способ: одна кнопка на все упражнения
 
-С 24.11.2026 все упражнения делает один скрипт — `make-json.py` (кнопка `Сделать JSON.bat`). Он спрашивает номер упражнения из списка:
+Все упражнения делает один скрипт — `make-json.py` (кнопка `Сделать JSON.bat`). Он спрашивает номер упражнения, и меняется только тип —
+данные у всех одинаковые (24.11.2026). В JSON — только данные, без промптов и настроек:
 
-| № | ID | Упражнение | Флаги экрана | Папка |
-|---|---|---|---|---|
-| 1 | `kp` | Ответ по смыслу (мост) | `kind: "kp"` (формат `questions`) | `json/мост/` |
-| 2 | `kpapi` | Ответ по смыслу · Gemini API | `engine: "api"`, `model` | `json/gemini-live/` |
-| 3 | `kpfile` | Ответ по смыслу · целым аудио | `kind: "kp"`, `dic: "file"` | `json/запись целиком/` |
-| 4 | `talk` | Разговор с Gemini (без персонажа) | `kind: "talk"` | `json/разговор без персонажа/` |
-| 5 | `talkava` | Разговор с персонажем | `kind: "talk"`, `avatar` | `json/разговор/` |
-| 6 | `talkptt` | Разговор · рация | `avatar`, `ptt` | `json/рация/` |
-| 7 | `talkptt2` | Разговор · рация (Busuu) | `avatar`, `ptt`, `busuu` | `json/рация busuu/` |
-| 8 | `talkvn` | Рация · голосовые | `avatar`, `ptt`, `vn` | `json/голосовые/` |
-| 9 | `talkexam` | Собеседование · рация | `avatar`, `ptt`, `exam` | `json/собеседование/` |
+```json
+{ "type": "talkvn", "steps": [ { "text": "Jaka jest tradycyjna polska zupa?", "ideal": "Najbardziej popularna polska zupa to ==żurek==…", "star": true, "n": 2 } ] }
+```
 
-ID — те же, что в приложении (`src/utils/lesson.ts` → `TEMPLATES`). Поля «шаблон» в JSON экрана нет: приложение узнаёт упражнение по `kind`
-и флагам (`lesson.ts` → `tplOf`). Новое упражнение — одна строка в таблице `TPL` в начале `make-json.py`.
+- `type` — ID упражнения: тот же, что серым тегом на плашке в меню Exercise;
+- `text` — вопрос, `ideal` — эталон (с выделениями домашки), `star` — обязательный (★), `n` — номер в домашке.
+
+Всё остальное — тип экрана и флаги, промпты, роль консула, модели — приложение берёт из шаблона упражнения и общих настроек курса
+(«{ }» на плитке). Поменять промпт — там, а не в JSON.
+
+| № | ID | Упражнение | Папка |
+|---|---|---|---|
+| 1 | `kp` | Ответ по смыслу | `json/мост/` |
+| 2 | `kpapi` | Ответ по смыслу · Gemini API | `json/gemini-live/` |
+| 3 | `kpfile` | Ответ по смыслу · целым аудио | `json/запись целиком/` |
+| 4 | `kpball` | Ответ по смыслу · шар | `json/шар/` |
+| 5 | `talk` | Разговор с Gemini | `json/разговор без персонажа/` |
+| 6 | `talkava` | Разговор с персонажем | `json/разговор/` |
+| 7 | `talkptt` | Разговор · рация | `json/рация/` |
+| 8 | `talkptt2` | Разговор · рация (Busuu) | `json/рация busuu/` |
+| 9 | `talkvn` | Рация · голосовые | `json/голосовые/` |
+| 10 | `talkexam` | Собеседование · рация | `json/собеседование/` |
+
+Новое упражнение — одна строка в `TYPES` в начале `make-json.py`.
 
 Из терминала:
 ```
-python tools/make-json.py --list                    # все ID
-python tools/make-json.py talkvn                    # все PDF из tools/pdf/ → папка упражнения
-python tools/make-json.py talkexam "ДЗ 8.pdf"       # рядом появится «ДЗ 8.talkexam.json»
-python tools/make-json.py talkptt "json/мост/ДЗ 8. Кухня.json"   # можно из готового JSON «моста»
-python tools/make-json.py kpapi --model auto        # «Gemini API» с проверкой Flash Lite
+python tools/make-json.py --list                    # все типы
+python tools/make-json.py talkvn                    # все PDF из tools/pdf/ → папка типа
+python tools/make-json.py kpball "ДЗ 8.pdf"         # рядом появится «ДЗ 8.kpball.json»
+python tools/make-json.py talkptt "json/мост/ДЗ 8. Кухня.json"   # можно из готового JSON
 ```
-`--no-avatar` — без персонажа, `--lesson` — название урока, если в PDF его нет текстом.
 
-Старые скрипты (`kpapi-json.py`, `kpfile-json.py`, `talk-json.py`, `ptt-json.py`, `exam-json.py`) и их кнопки делают то же самое —
-результат совпадает байт в байт; их можно удалить. `kp-json.py` оставить: им `make-json.py` разбирает PDF.
+Старые скрипты (`kpapi-json.py`, `kpfile-json.py`, `talk-json.py`, `ptt-json.py`, `exam-json.py`) и их кнопки больше не нужны — их можно удалить.
+`kp-json.py` оставить: им `make-json.py` разбирает PDF.
 
 1. Положите PDF домашек в папку `tools/pdf/` (можно несколько сразу).
 2. Дважды щёлкните нужную кнопку.

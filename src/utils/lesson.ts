@@ -492,7 +492,19 @@ export function kpFromHtml(h: string) {
     .split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n')
 }
 
+// JSON «только данные» (24.11.2026, tools/make-json.py): { "type": "talkvn", "text": вопрос, "ideal": эталон } — тип упражнения по ID шаблона
+// (TEMPLATES); kind и флаги (ptt, vn, exam, dic, engine, ball…) приложение берёт из шаблона. Промпты — тоже из шаблона, не из JSON
+const TPL_FLAGS = ['kind', 'ptt', 'avatar', 'busuu', 'vn', 'exam', 'dic', 'engine', 'ball', 'bk', 'bs'] as const
+function fromType(o: any): any {
+  if (!o || typeof o !== 'object' || o.kind || typeof o.type !== 'string') return o
+  const t = TEMPLATES.find((x) => x.id === o.type); if (!t) return o
+  const b: any = t.make(), f: any = {}
+  for (const k of TPL_FLAGS) if (b[k] !== undefined) f[k] = b[k]
+  const { type: _t, ...rest } = o
+  return { ...f, ...rest }
+}
 function stepFrom(o: any): Step | null {
+  o = fromType(o)
   if (!o || typeof o !== 'object' || !(o.kind in KINDS)) return null
   const s: any = { id: stepId(), kind: o.kind }
   for (const k of STR) { const v = str(o[k]); if (v) s[k] = v }
@@ -501,8 +513,8 @@ function stepFrom(o: any): Step | null {
   if (o.by === 'letters') s.by = 'letters'
   if (Number.isInteger(o.ans) && o.ans >= 0) s.ans = o.ans
   if (typeof o.min === 'number' && o.min > 0 && o.min <= 60) s.min = o.min
-  if ((o.kind === 'kp' || (o.kind === 'talk' && o.exam === true)) && o.star === true) s.star = true          // звезда и номер — и у собеседования-рации (24.11.2026)
-  if ((o.kind === 'kp' || (o.kind === 'talk' && o.exam === true)) && Number.isInteger(o.n) && o.n > 0 && o.n < 100) s.n = o.n
+  if ((o.kind === 'kp' || o.kind === 'talk') && o.star === true) s.star = true          // звезда и номер — у «Ответа по смыслу» и у всех разговоров (24.11.2026)
+  if ((o.kind === 'kp' || o.kind === 'talk') && Number.isInteger(o.n) && o.n > 0 && o.n < 100) s.n = o.n
   if (o.kind === 'kp' && (o.look === 'lines' || o.look === 'cards')) s.look = o.look
   if (o.kind === 'kp' && o.plain === true) s.plain = true
   if (o.kind === 'kp' && o.autoplay === true) s.autoplay = true
@@ -573,8 +585,10 @@ export function stepsFromJson(text: string): { steps: Step[]; bad: number } | nu
       return { kind: 'kp', text: q.question, ...(ideal ? { ideal } : {}), ...(q.star === true ? { star: true } : {}), ...(Number.isInteger(q.id) ? { n: q.id } : {}), ...(pr ? { prompt: pr } : {}), ...(pass != null ? { pass } : {}), ...(engine != null ? { engine } : {}), ...(model != null ? { model } : {}) }
     })
   }
-  const list = Array.isArray(v) ? v : Array.isArray(v?.steps) ? v.steps : v?.kind ? [v] : null
-  if (!list?.length || !list.some((o: any) => o?.kind)) return null
+  const root = typeof v?.type === 'string' && Array.isArray(v?.steps) ? v.type : ''          // { "type": "kpball", "steps": [{ "text", "ideal" }] } — тип на все экраны
+  const list0 = Array.isArray(v) ? v : Array.isArray(v?.steps) ? v.steps : v?.kind || v?.type ? [v] : null
+  const list = list0?.map((o: any) => (root && o && typeof o === 'object' && !o.kind && !o.type ? { ...o, type: root } : o))
+  if (!list?.length || !list.some((o: any) => o?.kind || o?.type)) return null
   const steps = list.map(stepFrom).filter(Boolean) as Step[]
   return { steps: steps.slice(0, STEPS_MAX), bad: list.length - steps.length }
 }
