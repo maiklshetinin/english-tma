@@ -341,13 +341,14 @@ const showCm = computed(() => props.part === 'fb' && ptt.value && !!C.value && !
       <select :value="pick || lessonModel" :disabled="tp.busy[step.id]" aria-label="Модель" @change="onModel($event.target.value)"><option value="">авто · {{ liveName(models[0]) }}{{ !editor && !lessonModel ? ' · из урока' : '' }}</option><option v-if="lessonModel && !models.includes(lessonModel)" :value="lessonModel">{{ liveName(lessonModel) }} · из урока</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ !editor && m === lessonModel ? ' · из урока' : '' }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
       <div v-if="C?.net?.length" class="net" aria-live="polite"><span v-for="x in C.net" :key="x.k" class="nt" :class="x.st" :title="x.name + ' — ' + x.txt"><i class="nd" /><b>{{ x.name }}</b> {{ x.txt }}<em v-if="x.st === 'busy'" class="dd"><i>.</i><i>.</i><i>.</i></em></span></div>
     </div>
-    <div v-if="showCm" class="fm" :class="C.pt">
-      <button type="button" class="pb" :style="{ '--l': C.lv }" :disabled="!C.live" :title="C.pt === 'talk' ? 'Нажмите ещё раз — Gemini ответит' : C.pt === 'wait' ? 'Нажмите — перебить и сказать своё' : 'Нажмите и говорите'" :aria-label="C.pt === 'talk' ? 'Отправить реплику' : 'Нажмите и говорите'" @click="C.mic()">
-        <svg v-if="C.pt === 'talk'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5" /></svg>
-        <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
-      </button>
-    </div>
-    <p v-if="showCm" class="fmt" :class="C.pt"><b>{{ !C.live ? 'Подключаюсь…' : C.pt === 'talk' ? (C.vn ? '● ' + C.dur : '● Говорите') : C.pt === 'wait' ? 'Gemini отвечает' : '' }}</b><small v-if="C.err" class="fme">{{ C.err }}</small></p>
+    <!-- микрофон — ровно по центру экрана (не подвала: справа «Продолжить»), надпись — под ним; место в строке держит .fmc -->
+    <div v-if="showCm" class="fmc"><div class="fm" :class="C.pt">
+        <button type="button" class="pb" :style="{ '--l': C.lv }" :disabled="!C.live" :title="C.pt === 'talk' ? 'Нажмите ещё раз — Gemini ответит' : C.pt === 'wait' ? 'Нажмите — перебить и сказать своё' : 'Нажмите и говорите'" :aria-label="C.pt === 'talk' ? 'Отправить реплику' : 'Нажмите и говорите'" @click="C.mic()">
+          <svg v-if="C.pt === 'talk'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5" /></svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+        </button>
+        <span class="fmt"><b>{{ !C.live ? 'Подключаюсь…' : C.pt === 'talk' ? (C.vn ? '● ' + C.dur : '● Говорите') : C.pt === 'wait' ? 'Gemini отвечает' : 'Нажмите и говорите' }}</b><small v-if="C.err" class="fme">{{ C.err }}</small></span>
+      </div></div>
   </div>
 </template>
 
@@ -369,8 +370,9 @@ const showCm = computed(() => props.part === 'fb' && ptt.value && !!C.value && !
 .evp > b { font-size: 13.5px } .evr { display: grid; grid-template-columns: 20px 1fr; gap: 6px } .evr i { font-style: normal } .evr b { font-weight: 800 } .evp small { color: var(--hint); font-size: 11.5px }
 @keyframes evp { from { opacity: 0; transform: translateY(-4px) } } @media (prefers-reduced-motion: reduce) { .evp { animation: none } }
 /* «таблетки» (21.11.2026): голос — вверху, модель — в подвале */
-.tf { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0 }
-.tfl { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0 }
+.tf { display: flex; align-items: center; gap: 12px; min-width: 0 }
+.tfl { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; max-width: min(100%, calc(50vw - 90px)) }          /* не заезжать под микрофон */
+.tfl .nt { max-width: 100%; overflow: hidden; text-overflow: ellipsis }
 .net { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 0 4px; font-size: 12px; font-weight: 600; line-height: 1.3; color: #8f8f8f }
 .nt { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap } .nt b { color: #3a3a3a; font-weight: 700 }
 .nd { width: 7px; height: 7px; border-radius: 50%; background: #c4c4c4; flex: none }
@@ -404,13 +406,14 @@ const showCm = computed(() => props.part === 'fb' && ptt.value && !!C.value && !
 .pi { justify-self: end; font-size: 12px; font-weight: 700; color: var(--hint); font-variant-numeric: tabular-nums }
 .pc { margin: 0; text-align: center; font-size: 14px } .pc small { display: block; font-size: 12px; font-weight: 700; color: var(--hint) } .pt.talk .pc b { color: #c0392b }
 /* большой микрофон рации — в подвале (24.11.2026) */
-.fm { display: grid; place-items: center }          /* микрофон — по центру подвала */
+.fmc { flex: none; width: 0; height: 52px }          /* держит высоту строки; сам микрофон — абсолютно, по центру плеера (.lp) */
+.fm { position: absolute; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center }
 .pb { --l: 0; flex: none; width: 52px; height: 52px; display: grid; place-items: center; border: 0; border-radius: 50%; background: linear-gradient(135deg, #4b8df8, #a35cf0); color: #fff; box-shadow: 0 6px 18px rgba(91, 108, 240, .35); cursor: pointer; transition: background .2s, box-shadow .15s; touch-action: manipulation }
 .pb svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round } .pb:disabled { opacity: .5; cursor: default }
 .fm.talk .pb { background: #e5484d; box-shadow: 0 0 0 calc(6px + var(--l) * 14px) rgba(229, 72, 77, .18), 0 0 0 calc(14px + var(--l) * 24px) rgba(229, 72, 77, .07) }
 .fm.wait .pb { background: #eef1f6; color: #6b7a99; box-shadow: none }
-.fmt { margin: 0; min-width: 0; font-size: 13px; text-align: left; white-space: nowrap } .fmt b { color: var(--hint) } .fmt.talk b { color: #c0392b; font-variant-numeric: tabular-nums }
-.fmt .fme { display: block; color: #b3261e; font-size: 11.5px; font-weight: 600; white-space: normal }
+.fmt { position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%); font-size: 11.5px; line-height: 1.2; text-align: center; white-space: nowrap } .fmt b { color: var(--hint); font-weight: 700 } .fm.talk .fmt b { color: #c0392b; font-variant-numeric: tabular-nums }
+.fmt .fme { display: block; width: 220px; color: #b3261e; font-size: 11px; font-weight: 600; white-space: normal }
 .b.dr { background: #f2fbe9; border: 1.5px dashed #9ad07a; color: #4f7a3c } .bl { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #5aa33a }
 .bw { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 800; color: #c0392b }
 .lk { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
