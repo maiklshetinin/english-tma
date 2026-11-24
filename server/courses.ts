@@ -32,7 +32,7 @@ export const PRESET_TPLS: Record<string, Record<string, unknown>> = { kp: { kind
   talk: { kind: 'talk' }, talkava: { kind: 'talk', avatar: true }, talkptt: { kind: 'talk', avatar: true, ptt: true }, talkptt2: { kind: 'talk', avatar: true, ptt: true, busuu: true },
   talkvn: { kind: 'talk', avatar: true, ptt: true, vn: true },          // 24.11.2026: «Рация · голосовые»
   talkexam: { kind: 'talk', avatar: true, ptt: true, exam: true } }          // 24.11.2026: «Собеседование · рация»
-const PRESET_DROP = ['id', 'kind', 'text', 'ideal', 'head', 'star', 'n', 'look', 'plain', 'autoplay', 'engine', 'dic', 'avatar', 'ptt', 'busuu', 'vn', 'exam', 'image', 'audio', 'video', 'exAudio', 'audioBy', 'skills', 'min', 'topic']
+const PRESET_DROP = ['id', 'kind', 'text', 'ideal', 'head', 'star', 'n', 'look', 'plain', 'autoplay', 'engine', 'dic', 'ball', 'keys', 'avatar', 'ptt', 'busuu', 'vn', 'exam', 'image', 'audio', 'video', 'exAudio', 'audioBy', 'skills', 'min', 'topic']
 export const INK_MAX = 300, INK_POINTS = 4000, TEMPLATES_MAX = 30          // TEMPLATES_MAX — своих упражнений из конструктора в курсе
 export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 
@@ -83,6 +83,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       // у моста и у Gemini API — свои message и format; язык; «целым аудио» — промпт и просьба расшифровки
       for (const k of ['format', 'message', 'sttPrompt', 'sttAsk']) putT(o, k, r[k], 4000)
       if (LANG_OK.includes(String(r.lang))) o.lang = r.lang
+      if (r.ball === true) o.ball = true          // «Ответ по смыслу · шар» (24.11.2026): шар и свои блоки (keys)
+      if (Array.isArray(r.keys)) { const k = r.keys.slice(0, 16).map((x: any) => ({ label: str(x?.label, 60).trim(), words: (Array.isArray(x?.words) ? x.words : []).slice(0, 3).map((w: unknown) => str(w, 40)).filter(Boolean) })).filter((x: { label: string }) => x.label); if (k.length) o.keys = k }
       putT(o, 'topic', r.topic, 300); if (typeof r.dicModel === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.dicModel)) o.dicModel = r.dicModel; putReq(o, r.request)          // тема, чем диктовать, свои поля запросов (23–24.11.2026)
       if (r.engine === 'api' || r.engine === 'live') { o.engine = 'api'; if (typeof r.model === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.model)) o.model = r.model
         if (typeof r.liveModel === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.liveModel)) o.liveModel = r.liveModel

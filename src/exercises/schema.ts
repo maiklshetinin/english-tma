@@ -39,6 +39,8 @@ const EXTRA: Record<string, SKey[]> = {
     { key: 'autoplay', type: 'bool', label: 'Звук вопроса играет сам' },
     { key: 'audio', type: 'file', label: 'Звук вопроса (озвучка)' },
     { key: 'engine', type: 'select', options: ['api'], label: 'Проверка напрямую через Gemini API (нет — через мост)' },
+    { key: 'ball', type: 'bool', label: 'Шар смысловых блоков над ответом (шаблон «Ответ по смыслу · шар», тест)' },
+    { key: 'keys', type: 'list', label: 'Блоки шара: [{ "label": "wieniec adwentowy", "words": ["wieniec"] }] — нет: Gemini нарежет эталон сама' },
   ],
   talk: [{ key: 'busuu', type: 'bool', label: 'Рация «как в Busuu» — свои настройки курса' },
     { key: 'vn', type: 'bool', label: 'Рация · голосовые: реплики ученика — голосовыми, как в Telegram (без распознавания)' },

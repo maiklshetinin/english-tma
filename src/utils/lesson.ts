@@ -41,6 +41,7 @@ export interface Step {
   tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
   bk?: string; bn?: number; bs?: 'page'                                           // из какого задания учебника (BOOK) — группа «Тест · упражнения Насти»; bn — свой номер задания, как в книге
   lang?: 'pl-PL' | 'en-US' | 'en-GB' | 'es-ES'; voice?: string                // «Транскрипция»: язык (нет — польский); «Разговор с Gemini»: голос Live-модели (нет — Kore)
+  ball?: boolean; keys?: { label: string; words: string[] }[]          // «Ответ по смыслу · шар» (24.11.2026, тест): шар смысловых блоков; keys — свои блоки (иначе Gemini нарежет эталон)
   dic?: 'file'                                                         // «Ответ по смыслу · целым аудио» (тест): диктовка целой записью, не потоком
   exam?: boolean                                                      // «Собеседование · рация» (24.11.2026): консул спрашивает вопрос экрана (text), сверяет с эталоном (ideal); шаблон talkexam
   busuu?: boolean                                                     // копия «Разговор · рация» для вкладки «Как в Busuu» (22.11.2026): свой шаблон talkptt2 и свои общие настройки курса
@@ -207,6 +208,7 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   // Karta Polaka (19.11.2026): своя вкладка меню; ответ проверяет Gemini по эталону
   { id: 'kp', kind: 'kp', t: 'Ответ по смыслу', d: 'ИИ сверяет с эталоном', make: () => fishStep('kp') },
   { id: 'kpfile', kind: 'kp', t: 'Ответ по смыслу · целым аудио', d: 'Запись целиком → Gemini · тест', make: () => ({ ...fishStep('kp'), dic: 'file' }) },          // 21.11.2026, тест: копия «Ответа по смыслу» (мост), диктовка — целой записью (utils/sttfile.js)
+  { id: 'kpball', kind: 'kp', t: 'Ответ по смыслу · шар', d: 'Шар смысловых блоков · тест', make: () => ({ ...fishStep('kp'), ball: true }) },          // 24.11.2026, тест: utils/kpball.js, exercises/kp/KpBall.vue
   { id: 'kpapi', kind: 'kp', t: 'Ответ по смыслу · Gemini API', d: 'Без моста, напрямую · тест', make: () => ({ ...fishStep('kp'), engine: 'api' }) },          // 20.11.2026, эксперимент: utils/kpcheck.js
   { id: 'talk', kind: 'talk', t: 'Разговор с Gemini', d: 'Живой диалог голосом', make: () => fishStep('talk') },          // 20.11.2026, эксперимент: Live API
   { id: 'talkptt', kind: 'talk', t: 'Разговор · рация', d: 'Нажал — говоришь, нажал — ответ · тест', make: () => ({ ...fishStep('talk'), avatar: true, ptt: true }) },          // 21.11.2026, тест: Transcribe пишет, Live отвечает по кнопке
@@ -253,7 +255,7 @@ for (const id of BOOK_TPL) {
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
 /** Цвета тегов — как плашки в меню упражнений (.chip.L … в CourseEditor / LessonRail) */
 export const SKILL_C: Record<string, string> = { L: '#1cb0f6', R: '#a560e8', W: '#ff9600', S: '#58cc02' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpfile: ['S'], kpapi: ['S'], talk: ['S', 'L'], talkava: ['S', 'L'], talkptt: ['S', 'L'], talkptt2: ['S', 'L'], talkvn: ['S', 'L'], talkexam: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpfile: ['S'], kpball: ['S'], kpapi: ['S'], talk: ['S', 'L'], talkava: ['S', 'L'], talkptt: ['S', 'L'], talkptt2: ['S', 'L'], talkvn: ['S', 'L'], talkexam: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
 for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]          // «Учебник 1:1» — те же навыки
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
 export function tplOf(s: Step): string {
@@ -263,6 +265,7 @@ export function tplOf(s: Step): string {
   // а в меню и на ветке — «Собери фразу» и «Повтори слово»
   if (s.kind === 'order') return 'order'
   if (s.kind === 'speak') return 'sayword'
+  if (s.kind === 'kp' && s.ball) return 'kpball'
   if (s.kind === 'kp' && (s.engine === 'api' || s.engine === 'live')) return 'kpapi'
   if (s.kind === 'talk' && s.exam) return 'talkexam'
   if (s.kind === 'talk' && s.ptt) return s.vn ? 'talkvn' : s.busuu ? 'talkptt2' : 'talkptt'
@@ -503,7 +506,7 @@ function stepFrom(o: any): Step | null {
   if (o.kind === 'kp' && (o.look === 'lines' || o.look === 'cards')) s.look = o.look
   if (o.kind === 'kp' && o.plain === true) s.plain = true
   if (o.kind === 'kp' && o.autoplay === true) s.autoplay = true
-  if (o.kind === 'kp') { delete s.prompt; Object.assign(s, kpFields(o)); if (o.dic === 'file') s.dic = 'file' }          // промпт, порог, модель и промпты проверки — только отличия от умолчаний (exercises/kp/defaults.ts; модель раньше терялась при «Применить»)
+  if (o.kind === 'kp') { delete s.prompt; Object.assign(s, kpFields(o)); if (o.dic === 'file') s.dic = 'file'; if (o.ball === true) s.ball = true; if (Array.isArray(o.keys)) s.keys = o.keys.filter((k: any) => k && typeof k.label === 'string').map((k: any) => ({ label: String(k.label).slice(0, 60), words: (Array.isArray(k.words) ? k.words : []).map(String).slice(0, 3) })).slice(0, 16) }          // промпт, порог, модель и промпты проверки — только отличия от умолчаний (exercises/kp/defaults.ts; модель раньше терялась при «Применить»)
   if (o.kind === 'stt' && (o.lang === 'en-US' || o.lang === 'es-ES')) s.lang = o.lang          // польский — умолчание
   if (o.kind === 'talk') { delete s.prompt; Object.assign(s, talkFields(o)); if (o.avatar === true) s.avatar = true; if (o.ptt === true) s.ptt = true; if (o.busuu === true) s.busuu = true; if (o.vn === true) s.vn = true; if (o.exam === true) { s.exam = true; s.ptt = true } }          // только отличия от умолчаний (exercises/talk/defaults.ts)
   if (o.kind === 'kp' && (o.engine === 'api' || o.engine === 'live')) s.engine = 'api'          // 'live' («Live (голос)») убран 20.11.2026 — такие экраны идут как «Gemini API»

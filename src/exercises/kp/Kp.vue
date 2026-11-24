@@ -23,6 +23,8 @@ import { kpLive } from '../../utils/kplive'
 import { recordMic, transcribeFile } from '../../utils/sttfile'
 import { reqOf } from '../../utils/overlay'
 import VoiceNote from '../../components/VoiceNote.vue'
+import KpBall from './KpBall.vue'          // «· шар» (24.11.2026, тест; step.ball) — шар смысловых блоков над ответом
+import { ballNet } from '../../utils/kpball'
 import { kpCfg, fill, kpReady, langHow } from './defaults'
 import { ai } from '../../utils/gemini'
 import J from './kp.json'
@@ -60,6 +62,11 @@ const loadBridge = (fresh = false) => bridgeStatus(undefined, fresh).then((b) =>
 let brTm = 0
 // экран не выбран на холсте редактора (p.idle, 23.11.2026) — мост не опрашиваем; выбрали — сразу свежий статус и опрос раз в 15 с
 const idle = computed(() => !!p?.idle)
+// «Ответ по смыслу · шар» (24.11.2026, тест): шару — всё, что сказано (поле ответа + черновик диктовки); статусы его запросов — в подвал
+const ballText = computed(() => ((p.st.text || '') + ' ' + (dicDraft.value || '')).trim())
+const BALL_ST = { on: 'open', busy: 'connecting', err: 'error', off: '' }
+const ballList = computed(() => { const n = props.step.ball && ballNet[props.step.id]; if (!n) return []
+  return [{ k: 'split', name: 'Нарезка эталона' + (n.model ? ' · ' + n.model : ''), ...n.split }, { k: 'cover', name: 'Сверка смысла' + (n.model ? ' · ' + n.model : ''), ...n.cover }].filter((x) => x.txt) })
 // экран выбрали (или открыли) — сразу свежий статус, мимо 15-секундной памяти (23.11.2026): видно и в Network; дальше — раз в 15 с.
 // Спрашивает только подвал (part fb) — статус показывает он
 // статус идёт сам по /live (bridgePush) — тогда ни запроса, ни таймера; соединения нет — спросить при выборе и раз в 15 с
@@ -387,6 +394,7 @@ function jsApply() {
       </div>
     </div>
 
+    <KpBall v-if="step.ball" :step="step" :text="ballText" :done="!!p.st.done" :edit="!!p.edit" :idle="idle" />
     <div class="kth">
     <div v-if="fileMode || p.edit || p.st.done || thinking" class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
       <button v-if="fileMode && !p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
@@ -473,6 +481,7 @@ function jsApply() {
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
       <span v-else-if="bridge" class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
+      <span v-for="x in ballList" :key="x.k" class="knt" :class="BALL_ST[x.st]" :title="x.name + ' — ' + x.txt"><i />{{ x.name }} · {{ x.txt }}<em v-if="x.st === 'busy'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span v-if="p.st.busy && !fileMode" class="knt connecting" :title="api ? 'Ответ ушёл на проверку в Gemini API' : 'Ответ ушёл на проверку через мост в чат'"><i />проверка · запрос ушёл<em class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span class="ksp" />
       <span v-if="!fileMode && cyrN" class="kcyr" title="В ответе русские буквы — подсвечены розовым: диктовка ошиблась языком, поправьте">русские буквы: {{ cyrN }}</span>

@@ -5,7 +5,8 @@
   "templates": [
     "kp",
     "kpfile",
-    "kpapi"
+    "kpapi",
+    "kpball"
   ],
   "fields": {
     "head": {
@@ -147,6 +148,9 @@
       "S"
     ],
     "kpfile": [
+      "S"
+    ],
+    "kpball": [
       "S"
     ]
   },
