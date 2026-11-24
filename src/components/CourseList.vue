@@ -68,7 +68,8 @@ async function remove(c) {
 </template>
 <style scoped>
 .cl { display: grid; gap: 6px; margin-bottom: 12px }
-.ch { --bleed: max(0px, calc((100vw - 8px - 100%) / 2)); display: flex; align-items: center; gap: 10px; margin-left: calc(-1 * var(--bleed)) } .ch .new { flex: 0 0 225px; box-sizing: border-box; margin: 3px 12px 3px 0; font: inherit; color: inherit; text-align: left } .sp, .ch .sk { flex: 1 }
+@media (min-width: 720px) { .cl { margin-top: -7px } }          /* 25.11.2026: верх плиток — на одной линии с кнопками справа сверху (они на 12px от края; у страницы отступ 16px + 3px у ряда) */
+.ch { --bleed: max(0px, calc((100vw - 8px - 100%) / 2)); display: flex; align-items: stretch; gap: 10px; margin-left: calc(-1 * var(--bleed)) } .ch .new { flex: 0 0 225px; align-self: stretch; height: auto; box-sizing: border-box; margin: 3px 12px 3px 0; font: inherit; color: inherit; text-align: left } .sp, .ch .sk { flex: 1 }
 .grid { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; flex: 1; min-width: 0; padding: 3px 12px 3px 12px }          /* 24.11.2026: курсы — одна строка на всю ширину экрана (вылезает за поля страницы); полоса прокрутки — только при наведении и только если не влезло */
 @media (min-width: 1024px) { .ch { --bleed: max(0px, calc((100vw - 132px - 100%) / 2)) } }          /* слева — рейл навигации (124px) */
 .grid::-webkit-scrollbar { height: 6px; background: transparent } .grid::-webkit-scrollbar-thumb { background: transparent }
