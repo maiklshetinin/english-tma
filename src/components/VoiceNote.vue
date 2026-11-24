@@ -37,7 +37,7 @@ onBeforeUnmount(stop)
         <span class="vs" aria-live="polite">
           <template v-if="status === 'sending'"><svg class="clk" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>отправляю в Gemini<b class="dots"><i>.</i><i>.</i><i>.</i></b></template>
           <template v-else-if="status === 'done'"><svg class="tk" viewBox="0 0 28 24" aria-hidden="true"><path d="M2 13l5 5L18 6M11 16l2 2L24 6" /></svg>распознано{{ ms ? ' · ' + (ms / 1000).toFixed(1).replace('.', ',') + ' с' : '' }}</template>
-          <template v-else-if="status === 'live'"><svg class="tk" viewBox="0 0 28 24" aria-hidden="true"><path d="M2 13l5 5L18 6M11 16l2 2L24 6" /></svg>услышала Gemini</template>
+          <template v-else-if="status === 'live'"><svg class="tk" viewBox="0 0 28 24" aria-hidden="true"><path d="M2 13l5 5L18 6M11 16l2 2L24 6" /></svg>услышала {{ model || 'Gemini' }}</template>
           <template v-else><b class="ex">!</b>не распознано · <button type="button" class="rt" @click="emit('retry')">Повторить</button></template>
         </span>
       </div>
