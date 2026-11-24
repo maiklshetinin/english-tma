@@ -232,9 +232,11 @@ function resetEval() { recA.length = 0; segs.value = []; speechSec.value = 0; se
 function mute() { muted.value = !muted.value; sess?.mute(muted.value) }
 onBeforeUnmount(() => { if (props.part !== 'body') return; trDone(trTok); waveRun(false); sess?.stop(); dropNotes(); clearInterval(clock); clearTimeout(scT); delete tp.busy[props.step.id]; delete tp.ctl[props.step.id] })
 const hasKeys = computed(() => ai.keys.length > 0)
+const qText = computed(() => (props.step.n ? props.step.n + '. ' : '') + (props.step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски'))
+const anyBusy = computed(() => busy.value || !!tp.busy[props.step.id])          // подвал — свой экземпляр: «идёт разговор» — общий флаг
 // ⓘ у «Оценивать речь» (24.11.2026): облачко — сколько нейросетей работает и какие: собеседник, текст речи, экзаменатор
 const info = ref(false), infoEl = ref(null)
-const evalName = computed(() => { const m = lastRep.value?.model || getSpeechPick(); return m ? checkName(m) : 'Flash Lite (авто)' })
+const evalName = computed(() => { const m = C.value?.evm || lastRep.value?.model || getSpeechPick(); return m ? checkName(m) : 'Flash Lite (авто)' })
 function infoAway(e) { if (infoEl.value && !infoEl.value.contains(e.target)) info.value = false }
 watch(info, (v) => { if (v) document.addEventListener('pointerdown', infoAway, true); else document.removeEventListener('pointerdown', infoAway, true) })
 onBeforeUnmount(() => document.removeEventListener('pointerdown', infoAway, true))
@@ -243,7 +245,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', infoAway, true
 watchEffect(() => {
   if (props.part !== 'body') return          // пишет только сам экран — подвал (part="fb") только рисует
   const c = C.value; if (!c) return
-  c.live = st.value === 'live'          // подвал — отдельный экземпляр: «идёт ли разговор» берёт отсюда, не из своего st
+  c.live = st.value === 'live'; c.evm = lastRep.value?.model || ''          // подвал — отдельный экземпляр: «идёт ли разговор» берёт отсюда, не из своего st
   const n = [], s = st.value, liveNm = liveName(used.value || pickName.value || 'Live').replace(/^Gemini /, '')
   n.push({ k: 'live', name: 'Live · ' + liveNm, st: s === 'connecting' ? 'busy' : s === 'live' ? (c.pt === 'wait' ? 'busy' : 'on') : 'off',
     txt: s === 'connecting' ? 'подключаюсь' : s === 'live' ? (c.pt === 'talk' ? 'слышит вас' : c.pt === 'wait' ? 'отвечает' : 'соединение открыто') : s === 'ended' ? 'соединение закрыто' : 'не подключена' })
@@ -268,25 +270,9 @@ watchEffect(() => {
          Во всех вариантах разговора, и у собеседования (вопрос консул задаёт сам, в чате). В правке — остаются (их можно поменять) -->
     <ExHead v-if="p.edit" :step="step" :def="J.head" />
     <ExText v-if="p.edit" v-model="step.text" tag="p" class="tk" ph="Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски" multi>{{ step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }}</ExText>
-    <div v-if="!p.edit" class="thd" @pointerdown.stop>          <!-- вверху (21.11.2026): голос и «Оценивать речь»; пока идёт разговор — не меняются -->
-      <span ref="infoEl" class="evw"><label class="ev" :class="{ off: busy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="busy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
-        <button type="button" class="evi" :class="{ on: info }" aria-label="Как это работает" title="Как это работает" @click="info = !info">i</button>
-        <span v-if="info" class="evp" role="dialog">
-          <b>Здесь работают {{ ptt && !vn ? 'три' : 'две' }} нейросети</b>
-          <span class="evr"><i>🗣</i><span><b>Собеседник — Gemini Live</b> · {{ pickName }}<br />Слышит ваш голос сырым звуком (с произношением) и отвечает голосом.{{ ptt ? '' : ' Текст вашей речи в чате пишет тоже она.' }}</span></span>
-          <span v-if="vn" class="evr"><i>🎧</i><span><b>Ваши реплики — голосовыми, как в Telegram</b><br />Без распознавания: ▶ — переслушать, что сказали. Это тот же звук, что услышала Gemini.</span></span>
-          <span v-if="ptt && !vn" class="evr"><i>✍️</i><span><b>Текст вашей речи — Gemini Transcribe Live</b><br />Только показывает внизу и в чате, что услышано. Собеседнику не передаётся — он слушает сам звук.</span></span>
-          <span class="evr"><i>📊</i><span><b>Экзаменатор — {{ evalName }}</b> · отдельная модель, включается этим переключателем<br />Каждые {{ STEP }} с вашей речи переслушивает запись (последние 3 мин) и расшифровку: уровень A1–C2, понятность, словарь, грамматика, связность, беглость, произношение, ошибки. Реплики собеседника — только контекст. Меньше 20 с речи — не оценивает; чем короче запись, тем ниже уверенность.</span></span>
-          <small>Как оценивать — промпт evalPrompt в JSON экрана («{ }»)</small>
-        </span></span>
-      <span v-if="ptt" class="lk" :title="`Язык закреплён: ${L.ru} — и для распознавания (Transcribe Live), и для ответа Gemini (lang в JSON экрана)`"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>{{ L.code }}</span>
-      <label class="pill" :class="{ off: busy }" :title="editor ? 'Голос Gemini — пишется в экран (voice в JSON)' : 'Голос Gemini — из урока; выбор здесь — только на этот раз'">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
-        <select :value="vSel" :disabled="busy" aria-label="Голос" @change="onVoice($event.target.value)">
-          <option v-if="!VOICES.some((x) => x[0] === voice)" :value="voice">{{ voice }} · из урока</option>
-          <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup>
-          <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup></select></label>
-    </div>
+    <!-- 24.11.2026: вверху — одна маленькая строка, всегда одинаковая: текст экрана (вопрос или задание; ★ — обязательный).
+         Голос, PL и «Оценивать речь» — в подвале -->
+    <p v-if="!p.edit" class="tq" :title="qText"><b v-if="step.star" class="tqs">★</b>{{ qText }}</p>
 
     <template v-if="p.edit">
       <label class="tl">Роль Gemini <small>видит только ИИ · пусто — консул на Карту поляка</small></label>
@@ -340,9 +326,28 @@ watchEffect(() => {
   <!-- подвал (24.11.2026): модель и статусы нейросетей (соединение открыто / закрыто, запрос ушёл) — слева от «Продолжить» -->
   <div v-else-if="part === 'fb' && !p.edit" class="tf" @pointerdown.stop>
     <div class="tfl">
-      <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" :title="editor ? 'Модель разговора — пишется в экран (model в JSON)' : 'Модель разговора — из урока; выбор здесь — только на этот раз'">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg><span class="pv">{{ pickName }}</span>
-      <select :value="pick || lessonModel" :disabled="tp.busy[step.id]" aria-label="Модель" @change="onModel($event.target.value)"><option value="">авто · {{ liveName(models[0]) }}{{ !editor && !lessonModel ? ' · из урока' : '' }}</option><option v-if="lessonModel && !models.includes(lessonModel)" :value="lessonModel">{{ liveName(lessonModel) }} · из урока</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ !editor && m === lessonModel ? ' · из урока' : '' }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
+      <div class="tpl">          <!-- голос, PL, «Оценивать речь» (были вверху экрана); пока идёт разговор — не меняются -->
+        <label v-if="models.length" class="pill" :class="{ off: tp.busy[step.id] }" :title="editor ? 'Модель разговора — пишется в экран (model в JSON)' : 'Модель разговора — из урока; выбор здесь — только на этот раз'">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z" /></svg><span class="pv">{{ pickName }}</span>
+        <select :value="pick || lessonModel" :disabled="tp.busy[step.id]" aria-label="Модель" @change="onModel($event.target.value)"><option value="">авто · {{ liveName(models[0]) }}{{ !editor && !lessonModel ? ' · из урока' : '' }}</option><option v-if="lessonModel && !models.includes(lessonModel)" :value="lessonModel">{{ liveName(lessonModel) }} · из урока</option><option v-for="m in models" :key="m" :value="m">{{ liveName(m) }}{{ !editor && m === lessonModel ? ' · из урока' : '' }}{{ think(m) ? ' — думает дольше, отвечает с паузой' : '' }}</option></select></label>
+        <span ref="infoEl" class="evw"><label class="ev" :class="{ off: anyBusy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="anyBusy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
+          <button type="button" class="evi" :class="{ on: info }" aria-label="Как это работает" title="Как это работает" @click="info = !info">i</button>
+          <span v-if="info" class="evp" role="dialog">
+            <b>Здесь работают {{ ptt && !vn ? 'три' : 'две' }} нейросети</b>
+            <span class="evr"><i>🗣</i><span><b>Собеседник — Gemini Live</b> · {{ pickName }}<br />Слышит ваш голос сырым звуком (с произношением) и отвечает голосом.{{ ptt ? '' : ' Текст вашей речи в чате пишет тоже она.' }}</span></span>
+            <span v-if="vn" class="evr"><i>🎧</i><span><b>Ваши реплики — голосовыми, как в Telegram</b><br />Без распознавания: ▶ — переслушать, что сказали. Это тот же звук, что услышала Gemini.</span></span>
+            <span v-if="ptt && !vn" class="evr"><i>✍️</i><span><b>Текст вашей речи — Gemini Transcribe Live</b><br />Только показывает внизу и в чате, что услышано. Собеседнику не передаётся — он слушает сам звук.</span></span>
+            <span class="evr"><i>📊</i><span><b>Экзаменатор — {{ evalName }}</b> · отдельная модель, включается этим переключателем<br />Каждые {{ STEP }} с вашей речи переслушивает запись (последние 3 мин) и расшифровку: уровень A1–C2, понятность, словарь, грамматика, связность, беглость, произношение, ошибки. Реплики собеседника — только контекст. Меньше 20 с речи — не оценивает; чем короче запись, тем ниже уверенность.</span></span>
+            <small>Как оценивать — промпт evalPrompt в JSON экрана («{ }»)</small>
+          </span></span>
+        <span v-if="ptt" class="lk" :title="`Язык закреплён: ${L.ru} — и для распознавания (Transcribe Live), и для ответа Gemini (lang в JSON экрана)`"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>{{ L.code }}</span>
+        <label class="pill" :class="{ off: anyBusy }" :title="editor ? 'Голос Gemini — пишется в экран (voice в JSON)' : 'Голос Gemini — из урока; выбор здесь — только на этот раз'">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
+          <select :value="vSel" :disabled="anyBusy" aria-label="Голос" @change="onVoice($event.target.value)">
+            <option v-if="!VOICES.some((x) => x[0] === voice)" :value="voice">{{ voice }} · из урока</option>
+            <optgroup label="Женские"><option v-for="v in VOICES.filter((x) => x[1] === 'женский')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup>
+            <optgroup label="Мужские"><option v-for="v in VOICES.filter((x) => x[1] === 'мужской')" :key="v[0]" :value="v[0]">{{ vName(v[0]) }}{{ !editor && v[0] === voice ? ' · из урока' : '' }}</option></optgroup></select></label>
+      </div>
       <div v-if="C?.net?.length" class="net" aria-live="polite"><span v-for="x in C.net" :key="x.k" class="nt" :class="x.st" :title="x.name + ' — ' + x.txt"><i class="nd" /><b>{{ x.name }}</b> {{ x.txt }}<em v-if="x.st === 'busy'" class="dd"><i>.</i><i>.</i><i>.</i></em></span></div>
     </div>
   </div>
@@ -357,14 +362,15 @@ watchEffect(() => {
 .tn { margin: 4px 0 0; font-size: 11.5px; font-weight: 600; color: var(--hint) }
 .tv { display: grid; gap: 10px }
 .ev { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer }
-.thd { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin: -4px 0 8px }          /* вверху под заданием: «Оценивать речь» слева, голос справа */
+.tq { margin: -4px 0 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center; font-size: 15px; font-weight: 800; line-height: 1.35; color: var(--text) } .tqs { margin-right: 4px; color: #e5484d }          /* строка вопроса вверху */
+.tpl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px }          /* подвал: модель, голос, PL, «Оценивать речь» */
 .ev.off { opacity: .5; cursor: default }
 .evw { position: relative; display: inline-flex; align-items: center; gap: 6px }
 .evi { width: 20px; height: 20px; padding: 0; border: 1.5px solid #b9c6dc; border-radius: 50%; background: var(--card); color: #6b7a99; font: italic 800 12px/1 Georgia, serif; cursor: pointer } .evi:hover, .evi.on { border-color: #2f6fe0; color: #2f6fe0 }
-.evp { position: absolute; left: 0; top: calc(100% + 8px); z-index: 20; display: grid; gap: 9px; width: min(360px, 86vw); padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); box-shadow: 0 8px 28px rgba(0, 0, 0, .16); font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--text); text-align: left; animation: evp .15s ease-out }
-.evp::before { content: ''; position: absolute; left: 22px; top: -6px; width: 10px; height: 10px; background: var(--card); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg) }
+.evp { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20; display: grid; gap: 9px; width: min(360px, 86vw); padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); box-shadow: 0 8px 28px rgba(0, 0, 0, .16); font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--text); text-align: left; animation: evp .15s ease-out }
+.evp::before { content: ''; position: absolute; left: 22px; bottom: -6px; width: 10px; height: 10px; background: var(--card); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); transform: rotate(45deg) }          /* облачко — над подвалом */
 .evp > b { font-size: 13.5px } .evr { display: grid; grid-template-columns: 20px 1fr; gap: 6px } .evr i { font-style: normal } .evr b { font-weight: 800 } .evp small { color: var(--hint); font-size: 11.5px }
-@keyframes evp { from { opacity: 0; transform: translateY(-4px) } } @media (prefers-reduced-motion: reduce) { .evp { animation: none } }
+@keyframes evp { from { opacity: 0; transform: translateY(4px) } } @media (prefers-reduced-motion: reduce) { .evp { animation: none } }
 /* «таблетки» (21.11.2026): голос — вверху, модель — в подвале */
 .tf { display: flex; align-items: center; gap: 12px; min-width: 0 }
 .tfl { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0 }
@@ -409,7 +415,7 @@ watchEffect(() => {
 .pc .fme { color: #b3261e; font-weight: 600 }
 .b.dr { background: #f2fbe9; border: 1.5px dashed #9ad07a; color: #4f7a3c } .bl { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #5aa33a }
 .bw { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 800; color: #c0392b }
-.lk { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
+.lk { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
 .tx { display: flex; flex-direction: column; gap: 5px; max-height: max(340px, 52vh); overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px 4px 2px;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px);          /* верх растворяется */
   scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color .3s }
