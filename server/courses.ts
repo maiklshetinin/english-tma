@@ -32,7 +32,7 @@ export const PRESET_TPLS: Record<string, Record<string, unknown>> = { kp: { kind
   talk: { kind: 'talk' }, talkava: { kind: 'talk', avatar: true }, talkptt: { kind: 'talk', avatar: true, ptt: true }, talkptt2: { kind: 'talk', avatar: true, ptt: true, busuu: true },
   talkvn: { kind: 'talk', avatar: true, ptt: true, vn: true },          // 24.11.2026: «Рация · голосовые»
   talkexam: { kind: 'talk', avatar: true, ptt: true, exam: true } }          // 24.11.2026: «Собеседование · рация»
-const PRESET_DROP = ['id', 'kind', 'text', 'ideal', 'head', 'star', 'n', 'look', 'plain', 'autoplay', 'engine', 'dic', 'ball', 'keys', 'avatar', 'ptt', 'busuu', 'vn', 'exam', 'image', 'audio', 'video', 'exAudio', 'audioBy', 'skills', 'min', 'topic']
+const PRESET_DROP = ['id', 'kind', 'text', 'ideal', 'head', 'star', 'n', 'look', 'plain', 'autoplay', 'engine', 'dic', 'ball', 'keys', 'pv', 'avatar', 'ptt', 'busuu', 'vn', 'exam', 'image', 'audio', 'video', 'exAudio', 'audioBy', 'skills', 'min', 'topic']
 export const INK_MAX = 300, INK_POINTS = 4000, TEMPLATES_MAX = 30          // TEMPLATES_MAX — своих упражнений из конструктора в курсе
 export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 
@@ -84,6 +84,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       for (const k of ['format', 'message', 'sttPrompt', 'sttAsk']) putT(o, k, r[k], 4000)
       if (LANG_OK.includes(String(r.lang))) o.lang = r.lang
       if (r.ball === true) o.ball = true          // «Ответ по смыслу · шар» (24.11.2026): шар и свои блоки (keys)
+      { const pv = Number(r.pv); if (Number.isInteger(pv) && pv > 0 && pv < 100) o.pv = pv }          // пресет типа (kp-2), 24.11.2026
       if (Array.isArray(r.keys)) { const k = r.keys.slice(0, 16).map((x: any) => ({ label: str(x?.label, 60).trim(), words: (Array.isArray(x?.words) ? x.words : []).slice(0, 3).map((w: unknown) => str(w, 40)).filter(Boolean) })).filter((x: { label: string }) => x.label); if (k.length) o.keys = k }
       putT(o, 'topic', r.topic, 300); if (typeof r.dicModel === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.dicModel)) o.dicModel = r.dicModel; putReq(o, r.request)          // тема, чем диктовать, свои поля запросов (23–24.11.2026)
       if (r.engine === 'api' || r.engine === 'live') { o.engine = 'api'; if (typeof r.model === 'string' && /^[a-z0-9.-]{3,80}$/.test(r.model)) o.model = r.model
@@ -101,7 +102,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       if (r.noiseSuppression === true) o.noiseSuppression = true; if (r.avatar === true) o.avatar = true; if (r.ptt === true) o.ptt = true; if (r.busuu === true) o.busuu = true; if (r.vn === true) o.vn = true
       putReq(o, r.request)
       put(o, 'ideal', str(r.ideal, 6000)); if (r.star === true) o.star = true; { const n = Number(r.n); if (Number.isInteger(n) && n > 0 && n < 100) o.n = n }          // 24.11.2026: вопрос (text), эталон, звезда, номер — у всех разговоров, не только у собеседования
-      if (r.exam === true) { o.exam = true; o.ptt = true } }          // «Собеседование · рация» (24.11.2026): эталон, звезда, номер
+      if (r.exam === true) { o.exam = true; o.ptt = true }
+      { const pv = Number(r.pv); if (Number.isInteger(pv) && pv > 0 && pv < 100) o.pv = pv } }          // пресет типа (talkexam-2), 24.11.2026          // «Собеседование · рация» (24.11.2026): эталон, звезда, номер
     // «Транскрипция» (Gemini 3.5 Transcribe Live, 20.11.2026, эксперимент): подсказка, язык
     if (kind === 'stt') { put(o, 'text', str(r.text, 300)); if (['en-US', 'es-ES'].includes(String(r.lang))) o.lang = r.lang }
     // Книжные (экспериментальные, 17.11.2026): «Найди лишнее» — плитки слов, одна лишняя; «Распредели по колонкам» — фразы по 2–3 колонкам.
@@ -202,12 +204,17 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       // настройки упражнений курса: те же поля и проверки, что у экрана этого шаблона; вопрос, эталон, файлы — не берём
       const presets: Record<string, Record<string, unknown>> = {}
       const bp = b.presets
-      if (bp && typeof bp === 'object' && !Array.isArray(bp)) for (const [tpl, form] of Object.entries(PRESET_TPLS)) {
-        const raw = (bp as Record<string, unknown>)[tpl]
+      // 24.11.2026: и пресеты типа — «talkexam-1» … «talkexam-99»: те же поля + имя (name); не больше 20 на тип
+      const nOf = (k: string) => { const m = /^(.+)-([1-9]\d?)$/.exec(k); return m && PRESET_TPLS[m[1]] ? { tpl: m[1], n: +m[2] } : PRESET_TPLS[k] ? { tpl: k, n: 0 } : null }
+      const per: Record<string, number> = {}
+      if (bp && typeof bp === 'object' && !Array.isArray(bp)) for (const [key, raw] of Object.entries(bp as Record<string, unknown>)) {
+        const kn = nOf(key); if (!kn) continue
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
-        const o: Record<string, unknown> = { ...step({ ...(raw as object), ...form, id: 'preset' }) }
+        if (kn.n && (per[kn.tpl] = (per[kn.tpl] ?? 0) + 1) > 20) continue
+        const o: Record<string, unknown> = { ...step({ ...(raw as object), ...PRESET_TPLS[kn.tpl], id: 'preset' }) }
         for (const k of PRESET_DROP) delete o[k]
-        if (Object.keys(o).length) presets[tpl] = o
+        if (kn.n) { const nm = str((raw as any).name, 60).trim(); if (nm) o.name = nm }
+        if (Object.keys(o).length || kn.n) presets[key] = o
       }
       const ref = col().doc(id), s = await ref.get()
       if (!s.exists && (await col().get()).size >= COURSES_MAX) throw fail(413, 'too many courses')

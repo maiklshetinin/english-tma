@@ -91,7 +91,7 @@ export const talkTpl = (s: any) => (s?.exam ? 'talkexam' : s?.ptt ? (s.vn ? 'tal
 export function talkCfg(s: any): TalkCfg {
   const own: any = {}
   for (const [k, v] of Object.entries(s ?? {})) if (v !== undefined && v !== null) own[k] = v
-  return talkCode({ ...presetFor(talkTpl(s)), ...own })
+  return talkCode({ ...presetFor(talkTpl(s), s?.pv), ...own })          // pv — пресет типа (talkexam-2), 24.11.2026
 }
 /** текстовые поля: свои — как есть, даже пустые (стёрли в JSON — пусто, умолчание не подставляем; 21.11.2026) */
 export const TALK_TEXTS = ['prompt', 'lock', 'opener', 'guard', 'evalPrompt', 'evalAsk'] as const

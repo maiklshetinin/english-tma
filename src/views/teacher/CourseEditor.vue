@@ -15,7 +15,7 @@
 // копия на случай, когда сети нет (localStorage; видео до загрузки — IndexedDB). Без сервера (демо) — только в браузере.
 import { aiIcon } from '../../utils/ai'
 import { ask, say, askText, dialog } from '../../composables/useDialog'
-import { setPresets, PRESET_TPLS } from '../../exercises/presets'
+import { setPresets, PRESET_TPLS, splitKey, variantsOf } from '../../exercises/presets'
 import { presetJson, presetFromJson, presetKeys, PRESET_FORM } from '../../exercises/presetJson'
 import { assemble } from '../../exercises/assemble'
 import { requests } from '../../exercises/requests'
@@ -92,26 +92,61 @@ const doc = reactive(load())
 watch(() => doc.presets, (p) => setPresets(p), { deep: true, immediate: true })
 const PRESET_SET = new Set(PRESET_TPLS)
 const preT = ref(null), preText = ref(''), preErr = ref(''), preK = ref(0)          // preK — окно заново (после «Вернуть умолчания»)
-const preName = (id) => TEMPLATES.find(t => t.id === id)?.t ?? id
-function preOpen(tpl) { tray.value = null; preT.value = tpl; preText.value = JSON.stringify(presetJson(tpl), null, 2); preErr.value = ''; preK.value++ }
+const preName = (id) => { const k = splitKey(id), b = TEMPLATES.find(t => t.id === (k?.base ?? id))?.t ?? id; return k?.n ? `${b} · ${pvList(k.base).find(v => v.n === k.n)?.name ?? 'пресет ' + k.n}` : b }
+// ---------- Пресеты типа (24.11.2026) ----------
+// У типа (talkexam, kp…) — несколько вариантов общих настроек: «talkexam-1», «talkexam-2»… Хранятся в курсе (doc.presets) рядом с базовым,
+// каждый — только свои отличия от базового и имя. Счётчик на плитке → сверху ряд пресетов: выбрать (с ним плитка ляжет на урок),
+// «{ }» — настройки пресета, корзина, ＋ — копия выбранного под следующим номером. Выбор пресета на плитке — в этом браузере
+const pvOpen = ref('')
+const PV_K = 'ce.pv'
+const pvSel = ref((() => { try { const v = JSON.parse(localStorage.getItem(PV_K) || '{}'); return v && typeof v === 'object' ? v : {} } catch { return {} } })())
+watch(pvSel, (v) => { try { localStorage.setItem(PV_K, JSON.stringify(v)) } catch {} })
+const pvList = (tpl) => variantsOf(doc.presets, tpl)
+const pvOf = (tpl) => { const n = Number(pvSel.value[tpl]) || 0; return n && doc.presets?.[`${tpl}-${n}`] ? n : 0 }
+const pvKey = (tpl) => (pvOf(tpl) ? `${tpl}-${pvOf(tpl)}` : tpl)
+const pvCount = (tpl) => pvList(tpl).length + 1
+const pvNext = (tpl) => { const l = pvList(tpl); for (let n = 1; n < 100; n++) if (!l.some(v => v.n === n)) return n; return 0 }
+function pvPick(tpl, n) { pvSel.value = { ...pvSel.value, [tpl]: n } }
+function pvAdd(tpl) {
+  const n = pvNext(tpl); if (!n || pvList(tpl).length >= 20) return showToast('Больше 20 пресетов у одного типа нельзя')
+  const src = pvOf(tpl), from = src ? { ...(doc.presets[`${tpl}-${src}`] ?? {}) } : {}
+  const name = (src ? pvList(tpl).find(v => v.n === src)?.name : 'Базовый') + ' · копия'
+  doc.presets = { ...(doc.presets ?? {}), [`${tpl}-${n}`]: { ...from, name } }; save()
+  pvPick(tpl, n); showToast(`Пресет ${tpl}-${n} — копия «${src ? pvList(tpl).find(v => v.n === src)?.name : 'Базовый'}». Поменяйте промпт в «{ }»`)
+}
+async function pvDel(tpl, n) {
+  const k = `${tpl}-${n}`, used = [...doc.items, ...doc.loose].flatMap(x => x.steps ?? []).filter(st => tplOf(st) === tpl && st.pv === n).length
+  if (!(await ask(`Удалить пресет ${k}?`, { text: used ? `${used} экранов на нём перейдут на базовый.` : 'Экранов на нём нет.', ok: 'Удалить', danger: true }))) return
+  const all = { ...(doc.presets ?? {}) }; delete all[k]; doc.presets = all; save()
+  if (pvOf(tpl) === n) pvPick(tpl, 0)
+}
+function pvRename(tpl, n, name) { const k = `${tpl}-${n}`, nm = String(name || '').trim().slice(0, 60) || `Пресет ${n}`; if (doc.presets?.[k]?.name === nm) return; doc.presets = { ...doc.presets, [k]: { ...doc.presets[k], name: nm } }; save() }
+const PV_LABEL = { prompt: 'промпт', system: 'роль', voice: 'голос', model: 'модель', message: 'сообщение', format: 'формат ответа', temperature: 'температура', opener: 'первая реплика', evalPrompt: 'промпт оценки', pass: 'порог', lang: 'язык', topic: 'тема', dicModel: 'модель диктовки', request: 'запрос' }
+const pvDiff = (f) => Object.keys(f ?? {}).filter(k => k !== 'name').map(k => PV_LABEL[k] ?? k).join(', ')
+function preOpen(tpl) { tray.value = null; pvOpen.value = ''; preT.value = tpl; preText.value = JSON.stringify(presetJson(tpl), null, 2); preErr.value = ''; preK.value++ }
 // «Запрос в API» (24.11.2026): что уйдёт по сети с этими общими настройками; JSON не разбирается — последний верный
 let preLast = []
 const preReqs = computed(() => { try { return (preLast = requests({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), ...preForm.value })) } catch { return preLast } })
-const preForm = computed(() => ({ kind: preT.value?.startsWith('kp') ? 'kp' : 'talk', ...(PRESET_FORM[preT.value] ? (({ kind: _k, ...f }) => f)(PRESET_FORM[preT.value]) : {}) }))          // форма шаблона — из presetJson.ts (PRESET_FORM)
+const preForm = computed(() => { const k = splitKey(preT.value ?? ''), b = k?.base ?? preT.value; return { kind: b?.startsWith('kp') ? 'kp' : 'talk', ...(PRESET_FORM[b] ? (({ kind: _k, ...f }) => f)(PRESET_FORM[b]) : {}), ...(k?.n ? { pv: k.n } : {}) } })          // форма шаблона — из presetJson.ts (PRESET_FORM)
 const preAsm = computed(() => { try { return assemble({ text: '‹вопрос экрана›', ideal: '‹эталон экрана›', ...JSON.parse(preText.value), ...preForm.value }) } catch { return { parts: [], warn: ['JSON пока не разбирается'], own: [] } } })
 function preSave() {
   const r = presetFromJson(preT.value, preText.value); if (r.error) { preErr.value = r.error; return }
   const all = { ...(doc.presets ?? {}) }
-  if (Object.keys(r.fields).length) all[preT.value] = r.fields; else delete all[preT.value]
+  const vn = splitKey(preT.value)?.n, nm = all[preT.value]?.name          // пресет: имя остаётся, пустой — не удаляется (это «как базовый»)
+  if (vn) all[preT.value] = { ...r.fields, ...(nm ? { name: nm } : {}) }
+  else if (Object.keys(r.fields).length) all[preT.value] = r.fields; else delete all[preT.value]
   doc.presets = all; save(); showToast(`«${preName(preT.value)}»: общие настройки сохранены — действуют на все такие экраны курса без своих`); preT.value = null
 }
 async function preReset() {
   if (!(await ask(`Вернуть «${preName(preT.value)}» к умолчаниям?`, { text: 'Общие настройки этого упражнения в курсе сотрутся — экраны без своих полей возьмут умолчания приложения (их видно в JSON).', ok: 'Вернуть' }))) return
-  const all = { ...(doc.presets ?? {}) }; delete all[preT.value]; doc.presets = all; save(); preOpen(preT.value)
+  const all = { ...(doc.presets ?? {}) }, nm = all[preT.value]?.name
+  if (splitKey(preT.value)?.n) all[preT.value] = nm ? { name: nm } : {}; else delete all[preT.value]          // пресет — к базовому, имя остаётся
+  doc.presets = all; save(); preOpen(preT.value)
 }
 async function preAll() {
   const tpl = preT.value, keys = presetKeys(tpl)
-  const list = [...doc.items, ...doc.loose].flatMap(x => x.steps ?? []).filter(st => tplOf(st) === tpl && keys.some(k => k in st))
+  const kk = splitKey(tpl), base = kk?.base ?? tpl, vn = kk?.n ?? 0
+  const list = [...doc.items, ...doc.loose].flatMap(x => x.steps ?? []).filter(st => tplOf(st) === base && (st.pv || 0) === vn && keys.some(k => k in st))
   if (!list.length) return showToast('У экранов этого упражнения своих настроек нет — все уже берут общие')
   if (!(await ask(`Убрать свои настройки у ${list.length} экранов «${preName(tpl)}»?`, { text: 'Промпты и настройки этих экранов станут общими (как здесь). Вопрос и эталон не трогаем.', ok: 'Убрать', danger: true }))) return
   for (const st of list) for (const k of keys) delete st[k]
@@ -611,7 +646,9 @@ const skillsT = (t) => SKILLS[t.id] ?? []
 /** Экраны по плитке меню: «Готовый урок» или шаблон */
 function makeTpl(id) {
   if (id === 'lesson') return fishLesson()
-  return [TEMPLATES.find(t => t.id === id).make()]
+  const s = TEMPLATES.find(t => t.id === id).make(), n = pvOf(id)
+  if (n) s.pv = n          // выбранный пресет плитки (24.11.2026)
+  return [s]
 }
 function addScreen(id) {
   let L = activeLesson.value ? findAny(activeLesson.value) : null
@@ -2012,14 +2049,32 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <small><b>{{ T[k].t }}</b>{{ TASK_D[k] }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
+        <!-- пресеты типа (24.11.2026): выезжают сверху по счётчику на плитке -->
+        <div v-if="pvOpen && tray === 'inter'" class="pvr" @pointerdown.stop>
+          <div class="pvh"><b>Пресеты</b><code>{{ pvOpen }}</code><small>{{ preName(pvOpen) }} · {{ pvCount(pvOpen) }}</small><button type="button" class="pvx" aria-label="Закрыть пресеты" @click="pvOpen = ''">✕</button></div>
+          <div class="pvt">
+            <div class="pvc" :class="{ sel: !pvOf(pvOpen) }" role="button" tabindex="0" @click="pvPick(pvOpen, 0)" @keydown.enter="pvPick(pvOpen, 0)">
+              <span class="mtag"><code>{{ pvOpen }}</code><button class="mjs" title="Настройки базового" @click.stop="preOpen(pvOpen)">{ }</button></span>
+              <div class="pvm"><ExerciseMini :id="pvOpen" /></div>
+              <b class="pvn">Базовый</b><small class="pvd">{{ doc.presets?.[pvOpen] ? 'Свои в курсе: ' + pvDiff(doc.presets[pvOpen]) : 'Умолчания приложения' }}</small>
+            </div>
+            <div v-for="v in pvList(pvOpen)" :key="v.n" class="pvc" :class="{ sel: pvOf(pvOpen) === v.n }" role="button" tabindex="0" @click="pvPick(pvOpen, v.n)" @keydown.enter.self="pvPick(pvOpen, v.n)">
+              <span class="mtag"><code>{{ pvOpen }}-{{ v.n }}</code><button class="mjs" :title="'Настройки пресета ' + pvOpen + '-' + v.n" @click.stop="preOpen(pvOpen + '-' + v.n)">{ }</button><button class="mar" title="Удалить пресет" :aria-label="'Удалить пресет ' + pvOpen + '-' + v.n" @click.stop="pvDel(pvOpen, v.n)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg></button></span>
+              <div class="pvm"><ExerciseMini :id="pvOpen" /></div>
+              <input class="pvn pvi" :value="v.name" maxlength="60" :aria-label="'Название пресета ' + v.n" @click.stop @keydown.enter="$event.target.blur()" @change="pvRename(pvOpen, v.n, $event.target.value)" />
+              <small class="pvd">{{ pvDiff(v.fields) ? 'Свой: ' + pvDiff(v.fields) : 'Как базовый — поменяйте в «{ }»' }}</small>
+            </div>
+            <button type="button" class="pvadd" :disabled="!pvNext(pvOpen)" @click="pvAdd(pvOpen)"><span>＋</span>Новый пресет<small>копия выбранного → {{ pvOpen }}-{{ pvNext(pvOpen) }}</small></button>
+          </div>
+        </div>
         <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i><i v-if="b.k === 'arch' && arch.length">{{ arch.length }}</i></button></div>
         <!-- мини-окошки: как выглядит экран -->
         <div class="xrow" :class="{ wrap: trayTab === 'kp' || trayTab === 'arch' }">
         <p v-if="trayTab === 'arch' && !XGROUPS.length" class="xarn">В архиве пусто. Наведите на плашку в другой вкладке и нажмите значок архива справа сверху — она переедет сюда.</p>          <!-- Karta Polaka: группы по одной плашке — переносятся рядами по ширине окна, без горизонтального скролла (21.11.2026) -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div v-if="trayTab !== 'kp' && trayTab !== 'arch'" class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">
-        <div v-for="t in g.items" :key="t.id" class="miw"><span class="mtag"><code :class="{ on: copiedId === t.id }" :title="copiedId === t.id ? 'Скопировано' : 'ID упражнения — так оно называется в JSON (тип), в окне «{ }» и в tools/make-json.py. Нажмите — скопировать'" @pointerdown.stop @click.stop="copyId(t.id)">{{ copiedId === t.id ? '✓ ' + t.id : t.id }}</code><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button><button class="mar" :class="{ back: trayTab === 'arch' }" :title="trayTab === 'arch' ? 'Вернуть в меню. ID шаблона: ' + t.id + ' — совсем убрать: src/utils/lesson.ts → TEMPLATES' : 'В архив — убрать из меню (вернуть можно на вкладке «Архив»)'" :aria-label="trayTab === 'arch' ? 'Вернуть «' + t.t + '» в меню' : 'Убрать «' + t.t + '» в архив'" @pointerdown.stop @click.stop="trayTab === 'arch' ? fromArch(t.id) : toArch(t.id)"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg></button></span><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
+        <div v-for="t in g.items" :key="t.id" class="miw"><span class="mtag"><code :class="{ on: copiedId === t.id }" :title="copiedId === pvKey(t.id) ? 'Скопировано' : 'ID упражнения — так оно называется в JSON (тип), в окне «{ }» и в tools/make-json.py. Нажмите — скопировать'" @pointerdown.stop @click.stop="copyId(pvKey(t.id))">{{ copiedId === pvKey(t.id) ? '✓ ' + pvKey(t.id) : pvKey(t.id) }}</code><button v-if="PRESET_SET.has(t.id)" class="mpc" :class="{ on: pvOpen === t.id, many: pvCount(t.id) > 1 }" :title="'Пресеты «' + t.t + '»: ' + pvCount(t.id) + ' — открыть ряд сверху'" :aria-label="'Пресеты ' + t.id" @pointerdown.stop @click.stop="pvOpen = pvOpen === t.id ? '' : t.id">{{ pvCount(t.id) }}</button><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button><button class="mar" :class="{ back: trayTab === 'arch' }" :title="trayTab === 'arch' ? 'Вернуть в меню. ID шаблона: ' + t.id + ' — совсем убрать: src/utils/lesson.ts → TEMPLATES' : 'В архив — убрать из меню (вернуть можно на вкладке «Архив»)'" :aria-label="trayTab === 'arch' ? 'Вернуть «' + t.t + '» в меню' : 'Убрать «' + t.t + '» в архив'" @pointerdown.stop @click.stop="trayTab === 'arch' ? fromArch(t.id) : toArch(t.id)"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg></button></span><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
-          <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b></small>          <!-- 24.11.2026: описание — только в подсказке; сверху — тег-ID -->
+          <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span v-if="pvOf(t.id)" class="mpn">{{ pvList(t.id).find(v => v.n === pvOf(t.id))?.name }}</span></small>          <!-- 24.11.2026: описание — только в подсказке; сверху — тег-ID -->
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i><span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span></span>          <!-- 19.11.2026: «Ответ по смыслу» — значки чатов в строку с навыком -->
         </button>
         
@@ -2061,7 +2116,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <button class="tb" :class="{ on: tray === g.k }" :style="{ '--c': g.c }" :title="gi === 0 ? '2 · Lesson — урок или чекпоинт внутри Chapter' : '3 · Exercise — экраны урока: пары, выбор ответа, порядок слов…'" @click="tray = tray === g.k ? null : g.k; noteTool = false; if (tool === 'pen') tool = 'select'"><em class="tn">{{ gi + 2 }}</em><svg viewBox="0 0 24 24" v-html="g.ic" /><small>{{ g.t }}</small></button></template>
     </div>
     <!-- Настройки упражнения в курсе («{ }» на плитке меню): JSON общих промптов и настроек; «Как собирается» — что уйдёт в модели -->
-  <JsonModal v-if="preT" :key="preK" :tpl="preT" v-model="preText" :schema="presetSchema(preT)" :reqs="preReqs" :title="'«' + preName(preT) + '» — общее для курса'" sub="Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения." :how="preAsm" :error="preErr" apply-text="Сохранить для курса" hint='"" — пусто, ничего не подставляется · Ctrl+Enter или Ctrl+S — сохранить · Esc — закрыть' @apply="preSave" @close="preT = null">
+  <JsonModal v-if="preT" :key="preK" :tpl="splitKey(preT)?.base ?? preT" v-model="preText" :schema="presetSchema(splitKey(preT)?.base ?? preT)" :reqs="preReqs" :title="'«' + preName(preT) + '» — общее для курса'" sub="Действует на все такие экраны без своих полей и на новые. У экрана своё — вопрос, эталон и исключения." :how="preAsm" :error="preErr" apply-text="Сохранить для курса" hint='"" — пусто, ничего не подставляется · Ctrl+Enter или Ctrl+S — сохранить · Esc — закрыть' @apply="preSave" @close="preT = null">
     <template #actions><span class="pre-sp" /><button class="pbtn" title="Стереть общие настройки — вернуть умолчания приложения" @click="preReset">Вернуть умолчания</button><button class="pbtn" title="Убрать свои промпты и настройки у экранов этого упражнения — пусть берут общие" @click="preAll">Применить ко всем экранам</button></template>
   </JsonModal>
 </div>
@@ -2409,6 +2464,19 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .tray.inter .xg { flex: none } .tray.inter .tt2 { align-self: center }
 .xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea } .xg.book { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }          /* книжные — экспериментальные */          /* группы упражнений — рядом, по горизонтали */
 .miw { position: relative; display: grid }
+/* пресеты (24.11.2026): счётчик на плитке и ряд сверху */
+.mpc { flex: none; min-width: 20px; height: 20px; padding: 0 5px; border: 0; border-radius: 10px; background: #e2e5ea; color: #4a4f57; font: 800 11px/20px inherit; cursor: pointer } .mpc.many { background: #1f1f1f; color: #fff } .mpc.on, .mpc:hover { box-shadow: 0 0 0 2px #9aa3b0 }
+.mpn { display: block; font-size: 11.5px; font-weight: 600; color: #6b7280 }
+.pvr { margin: 0 0 10px; padding: 10px 12px 12px; border: 1px solid #d6d9de; border-radius: 14px; background: #fff }
+.pvh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px } .pvh b { font-weight: 800 } .pvh small { color: #888; font-size: 12px; font-weight: 600 }
+.pvh code { padding: 1px 8px; border-radius: 7px; background: #eceef1; color: #4a4f57; font: 700 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace }
+.pvx { margin-left: auto; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: #888; cursor: pointer } .pvx:hover { background: #f0f1f3 }
+.pvt { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 4px }
+.pvc { flex: none; width: 150px; display: flex; flex-direction: column; gap: 5px; padding: 6px 6px 8px; border-radius: 14px; background: #eef9ea; cursor: pointer; text-align: left } .pvc.sel { box-shadow: 0 0 0 2px #1f1f1f }
+.pvm { height: 84px; overflow: hidden; border-radius: 8px; pointer-events: none }
+.pvn { font-size: 13px; font-weight: 800; color: #1f1f1f } .pvi { width: 100%; box-sizing: border-box; padding: 2px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: inherit; font-size: 13px; font-weight: 800 } .pvi:hover, .pvi:focus { border-color: #cfd4da; background: #fff; outline: none }
+.pvd { font-size: 11.5px; font-weight: 600; line-height: 1.35; color: #666 }
+.pvadd { flex: none; width: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 1.5px dashed #b9c0ca; border-radius: 14px; background: #fff; color: #444; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .pvadd span { font-size: 24px; color: #888 } .pvadd small { font-size: 11.5px; font-weight: 600; color: #888 } .pvadd:hover { border-color: #888 }
 .mtag { display: flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px }          /* верх плашки: тег-ID слева, «{ }» и архив — справа; превью — без кнопок */          /* тег-ID — серый, без цвета (цвет — у навыков внизу) */
 .mtag code { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 1px 8px; border-radius: 7px; background: #eceef1; color: #4a4f57; font: 700 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; cursor: copy } .mtag code:hover { background: #e2e5ea } .mtag code.on { background: #e3fbef; color: #1f7a3a }
 .mtc { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: none; color: #9aa0a8; cursor: pointer } .mtc:hover { background: #eceef1; color: #4a4f57 } .mtc.on { color: #1f7a3a }

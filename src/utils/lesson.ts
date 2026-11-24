@@ -41,6 +41,7 @@ export interface Step {
   tn?: string; td?: string                                           // своё упражнение из конструктора: название и описание плитки (вместо шаблона)
   bk?: string; bn?: number; bs?: 'page'                                           // из какого задания учебника (BOOK) — группа «Тест · упражнения Насти»; bn — свой номер задания, как в книге
   lang?: 'pl-PL' | 'en-US' | 'en-GB' | 'es-ES'; voice?: string                // «Транскрипция»: язык (нет — польский); «Разговор с Gemini»: голос Live-модели (нет — Kore)
+  pv?: number          // пресет типа (24.11.2026): настройки «talkexam-2» из курса поверх базовых — src/exercises/presets.ts
   ball?: boolean; keys?: { label: string; words: string[] }[]          // «Ответ по смыслу · шар» (24.11.2026, тест): шар смысловых блоков; keys — свои блоки (иначе Gemini нарежет эталон)
   dic?: 'file'                                                         // «Ответ по смыслу · целым аудио» (тест): диктовка целой записью, не потоком
   exam?: boolean                                                      // «Собеседование · рация» (24.11.2026): консул спрашивает вопрос экрана (text), сверяет с эталоном (ideal); шаблон talkexam
@@ -497,9 +498,11 @@ export function kpFromHtml(h: string) {
 const TPL_FLAGS = ['kind', 'ptt', 'avatar', 'busuu', 'vn', 'exam', 'dic', 'engine', 'ball', 'bk', 'bs'] as const
 function fromType(o: any): any {
   if (!o || typeof o !== 'object' || o.kind || typeof o.type !== 'string') return o
-  const t = TEMPLATES.find((x) => x.id === o.type); if (!t) return o
+  const m = /^(.+?)-([1-9]\d?)$/.exec(o.type)          // «talkexam-2» — тип talkexam, пресет 2 (24.11.2026)
+  const t = TEMPLATES.find((x) => x.id === o.type) ?? (m ? TEMPLATES.find((x) => x.id === m[1]) : undefined); if (!t) return o
   const b: any = t.make(), f: any = {}
   for (const k of TPL_FLAGS) if (b[k] !== undefined) f[k] = b[k]
+  if (m && t.id === m[1]) f.pv = +m[2]
   const { type: _t, ...rest } = o
   return { ...f, ...rest }
 }
@@ -513,6 +516,7 @@ function stepFrom(o: any): Step | null {
   if (o.by === 'letters') s.by = 'letters'
   if (Number.isInteger(o.ans) && o.ans >= 0) s.ans = o.ans
   if (typeof o.min === 'number' && o.min > 0 && o.min <= 60) s.min = o.min
+  if ((o.kind === 'kp' || o.kind === 'talk') && Number.isInteger(o.pv) && o.pv > 0 && o.pv < 100) s.pv = o.pv          // пресет типа (24.11.2026)
   if ((o.kind === 'kp' || o.kind === 'talk') && o.star === true) s.star = true          // звезда и номер — у «Ответа по смыслу» и у всех разговоров (24.11.2026)
   if ((o.kind === 'kp' || o.kind === 'talk') && Number.isInteger(o.n) && o.n > 0 && o.n < 100) s.n = o.n
   if (o.kind === 'kp' && (o.look === 'lines' || o.look === 'cards')) s.look = o.look

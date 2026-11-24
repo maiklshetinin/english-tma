@@ -122,7 +122,7 @@ export const kpTpl = (s: any) => (kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'k
 export function kpCfg(s: any): KpCfg {
   const mine: any = {}
   for (const [k, v] of Object.entries(s ?? {})) if (v !== undefined && v !== null) mine[k] = v
-  return kpCode({ ...presetFor(kpTpl(s)), ...mine })
+  return kpCode({ ...presetFor(kpTpl(s), s?.pv), ...mine })          // pv — пресет типа (kp-2), 24.11.2026
 }
 
 /** Что показывать в JSON экрана — ровно то, что уходит у этой формы: мост — prompt, message, format; Gemini API — всё; «целым аудио» — + sttPrompt, sttAsk */
