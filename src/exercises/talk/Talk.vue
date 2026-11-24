@@ -373,7 +373,7 @@ watchEffect(() => {
 .trow { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 4px } .trow label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--hint) }
 .trow select { max-width: 190px; height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; font-size: 12px }
 .tn { margin: 4px 0 0; font-size: 11.5px; font-weight: 600; color: var(--hint) }
-.tv { display: grid; gap: 10px }
+.tv { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0 } .tv > * { flex: none }          /* 24.11.2026: два скролла → один: чат занимает остаток высоты экрана и крутится сам, страница урока — нет */
 .ev { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer }
 .tq { margin: -4px 0 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center; font-size: 15px; font-weight: 800; line-height: 1.35; color: var(--text) } .tqs { margin-right: 4px; color: #e5484d }          /* строка вопроса вверху */
 .tpl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px }          /* подвал: модель, голос, PL, «Оценивать речь» */
@@ -414,7 +414,7 @@ watchEffect(() => {
 .ts { flex: 1; min-width: 0; display: flex; flex-direction: column } .ts b { font-size: 14px } .ts small { font-size: 12px; color: var(--hint); font-variant-numeric: tabular-nums }
 .sm { flex: none; height: 34px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer } .sm.on { background: #fff4d6 } .sm.red { color: var(--red-d) }
 .er { margin: 0; font-size: 13px; font-weight: 700; color: var(--red-d) }
-.txw { position: relative }
+.txw { position: relative; flex: 1 1 0 !important; min-height: 160px; display: flex; flex-direction: column }
 /* рация (21.11.2026) */
 /* рация: большой микрофон под персонажем — как было (76 px) */
 .tc:has(.pt) { padding: 12px 10px } .pt { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px 10px }
@@ -429,9 +429,10 @@ watchEffect(() => {
 .b.dr { background: #f2fbe9; border: 1.5px dashed #9ad07a; color: #4f7a3c } .bl { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #5aa33a }
 .bw { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 800; color: #c0392b }
 .lk { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fff1f1; color: #c0392b; font-size: 11.5px; font-weight: 900 } .lk svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round }
-.tx { display: flex; flex-direction: column; gap: 5px; max-height: max(340px, 52vh); overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px 4px 2px;
+.tx { display: flex; flex-direction: column; gap: 5px; flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px 4px 2px;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px);          /* верх растворяется */
   scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color .3s }
+:global(.embedded) .txw { flex: none !important } :global(.embedded) .tx { flex: none; max-height: max(340px, 52vh) }          /* в редакторе страница не фиксированной высоты — прежний потолок */
 .tx:hover, .tx.sc { scrollbar-color: rgba(0, 0, 0, .28) transparent }          /* полоска — только пока мышь над чатом или его крутят */
 .tx::-webkit-scrollbar { width: 6px } .tx::-webkit-scrollbar-track { background: transparent } .tx::-webkit-scrollbar-thumb { border-radius: 3px; background: transparent }
 .tx:hover::-webkit-scrollbar-thumb, .tx.sc::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .28) }
