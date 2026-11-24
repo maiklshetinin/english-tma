@@ -58,8 +58,8 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     expect(r.steps[0].lang).toBeUndefined(); expect(r.steps[1].model).toBe('gemini-2.5-flash')
   })
 
-  it('ID с языком: pl-kp, pl-talkexam-2, en-choice; не тот язык — не тип', () => {
-    expect(typeId('kp')).toBe('pl-kp'); expect(typeId('choice')).toBe('en-choice'); expect(typeId('es_talk')).toBe('es-talk'); expect(typeId('talkptt2')).toBe('en-talkptt2')
+  it('ID с языком — только у упражнений с ИИ: pl-kp, pl-talkexam-2, en-talkptt2; choice — без языка', () => {
+    expect(typeId('kp')).toBe('pl-kp'); expect(typeId('choice')).toBe('choice'); expect(tplFromType('en-choice')).toBeNull(); expect(typeId('es_talk')).toBe('es-talk'); expect(typeId('talkptt2')).toBe('en-talkptt2')
     expect(tplFromType('pl-kp')).toBe('kp'); expect(tplFromType('kp')).toBe('kp'); expect(tplFromType('en-kp')).toBeNull(); expect(tplFromType('es-talkptt')).toBe('es_talkptt')
     const r: any = stepsFromJson(JSON.stringify([{ type: 'pl-talkexam-2', text: 'Q', ideal: 'A' }, { type: 'talkexam-3', text: 'Q' }]))!.steps
     expect(r[0]).toMatchObject({ kind: 'talk', exam: true, pv: 2 }); expect(r[1]).toMatchObject({ exam: true, pv: 3 })

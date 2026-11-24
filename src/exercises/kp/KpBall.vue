@@ -183,13 +183,13 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), part: !ok.has(i) && sc[i] > 0, ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
     <div class="kbp" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
-      <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
+      <b>{{ pct }}%</b><span v-if="isLive" class="kbseg" aria-hidden="true"><i v-for="(b, i) in blocks" :key="i" :class="{ f: ok.has(i), h: !ok.has(i) && sc[i] > 0 }" /></span><span v-else class="kbbar"><i :style="{ width: pct + '%' }" /></span>
       <small>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
       <button v-if="!edit && !idle && !done && !isLive" type="button" class="kbgo" :disabled="asking || !hasNew" :title="'Отправить всё сказанное в чат через мост: какие смысловые блоки засчитаны и где ошибки'" @click="cover"><i class="kbdot" />{{ asking ? 'Чат сверяет…' : 'Отправить на проверку' }}</button>
     </div>
     <!-- что засчитал чат: блок ✓ — что ты сказал → как правильно (что исправлено); новое — сверху -->
     <ul v-if="got.length && !edit && !idle" class="kbl">
-      <li v-for="x in got" :key="x.i" :class="{ fx: x.fix }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span>
+      <li v-for="(x, k) in got" :key="x.i" :class="{ fx: x.fix, nw: k === 0 && isLive }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span>
         <template v-if="x.fix"><span class="kbf">→ {{ x.fix }}</span><small v-if="x.note">{{ x.note }}</small></template></li>
     </ul>
     <p v-if="done && missing.length" class="kbm"><b>Не прозвучало:</b> {{ missing.join(' · ') }}</p>
@@ -243,6 +243,13 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbl li { padding: 5px 10px; border-radius: 10px; background: #f2fbf4; font-size: 13px; line-height: 1.4 } .kbl li.fx { background: #fff7e8 }
 .kbl b { font-weight: 800; color: #128a55; margin-right: 6px } .kbs1 { color: #555; font-style: italic } .kbf { margin-left: 6px; font-weight: 800; color: #b26a00 }
 .kbl small { display: block; font-size: 12px; font-weight: 600; color: #8a6a3a }
+/* шар Live (25.11.2026): полоска из делений — одно деление = один блок; наполовину переданный — закрашен наполовину; свежий засчитанный в списке — обведён */
+.kbseg { flex: 1; display: flex; gap: 4px; height: 8px } .kbseg i { flex: 1; border-radius: 4px; background: #eef0f3; transition: background .4s }
+.kbseg i.f { background: #2bb34a } .kbseg i.h { background: linear-gradient(90deg, #2bb34a 50%, #eef0f3 50%) }
+.th-book .kbseg i { background: #f4dcb8 } .th-book .kbseg i.f { background: #cd8a30 } .th-book .kbseg i.h { background: linear-gradient(90deg, #cd8a30 50%, #f4dcb8 50%) }
+.th-space .kbseg i, .th-sphere .kbseg i { background: rgba(255, 255, 255, .08) } .th-space .kbseg i.f { background: #2bb34a } .th-sphere .kbseg i.f { background: #38bdf8 }
+.th-space .kbseg i.h { background: linear-gradient(90deg, #2bb34a 50%, rgba(255, 255, 255, .08) 50%) } .th-sphere .kbseg i.h { background: linear-gradient(90deg, #38bdf8 50%, rgba(255, 255, 255, .08) 50%) }
+.kbl li.nw { box-shadow: inset 0 0 0 1.5px #2bb34a } .th-book .kbl li.nw { box-shadow: inset 0 0 0 1.5px #cd8a30 } .th-sphere .kbl li.nw { box-shadow: inset 0 0 0 1.5px rgba(56, 189, 248, .7) }
 .kbm { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: #b3261e; line-height: 1.45 } .kbm b { font-weight: 800 }
 .kbe { display: grid; gap: 6px; margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f6f8fb } .kbe small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .kbb { display: flex; gap: 6px; flex-wrap: wrap }

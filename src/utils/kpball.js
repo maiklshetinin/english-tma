@@ -18,6 +18,8 @@
 //  ШАР LIVE (24.11.2026, тест; step.ballLive, шаблон kpballive): то же самое, но без моста — одна Live-сессия (WebSocket) на упражнение.
 //  Эталон — в системной инструкции; первое сообщение «РАЗБЕЙ» (или «БЛОКИ: …», если блоки уже есть) — модель молча вызывает функцию blocks;
 //  дальше каждый новый кусок расшифровки уходит текстом «РЕЧЬ: …», модель молча вызывает cover(n, score 1 / 0.5, said). Голос модели не играет.
+//  Голос (25.11.2026) — рация-переключатель: нажал — микрофон включён, нажал ещё раз — выключен. Пока говорят, приложение само режет речь на куски
+//  (каждые ≥1,5 с и ≥3 слова, без пауз) — модель на каждый СРАЗУ вызывает cover (пустой — если нового нет): блоки загораются по ходу. Время — от последнего слова.
 //  Статусы — те же ballNet (подвал). Реализация — openBallLive внизу файла.
 //  Статусы запросов (нарезка, сверка) — ballNet[id экрана], их рисует подвал «Ответа по смыслу» (Kp.vue), рядом с диктовкой.
 import { reactive } from 'vue'
@@ -144,10 +146,12 @@ const LIVE_SYS = (question, ideal) => 'Ты — молчаливый помощ�
   'Один пункт — одна законченная мысль; перечисления («słodycze, zabawki lub książki») — части одного пункта, не дроби их. label — суть пункта на языке эталона, 3–6 слов, ' +
   'понятная сама по себе; words — 1–3 самых характерных слова пункта, как они написаны в эталоне. Не добавляй того, чего нет в эталоне.\n' +
   '2. «БЛОКИ: 1. … 2. …» — готовый нумерованный список пунктов: запомни номера, ничего не вызывай.\n' +
-  '3. «РЕЧЬ: …» — текстом то, что сказал ученик; а когда ученик говорит в микрофон, ты слышишь его сам — после каждой его реплики поступай так же, как с «РЕЧЬ» (в речи бывают оговорки и ошибки произношения). Сверь всё сказанное с пунктами и вызови функцию cover: ' +
+  '3. «РЕЧЬ: …» — текстом то, что сказал ученик; а когда ученик говорит в микрофон (как по рации: включил микрофон — говорит, выключил — реплика кончилась), ты слышишь его сам — ' +
+  'речь приходит короткими кусками по 1–3 секунды, обрыв куска — не конец ответа; СРАЗУ после каждого куска поступай так же, как с «РЕЧЬ» (в речи бывают оговорки и ошибки произношения). Сверь всё сказанное с пунктами и вызови функцию cover: ' +
   'для каждого пункта, который передан впервые или полнее, чем раньше: n — номер пункта; score — 1, если мысль передана целиком, 0.5 — если только часть; ' +
   'said — что ученик сказал (2–8 слов). Засчитывай по смыслу: синонимы, другие слова, грамматические ошибки не мешают; если о пункте ничего не сказано — не засчитывай. ' +
-  'Пункт, уже засчитанный с тем же score, не повторяй. Нового нет — ничего не вызывай.'
+  'Пункт, уже засчитанный с тем же score, не повторяй. Нового нет — всё равно вызови cover с пустым covered: приложение ждёт ответ. ' +
+  'Отвечай мгновенно, одним вызовом cover на каждый кусок; мысль, начатую в прошлом куске, засчитывай, когда она договорена; ошибки не разбирай, не говори и не пиши ничего, кроме вызовов функций.'
 const LIVE_TOOLS = [
   { name: 'blocks', description: 'Смысловые пункты эталона (ответ на «РАЗБЕЙ»)',
     parameters: { type: 'OBJECT', properties: { blocks: { type: 'ARRAY', items: { type: 'OBJECT', properties: { label: { type: 'STRING' }, words: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['label'] } } }, required: ['blocks'] } },
@@ -169,18 +173,33 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
   const queue = []
   const flush = () => { if (!ready || !sess) return; while (queue.length) { const t = queue.shift(); if (/^РАЗБЕЙ/.test(t)) sentSplit = true; t0 = Date.now(); sess.send(t) } }
   const fail = (txt) => { closed = true; n.cover = { st: 'err', txt }; if (sentSplit && n.split.st === 'busy') n.split = { st: 'err', txt } }
-  let hearH = null, hearUntil = 0, micOn = false          // hearH — кто слушает расшифровку; hearUntil — ещё 2,5 с после «стоп» считаем, что речь уже у модели
+  // рация-переключатель (25.11.2026): нажал — микрофон включён, нажал ещё раз — выключен; выключен — в Live не уходит НИ звука (manual).
+  // Live сама посреди речи не отвечает (ждёт конца реплики) — поэтому, пока говорят, приложение само «режет» речь (talkCut: activityEnd + activityStart,
+  // микрофон не прерывается): прозвучало ≥3 новых слов, прошлый ответ пришёл и с прошлого среза ≥1,5 с — срез, модель сразу шлёт cover, ученик говорит
+  // дальше без пауз (NO_INTERRUPTION — новая речь ответ не обрывает). Выключили — activityEnd: последнее — сразу. wait — выключили, ждём последний ответ
+  let hearH = null, hearUntil = 0, micOn = false, wait = false, waitTm = 0
+  let talking = false, newW = 0, pend = false, cutAt = 0, cutTm = 0
+  const CUT_WORDS = 3, CUT_MS = 1500
+  function maybeCut() { if (!talking || pend || newW < CUT_WORDS || Date.now() - cutAt < CUT_MS) return; pend = true; newW = 0; cutAt = Date.now(); sess.talkCut() }
+  const endWait = () => { clearTimeout(waitTm); if (wait) { wait = false; hearUntil = Date.now() + 3500; const h0 = hearH; setTimeout(() => { if (!talking && hearH === h0) hearH = null }, 2500) } }          // хвост расшифровки ещё 2,5 с идёт в поле          // текстом не дублируем; микрофон снова включили — новый слушатель остаётся
   const api = {
     get model() { return modelName }, get modelId() { return modelId }, get alive() { return !closed },
-    get hearing() { return !!hearH || Date.now() < hearUntil },
+    get hearing() { return !!hearH || wait || Date.now() < hearUntil },
     send(text) { if (closed) return; queue.push(text); flush() },
-    stop() { closed = true; delete liveSessions[id]; try { sess?.stop() } catch { /* */ } },
+    stop() { closed = true; clearInterval(cutTm); delete liveSessions[id]; try { sess?.stop() } catch { /* */ } },
     /** Голос — прямо в Live: h = { text(кусок расшифровки), turn(), level(0..1) } или null — выключить */
     async hear(h) {
-      if (!h) { const h0 = hearH; hearUntil = Date.now() + 2500; if (sess && micOn) sess.mute(true); setTimeout(() => { if (hearH === h0) hearH = null }, 2500); return }          // запись кончилась — слушаем расшифровку ещё 2,5 с (хвост фразы)
-      if (closed || !sess) throw new Error('Live не подключён')
-      hearH = h; if (!micOn) { micOn = true; await sess.listen() } else sess.mute(false)
-      if (hearH !== h) sess.mute(true)          // отпустили, пока микрофон включался
+      if (!h) {          // отпустили кнопку — конец реплики: модель отвечает сразу; хвост расшифровки и ответ ещё идут прежнему слушателю
+        if (!sess || !talking) { hearH = null; return }
+        talking = false; clearInterval(cutTm); sess.talkEnd(); wait = true; n.cover = { st: 'busy', txt: 'сверяет последнюю фразу' }
+        clearTimeout(waitTm); waitTm = setTimeout(endWait, 12_000)          // ответа нет 12 с — не держим
+        return
+      }
+      if (closed || !sess || !ready) throw new Error('Live не подключён')
+      hearH = h; if (!micOn) { micOn = true; await sess.listen() }
+      if (hearH !== h) return          // отпустили, пока микрофон включался — реплики не было
+      talking = true; newW = 0; pend = false; cutAt = Date.now(); sess.talkStart(); n.cover = { st: 'on', txt: 'слушает · засчитывает на ходу' }          // включили — звук пошёл в Live
+      clearInterval(cutTm); cutTm = setInterval(maybeCut, 300)
     },
   }
   liveSessions[id] = api
@@ -191,11 +210,11 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
       if (!m) throw new Error('Google не дал ключу Live-модели')
       modelId = m; modelName = liveName(m); n.model = modelName + ' · Live'
       if (closed) return
-      sess = startTalk({ key, model: m, system: LIVE_SYS(question, ideal), lang: 'pl-PL', temperature: 0.2, tools: LIVE_TOOLS, micLater: true, quiet: true, on: {
+      sess = startTalk({ key, model: m, system: LIVE_SYS(question, ideal), lang: 'pl-PL', temperature: 0.2, tools: LIVE_TOOLS, micLater: true, quiet: true, manual: true, noInterrupt: true, on: {
         state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
         ready: () => { ready = true; flush() },
-        turn: () => { hearH?.turn?.(); onTurn?.() },
-        text: (role, t) => { if (role === 'me') hearH?.text?.(t) },
+        turn: () => { hearH?.turn?.(); pend = false; if (wait) endWait(); onTurn?.(); maybeCut() },
+        text: (role, t) => { if (role === 'me') { t0 = Date.now(); newW += t.trim() ? t.trim().split(/\s+/).length : 0; hearH?.text?.(t); maybeCut() } },          // время ответа — от последнего услышанного слова
         level: (v) => hearH?.level?.(v),
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
@@ -208,7 +227,7 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
           }
           if (name === 'cover') {
             const got = (Array.isArray(args?.covered) ? args.covered : []).map((x) => ({ i: Math.round(Number(x?.n)) - 1, score: Math.max(0, Math.min(1, Number(x?.score) || 0)), said: String(x?.said ?? '').trim() })).filter((x) => x.i >= 0 && x.score > 0)
-            n.cover = { st: 'on', txt: `засчитано ${got.length} · ${sec}` }
+            n.cover = { st: 'on', txt: (got.length ? `засчитано ${got.length}` : 'нового нет') + ` · ${sec}` }
             onCover?.(got); return { ok: true }
           }
           return { ok: false, error: 'неизвестная функция' }

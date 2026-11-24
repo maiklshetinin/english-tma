@@ -230,8 +230,8 @@ const liveLine = computed(() => { const n = props.step.ballLive && ballNet[props
   if (dic.value === 'live') return { st: 'open', t: name + ' · слушает' }
   if (n.split.st === 'busy') return { st: 'connecting', t: name + ' · режет эталон на блоки' }
   return { st: n.cover.st === 'busy' ? 'connecting' : n.cover.st === 'on' ? 'open' : '', t: name + ' · ' + (n.cover.st === 'busy' ? 'сверяет речь' : n.cover.txt || 'ждёт речь') } })
-const pttDown = () => { if (dic.value === 'idle' && !p.st.busy && !idle.value) dictate() }
-const pttUp = () => { if (dic.value === 'live' || dic.value === 'connecting') dicS?.stop() }          // шар Live: одна Live-сессия — мост и выбор модели диктовки в подвале не показываем
+// рация шара Live (25.11.2026): нажал — микрофон включён (держать не надо), говоришь сколько нужно; нажал ещё раз — выключен, Live сразу засчитывает блоки
+const pttTap = () => { if (dic.value === 'live' || dic.value === 'connecting') dicS?.stop(); else if (dic.value === 'idle' && !p.st.busy && !idle.value) dictate() }          // шар Live: одна Live-сессия — мост и выбор модели диктовки в подвале не показываем
 const dicSel = computed(() => (props.step.dicModel && props.step.dicModel !== 'auto' ? props.step.dicModel : ''))
 function setDic(v) { if (v) props.step.dicModel = v; else delete props.step.dicModel; ed.changed() }
 // при прохождении урока курс не меняем: выбор — только в этом браузере (как модель проверки), главнее урока; '' — как в уроке
@@ -479,10 +479,11 @@ function jsApply() {
     <div v-if="isLive && !fileMode" class="kpt" :class="[dic, { off: idle }]" @pointerdown.stop>
       <div v-if="dicDraft || dicErr" class="kcd" :class="{ er: dicErr && !dicDraft }" aria-live="polite">{{ dicDraft || dicErr }}</div>
       <div class="kpr">
-        <button type="button" class="kptt" :class="dic" :disabled="idle || p.st.busy" title="Держите и говорите — отпустили, Live засчитает блоки" aria-label="Держите и говорите" @pointerdown.prevent="pttDown" @pointerup="pttUp" @pointerleave="pttUp" @pointercancel="pttUp" @contextmenu.prevent>
-          <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+        <button type="button" class="kptt" :class="dic" :disabled="idle || p.st.busy" :title="dic === 'live' ? 'Нажмите ещё раз — микрофон выключится, Live сразу засчитает блоки' : 'Нажмите и говорите — нажмите ещё раз, когда закончите'" :aria-label="dic === 'live' ? 'Выключить микрофон' : 'Включить микрофон'" :aria-pressed="dic === 'live'" @click="pttTap">
+          <svg v-if="dic === 'live'" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
+          <svg v-else viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
           <span v-if="dic === 'live'" class="kcwv" aria-hidden="true"><span class="kcwvs" :style="{ transform: `translateX(${-waveOff}px)` }"><i v-for="(v, i) in wave" :key="i" :style="{ height: waveH(v) + 'px' }" /></span></span>
-          <b v-else>{{ dic === 'connecting' ? 'Подключаюсь…' : 'Держите и говорите' }}</b>
+          <b v-else>{{ dic === 'connecting' ? 'Подключаюсь…' : 'Нажмите и говорите' }}</b>
         </button>
         <button type="button" class="kpdone" :class="{ busy: p.st.busy }" :disabled="!p.canCheck || idle || dic !== 'idle'" title="Закончить ответ — подвести итог" @click="p.checkAny()"><span v-if="!p.st.busy">Готово</span><i v-else class="kspin" /></button>
       </div>

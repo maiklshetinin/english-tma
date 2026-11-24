@@ -11,14 +11,15 @@ const WS = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelangu
 export const LIVE_URL = WS.replace(/\?key=$/, '')
 /** Первое сообщение Live-сессии (setup). plain — без настроек языка и пауз (старая модель их не приняла)
  *  @param {{ model: string, system: string, voice?: string, lang?: string, temperature?: number | null, silenceMs?: number, endSens?: string, manual?: boolean, tools?: any[] | null, plain?: boolean, extra?: object | null }} o */
-export function liveSetup({ model, system, voice, lang, temperature = null, silenceMs = 1200, endSens = 'low', manual = false, tools = null, plain = false, extra = null }) {          // extra — свои поля из JSON (request.…), поверх
+export function liveSetup({ model, system, voice, lang, temperature = null, silenceMs = 1200, endSens = 'low', manual = false, tools = null, plain = false, noInterrupt = false, extra = null }) {          // extra — свои поля из JSON (request.…), поверх
   return { setup: overlay({
     model: 'models/' + model,
     generationConfig: { responseModalities: ['AUDIO'], ...(typeof temperature === 'number' ? { temperature } : {}), speechConfig: { ...(voice ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } : {}), ...(lang && !plain ? { languageCode: lang } : {}) } },
     systemInstruction: { parts: [{ text: system }] },
     inputAudioTranscription: lang && !plain ? { languageCodes: [lang] } : {}, outputAudioTranscription: {},
     // рация (manual): «договорил» решает не модель по паузе, а кнопка — шлём activityStart / activityEnd сами
-    ...(manual ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } } : plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs } } }),
+    // noInterrupt (шар Live, 25.11.2026): новая речь не обрывает ответ модели — оценка по прошлой паузе доходит, пока ученик говорит дальше
+    ...(manual ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } } : plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs }, ...(noInterrupt ? { activityHandling: 'NO_INTERRUPTION' } : {}) } }),
     ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
   }, extra) }
 }
@@ -62,7 +63,8 @@ registerProcessor('tma-mic', Mic)`
  *  quiet — не проигрывать голос (расшифровка всё равно идёт). Возврат: { stop, mute, quiet(v), send(text), listen() } */
 /** silenceMs — пауза до «договорил», endSens — 'low' | 'high' (чувствительность конца речи), temperature — null: как у модели,
  *  noiseSuppression — шумодав браузера (по умолчанию выкл.: режет sz, cz, ś, ć). Умолчания — как было до 20.11.2026 (kp, kplive) */
-export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, manual = false, extra = null, on = {} }) {          // rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
+export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', tools = null, micLater = false, quiet = false, rec = null, silenceMs = 1200, endSens = 'low', temperature = null, noiseSuppression = false, manual = false, gated = false, noInterrupt = false, extra = null, on = {} }) {          // gated — звук уходит только пока открыт gate(true) (рация-переключатель шара Live); rec(pcm, rms) — свой голос для «Теста речи»: только пока Gemini молчит
+  let gateOn = false          // gated: микрофон включён кнопкой
   let talking = false          // manual (рация, 21.11.2026): голос уходит в модель только между talkStart() и talkEnd()
   let ws = null, ready = false, plain = false, hushed = !!quiet, mic = null, ctxIn = null, ctxOut = null, outAn = null, outBuf = null, node = null, src = null, nextAt = 0, done = false, muted = false
   const playing = new Set()
@@ -94,6 +96,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
     node.port.onmessage = (e) => {
       if (done || ws?.readyState !== 1) return
       if (manual && !talking) return          // рация: кнопку не нажали — не шлём
+      if (gated && !gateOn) return          // микрофон выключен кнопкой — не шлём
       const f = e.data; let sum = 0; const pcm = new Int16Array(f.length)
       for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); sum += v * v; pcm[i] = muted ? 0 : v * 32767 }
       on.level?.(muted ? 0 : Math.min(1, Math.sqrt(sum / f.length) * 4))
@@ -108,7 +111,7 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   // язык закреплён (20.11.2026: польский слышала плохо — модель сама угадывала язык и с акцентом «слышала» русский):
   // язык расшифровки и голоса — lang; пауза до «договорил» — silenceMs, по умолчанию 1,2 с (на собеседовании думают посреди фразы).
   // Не приняла настройку (старая модель) — переподключаемся без неё (plain)
-  const setup = () => liveSetup({ model, system, voice, lang, temperature, silenceMs, endSens, manual, tools, plain, extra })
+  const setup = () => liveSetup({ model, system, voice, lang, temperature, silenceMs, endSens, manual, tools, plain, noInterrupt, extra })
   function connect() {
     ws = new WebSocket(WS + encodeURIComponent(key))
     ws.onopen = () => ws.send(JSON.stringify(setup()))
@@ -152,7 +155,9 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   /** Рация (manual): начало реплики — Gemini замолкает (звук обрывается сразу), голос идёт в модель; конец — модель отвечает */
   function talkStart() { if (!manual || talking || done || ws?.readyState !== 1) return; hush(); talking = true; ws.send(JSON.stringify({ realtimeInput: { activityStart: {} } })) }
   function talkEnd() { if (!manual || !talking) return; talking = false; if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { activityEnd: {} } })) }
-  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() }, outLevel, talkStart, talkEnd,
+  /** gated: включить / выключить микрофон; выключили — audioStreamEnd: модель доделывает последнюю фразу сразу, без ожидания паузы */
+  function gate(v) { v = !!v; if (!gated || v === gateOn) return; gateOn = v; if (!v && ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) }
+  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() }, outLevel, talkStart, talkEnd, gate,
     send: (text) => { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { text } })) },
     listen: async () => { if (mic || done) return; try { await startMic() } catch (err) { stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) } } }
 }
