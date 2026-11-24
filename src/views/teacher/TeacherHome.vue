@@ -467,7 +467,7 @@ watch(() => w1.value[0] + monthEnd.value, loadAll)                              
 }
 @media (min-width: 1024px) {
   /* Сверху — место под будущую панель (высота шапки, --top-gap); таблица и ученики начинаются на одной линии */
-  .home { --top-gap: 8px; grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: var(--top-gap) 0 40px; align-items: start }
+  .home { --top-gap: 8px; grid-template-columns: minmax(0, 1fr) 272px; grid-template-areas: 'main side'; gap: 24px; padding: var(--top-gap) 0 var(--top-gap); align-items: start }          /* 24.11.2026: снизу 8px как сверху (было 40px — при масштабе 80% страница вылезала за окно и появлялась полоса прокрутки) */
   .weeks { margin: 0 0 0 auto }          /* 18.11.2026: таблица прижата к ученикам — расстояние всегда 24px; по центру оно «прыгало», когда менялась ширина (появилась прокрутка / уведомление «Отменить») */
   .side { position: sticky; top: 12px; max-height: calc(100vh - var(--top-gap) - 16px); padding: 0; background: none; z-index: 1; display: grid; grid-template-rows: minmax(0, 1fr) }
 }
