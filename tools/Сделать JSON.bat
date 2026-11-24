@@ -1,6 +1,5 @@
 @echo off
-rem Двойной щелчок: спросит, какое упражнение (номер из списка), и из каждой PDF в папке pdf\ сделает его экраны в папку json\(папка упражнения)\ (tools/make-json.py)
-rem Один скрипт на все упражнения (24.11.2026): kp, kpapi, kpfile, talk, talkava, talkptt, talkptt2, talkvn, talkexam
+rem Двойной щелчок: спросит, какое упражнение (номер из списка), и из каждой PDF в папке pdf\ сделает папку урока в json\(папка упражнения)\ — по JSON-файлу на вопрос (tools/make-json.py)
 chcp 65001 >nul
 set PYTHONIOENCODING=utf-8
 cd /d "%~dp0"
