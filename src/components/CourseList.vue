@@ -56,7 +56,8 @@ async function remove(c) {
         </div>
       </div>
       <span v-else class="sp" />
-      <button class="btn sm" @click="open('new')"><AppIcon name="plus" :size="16" /> Новый курс</button>
+      <!-- 24.11.2026: «Новый курс» — такая же плитка, как курсы (тот же размер), только пунктиром -->
+      <button class="card cc new" type="button" @click="open('new')"><span class="ic"><AppIcon name="plus" :size="16" /></span><span class="tx"><b>Новый курс</b><small>создать</small></span></button>
     </div>
     <p v-if="err" class="hint">Не удалось загрузить курсы {{ err }}</p>
     <div v-if="list && !list.length" class="card empty">
@@ -67,7 +68,7 @@ async function remove(c) {
 </template>
 <style scoped>
 .cl { display: grid; gap: 6px; margin-bottom: 12px }
-.ch { --bleed: max(0px, calc((100vw - 8px - 100%) / 2)); display: flex; align-items: center; gap: 10px; margin-left: calc(-1 * var(--bleed)) } .ch .btn { flex: none } .sp, .ch .sk { flex: 1 }
+.ch { --bleed: max(0px, calc((100vw - 8px - 100%) / 2)); display: flex; align-items: center; gap: 10px; margin-left: calc(-1 * var(--bleed)) } .ch .new { flex: 0 0 225px; box-sizing: border-box; margin: 3px 12px 3px 0; font: inherit; color: inherit; text-align: left } .sp, .ch .sk { flex: 1 }
 .grid { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; flex: 1; min-width: 0; padding: 3px 12px 3px 12px }          /* 24.11.2026: курсы — одна строка на всю ширину экрана (вылезает за поля страницы); полоса прокрутки — только при наведении и только если не влезло */
 @media (min-width: 1024px) { .ch { --bleed: max(0px, calc((100vw - 132px - 100%) / 2)) } }          /* слева — рейл навигации (124px) */
 .grid::-webkit-scrollbar { height: 6px; background: transparent } .grid::-webkit-scrollbar-thumb { background: transparent }
@@ -81,6 +82,7 @@ async function remove(c) {
 .cc .tx b { padding-right: 50px }
 .ic { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--purple); color: #fff }
 .tx { flex: 1; display: grid; gap: 0; line-height: 1.15; min-width: 0 } .tx b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tx small { font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--hint) }
+.cc.new { border-style: dashed; background: none } .cc.new .ic { background: var(--surface); color: var(--hint) } .cc.new:hover .ic { background: var(--blue); color: #fff } .cc.new .tx b { padding-right: 0 }
 .cc.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) }
 .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 24px } .empty span { max-width: 420px; color: var(--hint); font-size: 14px }
 .sk { height: 48px; opacity: .5 }
