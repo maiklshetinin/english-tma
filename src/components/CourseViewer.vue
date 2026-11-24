@@ -104,7 +104,7 @@ let t0 = 0
 async function finish(x, sc = {}) {
   if (rlog && open.value === x) rlog.finish()          // журнал: заход закончен («Готово»)
   if (props.of || !x || x.virtual) return          // «Повторение» в прогресс курса не пишется
-  const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0, ...(x.type !== 'checkpoint' && misses.size ? { miss: [...misses] } : {}) }
+  const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: Number.isFinite(sc.sec) ? Math.min(86400, sc.sec) : t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0,          /* урок — сумма времён выполнения упражнений (плеер), 24.11.2026 */ ...(x.type !== 'checkpoint' && misses.size ? { miss: [...misses] } : {}) }
   if (self && !online) {                       // без сервера — те же правила, что на сервере (server/learn.ts), в этом браузере
     const r = run.value; if (x.n > r.done) return
     const res = { ok: body.ok, all: body.all, sec: body.sec, at: Date.now(), ...(body.miss ? { miss: body.miss } : {}) }
@@ -239,11 +239,11 @@ function startLog(x) {
   } })
 }
 watch(open, (x) => { if (!x && rlog) { rlog.close(); rlog = null } })
-const onHide = (e) => { if (e.type === 'pagehide' || document.visibilityState === 'hidden') rlog?.save() }
+const onHide = (e) => { const h = e.type === 'pagehide' || document.visibilityState === 'hidden'; rlog?.hide(h); if (h) rlog?.save() }          // скрытая вкладка — время не идёт (24.11.2026)
 onMounted(() => { document.addEventListener('visibilitychange', onHide); addEventListener('pagehide', onHide) })
 onUnmounted(() => { document.removeEventListener('visibilitychange', onHide); removeEventListener('pagehide', onHide); rlog?.close() })
 const onAnswer = (a) => {
-  rlog?.answer(a.step.id, { ok: a.ok ?? null, text: a.text, score: a.score })
+  rlog?.answer(a.step.id, { ok: a.ok ?? null, text: a.text, score: a.score, took: a.took })          // took — время выполнения от плеера
   if (String(a.step.id).startsWith('pr-')) { recordStep(a.step, a, { lesson: open.value?.home?.title, course: course.value?.title, noTags: true }); return }          // «Как это по-английски?» — только слова
   if (a.ok === false) misses.add(a.step.id)
   const hits = hitsOf(a.step, a), was = {}

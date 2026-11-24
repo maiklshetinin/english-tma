@@ -1,5 +1,7 @@
 // Журнал заходов в уроки (21.11.2026): каждый заход — отдельная запись на сервере (server/learn.ts → lessonLogs), пишется по ходу
-// урока, поэтому видно и незаконченный урок. По каждому экрану: ok (верно / ошибка / null — без оценки), sec — сколько пробыл,
+// урока, поэтому видно и незаконченный урок. По каждому экрану: ok (верно / ошибка / null — без оценки), sec — время выполнения
+// (24.11.2026: от открытия экрана до результата — его присылает плеер в answer(took); после результата и пока вкладка скрыта — не считается;
+// экран без оценки — до ухода с него), sec урока — сумма sec экранов,
 // t — сколько раз отвечал, x — что ответил, sc — балл ИИ. Отправка пачкой: через DELAY после изменения, при «Готово» и при закрытии.
 // Читает вкладка Review «Журнал» (components/LessonLog.vue).
 export const DELAY = 3000
@@ -17,9 +19,9 @@ export const newRun = (now = Date.now()) => now.toString(36) + Math.random().toS
 const TIMER = { set: (f, ms) => setTimeout(f, ms), clear: (t) => clearTimeout(t) }
 export function makeRunLog({ itemId, n, send, now = Date.now, timer = TIMER }) {
   const run = newRun(now()), at = now(), steps = {}
-  let cur = null, since = at, fin = false, dirty = false, t = null
+  let cur = null, since = at, fin = false, dirty = false, t = null, hidden = false
   const entry = (id) => (steps[id] ??= { ok: null, ms: 0, t: 0 })
-  function tick() { const x = now(); if (cur) entry(cur).ms += Math.max(0, x - since); since = x }
+  function tick() { const x = now(); if (cur && !hidden && !entry(cur).stop) entry(cur).ms += Math.max(0, x - since); since = x }          // stop — результат пришёл, время зафиксировано
   function later() { dirty = true; timer.clear(t); t = timer.set(flush, DELAY) }
   function body() {
     const out = {}
@@ -30,7 +32,8 @@ export function makeRunLog({ itemId, n, send, now = Date.now, timer = TIMER }) {
       if (e.at) o.at = e.at
       out[id] = o
     }
-    return { run, itemId, at, sec: Math.min(86400, Math.round((now() - at) / 1000)), n: Math.min(1000, n), fin, steps: out }
+    const sum = Object.values(steps).reduce((a, e) => a + e.ms, 0)          // урок — сумма времён выполнения экранов (24.11.2026)
+    return { run, itemId, at, sec: Math.min(86400, Math.round(sum / 1000)), n: Math.min(1000, n), fin, steps: out }
   }
   function flush() { timer.clear(t); t = null; if (!dirty) return; dirty = false; tick(); send(body()) }
   return {
@@ -38,8 +41,9 @@ export function makeRunLog({ itemId, n, send, now = Date.now, timer = TIMER }) {
     /** открыт экран (null — итог урока) */
     step(id) { tick(); cur = id ?? null; if (cur) entry(cur); later() },
     /** ответ на экране: ok true / false / null; text — что ответил; score — балл ИИ (0–100) */
-    answer(id, { ok = null, text, score } = {}) {
+    answer(id, { ok = null, text, score, took } = {}) {
       tick(); const e = entry(id)
+      if (Number.isFinite(took) && took >= 0 && !e.stop) { e.ms = took * 1000; e.stop = true }          // время выполнения от плеера: до результата
       if (ok !== null) { e.t++; e.ok = ok }
       if (typeof text === 'string' && text.trim()) e.x = text.trim().slice(0, 400)
       if (Number.isFinite(score)) e.sc = Math.max(0, Math.min(100, Math.round(score)))
@@ -50,6 +54,8 @@ export function makeRunLog({ itemId, n, send, now = Date.now, timer = TIMER }) {
     finish() { tick(); cur = null; fin = true; dirty = true; flush() },
     /** закрыли урок — отправить, что накопилось */
     close() { tick(); cur = null; flush() },
+    /** вкладка скрыта / снова видна: скрытое время не считается (24.11.2026) */
+    hide(h) { tick(); hidden = !!h },
     /** вкладку свернули / уходят со страницы — отправить сейчас (экран остаётся открытым) */
     save() { dirty = true; flush() },
     flush,

@@ -59,9 +59,21 @@ const src = (v, k) => (!v || (props.idle && (k === 'audio' || k === 'video')) ? 
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
 const { hapticResult, hapticTick } = useTelegram()      // виброотклик на ответы (в Профиле можно выключить)
-const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false })          // ai, busy — «Ответ по смыслу» (проверка через мост с чатом)
+const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false, took: null, spoke: 0 })          // took — время выполнения, с; spoke — сколько говорил (Kp), 24.11.2026; ai, busy — «Ответ по смыслу» (проверка через мост с чатом)
+// Время выполнения упражнения (24.11.2026): от открытия экрана до результата (проверки); пока вкладка скрыта — не считается.
+// Его видно в подвале у результата, оно же уходит в журнал заходов (answer → took), урок = сумма этих времён (spent).
+// Экраны без оценки (вступление, подсказка, разговор) — до «Продолжить»
+let exT0 = 0, exHid = 0, exHidAt = 0
+const spent = ref(0)          // мс — сумма времён выполнения упражнений урока
+const exVis = () => { if (!exT0) return; if (document.hidden) { if (!exHidAt) exHidAt = Date.now() } else if (exHidAt) { exHid += Date.now() - exHidAt; exHidAt = 0 } }
+const exMs = () => (exT0 ? Math.max(0, Date.now() - exT0 - exHid - (exHidAt ? Date.now() - exHidAt : 0)) : 0)
+function exClose() { if (!exT0) return; spent.value += st.took != null ? st.took * 1000 : exMs(); exT0 = 0 }
+onMounted(() => document.addEventListener('visibilitychange', exVis)); onUnmounted(() => document.removeEventListener('visibilitychange', exVis))
+const tookT = computed(() => { const s = st.took ?? 0; return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 function setup() {
-  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false }); Object.assign(mine, { ok: 0, all: 0 })
+  exClose()
+  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false, took: null, spoke: 0 }); Object.assign(mine, { ok: 0, all: 0 })
+  if (!props.edit && !props.mini && !props.idle && step.value) { exT0 = Date.now(); exHid = 0; exHidAt = document.hidden ? Date.now() : 0 }
   recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''; rec.miss = false
   const s = step.value; if (!s || props.edit) return
   if (s.kind === 'choice') { const idx = (s.opts ?? []).map((_, k) => k); st.order = props.single || props.mini ? idx : shuffle(idx) }
@@ -217,7 +229,8 @@ function next() {
   i.value++
 }
 const answer = computed(() => step.value?.opts?.[step.value.ans ?? 0])
-const time = computed(() => { const s = props.stats ? props.stats.sec : Math.round(((endT.value || Date.now()) - t0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
+watch(isFinal, (f) => { if (f) exClose() })
+const time = computed(() => { const s = props.stats ? props.stats.sec : Math.round(spent.value / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })          // урок — сумма времён выполнения упражнений (24.11.2026)
 const acc = computed(() => { const x = props.stats ?? score; return x.all ? Math.round(x.ok / x.all * 100) : 100 })
 // слова урока для итога
 const words = computed(() => {
@@ -242,13 +255,15 @@ function answerText(s) {
 }
 // экран решён (или показан, если без оценки) — ответ в Review: верно / нет, у «Пар» — какие пары перепутали
 watch(() => st.done, (d) => {
-  const s = step.value; if (!d || !props.track || !s || !['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp'].includes(s.kind)) return
-  emit('answer', { step: s, ok: s.kind === 'kp' && st.ai?.error ? null : s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong], text: answerText(s), score: st.ai?.score })          // ИИ не ответил — без оценки
+  const s = step.value; if (!d || !s || !['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp', 'answer'].includes(s.kind)) return
+  if (st.took == null && exT0) st.took = Math.round(exMs() / 1000)          // результат пришёл — время выполнения зафиксировано
+  if (!props.track || s.kind === 'answer') return
+  emit('answer', { took: st.took, step: s, ok: s.kind === 'kp' && st.ai?.error ? null : s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong], text: answerText(s), score: st.ai?.score })          // ИИ не ответил — без оценки
 })
 // всё объявлено — теперь можно запускать (immediate вызывает setup сразу)
 watch([i, () => (props.single || props.embedded ? JSON.stringify(step.value) : props.steps)], setup, { immediate: true })     // в конструкторе — заново при каждой правке
 watch(() => props.start, (v) => { i.value = v })          // ветка в редакторе: экраны добавили / переставили — этот кадр показывает свой экран
-watch(isFinal, (v) => { if (v && !endT.value) { endT.value = Date.now(); emit('done', { ...score }) } }, { immediate: true })
+watch(isFinal, (v) => { if (v && !endT.value) { endT.value = Date.now(); emit('done', { ...score, sec: Math.round(spent.value / 1000) }) } }, { immediate: true })          // sec — сумма времён выполнения (24.11.2026)
 const onKey = (e) => { if (e.key === 'Enter' && !props.single && !props.embedded && !/INPUT|TEXTAREA/.test(e.target?.tagName)) isFinal.value ? emit('close') : next() }
 // Тест · упражнения Насти: экран в стиле страницы учебника (кремовая бумага, номер в оранжевом кружке, задание по-английски)
 const isBook = computed(() => !isFinal.value && !!step.value?.bk && !!BOOK[step.value.bk])
@@ -357,7 +372,7 @@ providePlay(reactive({
     <div v-else class="foot" :class="fbState">
       <!-- как в Busuu: подвал выезжает зелёным или красным, значок ✓ / ✕ «выпрыгивает», звук — useSfx (выключается в Профиле) -->
       <span v-if="fbState" :key="fbState + i" class="mk" aria-hidden="true"><svg v-if="fbState === 'good'" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg><svg v-else viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" /></svg></span>
-      <span class="fb"><component :is="ex.view" v-if="ex" :step="step" part="fb" /></span>
+      <span class="fb"><component :is="ex.view" v-if="ex" :step="step" part="fb" /><small v-if="st.took != null && st.done && !single && !embedded" class="ftk" title="Время выполнения: от открытия упражнения до результата (скрытая вкладка не считается). Оно и пишется в журнал; урок — сумма таких времён">время выполнения — {{ tookT }}</small></span>
       <template v-if="embedded && isFinal"><button class="go ghost" @click="emit('restart')">↺ Заново</button><button class="go" @click="emit('full')">Во весь экран</button></template>
       <template v-else-if="needCheck && !single && chatKp" />          <!-- «Ответ по смыслу»: «Проверить» внутри строки ввода (Kp.vue) -->
       <button v-else-if="needCheck && !single" class="go" :disabled="!canCheck" @click="checkAny">Проверить</button>
@@ -369,6 +384,7 @@ providePlay(reactive({
 </template>
 
 <style scoped>
+.ftk { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; opacity: .75; font-variant-numeric: tabular-nums }
 .lp { position: relative; display: flex; flex-direction: column; height: 100%; background: var(--card); color: var(--text); font-family: var(--font); user-select: none }
 .top { display: flex; align-items: center; gap: 12px; padding: 18px 22px 6px; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box }
 .x { flex: none; width: 32px; height: 32px; border: 0; background: none; border-radius: 8px; cursor: pointer; display: grid; place-items: center } .x:hover { background: var(--surface) }

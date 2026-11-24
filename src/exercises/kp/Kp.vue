@@ -63,18 +63,10 @@ let brTm = 0
 // экран не выбран на холсте редактора (p.idle, 23.11.2026) — мост не опрашиваем; выбрали — сразу свежий статус и опрос раз в 15 с
 const idle = computed(() => !!p?.idle)
 // «Ответ по смыслу · шар» (24.11.2026, тест): шару — всё, что сказано (поле ответа + черновик диктовки); статусы его запросов — в подвал
-// Секундомер (24.11.2026): ⏱ — сколько открыт экран (то же время, что пишет журнал заходов: чтение, раздумья, речь, ожидание проверки),
-// останавливается на проверке; 🎙 — сколько говорил (сумма записей диктовки). Оба — в p.st (took, spoke): после проверки — у «Ваш ответ»
-const swT0 = ref(0), swNow = ref(Date.now())
-let swTm = 0
+// 🎙 (24.11.2026): сколько говорил — сумма записей диктовки (p.st.spoke), в углу пузыря ответа. Время выполнения упражнения
+// считает и показывает плеер (LessonPlayer → st.took, «время выполнения» в подвале), оно же — в журнале
 const mmss = (s) => { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
-let swHid = 0, swHidAt = 0          // пока вкладка скрыта — не считаем (24.11.2026)
-const swVis = () => { if (document.hidden) swHidAt = Date.now(); else if (swHidAt) { swHid += Date.now() - swHidAt; swHidAt = 0 } }
-const tookS = computed(() => (p.st.took != null ? p.st.took : swT0.value ? (swNow.value - swT0.value - swHid) / 1000 : 0))
 const spokeS = computed(() => (p.st.spoke || 0) + (dic.value === 'live' && dicT0.value ? (dicNow.value - dicT0.value) / 1000 : 0))
-onMounted(() => { if (idle.value || p.edit || p.st.done) return; swT0.value = swNow.value = Date.now(); swTm = setInterval(() => { swNow.value = Date.now() }, 1000); document.addEventListener('visibilitychange', swVis) })
-watch(() => p.st.done, (d) => { if (d && swT0.value && p.st.took == null) { swVis(); p.st.took = Math.round((Date.now() - swT0.value - swHid - (swHidAt ? Date.now() - swHidAt : 0)) / 1000) } if (d) clearInterval(swTm) })          // проверка — время на вопрос зафиксировано
-onBeforeUnmount(() => { clearInterval(swTm); document.removeEventListener('visibilitychange', swVis) })
 const ballText = computed(() => ((p.st.text || '') + ' ' + (dicDraft.value || '')).trim())
 const BALL_ST = { on: 'open', busy: 'connecting', err: 'error', off: '' }
 const ballList = computed(() => { const n = props.step.ball && ballNet[props.step.id]; if (!n) return []
@@ -467,7 +459,7 @@ function jsApply() {
     </div>
   </template>
   <template v-else-if="part === 'fb' && p.st.done && r">
-    <small>{{ r.error ? 'Без проверки' : tierT[tier] }}<template v-if="tookS >= 1"> · <span class="ktook" title="Сколько ушло на вопрос: от открытия экрана до «Проверить» — чтение, раздумья, речь. Пока вкладка или окно скрыты — не считается">на вопрос — {{ mmss(tookS) }}</span></template></small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
+    <small>{{ r.error ? 'Без проверки' : tierT[tier] }}</small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
   </template>
   <!-- 23.11.2026: строка ввода как в чате (Claude) — в подвале, где «Проверить». Внутри: текст (растёт по высоте, без прокрутки),
        микрофон и «Проверить»; пока диктуют — то, что модель слышит, курсивом, волна, ✕ (выбросить продиктованное) и ✓ (остановить).
