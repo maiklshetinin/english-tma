@@ -6,13 +6,14 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useEdit } from '../ctx'
 import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf } from '../../utils/kpball'
-const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })
+const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, final: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })          // text — всё сказанное (с черновиком), final — только готовые («чёрные») куски
 const ed = useEdit()
 
 const own = computed(() => (Array.isArray(props.step.keys) && props.step.keys.length ? props.step.keys : null))
 const blocks = ref(own.value || quickBlocks(props.step.ideal))
 const fast = ref(!own.value)          // блоки «быстрые» (выделения эталона), пока Gemini не нарезала
-const ok = ref(new Set()), byAi = ref(new Set()), hit = ref(-1)
+const ok = ref(new Set()), byAi = ref(new Set()), hit = ref(-1), info = ref({})          // info[i] — от чата: { said, fix, note }
+const got = computed(() => Object.entries(info.value).map(([i, x]) => ({ i: +i, label: blocks.value[+i]?.label ?? '', ...x })).filter((x) => x.label).sort((a, b) => b.at - a.at))
 const pct = computed(() => (blocks.value.length ? Math.round((ok.value.size / blocks.value.length) * 100) : 0))
 const missing = computed(() => blocks.value.map((b, i) => (ok.value.has(i) ? null : b.label)).filter(Boolean))
 
@@ -48,25 +49,37 @@ function light(idx, ai) {
   for (const i of idx) if (!s.has(i)) { s.add(i); if (ai) a.add(i); if (first < 0) first = i }
   if (first >= 0) { ok.value = s; byAi.value = a; face(first) }
 }
-let sentWords = 0, busy = false, again = false, coverTm = 0, lastAt = 0
+// 24.11.2026: в чат — когда фраза распознана окончательно (готовый, «чёрный» кусок; 3+ новых слова) или кнопкой «Сверить сейчас».
+// Один запрос за раз: пока чат отвечает, новые куски копятся и уходят следующим запросом
+let sentWords = 0, busy = false, again = false
+const asking = ref(false)
 const wc = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0)
 function onText() {
   if (props.edit || props.idle) return
-  light(matchLocal(props.text, blocks.value), false)          // мгновенно — дословные совпадения
-  clearTimeout(coverTm)
-  if (wc(props.text) - sentWords >= 4) coverTm = setTimeout(cover, Math.max(2500, 8000 - (Date.now() - lastAt)))          // 4+ новых слова и пауза — по смыслу в чат; не чаще раза в 8 с
+  light(matchLocal(props.text, blocks.value), false)          // мгновенно — дословные совпадения (и по черновику)
+}
+function onFinal() {
+  if (props.edit || props.idle || props.done) return
+  if (wc(props.final) - sentWords >= 3) cover()
 }
 async function cover() {
   if (busy) { again = true; return }
-  const text = props.text.trim(); if (!text) return
-  busy = true; sentWords = wc(text); lastAt = Date.now()
-  try { light(await coverBlocks({ id: props.step.id, question: props.step.text || '', blocks: blocks.value, text }), true) } catch { /* статус — в подвале */ }
-  finally { busy = false; if (again) { again = false; if (wc(props.text) > sentWords) cover() } }
+  const text = (props.final || props.text).trim(); if (!text) return
+  busy = true; asking.value = true; sentWords = wc(text)
+  try {
+    const r = await coverBlocks({ id: props.step.id, question: props.step.text || '', blocks: blocks.value, text })
+    const inf = { ...info.value }, at = Date.now()
+    r.forEach((x, k) => { inf[x.i] = { said: x.said, fix: x.fix, note: x.note, at: at - k } })
+    info.value = inf
+    light(r.map((x) => x.i), true)
+  } catch { /* статус — в подвале */ }
+  finally { busy = false; asking.value = false; if (again) { again = false; if (wc(props.final || props.text) > sentWords) cover() } }
 }
 watch(() => props.text, onText)
+watch(() => props.final, onFinal)
 watch(() => props.done, async (d) => {
   clearInterval(missTm)
-  if (!d) { ok.value = new Set(); byAi.value = new Set(); sentWords = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; return }
+  if (!d) { ok.value = new Set(); byAi.value = new Set(); info.value = {}; sentWords = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; return }
   if (wc(props.text) > sentWords) await cover()          // последняя сверка — по всему ответу
   missTm = setInterval(() => { const m = blocks.value.map((_, i) => i).filter((i) => !ok.value.has(i)); if (m.length) { face(m[missI++ % m.length]); hit.value = -1 } }, 1800)          // по очереди — что не прозвучало
 })
@@ -75,7 +88,7 @@ watch(() => props.done, async (d) => {
 const cutting = ref(false), cutErr = ref('')
 async function load() {
   if (own.value || props.idle || props.edit) return
-  try { const b = await splitBlocks({ id: props.step.id, question: props.step.text || '', ideal: props.step.ideal || '' }); blocks.value = b; fast.value = false; ok.value = new Set(); byAi.value = new Set(); sentWords = 0; onText() }
+  try { const b = await splitBlocks({ id: props.step.id, question: props.step.text || '', ideal: props.step.ideal || '' }); blocks.value = b; fast.value = false; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sentWords = 0; onText() }
   catch { /* остаются быстрые блоки; статус — в подвале */ }
 }
 /** правка: Gemini режет эталон заново — блоки пишутся в экран (keys) */
@@ -94,12 +107,18 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(coverTm); clearI
 <template>
   <div class="kball" :class="{ idle }" @pointerdown.stop>
     <div ref="box" class="kbs" aria-hidden="true">
-      <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), ai: byAi.has(i), miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
+      <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
     <div class="kbp" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
       <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
       <small>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
+      <button v-if="!edit && !idle && !done" type="button" class="kbgo" :disabled="asking || !text.trim()" :title="'Отправить сказанное в чат через мост — какие блоки раскрыты и где ошибки'" @click="cover">{{ asking ? 'Чат сверяет…' : 'Сверить сейчас' }}</button>
     </div>
+    <!-- что засчитал чат: блок ✓ — что ты сказал → как правильно (что исправлено); новое — сверху -->
+    <ul v-if="got.length && !edit && !idle" class="kbl">
+      <li v-for="x in got" :key="x.i" :class="{ fx: x.fix }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span>
+        <template v-if="x.fix"><span class="kbf">→ {{ x.fix }}</span><small v-if="x.note">{{ x.note }}</small></template></li>
+    </ul>
     <p v-if="done && missing.length" class="kbm"><b>Не прозвучало:</b> {{ missing.join(' · ') }}</p>
     <div v-if="edit" class="kbe">
       <small>{{ own ? 'Свои блоки экрана (keys в JSON) — ученик увидит их' : 'Блоков у экрана нет — у ученика Gemini нарежет эталон сама (и запомнит в браузере). Можно нарезать сейчас и поправить в JSON' }}</small>
@@ -118,13 +137,18 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(coverTm); clearI
 .kball.idle .kbs { height: 170px }
 .kbw { position: absolute; transition: background .3s, color .3s, box-shadow .3s, filter .4s; left: 0; top: 0; padding: 3px 10px; border-radius: 12px; white-space: nowrap; font-size: 14px; font-weight: 700; color: #7b8494; will-change: transform }
 .kbw { filter: blur(3.5px) } .kball.idle .kbw, .kbw.ok, .kbw.miss { filter: none }          /* нераскрытое — размыто: подсказку не подсмотреть; после проверки — видно, чего не хватило */
-.kbw.ok { background: #e3fbef; color: #128a55 } .kbw.ai::after { content: ' •'; color: #1a73e8 }
+.kbw.ok { background: #e3fbef; color: #128a55 } .kbw.fx::before { content: '✎ '; color: #b26a00 }          /* ✎ — сказал с ошибкой, чат поправил (список ниже) */ .kbw.ai::after { content: ' •'; color: #1a73e8 }
 .kbw.hit { box-shadow: 0 0 0 2px #2bb34a }
 .kbw.miss { background: #fff; color: #b3261e; box-shadow: inset 0 0 0 1.5px #f1c7c7 }
 .kbp { display: flex; align-items: center; gap: 10px; margin-top: 2px }
 .kbp b { min-width: 52px; font-size: 22px; font-weight: 900; color: #128a55; font-variant-numeric: tabular-nums }
 .kbbar { flex: 1; height: 8px; border-radius: 4px; background: #eef0f3; overflow: hidden } .kbbar i { display: block; height: 100%; background: #2bb34a; transition: width .4s }
 .kbp small { font-size: 12px; font-weight: 700; color: var(--hint); white-space: nowrap }
+.kbgo { flex: none; height: 26px; padding: 0 10px; border: 1px solid #b7e3c3; border-radius: 13px; background: #fff; color: #1f7a3a; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer } .kbgo:disabled { opacity: .55; cursor: default }
+.kbl { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; max-height: 160px; overflow-y: auto }
+.kbl li { padding: 5px 10px; border-radius: 10px; background: #f2fbf4; font-size: 13px; line-height: 1.4 } .kbl li.fx { background: #fff7e8 }
+.kbl b { font-weight: 800; color: #128a55; margin-right: 6px } .kbs1 { color: #555; font-style: italic } .kbf { margin-left: 6px; font-weight: 800; color: #b26a00 }
+.kbl small { display: block; font-size: 12px; font-weight: 600; color: #8a6a3a }
 .kbm { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: #b3261e; line-height: 1.45 } .kbm b { font-weight: 800 }
 .kbe { display: grid; gap: 6px; margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f6f8fb } .kbe small { font-size: 12px; font-weight: 600; color: var(--hint) }
 .kbb { display: flex; gap: 6px; flex-wrap: wrap }

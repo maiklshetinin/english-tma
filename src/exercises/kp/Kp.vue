@@ -394,7 +394,7 @@ function jsApply() {
       </div>
     </div>
 
-    <KpBall v-if="step.ball" :step="step" :text="ballText" :done="!!p.st.done" :edit="!!p.edit" :idle="idle" />
+    <KpBall v-if="step.ball" :step="step" :text="ballText" :final="p.st.text || ''" :done="!!p.st.done" :edit="!!p.edit" :idle="idle" />
     <div class="kth">
     <div v-if="fileMode || p.edit || p.st.done || thinking" class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
       <button v-if="fileMode && !p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
