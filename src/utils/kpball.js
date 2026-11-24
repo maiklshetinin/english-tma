@@ -15,9 +15,14 @@
 //     шар по очереди поворачивается к каждому. Пока запрос идёт — следующий ждёт и уходит сразу после ответа.
 //  4. Итог. После «Проверить» — последняя сверка; нераскрытые блоки — «Не прозвучало», шар по очереди показывает их.
 //  Процент на шаре — доля раскрытых блоков. Оценку «Проверить» ставит как раньше (мост / Gemini API) — шар её не меняет.
+//  ШАР LIVE (24.11.2026, тест; step.ballLive, шаблон kpballive): то же самое, но без моста — одна Live-сессия (WebSocket) на упражнение.
+//  Эталон — в системной инструкции; первое сообщение «РАЗБЕЙ» (или «БЛОКИ: …», если блоки уже есть) — модель молча вызывает функцию blocks;
+//  дальше каждый новый кусок расшифровки уходит текстом «РЕЧЬ: …», модель молча вызывает cover(n, score 1 / 0.5, said). Голос модели не играет.
+//  Статусы — те же ballNet (подвал). Реализация — openBallLive внизу файла.
 //  Статусы запросов (нарезка, сверка) — ballNet[id экрана], их рисует подвал «Ответа по смыслу» (Kp.vue), рядом с диктовкой.
 import { reactive } from 'vue'
 import { apiRequest } from '../firebase'
+import { firstKey, startTalk, liveModels, liveName } from './live'
 
 
 /** статусы для подвала: ballNet[id] = { split: { st, txt }, cover: { st, txt }, model } · st: off | busy | on | err */
@@ -129,3 +134,74 @@ export async function coverBlocks({ id, question, blocks, text, done = [], befor
 }
 
 function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) }
+
+
+// =====================================  ШАР LIVE  =====================================
+const LIVE_SYS = (question, ideal) => 'Ты — молчаливый помощник в устном упражнении к собеседованию по-польски. Ты НИЧЕГО не говоришь и не пишешь ученику: ' +
+  'весь твой ответ — только вызовы функций, их читает приложение.\n\nВопрос: ' + question + '\n\nЭталонный ответ:\n' + plain(ideal) + '\n\n' +
+  'Сообщения от приложения бывают трёх видов.\n' +
+  '1. «РАЗБЕЙ» — вызови функцию blocks: разбей эталон на 5–10 смысловых пунктов — фактов, которые экзаменатор ждёт услышать (когда, кто, что делают, где, зачем, почему). ' +
+  'Один пункт — одна законченная мысль; перечисления («słodycze, zabawki lub książki») — части одного пункта, не дроби их. label — суть пункта на языке эталона, 3–6 слов, ' +
+  'понятная сама по себе; words — 1–3 самых характерных слова пункта, как они написаны в эталоне. Не добавляй того, чего нет в эталоне.\n' +
+  '2. «БЛОКИ: 1. … 2. …» — готовый нумерованный список пунктов: запомни номера, ничего не вызывай.\n' +
+  '3. «РЕЧЬ: …» — новый кусок того, что сказал ученик (расшифровка речи, в ней бывают ошибки распознавания). Сверь всё сказанное с пунктами и вызови функцию cover: ' +
+  'для каждого пункта, который передан впервые или полнее, чем раньше: n — номер пункта; score — 1, если мысль передана целиком, 0.5 — если только часть; ' +
+  'said — что ученик сказал (2–8 слов). Засчитывай по смыслу: синонимы, другие слова, грамматические ошибки не мешают; если о пункте ничего не сказано — не засчитывай. ' +
+  'Пункт, уже засчитанный с тем же score, не повторяй. Нового нет — ничего не вызывай.'
+const LIVE_TOOLS = [
+  { name: 'blocks', description: 'Смысловые пункты эталона (ответ на «РАЗБЕЙ»)',
+    parameters: { type: 'OBJECT', properties: { blocks: { type: 'ARRAY', items: { type: 'OBJECT', properties: { label: { type: 'STRING' }, words: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['label'] } } }, required: ['blocks'] } },
+  { name: 'cover', description: 'Какие пункты эталона ученик передал в сказанном (ответ на «РЕЧЬ»)',
+    parameters: { type: 'OBJECT', properties: { covered: { type: 'ARRAY', items: { type: 'OBJECT', properties: { n: { type: 'INTEGER' }, score: { type: 'NUMBER' }, said: { type: 'STRING' } }, required: ['n', 'score'] } } }, required: ['covered'] } },
+]
+/** «БЛОКИ: 1. … 2. …» — список для модели, когда блоки уже есть (свои у экрана или из памяти браузера) */
+export const blocksMsg = (b) => 'БЛОКИ:\n' + b.map((x, i) => `${i + 1}. ${x.label}`).join('\n')
+const lck = (q, i) => 'tma.ballL.' + hash(q + '|' + i)          // нарезка Live — своя память (ballL), чтобы не путать с мостом
+/** Нарезка Live из памяти браузера (по тексту вопроса и эталона) или null */
+export const liveCached = (q, i) => { try { const c = JSON.parse(localStorage.getItem(lck(q, i)) || 'null'); return Array.isArray(c) && c.length ? c : null } catch { return null } }
+/** Live-сессия шара. cb: { onBlocks([{label, words}]), onCover([{ i (с 0), score 0..1, said }]), onTurn() — модель договорила }.
+ *  → { send(text), stop(), alive, model }. Сообщения до готовности сессии ждут в очереди */
+export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn }) {
+  const n = netOf(id), key = firstKey()
+  if (!key) throw new Error('Нужен ключ Gemini в профиле')
+  let sess = null, ready = false, closed = false, modelName = '', t0 = Date.now(), sentSplit = false
+  const queue = []
+  const flush = () => { if (!ready || !sess) return; while (queue.length) { const t = queue.shift(); if (/^РАЗБЕЙ/.test(t)) sentSplit = true; t0 = Date.now(); sess.send(t) } }
+  const fail = (txt) => { closed = true; n.cover = { st: 'err', txt }; if (sentSplit && n.split.st === 'busy') n.split = { st: 'err', txt } }
+  const api = {
+    get model() { return modelName }, get alive() { return !closed },
+    send(text) { if (closed) return; queue.push(text); flush() },
+    stop() { closed = true; try { sess?.stop() } catch { /* */ } },
+  }
+  n.cover = { st: 'busy', txt: 'подключаюсь к Live-модели…' }
+  ;(async () => {
+    try {
+      const m = (await liveModels(key))[0]
+      if (!m) throw new Error('Google не дал ключу Live-модели')
+      modelName = liveName(m); n.model = modelName + ' · Live'
+      if (closed) return
+      sess = startTalk({ key, model: m, system: LIVE_SYS(question, ideal), lang: 'pl-PL', temperature: 0.2, tools: LIVE_TOOLS, micLater: true, quiet: true, on: {
+        state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
+        ready: () => { ready = true; flush() },
+        turn: () => onTurn?.(),
+        tool: (name, args) => {
+          const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
+          if (name === 'blocks') {
+            const b = (Array.isArray(args?.blocks) ? args.blocks : []).map((x) => ({ label: String(x?.label ?? '').trim().slice(0, 60), words: (Array.isArray(x?.words) ? x.words : []).map(String).filter(Boolean).slice(0, 3) })).filter((x) => x.label).slice(0, 16)
+            if (!b.length) return { ok: false, error: 'пустой список' }
+            n.split = { st: 'on', txt: `${b.length} блоков · ${sec}` }
+            try { localStorage.setItem(lck(question, ideal), JSON.stringify(b)) } catch { /* */ }
+            onBlocks?.(b); return { ok: true, count: b.length }
+          }
+          if (name === 'cover') {
+            const got = (Array.isArray(args?.covered) ? args.covered : []).map((x) => ({ i: Math.round(Number(x?.n)) - 1, score: Math.max(0, Math.min(1, Number(x?.score) || 0)), said: String(x?.said ?? '').trim() })).filter((x) => x.i >= 0 && x.score > 0)
+            n.cover = { st: 'on', txt: `засчитано ${got.length} · ${sec}` }
+            onCover?.(got); return { ok: true }
+          }
+          return { ok: false, error: 'неизвестная функция' }
+        },
+      } })
+    } catch (e) { fail('Live: ' + (e.message || e)) }
+  })()
+  return api
+}

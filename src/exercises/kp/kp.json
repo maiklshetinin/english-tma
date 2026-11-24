@@ -6,7 +6,8 @@
     "kp",
     "kpfile",
     "kpapi",
-    "kpball"
+    "kpball",
+    "kpballive"
   ],
   "fields": {
     "head": {
@@ -140,6 +141,9 @@
       "S"
     ],
     "kpball": [
+      "S"
+    ],
+    "kpballive": [
       "S"
     ]
   },

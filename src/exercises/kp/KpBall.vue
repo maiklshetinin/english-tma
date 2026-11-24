@@ -5,7 +5,7 @@
 // В правке — список блоков и кнопка «Нарезать эталон» (Gemini) — пишет блоки в экран (keys в JSON).
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useEdit } from '../ctx'
-import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf } from '../../utils/kpball'
+import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, blocksMsg, liveCached } from '../../utils/kpball'
 const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, final: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })          // text — всё сказанное (с черновиком), final — только готовые («чёрные») куски
 const ed = useEdit()
 // Темы шара (24.11.2026): белая (тест), «Космос» — тёмная панель со звёздами, слова светятся; «Как у Марии» — бежево-коричневая, цвета домашек
@@ -21,7 +21,9 @@ const blocks = ref(own.value || quickBlocks(props.step.ideal))
 const fast = ref(!own.value)          // блоки «быстрые» (выделения эталона), пока Gemini не нарезала
 const ok = ref(new Set()), byAi = ref(new Set()), hit = ref(-1), info = ref({})          // info[i] — от чата: { said, fix, note }
 const got = computed(() => Object.entries(info.value).map(([i, x]) => ({ i: +i, label: blocks.value[+i]?.label ?? '', ...x })).filter((x) => x.label).sort((a, b) => b.at - a.at))
-const pct = computed(() => (blocks.value.length ? Math.round((ok.value.size / blocks.value.length) * 100) : 0))
+const sc = ref({})          // Live (шар Live): i → оценка блока 0..1 (1 — целиком, 0.5 — частично); у обычного шара пусто
+const isLive = computed(() => !!props.step.ballLive)
+const pct = computed(() => (blocks.value.length ? Math.round((blocks.value.reduce((a, _, i) => a + (ok.value.has(i) ? 1 : sc.value[i] || 0), 0) / blocks.value.length) * 100) : 0))
 const missing = computed(() => blocks.value.map((b, i) => (ok.value.has(i) ? null : b.label)).filter(Boolean))
 
 // ---------- сфера ----------
@@ -82,6 +84,7 @@ function onText() {
 }
 /** «Отправить на проверку»: в чат — только новый кусок (сказанное после прошлой отправки), блоки — с пометкой уже засчитанных */
 async function cover() {
+  if (isLive.value) return coverLive()
   if (busy) { again = true; return }
   const all = (props.final || props.text).trim(), w = all ? all.split(/\s+/) : []
   if (w.length <= sentWords) return
@@ -96,10 +99,57 @@ async function cover() {
   } catch { /* статус — в подвале */ }
   finally { busy = false; asking.value = false; if (again) { again = false; if (wc(props.final || props.text) > sentWords) cover() } }
 }
+// ---------- шар Live (24.11.2026, тест): одна Live-сессия вместо моста — utils/kpball.js (openBallLive) ----------
+// Текст сказанного уходит в модель кусками «РЕЧЬ: …» (сразу после паузы или кнопкой), она молча вызывает cover(n, score, said): 1 — блок целиком,
+// 0.5 — частично (блок наполовину, процент считаем сами). Одно сообщение за раз: пока модель не договорила, следующий кусок ждёт
+let lv = null, lvBlocks = [], busyL = false, againL = false, busyTm = 0, autoTm = 0, fillTm = 0
+function fill(b) {          // блоки «наливаются» в шар по одному — как будто нейросеть выдаёт их
+  clearInterval(fillTm); let k = 0; blocks.value = []
+  fillTm = setInterval(() => { k++; blocks.value = b.slice(0, k); if (k >= b.length) { clearInterval(fillTm); fillTm = 0 } }, 260)
+}
+function resetSay() { ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) }
+function startLive(keep = false) {          // keep — переподключение: засчитанное остаётся, вся речь уходит заново
+  lv?.stop(); if (keep) { sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) } else resetSay()
+  const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
+  try {
+    lv = openBallLive({ id, question: q, ideal,
+      onBlocks: (b) => { lvBlocks = b; fast.value = false; resetSay(); fill(b) },
+      onCover: onLiveCover,
+      onTurn: () => { busyL = false; asking.value = false; clearTimeout(busyTm); if (againL) { againL = false; coverLive() } } })
+  } catch (e) { netOf(id).cover = { st: 'err', txt: String(e.message || e) }; return }
+  const have = lvBlocks.length ? lvBlocks : own.value || liveCached(q, ideal)
+  if (have) { lvBlocks = have; blocks.value = have; fast.value = false; netOf(id).split = { st: 'on', txt: `${have.length} блоков · ${own.value ? 'из экрана' : 'из памяти браузера'}` }; lv.send(blocksMsg(have)); onText() }
+  else { netOf(id).split = { st: 'busy', txt: 'эталон ушёл в Live — режет на блоки' }; lv.send('РАЗБЕЙ') }
+}
+function onLiveCover(list) {
+  const s = { ...sc.value }, inf = { ...info.value }, at = Date.now(), lit = []
+  list.forEach((x, k) => {
+    if (x.i >= blocks.value.length) return
+    if (x.score > (s[x.i] || 0)) s[x.i] = x.score
+    if (x.score >= 0.75) { lit.push(x.i); if (x.said) inf[x.i] = { said: x.said, fix: '', note: '', at: at - k } }
+  })
+  sc.value = s; info.value = inf; light(lit, true)
+}
+function coverLive() {
+  const all = (props.final || props.text).trim(), w = all ? all.split(/\s+/) : []
+  if (w.length <= sentWords) return
+  if (busyL) { againL = true; return }
+  if (!lv?.alive) { startLive(true); setTimeout(coverLive, 1200); return }          // сессия закрылась — открыть заново (блоки и вся речь уйдут снова)
+  const chunk = w.slice(sentWords).join(' ')
+  busyL = true; asking.value = true; sentWords = sentN.value = w.length
+  netOf(props.step.id).cover = { st: 'busy', txt: 'запрос ушёл в Live — сверяет речь с блоками' }
+  lv.send('РЕЧЬ: ' + chunk)
+  clearTimeout(busyTm); busyTm = setTimeout(() => { if (busyL) { busyL = false; asking.value = false; netOf(props.step.id).cover = { st: 'err', txt: 'Live не ответил за 25 с' } } }, 25_000)
+}
+watch(() => props.idle, (v) => { if (!v && isLive.value && !props.edit && !lv) startLive() })          // экран выбрали на холсте — Live включается
+watch(() => props.final, () => {          // сказал — помолчал: само уходит в Live
+  if (!isLive.value || props.edit || props.idle || props.done) return
+  clearTimeout(autoTm); autoTm = setTimeout(() => { if (hasNew.value) coverLive() }, 1100)
+})
 watch(() => props.text, onText)
 watch(() => props.done, async (d) => {
   clearInterval(missTm)
-  if (!d) { ok.value = new Set(); byAi.value = new Set(); info.value = {}; sentWords = sentN.value = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; return }
+  if (!d) { ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; if (isLive.value && !props.idle && !props.edit) startLive(); return }
   if (wc(props.text) > sentWords) await cover()          // последняя сверка — по всему ответу
   missTm = setInterval(() => { const m = blocks.value.map((_, i) => i).filter((i) => !ok.value.has(i)); if (m.length) { face(m[missI++ % m.length]); hit.value = -1 } }, 1800)          // по очереди — что не прозвучало
 })
@@ -120,15 +170,15 @@ async function cut() {
 function dropOwn() { delete props.step.keys; blocks.value = quickBlocks(props.step.ideal); fast.value = true; ed.changed() }
 watch(() => props.step.keys, (k) => { if (Array.isArray(k) && k.length) { blocks.value = k; fast.value = false } })
 
-onMounted(() => { layout(); run(); if (!props.idle && !props.edit) { netOf(props.step.id); load() } })
-onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInterval(missTm) })
+onMounted(() => { layout(); run(); if (!props.idle && !props.edit) { netOf(props.step.id); if (isLive.value) startLive(); else load() } })
+onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInterval(missTm); clearInterval(fillTm); clearTimeout(autoTm); clearTimeout(busyTm); lv?.stop() })
 </script>
 
 <template>
   <div class="kball" :class="['th-' + theme, { idle }]" @pointerdown.stop>
     <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
     <div ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
-      <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
+      <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), part: !ok.has(i) && sc[i] > 0, ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
     <div class="kbp" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
       <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
@@ -180,6 +230,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbw { filter: blur(3.5px) } .kball.idle .kbw, .kbw.ok, .kbw.miss { filter: none }          /* нераскрытое — размыто: подсказку не подсмотреть; после проверки — видно, чего не хватило */
 .kbw.ok { background: #e3fbef; color: #128a55 } .kbw.fx::before { content: '✎ '; color: #b26a00 }          /* ✎ — сказал с ошибкой, чат поправил (список ниже) */ .kbw.ai::after { content: ' •'; color: #1a73e8 }
 .kbw.hit { box-shadow: 0 0 0 2px #2bb34a }
+.kbw.part { filter: blur(1.4px); box-shadow: inset 0 0 0 1.5px rgba(43, 179, 74, .55) } .th-sphere .kbw.part { box-shadow: inset 0 0 0 1.5px rgba(56, 189, 248, .6) }          /* Live: блок передан частично */
 .kbw.miss { background: #fff; color: #b3261e; box-shadow: inset 0 0 0 1.5px #f1c7c7 }
 .kbp { display: flex; align-items: center; gap: 10px; margin-top: 2px }
 .kbp b { min-width: 52px; font-size: 22px; font-weight: 900; color: #128a55; font-variant-numeric: tabular-nums }
