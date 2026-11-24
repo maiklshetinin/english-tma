@@ -68,11 +68,13 @@ const idle = computed(() => !!p?.idle)
 const swT0 = ref(0), swNow = ref(Date.now())
 let swTm = 0
 const mmss = (s) => { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
-const tookS = computed(() => (p.st.took != null ? p.st.took : swT0.value ? (swNow.value - swT0.value) / 1000 : 0))
+let swHid = 0, swHidAt = 0          // пока вкладка скрыта — не считаем (24.11.2026)
+const swVis = () => { if (document.hidden) swHidAt = Date.now(); else if (swHidAt) { swHid += Date.now() - swHidAt; swHidAt = 0 } }
+const tookS = computed(() => (p.st.took != null ? p.st.took : swT0.value ? (swNow.value - swT0.value - swHid) / 1000 : 0))
 const spokeS = computed(() => (p.st.spoke || 0) + (dic.value === 'live' && dicT0.value ? (dicNow.value - dicT0.value) / 1000 : 0))
-onMounted(() => { if (idle.value || p.edit || p.st.done) return; swT0.value = swNow.value = Date.now(); swTm = setInterval(() => { swNow.value = Date.now() }, 1000) })
-watch(() => p.st.done, (d) => { if (d && swT0.value && p.st.took == null) p.st.took = Math.round((Date.now() - swT0.value) / 1000); if (d) clearInterval(swTm) })          // проверка — секундомер стоп
-onBeforeUnmount(() => clearInterval(swTm))
+onMounted(() => { if (idle.value || p.edit || p.st.done) return; swT0.value = swNow.value = Date.now(); swTm = setInterval(() => { swNow.value = Date.now() }, 1000); document.addEventListener('visibilitychange', swVis) })
+watch(() => p.st.done, (d) => { if (d && swT0.value && p.st.took == null) { swVis(); p.st.took = Math.round((Date.now() - swT0.value - swHid - (swHidAt ? Date.now() - swHidAt : 0)) / 1000) } if (d) clearInterval(swTm) })          // проверка — время на вопрос зафиксировано
+onBeforeUnmount(() => { clearInterval(swTm); document.removeEventListener('visibilitychange', swVis) })
 const ballText = computed(() => ((p.st.text || '') + ' ' + (dicDraft.value || '')).trim())
 const BALL_ST = { on: 'open', busy: 'connecting', err: 'error', off: '' }
 const ballList = computed(() => { const n = props.step.ball && ballNet[props.step.id]; if (!n) return []
@@ -411,7 +413,7 @@ function jsApply() {
     <div v-if="fileMode || p.edit || p.st.done || thinking" class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
       <button v-if="fileMode && !p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? (fileMode ? 'Включаю микрофон…' : 'Подключаюсь…') : dic === 'sending' ? 'Распознаю…' : fileMode ? 'Записать ответ' : 'Надиктовать с Gemini' }}</button>
-      <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? (tookS ? '⏱ ' + mmss(tookS) + ' · ' : '') + (spokeS ? '🎙 ' + mmss(spokeS) + ' · ' : '') + words : `${words} · зачёт от ${pass}%` }}</span></div>
+      <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
     <p v-if="fileMode && !p.st.done" class="kfn" :class="{ er: dicErr }">{{ dicErr || '🎙 Запись уходит в Gemini целым аудио после «Стоп» — не кусками; распознанный текст впишется в поле' }}</p>
     <VoiceNote v-if="fileMode && note && !p.edit" :url="note.url" :peaks="note.peaks" :sec="note.sec" :status="note.status" :model="note.model" :ms="note.ms" :err="note.err" @retry="sendNote" />
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
@@ -420,7 +422,7 @@ function jsApply() {
       <!-- черновик диктовки — облаком поверх низа поля (21.11.2026): раньше строкой под полем — появлялась и пропадала, всё ниже прыгало -->
       <div v-if="dicCloud" class="kdd" :class="{ er: dicErr && !dicDraft }" aria-live="polite"><small>{{ dicErr && !dicDraft ? 'Диктовка' : dicWho }}</small>{{ dicShow }}</div>
     </div>
-    <div v-else-if="p.st.done || thinking" class="ka done">{{ p.st.text }}</div>          <!-- ответ «уходит вверх» пузырём — после проверки -->
+    <div v-else-if="p.st.done || thinking" class="ka done">{{ p.st.text }}<span v-if="spokeS >= 1" class="kmeta" title="Сколько вы говорили — сумма записей диктовки">🎙 {{ mmss(spokeS) }}</span></div>          <!-- 24.11.2026: время речи — в углу пузыря, как в Telegram -->          <!-- ответ «уходит вверх» пузырём — после проверки -->
 
     <div v-if="thinking" class="kthink" aria-live="polite"><span class="kthi"><img v-if="aiIcon(thinkWho)" :src="aiIcon(thinkWho)" alt="" /></span>
       <span class="kthx">{{ thinkWho }} проверяет ответ</span><span class="kths">{{ thinkSec ? thinkSec + ' с' : '' }}</span></div>
@@ -465,7 +467,7 @@ function jsApply() {
     </div>
   </template>
   <template v-else-if="part === 'fb' && p.st.done && r">
-    <small>{{ r.error ? 'Без проверки' : tierT[tier] }}</small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
+    <small>{{ r.error ? 'Без проверки' : tierT[tier] }}<template v-if="tookS >= 1"> · <span class="ktook" title="Сколько ушло на вопрос: от открытия экрана до «Проверить» — чтение, раздумья, речь. Пока вкладка или окно скрыты — не считается">на вопрос — {{ mmss(tookS) }}</span></template></small><span class="fs">{{ r.error ? 'Сравните свой ответ с эталоном' : r.feedback }}</span>
   </template>
   <!-- 23.11.2026: строка ввода как в чате (Claude) — в подвале, где «Проверить». Внутри: текст (растёт по высоте, без прокрутки),
        микрофон и «Проверить»; пока диктуют — то, что модель слышит, курсивом, волна, ✕ (выбросить продиктованное) и ✓ (остановить).
@@ -497,7 +499,6 @@ function jsApply() {
       <span v-if="p.st.busy && !fileMode" class="knt connecting" :title="api ? 'Ответ ушёл на проверку в Gemini API' : 'Ответ ушёл на проверку через мост в чат'"><i />проверка · запрос ушёл<em class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span class="ksp" />
       <span v-if="!fileMode && cyrN" class="kcyr" title="В ответе русские буквы — подсвечены розовым: диктовка ошиблась языком, поправьте">русские буквы: {{ cyrN }}</span>
-      <span v-if="!idle && swT0" class="kcn ksw" title="⏱ — сколько открыт экран (это время пишется в журнал заходов); 🎙 — сколько говорили">⏱ {{ mmss(tookS) }}<template v-if="spokeS"> · 🎙 {{ mmss(spokeS) }}</template></span>
       <span v-if="!fileMode" class="kcn" :title="'Зачёт — от ' + pass + ' % смысла эталона'">{{ words }} · от {{ pass }}%</span>
       <span v-if="!fileMode && canDic && !idle" class="knt" :class="dicNet" :title="'Соединение с нейросетью диктовки (' + dicShort(dicUsed || dicSel || dicAuto || STT_MODEL) + '): открывается на каждое нажатие микрофона и закрывается после ✓'"><i />{{ { off: 'соединение закрыто', connecting: 'подключаюсь', open: 'соединение открыто · слушает', closed: 'соединение закрыто', error: 'соединение оборвалось' }[dicNet] }}<em v-if="dicNet === 'connecting'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <select v-if="idle && !fileMode && canDic" class="kms kdm" disabled><option>🎙 {{ dicSel ? dicShort(dicSel) : 'авто' }}</option></select>
@@ -610,7 +611,8 @@ function jsApply() {
 .ksp { flex: 1 1 0 !important } .kcn { color: #8f8f8f; font-size: 12.5px; font-weight: 500 }
 .kcst .kdm { height: 28px; max-width: 165px; margin-left: 0; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: #3a3a3a; font-size: 12.5px; font-weight: 600; cursor: pointer } .kcst .kdm:hover:not(:disabled) { background: #f0f0f0 } .kcst .kdm:disabled { color: #b0b0b0; background: transparent }
 .kcst .kbr { font-size: 12.5px; font-weight: 600 }
-.ksw { font-variant-numeric: tabular-nums }
+.kmeta { float: right; margin: 6px -4px -4px 12px; font-family: var(--font, inherit); font-size: 12px; font-weight: 700; line-height: 1; color: #5a8a3c; font-variant-numeric: tabular-nums; white-space: nowrap }          /* 🎙 0:14 — в углу пузыря */
+.ktook { font-variant-numeric: tabular-nums; white-space: nowrap }
 /* соединение с нейросетью (24.11.2026): серая точка — закрыто, синяя мигает — подключаюсь / запрос ушёл, зелёная — открыто, красная — оборвалось */
 .knt { display: inline-flex; align-items: center; gap: 5px; color: #8f8f8f; font-size: 12px; font-weight: 600; white-space: nowrap }
 .knt i { width: 7px; height: 7px; border-radius: 50%; background: #c4c4c4; flex: none }
