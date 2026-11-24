@@ -232,11 +232,10 @@ onBeforeUnmount(() => clearInterval(lvTm))
 const liveLine = computed(() => { const n = props.step.ballLive && ballNet[props.step.id]; if (!n) return null
   const name = String(n.model || 'Gemini Live').replace(/ · Live$/, ''), bad = n.split.st === 'err' ? n.split : n.cover.st === 'err' ? n.cover : null
   if (bad) return { st: 'error', t: name + ' · ' + bad.txt }
-  // 25.11.2026: речь режется на куски раз в 5 с — видно, что сейчас: слушает (через сколько сверка) → Gemini ищет совпадения (секундомер) → засчитано за N с
+  // 25.11.2026: что сейчас — слушает → (пауза) Gemini ищет совпадения (секундомер от паузы) → засчитано за N с
   const L = n.lv, tk = lvNow.value, last = L?.last ? (L.last.n ? `засчитано ${L.last.n}` : 'нового нет') + ' за ' + sec1(L.last.ms) + ' с' : ''
   if (L?.ph === 'think') return { st: 'connecting', t: name + ' · Gemini ищет совпадения… ' + sec1(tk - L.at) + ' с' }
-  if (dic.value === 'live') { const left = L?.cut ? Math.max(0, 5000 - (tk - L.cut)) : 5000
-    return { st: 'rec', t: name + ' · слушает · ' + (left > 0 ? `сверка через ${Math.ceil(left / 1000)} с` : 'сверка после следующих слов'), s: last, p: L?.cut ? Math.min(1, (tk - L.cut) / 5000) : 0 } }
+  if (dic.value === 'live') return { st: 'rec', t: name + ' · слушает · засчитает на паузе', s: last }
   if (n.split.st === 'busy') return { st: 'connecting', t: name + ' · режет эталон на блоки' }
   if (last) return { st: 'open', t: name + ' · ' + last }
   return { st: n.cover.st === 'busy' ? 'connecting' : n.cover.st === 'on' ? 'open' : '', t: name + ' · ' + (n.cover.st === 'busy' ? 'сверяет речь' : n.cover.txt || 'ждёт речь') } })
@@ -520,7 +519,7 @@ function jsApply() {
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
       <span v-else-if="bridge && !isLive" class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
-      <span v-if="liveLine" class="knt" :class="liveLine.st"><i />{{ liveLine.t }}<em v-if="liveLine.st === 'connecting' && !/с$/.test(liveLine.t)" class="kdd"><b>.</b><b>.</b><b>.</b></em><span v-if="liveLine.st === 'rec'" class="kntb" aria-hidden="true"><b :style="{ transform: `scaleX(${liveLine.p})` }" /></span><small v-if="liveLine.s" class="knts">{{ liveLine.s }}</small></span>
+      <span v-if="liveLine" class="knt" :class="liveLine.st"><i />{{ liveLine.t }}<em v-if="liveLine.st === 'connecting' && !/с$/.test(liveLine.t)" class="kdd"><b>.</b><b>.</b><b>.</b></em><small v-if="liveLine.s" class="knts">{{ liveLine.s }}</small></span>
       <span v-for="x in ballList" :key="x.k" class="knt" :class="BALL_ST[x.st]" :title="x.name + ' — ' + x.txt"><i />{{ x.name }} · {{ x.txt }}<em v-if="x.st === 'busy'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span v-if="p.st.busy && !fileMode && !isLive" class="knt connecting" :title="api ? 'Ответ ушёл на проверку в Gemini API' : 'Ответ ушёл на проверку через мост в чат'"><i />проверка · запрос ушёл<em class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span class="ksp" />
@@ -652,8 +651,7 @@ function jsApply() {
 .knt.open { color: #1f7a3a } .knt.open i { background: #2bb34a; box-shadow: 0 0 0 3px rgba(43, 179, 74, .16) }
 .knt.connecting { color: #1a73e8 } .knt.connecting i { background: #1a73e8; animation: kntp 1s ease-in-out infinite }
 .knt.error { color: #b3261e } .knt.error i { background: #d93025 }
-.knt.rec { color: #c4262e } .knt.rec i { background: #e5484d; animation: kntp 1.2s ease-in-out infinite }          /* шар Live: слушает — красная точка и полоска до следующей сверки (5 с) */
-.kntb { flex: none; width: 46px; height: 3px; border-radius: 2px; background: rgba(229, 72, 77, .18); overflow: hidden } .kntb b { display: block; height: 100%; background: #e5484d; transform-origin: left }
+.knt.rec { color: #c4262e } .knt.rec i { background: #e5484d; animation: kntp 1.2s ease-in-out infinite }          /* шар Live: слушает — красная мигающая точка */
 .knts { color: #8f8f8f; font-size: 12px; font-weight: 600 } .knts::before { content: '· ' }
 .kdd b { font-weight: inherit; animation: kddb 1.2s infinite } .kdd b:nth-child(2) { animation-delay: .2s } .kdd b:nth-child(3) { animation-delay: .4s }
 @keyframes kntp { 50% { opacity: .35 } } @keyframes kddb { 0%, 100% { opacity: .2 } 40% { opacity: 1 } }
