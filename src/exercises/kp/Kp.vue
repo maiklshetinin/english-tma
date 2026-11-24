@@ -63,6 +63,16 @@ let brTm = 0
 // экран не выбран на холсте редактора (p.idle, 23.11.2026) — мост не опрашиваем; выбрали — сразу свежий статус и опрос раз в 15 с
 const idle = computed(() => !!p?.idle)
 // «Ответ по смыслу · шар» (24.11.2026, тест): шару — всё, что сказано (поле ответа + черновик диктовки); статусы его запросов — в подвал
+// Секундомер (24.11.2026): ⏱ — сколько открыт экран (то же время, что пишет журнал заходов: чтение, раздумья, речь, ожидание проверки),
+// останавливается на проверке; 🎙 — сколько говорил (сумма записей диктовки). Оба — в p.st (took, spoke): после проверки — у «Ваш ответ»
+const swT0 = ref(0), swNow = ref(Date.now())
+let swTm = 0
+const mmss = (s) => { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
+const tookS = computed(() => (p.st.took != null ? p.st.took : swT0.value ? (swNow.value - swT0.value) / 1000 : 0))
+const spokeS = computed(() => (p.st.spoke || 0) + (dic.value === 'live' && dicT0.value ? (dicNow.value - dicT0.value) / 1000 : 0))
+onMounted(() => { if (idle.value || p.edit || p.st.done) return; swT0.value = swNow.value = Date.now(); swTm = setInterval(() => { swNow.value = Date.now() }, 1000) })
+watch(() => p.st.done, (d) => { if (d && swT0.value && p.st.took == null) p.st.took = Math.round((Date.now() - swT0.value) / 1000); if (d) clearInterval(swTm) })          // проверка — секундомер стоп
+onBeforeUnmount(() => clearInterval(swTm))
 const ballText = computed(() => ((p.st.text || '') + ' ' + (dicDraft.value || '')).trim())
 const BALL_ST = { on: 'open', busy: 'connecting', err: 'error', off: '' }
 const ballList = computed(() => { const n = props.step.ball && ballNet[props.step.id]; if (!n) return []
@@ -153,6 +163,7 @@ async function dictate() {
       if (s === 'error') { dicErr.value = info; dicNet.value = 'error' }
       if (s === 'ended') dicNet.value = 'closed'
       if (s === 'live') { dicNet.value = 'open'; dicT0.value = dicNow.value = Date.now(); clearInterval(dicTm); dicTm = setInterval(() => { dicNow.value = Date.now() }, 500); waveRun(true) }
+      if ((s === 'ended' || s === 'error') && dic.value !== 'connecting' && dicT0.value) { p.st.spoke = (p.st.spoke || 0) + (Date.now() - dicT0.value) / 1000; dicT0.value = 0 }          // 🎙 — сколько говорил
       if (s === 'ended' || s === 'error') { clearInterval(dicTm); dicLvl.value = 0; dicS = null; insText(dicDraft.value); dicDraft.value = ''; waveRun(false); micOffSnd() }
     },
     interim: (t) => { dicDraft.value = t },
@@ -179,6 +190,7 @@ async function dictateFile() {
 }
 function finishRec() {
   const r = recS?.stop(); recS = null; clearInterval(dicTm); dicLvl.value = 0
+  if (r?.sec) p.st.spoke = (p.st.spoke || 0) + r.sec; dicT0.value = 0          // 🎙 «целым аудио» — длина записи
   if (!r) { dic.value = 'idle'; return }
   if (note.value?.url) URL.revokeObjectURL(note.value.url)
   note.value = { url: URL.createObjectURL(r.blob), blob: r.blob, peaks: r.peaks, sec: r.sec, status: 'sending', model: '', ms: 0, err: '' }
@@ -399,7 +411,7 @@ function jsApply() {
     <div v-if="fileMode || p.edit || p.st.done || thinking" class="kl" :class="look"><label :for="'kpa-' + step.id">Ваш ответ</label>
       <button v-if="fileMode && !p.edit && !p.st.done && canDic" type="button" class="kdic" :class="dic" :style="{ '--l': dicLvl }" :disabled="p.st.busy || dic === 'sending'" :title="dic === 'live' ? 'Остановить запись' : fileMode ? 'Записать ответ целиком — после «Стоп» запись уйдёт в Gemini одним файлом' : 'Надиктовать ответ — Gemini распознаёт польскую речь'" @pointerdown.stop @click="dictate">
         <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>{{ dic === 'live' ? 'Стоп · ' + dicSec : dic === 'connecting' ? (fileMode ? 'Включаю микрофон…' : 'Подключаюсь…') : dic === 'sending' ? 'Распознаю…' : fileMode ? 'Записать ответ' : 'Надиктовать с Gemini' }}</button>
-      <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? words : `${words} · зачёт от ${pass}%` }}</span></div>
+      <span>{{ p.edit ? `зачёт от ${pass}%` : checked ? (tookS ? '⏱ ' + mmss(tookS) + ' · ' : '') + (spokeS ? '🎙 ' + mmss(spokeS) + ' · ' : '') + words : `${words} · зачёт от ${pass}%` }}</span></div>
     <p v-if="fileMode && !p.st.done" class="kfn" :class="{ er: dicErr }">{{ dicErr || '🎙 Запись уходит в Gemini целым аудио после «Стоп» — не кусками; распознанный текст впишется в поле' }}</p>
     <VoiceNote v-if="fileMode && note && !p.edit" :url="note.url" :peaks="note.peaks" :sec="note.sec" :status="note.status" :model="note.model" :ms="note.ms" :err="note.err" @retry="sendNote" />
     <div v-if="p.edit" class="ka ro" title="Тут ученик надиктовывает ответ по-польски">Mikołajki obchodzimy…</div>
@@ -485,6 +497,7 @@ function jsApply() {
       <span v-if="p.st.busy && !fileMode" class="knt connecting" :title="api ? 'Ответ ушёл на проверку в Gemini API' : 'Ответ ушёл на проверку через мост в чат'"><i />проверка · запрос ушёл<em class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span class="ksp" />
       <span v-if="!fileMode && cyrN" class="kcyr" title="В ответе русские буквы — подсвечены розовым: диктовка ошиблась языком, поправьте">русские буквы: {{ cyrN }}</span>
+      <span v-if="!idle && swT0" class="kcn ksw" title="⏱ — сколько открыт экран (это время пишется в журнал заходов); 🎙 — сколько говорили">⏱ {{ mmss(tookS) }}<template v-if="spokeS"> · 🎙 {{ mmss(spokeS) }}</template></span>
       <span v-if="!fileMode" class="kcn" :title="'Зачёт — от ' + pass + ' % смысла эталона'">{{ words }} · от {{ pass }}%</span>
       <span v-if="!fileMode && canDic && !idle" class="knt" :class="dicNet" :title="'Соединение с нейросетью диктовки (' + dicShort(dicUsed || dicSel || dicAuto || STT_MODEL) + '): открывается на каждое нажатие микрофона и закрывается после ✓'"><i />{{ { off: 'соединение закрыто', connecting: 'подключаюсь', open: 'соединение открыто · слушает', closed: 'соединение закрыто', error: 'соединение оборвалось' }[dicNet] }}<em v-if="dicNet === 'connecting'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <select v-if="idle && !fileMode && canDic" class="kms kdm" disabled><option>🎙 {{ dicSel ? dicShort(dicSel) : 'авто' }}</option></select>
@@ -597,6 +610,7 @@ function jsApply() {
 .ksp { flex: 1 1 0 !important } .kcn { color: #8f8f8f; font-size: 12.5px; font-weight: 500 }
 .kcst .kdm { height: 28px; max-width: 165px; margin-left: 0; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: #3a3a3a; font-size: 12.5px; font-weight: 600; cursor: pointer } .kcst .kdm:hover:not(:disabled) { background: #f0f0f0 } .kcst .kdm:disabled { color: #b0b0b0; background: transparent }
 .kcst .kbr { font-size: 12.5px; font-weight: 600 }
+.ksw { font-variant-numeric: tabular-nums }
 /* соединение с нейросетью (24.11.2026): серая точка — закрыто, синяя мигает — подключаюсь / запрос ушёл, зелёная — открыто, красная — оборвалось */
 .knt { display: inline-flex; align-items: center; gap: 5px; color: #8f8f8f; font-size: 12px; font-weight: 600; white-space: nowrap }
 .knt i { width: 7px; height: 7px; border-radius: 50%; background: #c4c4c4; flex: none }

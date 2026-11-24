@@ -1577,8 +1577,20 @@ function fileOver(e) {
 function fileLeave(e) { if (!e.relatedTarget && drag.on && drag.from === 'file') Object.assign(drag, { on: false, item: null }) }
 async function fileDrop(e) {
   if (!/^(INPUT|TEXTAREA)$/.test(e.target?.tagName)) {      // JSON экранов: файл .json или перетащенный текст
-    const jf = [...(e.dataTransfer?.files ?? [])].find(f => f.type === 'application/json' || /\.json$/i.test(f.name))
-    const text = jf ? await jf.text().catch(() => '') : !hasFiles(e) ? e.dataTransfer?.getData('text/plain') ?? '' : ''
+    // 24.11.2026: несколько файлов сразу (tools/make-json.py — файл на вопрос) — все, по порядку имён (01, 02, …), одной пачкой на доску
+    const jfs = [...(e.dataTransfer?.files ?? [])].filter(f => f.type === 'application/json' || /\.json$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    const jf = jfs[0]
+    let text = ''
+    if (jfs.length > 1) {
+      const all = []
+      for (const f of jfs) {
+        let v = null; try { v = JSON.parse(await f.text()) } catch { continue }
+        if (Array.isArray(v)) all.push(...v)
+        else if (Array.isArray(v?.steps)) all.push(...v.steps.map(x => (typeof v.type === 'string' && x && typeof x === 'object' && !x.kind && !x.type ? { ...x, type: v.type } : x)))
+        else if (v && typeof v === 'object') all.push(v)
+      }
+      text = all.length ? JSON.stringify(all) : ''
+    } else text = jf ? await jf.text().catch(() => '') : !hasFiles(e) ? e.dataTransfer?.getData('text/plain') ?? '' : ''
     if (jf || text) {
       e.preventDefault(); Object.assign(drag, { on: false, item: null, over: false })
       if (!(await importJson(text, toWorld(e.clientX, e.clientY)))) say('Это не JSON экранов', { text: 'Нужен экран или список экранов, как у кнопки «{ }» у экрана.' })
