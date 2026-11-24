@@ -53,10 +53,10 @@ async function remove(c) {
       <div v-for="c in list" :key="c.id" class="card cc" :class="{ on: c.id === selected }" role="button" tabindex="0" :title="`Нажмите — посмотреть ниже, дважды — открыть в редакторе${c.updatedAt ? ' · изменён ' + ago(c.updatedAt) : ''}`"
         @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
         <span class="ic"><AppIcon name="route" :size="16" /></span>
-        <span class="tx"><b>{{ c.title }}</b><small>{{ c.count }} {{ word(c.count) }}</small></span>
+        <span class="tx"><b>{{ c.title }}</b><small>{{ c.count }} {{ word(c.count) }}<template v-if="c.updatedAt"> · {{ ago(c.updatedAt) }}</template></small></span>
         <!-- как везде: справа карандаш (редактор) и корзина -->
-        <button class="icon-btn" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="16" /></button>
-        <button class="icon-btn danger" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="16" /></button>
+        <button class="icon-btn" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="13" /></button>
+        <button class="icon-btn danger" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="13" /></button>
       </div>
     </div>
   </div>
@@ -69,9 +69,12 @@ async function remove(c) {
 .grid::-webkit-scrollbar { height: 6px; background: transparent } .grid::-webkit-scrollbar-thumb { background: transparent }
 .grid:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .28) } html[data-theme='dark'] .grid:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .3) }
 .grid > .cc { flex: 0 0 225px; box-sizing: border-box }          /* на четверть уже прежних 300px */
-.cc { user-select: none; display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 8px; margin: 0; cursor: pointer; transition: border-color .1s }
+.cc { user-select: none; display: flex; align-items: center; gap: 6px; padding: 5px 8px; margin: 0; cursor: pointer; transition: border-color .1s }
 .cc:hover { border-color: var(--blue) }
-.cc .icon-btn { --ib: 26px; color: var(--hint) }
+.cc { position: relative }
+.cc .icon-btn { --ib: 22px; position: absolute; top: 3px; color: var(--hint); border-color: transparent; background: none } .cc .icon-btn:hover { background: var(--surface) }
+.cc .icon-btn.danger { right: 4px } .cc .icon-btn:not(.danger) { right: 27px }          /* карандаш и корзина — мелко, в правом верхнем углу: тексту вся ширина */
+.cc .tx b { padding-right: 50px }
 .ic { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--purple); color: #fff }
 .tx { flex: 1; display: grid; gap: 0; line-height: 1.15; min-width: 0 } .tx b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tx small { font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--hint) }
 .cc.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) }
