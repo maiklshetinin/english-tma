@@ -106,7 +106,6 @@ html[data-theme='dark'] .badge.ok { color: var(--green); } html[data-theme='dark
 @keyframes sheet-up { from { transform: translateY(100%); } }
 @media (min-width: 768px) { .sheet-bg { align-items: center; } .sheet-box { border-radius: 24px; } }
 @media (min-width: 1024px) { .page.wide { padding-left: 0; padding-right: 0; } }
-@media (min-width: 1024px) { .page { padding-bottom: calc(24px + var(--safe-b)) } }          /* 24.11.2026: на компьютере навигация слева — запас 100px под нижнюю панель не нужен (иначе страница крутится, даже когда всё влезает) */
 
 /* Полоса прокрутки во всём приложении — как в Telegram Desktop: тонкая серая «таблетка» без дорожки и без стрелок.
    Только ::-webkit-scrollbar (Chrome, Edge, Safari, Telegram): если задать scrollbar-width / scrollbar-color, Chrome на Windows рисует системную полосу со стрелками. */

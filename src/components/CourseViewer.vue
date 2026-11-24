@@ -43,7 +43,7 @@ const onEsc = (e) => { if (e.key !== 'Escape') return; if (open.value) open.valu
 const onDown = (e) => { if (peek.value && !e.target.closest?.('.pv, .vrow.peek, .rpt')) peek.value = null }
 const auth = useAuthStore()
 onMounted(() => { syncReview(auth.user?.id); addEventListener('keydown', onEsc); addEventListener('pointerdown', onDown) })
-onUnmounted(() => { removeEventListener('keydown', onEsc); removeEventListener('pointerdown', onDown) })
+onUnmounted(() => { removeEventListener('keydown', onEsc); removeEventListener('pointerdown', onDown); lockPage(false) })
 
 // типы заданий — как в редакторе курса
 const T = {
@@ -131,6 +131,9 @@ const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 // этого просмотра). Ошибок нет — проверяемые экраны из уроков Chapter, до CK_MAX, равномерно — чекпоинт не бывает пустым.
 const GRADED = ['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp'], CK_MAX = 8
 const open = ref(null)                         // открытое во весь экран задание
+// 24.11.2026: урок открыт во весь экран — страница под ним не крутится (иначе справа торчит лишняя полоса прокрутки окна, даже на пустом экране)
+const lockPage = (v) => { document.documentElement.style.overflow = v ? 'hidden' : ''; document.body.style.overflow = v ? 'hidden' : '' }
+watch(open, (v) => lockPage(!!v), { immediate: true })
 const misses = reactive(new Set())             // экраны с ошибкой в открытом сейчас уроке
 const okSteps = (x) => (x.steps ?? []).filter(s => !stepIssue(s))
 // ошибки урока: с сервера (ученик) / этого просмотра; у открытого сейчас урока — плюс ошибки, сделанные только что (в реальном времени)
