@@ -583,10 +583,22 @@ const XGROUPS_BOOK = [
 const XGROUPS_PAGE = XGROUPS_BOOK.map(g => ({ ...g, k: 'p' + g.k, items: g.ids.map(id => TPL.find(v => v.id === 'pg_' + id)).filter(Boolean) }))
 // «Karta Polaka» (19.11.2026) — упражнения курса к собеседованию: ответ своими словами, проверяет Gemini по эталону
 const XGROUPS_KP = [{ k: 'S', t: 'Ответ по смыслу', d: 'проверяет ИИ по эталону', items: TPL.filter(v => v.id === 'kp') }, { k: 'S', t: 'Ответ по смыслу · целым аудио', d: 'запись целиком → Gemini, не кусками · тест', items: TPL.filter(v => v.id === 'kpfile') }, { k: 'S', t: 'Ответ по смыслу · Gemini API', d: 'напрямую, без моста · тест', items: TPL.filter(v => v.id === 'kpapi') }, { k: 'S', t: 'Разговор с Gemini', d: 'живой голос сразу в Gemini, не текст', items: TPL.filter(v => v.id === 'talk') }, { k: 'S', t: 'Разговор с персонажем', d: 'тот же разговор, персонаж говорит · тест', items: TPL.filter(v => v.id === 'talkava') }, { k: 'S', t: 'Разговор · рация', d: 'нажал — говоришь, нажал — ответ · тест', items: TPL.filter(v => v.id === 'talkptt') }, { k: 'S', t: 'Рация · голосовые', d: 'реплики — голосовыми, как в Telegram · тест', items: TPL.filter(v => v.id === 'talkvn') }, { k: 'S', t: 'Собеседование · рация', d: 'консул спрашивает вопрос из домашки, оценка речи · тест', items: TPL.filter(v => v.id === 'talkexam') }, { k: 'S', t: 'Транскрипция', d: 'сказать — увидеть текст · эксперимент', items: TPL.filter(v => v.id === 'stt') }]
-const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'kp', t: 'Karta Polaka', exp: true }]
+const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'kp', t: 'Karta Polaka', exp: true }, { k: 'arch', t: 'Архив' }]
 const trayTab = ref((() => { try { const v = localStorage.getItem('ce.trayTab'); return TRAY_TABS.some(b => b.k === v) ? v : 'app' } catch { return 'app' } })())          // была вкладка «Мои» (конструктор убран 18.11.2026) — откроется «Как в Busuu»
 watch(trayTab, (v) => { try { localStorage.setItem('ce.trayTab', v) } catch {} })
-const XGROUPS = computed(() => (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : trayTab.value === 'kp' ? XGROUPS_KP : XGROUPS_STD)
+// «Архив» (24.11.2026): надоевшие или отыгранные плашки убираются из меню (кнопка на плашке) и живут на вкладке «Архив» —
+// оттуда их можно вернуть. Это только меню: экраны в уроках работают как раньше. Совсем убрать шаблон — в коде (src/utils/lesson.ts → TEMPLATES).
+// Список — в этом браузере (localStorage), в курс не пишется
+const ARCH_K = 'ce.archive'
+const arch = ref((() => { try { const v = JSON.parse(localStorage.getItem(ARCH_K) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [] } catch { return [] } })())
+watch(arch, (v) => { try { localStorage.setItem(ARCH_K, JSON.stringify(v)) } catch {} })
+const archSet = computed(() => new Set(arch.value))
+function toArch(id) { if (!archSet.value.has(id)) arch.value = [...arch.value, id] }
+function fromArch(id) { arch.value = arch.value.filter(x => x !== id) }
+const XGROUPS = computed(() => (trayTab.value === 'arch'
+  ? [{ k: 'arch', t: 'Архив', d: 'убраны из меню — вернуть или удалить в коде', items: arch.value.map(id => TPL.find(v => v.id === id)).filter(Boolean) }].filter(g => g.items.length)
+  : (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : trayTab.value === 'kp' ? XGROUPS_KP : XGROUPS_STD)
+    .map(g => ({ ...g, items: g.items.filter(t => !archSet.value.has(t.id)) })).filter(g => g.items.length))
   .map((g, _, all) => ({ ...g, cols: all.length > 1 ? g.items.length : Math.max(1, Math.min(g.items.length, Math.floor((W.value - 32 - 44) / 140))) })))
 // все плашки группы — в один ряд; группа во вкладке одна (Karta Polaka) — сколько влезает по ширине окна, остальные следующим рядом,
 // без горизонтального скролла (21.11.2026). 140 — плашка 132 + промежуток; 32 — отступы меню от краёв окна, 44 — поля меню и группы
@@ -1962,7 +1974,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <small><b>{{ tileItem.t }}</b><span>{{ tileItem.d }}</span></small>
       <span v-if="skillsT(tileItem).length" class="skl"><i v-for="k in skillsT(tileItem)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
     </div>
-    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter', kpw: tray === 'inter' && trayTab === 'kp' }" role="toolbar" @pointerdown.stop @wheel.stop="trayWheel">
+    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter', kpw: tray === 'inter' && (trayTab === 'kp' || trayTab === 'arch') }" role="toolbar" @pointerdown.stop @wheel.stop="trayWheel">
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
         <!-- чекпоинт — как на рельсе: экраны НАД линией, линия снизу, в конце — итог Chapter -->
@@ -1984,15 +1996,18 @@ async function reset() { if (!(await ask('Вернуть пример курса
         <small><b>{{ T[k].t }}</b>{{ TASK_D[k] }}</small></button></template>
       <template v-else-if="tray === 'media'"><button v-for="k in MEDIA" :key="k" class="ti" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c }" @pointerdown.prevent="startDrag($event, { type: k })"><span class="tc" :class="k"><svg viewBox="0 0 24 24" v-html="T[k].ic" /></span><small>{{ T[k].t }}</small></button></template>
       <template v-else-if="tray === 'inter'">
-        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i></button></div>
+        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i><i v-if="b.k === 'arch' && arch.length">{{ arch.length }}</i></button></div>
         <!-- мини-окошки: как выглядит экран -->
-        <div class="xrow" :class="{ wrap: trayTab === 'kp' }">          <!-- Karta Polaka: группы по одной плашке — переносятся рядами по ширине окна, без горизонтального скролла (21.11.2026) -->
+        <div class="xrow" :class="{ wrap: trayTab === 'kp' || trayTab === 'arch' }">
+        <p v-if="trayTab === 'arch' && !XGROUPS.length" class="xarn">В архиве пусто. Наведите на плашку в другой вкладке и нажмите <b>в архив</b> слева сверху — она переедет сюда.</p>          <!-- Karta Polaka: группы по одной плашке — переносятся рядами по ширине окна, без горизонтального скролла (21.11.2026) -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">
         <div v-for="t in g.items" :key="t.id" class="miw"><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
           <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i><span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span></span>          <!-- 19.11.2026: «Ответ по смыслу» — значки чатов в строку с навыком -->
-        </button><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button></div>
+        </button><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button>
+        <button class="mar" :class="{ back: trayTab === 'arch' }" :title="trayTab === 'arch' ? 'Вернуть в меню. ID шаблона: ' + t.id + ' — совсем убрать: src/utils/lesson.ts → TEMPLATES' : 'В архив — убрать из меню (вернуть можно на вкладке «Архив»)'" :aria-label="trayTab === 'arch' ? 'Вернуть «' + t.t + '» в меню' : 'Убрать «' + t.t + '» в архив'" @pointerdown.stop @click.stop="trayTab === 'arch' ? fromArch(t.id) : toArch(t.id)"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg>{{ trayTab === 'arch' ? 'вернуть' : 'в архив' }}</button>
+        <code v-if="trayTab === 'arch'" class="mid">{{ t.id }}</code></div>
         </div></div>
         </div>
       </template>
@@ -2379,6 +2394,11 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .xg { display: grid; align-content: start; gap: 4px; padding: 8px 6px 6px; border-radius: 14px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea } .xg.book { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }          /* книжные — экспериментальные */          /* группы упражнений — рядом, по горизонтали */
 .miw { position: relative; display: grid }
 .mjs { position: absolute; top: 4px; right: 4px; z-index: 2; height: 22px; padding: 0 6px; border: 1px solid #dcdcdc; border-radius: 7px; background: #fff; font: 900 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -1px; color: #777; cursor: pointer; opacity: .85 }
+.mar { position: absolute; top: 4px; left: 4px; z-index: 2; display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 6px; border: 1px solid #dcdcdc; border-radius: 7px; background: #fff; color: #777; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; opacity: 0; transition: opacity .12s }
+.mar svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.miw:hover .mar, .mar:focus-visible, .mar.back { opacity: 1 } .mar:hover { color: #b3261e; border-color: #f1c7c7; background: #fff5f5 } .mar.back:hover { color: #1f7a3a; border-color: #b7e3c3; background: #f2fbf4 }          /* «в архив» — только при наведении; на вкладке «Архив» — «вернуть» всегда */
+.mid { justify-self: center; margin-top: 2px; padding: 1px 6px; border-radius: 5px; background: #f2f2f2; color: #777; font: 600 10.5px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace }
+.xarn { margin: 8px 10px; color: var(--hint); font-size: 13px; font-weight: 600 }
 .mjs:hover, .mjs.on { opacity: 1; color: #1899d6; border-color: #84d8ff; background: #f0faff }
 .pre-sp { flex: 1 }
 .pbtn { flex: none; width: auto; height: auto; border: 0; border-radius: 10px; padding: 7px 12px; background: #f0f1f3; font: inherit; font-size: 12.5px; font-weight: 800; color: #4b4b4b; cursor: pointer; white-space: nowrap } .pbtn:hover { background: #e6e8eb }
