@@ -144,6 +144,7 @@ function coverLive() {
 watch(() => props.idle, (v) => { if (!v && isLive.value && !props.edit && !lv) startLive() })          // экран выбрали на холсте — Live включается
 watch(() => props.final, () => {          // сказал — помолчал: само уходит в Live
   if (!isLive.value || props.edit || props.idle || props.done) return
+  if (lv?.hearing) { sentWords = sentN.value = wc(props.final); return }          // речь слышит сама Live-сессия (микрофон) — текстом повторно не шлём
   clearTimeout(autoTm); autoTm = setTimeout(() => { if (hasNew.value) coverLive() }, 1100)
 })
 watch(() => props.text, onText)

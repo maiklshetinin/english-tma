@@ -21,6 +21,7 @@ import { sttModel, sttModels, STT_MODEL, firstKey, startTalk, liveModels, liveNa
 import { checkModels, checkName, limitOf, getPick, setPick } from '../../utils/kpcheck'
 import { kpLive } from '../../utils/kplive'
 import { recordMic, transcribeFile } from '../../utils/sttfile'
+import { startBallDictation, ballLiveOf } from '../../utils/kpball'
 import { reqOf } from '../../utils/overlay'
 import VoiceNote from '../../components/VoiceNote.vue'
 import KpBall from './KpBall.vue'          // «· шар» (24.11.2026, тест; step.ball) — шар смысловых блоков над ответом
@@ -148,9 +149,9 @@ async function dictate() {
   dic.value = 'connecting'; dicNet.value = 'connecting'; dicBase = p.st.text || ''; sfxMicOn(); micOn = true          // ✕ — вернуть, как было до диктовки; «тр-тр-тр» — пошло
   { const el = ta.value; insSel = el && props.part === 'fb' ? [el.selectionStart ?? dicBase.length, el.selectionEnd ?? dicBase.length] : null }          // куда вставлять — где курсор
   // чем распознавать — dicModel экрана или курса (23.11.2026): auto — свежая …transcribe-live ключа; Live-собеседник — молча; browser — сам браузер
-  const want = (!editor && dicPick.value) || kpCfg(props.step).dicModel, model = dicKind(want) === 'auto' ? await sttModel(key) : want
+  const want = (!editor && dicPick.value) || kpCfg(props.step).dicModel, model = props.step.ballLive ? (ballLiveOf(props.step.id)?.modelId || want) : dicKind(want) === 'auto' ? await sttModel(key) : want          // шар Live: слушает его же Live-сессия, своей расшифровки нет
   dicUsed.value = model
-  dicS = startDictation({ key, model, lang: kpCfg(props.step).lang, extra: reqOf(kpCfg(props.step), 'dictation'), on: {          // язык — из JSON экрана (lang)
+  dicS = (props.step.ballLive ? startBallDictation : startDictation)({ id: props.step.id, key, model, lang: kpCfg(props.step).lang, extra: reqOf(kpCfg(props.step), 'dictation'), on: {          // язык — из JSON экрана (lang)
     state: (s, info) => {
       if (s === 'live' && info) return
       dic.value = s === 'error' ? 'idle' : s === 'ended' ? 'idle' : s

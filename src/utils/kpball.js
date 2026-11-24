@@ -144,7 +144,7 @@ const LIVE_SYS = (question, ideal) => 'Ты — молчаливый помощ�
   'Один пункт — одна законченная мысль; перечисления («słodycze, zabawki lub książki») — части одного пункта, не дроби их. label — суть пункта на языке эталона, 3–6 слов, ' +
   'понятная сама по себе; words — 1–3 самых характерных слова пункта, как они написаны в эталоне. Не добавляй того, чего нет в эталоне.\n' +
   '2. «БЛОКИ: 1. … 2. …» — готовый нумерованный список пунктов: запомни номера, ничего не вызывай.\n' +
-  '3. «РЕЧЬ: …» — новый кусок того, что сказал ученик (расшифровка речи, в ней бывают ошибки распознавания). Сверь всё сказанное с пунктами и вызови функцию cover: ' +
+  '3. «РЕЧЬ: …» — текстом то, что сказал ученик; а когда ученик говорит в микрофон, ты слышишь его сам — после каждой его реплики поступай так же, как с «РЕЧЬ» (в речи бывают оговорки и ошибки произношения). Сверь всё сказанное с пунктами и вызови функцию cover: ' +
   'для каждого пункта, который передан впервые или полнее, чем раньше: n — номер пункта; score — 1, если мысль передана целиком, 0.5 — если только часть; ' +
   'said — что ученик сказал (2–8 слов). Засчитывай по смыслу: синонимы, другие слова, грамматические ошибки не мешают; если о пункте ничего не сказано — не засчитывай. ' +
   'Пункт, уже засчитанный с тем же score, не повторяй. Нового нет — ничего не вызывай.'
@@ -161,29 +161,41 @@ const lck = (q, i) => 'tma.ballL.' + hash(q + '|' + i)          // нарезк�
 export const liveCached = (q, i) => { try { const c = JSON.parse(localStorage.getItem(lck(q, i)) || 'null'); return Array.isArray(c) && c.length ? c : null } catch { return null } }
 /** Live-сессия шара. cb: { onBlocks([{label, words}]), onCover([{ i (с 0), score 0..1, said }]), onTurn() — модель договорила }.
  *  → { send(text), stop(), alive, model }. Сообщения до готовности сессии ждут в очереди */
+const liveSessions = {}          // id экрана → api открытой Live-сессии (микрофон диктовки берёт её же)
 export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn }) {
   const n = netOf(id), key = firstKey()
   if (!key) throw new Error('Нужен ключ Gemini в профиле')
-  let sess = null, ready = false, closed = false, modelName = '', t0 = Date.now(), sentSplit = false
+  let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now(), sentSplit = false
   const queue = []
   const flush = () => { if (!ready || !sess) return; while (queue.length) { const t = queue.shift(); if (/^РАЗБЕЙ/.test(t)) sentSplit = true; t0 = Date.now(); sess.send(t) } }
   const fail = (txt) => { closed = true; n.cover = { st: 'err', txt }; if (sentSplit && n.split.st === 'busy') n.split = { st: 'err', txt } }
+  let hearH = null, hearUntil = 0, micOn = false          // hearH — кто слушает расшифровку; hearUntil — ещё 2,5 с после «стоп» считаем, что речь уже у модели
   const api = {
-    get model() { return modelName }, get alive() { return !closed },
+    get model() { return modelName }, get modelId() { return modelId }, get alive() { return !closed },
+    get hearing() { return !!hearH || Date.now() < hearUntil },
     send(text) { if (closed) return; queue.push(text); flush() },
-    stop() { closed = true; try { sess?.stop() } catch { /* */ } },
+    stop() { closed = true; delete liveSessions[id]; try { sess?.stop() } catch { /* */ } },
+    /** Голос — прямо в Live: h = { text(кусок расшифровки), turn(), level(0..1) } или null — выключить */
+    async hear(h) {
+      if (!h) { hearH = null; hearUntil = Date.now() + 2500; if (sess && micOn) sess.mute(true); return }
+      if (closed || !sess) throw new Error('Live не подключён')
+      hearH = h; if (!micOn) { micOn = true; await sess.listen() } else sess.mute(false)
+    },
   }
+  liveSessions[id] = api
   n.cover = { st: 'busy', txt: 'подключаюсь к Live-модели…' }
   ;(async () => {
     try {
       const m = (await liveModels(key))[0]
       if (!m) throw new Error('Google не дал ключу Live-модели')
-      modelName = liveName(m); n.model = modelName + ' · Live'
+      modelId = m; modelName = liveName(m); n.model = modelName + ' · Live'
       if (closed) return
       sess = startTalk({ key, model: m, system: LIVE_SYS(question, ideal), lang: 'pl-PL', temperature: 0.2, tools: LIVE_TOOLS, micLater: true, quiet: true, on: {
         state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
         ready: () => { ready = true; flush() },
-        turn: () => onTurn?.(),
+        turn: () => { hearH?.turn?.(); onTurn?.() },
+        text: (role, t) => { if (role === 'me') hearH?.text?.(t) },
+        level: (v) => hearH?.level?.(v),
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
           if (name === 'blocks') {
@@ -204,4 +216,21 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
     } catch (e) { fail('Live: ' + (e.message || e)) }
   })()
   return api
+}
+
+export const ballLiveOf = (id) => liveSessions[id]
+/** Диктовка через Live-сессию шара — тот же вид, что у startDictation: on { state, interim, final, level } → { stop } */
+export function startBallDictation({ id, on = {} }) {
+  const lv = liveSessions[id]
+  let buf = '', tm = 0, done = false
+  const flush = () => { clearTimeout(tm); const t = buf.trim(); buf = ''; if (t) on.final?.(t); on.interim?.('') }
+  const fin = (r = '') => { if (done) return; done = true; flush(); lv?.hear(null); on.state?.(r ? 'error' : 'ended', r) }
+  on.state?.('connecting')
+  if (!lv?.alive) { on.state?.('error', 'Live ещё не подключился — секунду и нажмите снова'); return { stop() {} } }
+  lv.hear({
+    text: (t) => { buf += t; on.interim?.(buf.trim()); clearTimeout(tm); tm = setTimeout(flush, 1500) },          // кусок расшифровки: ждём ещё 1,5 с, потом в поле
+    turn: flush,
+    level: (v) => on.level?.(v),
+  }).then(() => { if (!done) on.state?.('live') }, (e) => fin('Микрофон: ' + (e?.message || e)))
+  return { stop: () => fin('') }
 }
