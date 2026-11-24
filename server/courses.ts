@@ -222,7 +222,10 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       const tasks = items.filter((x) => x.type !== 'unit').length
       const doc = { updatedBy: uid, title: str(b.title, 120) || 'Без названия', mode: b.mode === 'line' ? 'line' : 'wave',
         progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, notes, ink, templates, presets, updatedAt: FieldValue.serverTimestamp() }
-      await ref.set(s.exists ? doc : { ...doc, teacherId: uid, createdAt: FieldValue.serverTimestamp() }, { merge: true })
+      // 24.11.2026: курс уже есть — update, а не set({ merge: true }): merge сливает вложенные поля (presets), и удалённый пресет
+      // или сброшенная настройка возвращались из базы. update меняет поле целиком; teacherId, createdAt, assigned не трогает
+      if (s.exists) await ref.update(doc)
+      else await ref.set({ ...doc, teacherId: uid, createdAt: FieldValue.serverTimestamp() })
       return { id, ok: true }
     },
     /** Файлы, которые нужны другим курсам (экран скопировали из курса в курс — файл общий): при удалении курса их не трогаем */
