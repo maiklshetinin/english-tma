@@ -112,9 +112,12 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(coverTm); clearI
 
 <style scoped>
 .kball { margin: 4px 0 10px }
+/* тест — на белом (24.11.2026): весь экран упражнения с шаром белый, подвал — тоже (кроме зелёного / красного итога) */
+:global(.lp:has(.kball:not(.idle))), :global(.lp:has(.kball:not(.idle)) .body), :global(.lp:has(.kball:not(.idle)) .foot:not(.good):not(.bad)) { background: #fff !important }
 .kbs { position: relative; height: 210px; overflow: hidden; user-select: none }
 .kball.idle .kbs { height: 170px }
-.kbw { position: absolute; left: 0; top: 0; padding: 3px 10px; border-radius: 12px; white-space: nowrap; font-size: 14px; font-weight: 700; color: #7b8494; transition: background .3s, color .3s, box-shadow .3s; will-change: transform }
+.kbw { position: absolute; transition: background .3s, color .3s, box-shadow .3s, filter .4s; left: 0; top: 0; padding: 3px 10px; border-radius: 12px; white-space: nowrap; font-size: 14px; font-weight: 700; color: #7b8494; will-change: transform }
+.kbw { filter: blur(3.5px) } .kball.idle .kbw, .kbw.ok, .kbw.miss { filter: none }          /* нераскрытое — размыто: подсказку не подсмотреть; после проверки — видно, чего не хватило */
 .kbw.ok { background: #e3fbef; color: #128a55 } .kbw.ai::after { content: ' •'; color: #1a73e8 }
 .kbw.hit { box-shadow: 0 0 0 2px #2bb34a }
 .kbw.miss { background: #fff; color: #b3261e; box-shadow: inset 0 0 0 1.5px #f1c7c7 }

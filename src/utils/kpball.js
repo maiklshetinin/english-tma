@@ -70,16 +70,19 @@ async function gen(system, user, schema) {
   throw last || new Error('Gemini не ответила')
 }
 
-const SPLIT_SYS = 'Ты готовишь упражнение для устного ответа на собеседовании. Разбей эталонный ответ на 8–14 ключевых смысловых блоков — ' +
-  'отдельных фактов или мыслей, которые ученик должен назвать. Для каждого блока: label — короткая фраза на языке эталона, 2–5 слов, ' +
-  'словами из эталона; words — 1–3 опорных слова из эталона (как они написаны в эталоне), по которым блок узнаётся в речи. ' +
-  'Не дублируй блоки, не добавляй того, чего нет в эталоне.'
+// v2 (24.11.2026): блок — целый факт («6 grudnia — dzień Mikołaja»), а не кусок фразы («w butach»): так экзаменатор и проверяет
+const SPLIT_SYS = 'Ты готовишь устное упражнение к собеседованию. Разбей эталонный ответ на 5–10 смысловых пунктов — фактов, которые ' +
+  'экзаменатор ждёт услышать: когда, кто, что делают, где, зачем, почему. Один пункт — одна законченная мысль. Не дроби мысль на кусочки ' +
+  'и не делай отдельный пункт из каждого слова перечисления: «słodycze, zabawki lub książki» и «pod poduszką lub w butach» — части одного ' +
+  'пункта о подарках. Для каждого пункта: label — суть пункта на языке эталона, 3–6 слов, понятная сама по себе, например ' +
+  '«6 grudnia — dzień Mikołaja», «Mikołaj był biskupem z Miry», «prezenty pod poduszką lub w butach»; words — 1–3 самых характерных ' +
+  'слова этого пункта, как они написаны в эталоне, по ним пункт узнаётся в речи. Не добавляй того, чего нет в эталоне.'
 const SPLIT_SCHEMA = { type: 'OBJECT', properties: { blocks: { type: 'ARRAY', items: { type: 'OBJECT', properties: { label: { type: 'STRING' }, words: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['label', 'words'] } } }, required: ['blocks'] }
 const plain = (t) => String(t || '').replace(/\*\*|==|(^|\s)_|_(\s|$)/g, '$1$2').replace(/^• /gm, '- ')
 
 /** Нарезка эталона на блоки (с кэшем в браузере). id — экран (статус в подвал) */
 export async function splitBlocks({ id, question, ideal, force = false }) {          // force — мимо памяти браузера (кнопка в правке)
-  const ck = 'tma.ball.' + hash(question + '|' + ideal)
+  const ck = 'tma.ball2.' + hash(question + '|' + ideal)          // ball2 — нарезка v2 (старые кусочки в памяти браузера не берём)
   if (!force) try { const c = JSON.parse(localStorage.getItem(ck) || 'null'); if (Array.isArray(c) && c.length) { netOf(id).split = { st: 'on', txt: `${c.length} блоков · из памяти браузера` }; return c } } catch { /* */ }
   const n = netOf(id); n.split = { st: 'busy', txt: 'запрос ушёл — режет эталон на блоки' }
   const t0 = Date.now()
