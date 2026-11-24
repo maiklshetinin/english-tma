@@ -2,22 +2,22 @@
 // Всё про шар — в этом файле и в src/exercises/kp/KpBall.vue: не понравится — убрать их, флаг ball и шаблон kpball (lesson.ts).
 //
 // Алгоритм:
-//  1. Блоки. Свои у экрана (step.keys: [{ label, words }]) — берём их. Нет — Gemini один раз режет эталон на 8–14 смысловых блоков
+//  0. Куда идут запросы (24.11.2026): только через МОСТ — в чат преподавателя (ChatGPT / Gemini / Claude во вкладке, server/ai.ts),
+//     как проверка «Ответа по смыслу». API не используется: работал через раз. Мост не в сети — шар на быстрых блоках, статус — в подвале.
+//  1. Блоки. Свои у экрана (step.keys: [{ label, words }]) — берём их. Нет — первым запросом чат режет эталон на 5–10 смысловых пунктов
 //     (splitBlocks), результат запоминается в браузере (по тексту вопроса и эталона), в правке — кнопкой пишется в экран (keys).
 //     Пока Gemini режет — шар из «быстрых» блоков: выделения эталона (**жирное**, ==оранжевое==), иначе — начала предложений.
 //  2. Пока говорят. Каждое новое слово расшифровки (Transcribe Live) — сразу локальная сверка (matchLocal): блок горит, если в речи
 //     есть все его опорные слова (по первым 5 буквам: «świece» = «świec», «oczekiwania» = «oczekiwanie»). Мгновенно, без сети.
-//  3. Смысл. Набралось 4+ новых слова и 2,5 с тишины — расшифровка и список блоков уходят в Gemini (coverBlocks): какие блоки
-//     уже раскрыты по смыслу, своими словами тоже. Ответ — блоки загораются (шар поворачивается к ним). Пока запрос идёт — новый ждёт.
+//  3. Смысл. Набралось 4+ новых слова и пауза — вторым запросом в чат уходят НЕ эталон, а готовые блоки из первого запроса и расшифровка
+//     (coverBlocks): какие блоки уже раскрыты по смыслу, своими словами тоже. Ответ — блоки загораются (шар поворачивается к ним).
+//     Пока запрос идёт — новый ждёт; через мост — не чаще раза в 8 с (чат отвечает 5–15 с).
 //  4. Итог. После «Проверить» — последняя сверка; нераскрытые блоки — «Не прозвучало», шар по очереди показывает их.
 //  Процент на шаре — доля раскрытых блоков. Оценку «Проверить» ставит как раньше (мост / Gemini API) — шар её не меняет.
 //  Статусы запросов (нарезка, сверка) — ballNet[id экрана], их рисует подвал «Ответа по смыслу» (Kp.vue), рядом с диктовкой.
 import { reactive } from 'vue'
-import { ai, mark } from './gemini'
-import { checkModels, CHECK_DEFAULT, checkName } from './kpcheck'
+import { apiRequest } from '../firebase'
 
-const API = 'https://generativelanguage.googleapis.com/v1beta/models'
-const think = (m) => (/gemini-2\./.test(m) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' })
 
 /** статусы для подвала: ballNet[id] = { split: { st, txt }, cover: { st, txt }, model } · st: off | busy | on | err */
 export const ballNet = reactive({})
@@ -44,30 +44,33 @@ export function matchLocal(text, blocks) {
   return out
 }
 
-/** Один запрос generateContent с JSON-ответом — по ключам по очереди (лимит — следующий ключ) → { o, model } */
-async function gen(system, user, schema) {
-  if (!ai.keys.length) throw new Error('нет ключей Gemini')
-  const m = (await checkModels(ai.keys[0].key))[0] || CHECK_DEFAULT
-  const body = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0, thinkingConfig: think(m) } }
-  let last = null
-  for (const x of ai.keys.filter((k) => !(k.until > Date.now()))) {
-    try {
-      const send = () => fetch(`${API}/${m}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': x.key }, body: JSON.stringify(body) })
-      let r = await send(), raw = await r.text()
-      if (r.status === 400 && /think/i.test(raw)) { delete body.generationConfig.thinkingConfig; r = await send(); raw = await r.text() }
-      if (!r.ok) {
-        let msg = raw; try { msg = JSON.parse(raw).error?.message ?? raw } catch { /* */ }
-        const e = new Error(`${r.status}: ${String(msg).slice(0, 140)}`); e.status = r.status
-        if (r.status === 429) { last = e; continue }
-        mark(x, false, e); throw e
-      }
-      mark(x, true)
-      const o = JSON.parse(JSON.parse(raw).candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '')
-      return { o, model: m }
-    } catch (e) { last = e; if (e instanceof SyntaxError || e.status === 429) continue; throw e }
+/** Мост: текст — в чат преподавателя через наш сервер (/ai/check, как проверка «Ответа по смыслу»), ответ чата — целиком.
+ *  Сервер ищет в ответе JSON со «score» и меткой {id} — поэтому в формате ответа они есть; нужное (blocks / covered) читаем из текста сами */
+async function askBridge(prompt, message, format) {
+  const r = await apiRequest('/ai/check', { method: 'POST', body: JSON.stringify({ prompt, message, format, question: '', reference: '', answer: '' }) })
+  let b = null; try { b = await r.json() } catch { /* */ }
+  if (!r.ok) { const e = new Error(b?.error || 'мост: ошибка ' + r.status); e.status = r.status; throw e }
+  return { text: String(b?.text ?? ''), site: String(b?.site ?? '') }
+}
+/** Первый JSON-объект в тексте, где есть ключ key */
+function jsonWith(text, key) {
+  const s = String(text || '')
+  for (let i = s.indexOf('{'); i >= 0; i = s.indexOf('{', i + 1)) {
+    let d = 0, str = false, esc = false
+    for (let j = i; j < s.length; j++) {
+      const c = s[j]
+      if (str) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') str = false; continue }
+      if (c === '"') str = true; else if (c === '{') d++
+      else if (c === '}' && --d === 0) { try { const o = JSON.parse(s.slice(i, j + 1)); if (o && key in o) return o } catch { /* */ } break }
+    }
   }
-  throw last || new Error('Gemini не ответила')
+  return null
+}
+/** Запрос в чат через мост → объект из ответа (с ключом key) и какой чат ответил */
+async function ask(system, user, key, fmt) {
+  const { text, site } = await askBridge(system, user, fmt)
+  const o = jsonWith(text, key); if (!o) throw new Error('чат ответил не в том формате')
+  return { o, via: 'мост' + (site ? ' · ' + site : '') }
 }
 
 // v2 (24.11.2026): блок — целый факт («6 grudnia — dzień Mikołaja»), а не кусок фразы («w butach»): так экзаменатор и проверяет
@@ -77,20 +80,20 @@ const SPLIT_SYS = 'Ты готовишь устное упражнение к с
   'пункта о подарках. Для каждого пункта: label — суть пункта на языке эталона, 3–6 слов, понятная сама по себе, например ' +
   '«6 grudnia — dzień Mikołaja», «Mikołaj był biskupem z Miry», «prezenty pod poduszką lub w butach»; words — 1–3 самых характерных ' +
   'слова этого пункта, как они написаны в эталоне, по ним пункт узнаётся в речи. Не добавляй того, чего нет в эталоне.'
-const SPLIT_SCHEMA = { type: 'OBJECT', properties: { blocks: { type: 'ARRAY', items: { type: 'OBJECT', properties: { label: { type: 'STRING' }, words: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['label', 'words'] } } }, required: ['blocks'] }
 const plain = (t) => String(t || '').replace(/\*\*|==|(^|\s)_|_(\s|$)/g, '$1$2').replace(/^• /gm, '- ')
 
 /** Нарезка эталона на блоки (с кэшем в браузере). id — экран (статус в подвал) */
 export async function splitBlocks({ id, question, ideal, force = false }) {          // force — мимо памяти браузера (кнопка в правке)
   const ck = 'tma.ball2.' + hash(question + '|' + ideal)          // ball2 — нарезка v2 (старые кусочки в памяти браузера не берём)
   if (!force) try { const c = JSON.parse(localStorage.getItem(ck) || 'null'); if (Array.isArray(c) && c.length) { netOf(id).split = { st: 'on', txt: `${c.length} блоков · из памяти браузера` }; return c } } catch { /* */ }
-  const n = netOf(id); n.split = { st: 'busy', txt: 'запрос ушёл — режет эталон на блоки' }
+  const n = netOf(id); n.split = { st: 'busy', txt: 'запрос ушёл в чат через мост — режет эталон на блоки' }
   const t0 = Date.now()
   try {
-    const { o, model } = await gen(SPLIT_SYS, `Вопрос: ${question}\n\nЭталонный ответ:\n${plain(ideal)}`, SPLIT_SCHEMA)
+    const { o, via } = await ask(SPLIT_SYS, `Вопрос: ${question}\n\nЭталонный ответ:\n${plain(ideal)}`, 'blocks',
+      'Ответь только JSON без пояснений: {"id":"{id}","score":0,"blocks":[{"label":"…","words":["…"]}]}')
     const b = (o?.blocks ?? []).map((x) => ({ label: String(x.label || '').trim().slice(0, 60), words: (x.words ?? []).map(String).filter(Boolean).slice(0, 3) })).filter((x) => x.label).slice(0, 16)
     if (!b.length) throw new Error('пустой ответ')
-    n.model = checkName(model); n.split = { st: 'on', txt: `${b.length} блоков · ${((Date.now() - t0) / 1000).toFixed(1).replace('.', ',')} с` }
+    n.model = via; n.split = { st: 'on', txt: `${b.length} блоков · ${((Date.now() - t0) / 1000).toFixed(1).replace('.', ',')} с` }
     try { localStorage.setItem(ck, JSON.stringify(b)) } catch { /* */ }
     return b
   } catch (e) { n.split = { st: 'err', txt: 'не нарезала: ' + (e.message || e) }; throw e }
@@ -99,17 +102,17 @@ export async function splitBlocks({ id, question, ideal, force = false }) {     
 const COVER_SYS = 'Ты сверяешь устный ответ ученика с ключевыми блоками эталона. Ответ — расшифровка речи, в ней бывают ошибки распознавания. ' +
   'Верни номера блоков, смысл которых ученик уже передал — своими словами, синонимами, с грамматическими ошибками тоже считается. ' +
   'Не засчитывай блок, если о нём ничего не сказано по смыслу.'
-const COVER_SCHEMA = { type: 'OBJECT', properties: { covered: { type: 'ARRAY', items: { type: 'INTEGER' } } }, required: ['covered'] }
 
 /** Сверка по смыслу: какие блоки раскрыты → индексы (с 0) */
 export async function coverBlocks({ id, question, blocks, text }) {
-  const n = netOf(id); n.cover = { st: 'busy', txt: 'запрос ушёл — сверяет речь с блоками' }
+  const n = netOf(id); n.cover = { st: 'busy', txt: 'запрос ушёл в чат — сверяет речь с блоками' }
   const t0 = Date.now()
   try {
     const list = blocks.map((b, i) => `${i + 1}. ${b.label}`).join('\n')
-    const { o, model } = await gen(COVER_SYS, `Вопрос: ${question}\n\nБлоки эталона:\n${list}\n\nРасшифровка ответа ученика:\n${text}`, COVER_SCHEMA)
+    const { o, via } = await ask(COVER_SYS, `Вопрос: ${question}\n\nСмысловые блоки эталона (из нарезки):\n${list}\n\nРасшифровка ответа ученика:\n${text}`, 'covered',
+      'Ответь только JSON без пояснений: {"id":"{id}","score":<сколько процентов блоков раскрыто>,"covered":[номера раскрытых блоков]}')
     const got = [...new Set((o?.covered ?? []).map((v) => Math.round(Number(v)) - 1).filter((v) => v >= 0 && v < blocks.length))]
-    n.model = checkName(model); n.cover = { st: 'on', txt: `раскрыто ${got.length} из ${blocks.length} · ${((Date.now() - t0) / 1000).toFixed(1).replace('.', ',')} с` }
+    n.model = via; n.cover = { st: 'on', txt: `раскрыто ${got.length} из ${blocks.length} · ${((Date.now() - t0) / 1000).toFixed(1).replace('.', ',')} с` }
     return got
   } catch (e) { n.cover = { st: 'err', txt: 'не сверила: ' + (e.message || e) }; throw e }
 }

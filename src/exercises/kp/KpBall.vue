@@ -48,18 +48,18 @@ function light(idx, ai) {
   for (const i of idx) if (!s.has(i)) { s.add(i); if (ai) a.add(i); if (first < 0) first = i }
   if (first >= 0) { ok.value = s; byAi.value = a; face(first) }
 }
-let sentWords = 0, busy = false, again = false, coverTm = 0
+let sentWords = 0, busy = false, again = false, coverTm = 0, lastAt = 0
 const wc = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0)
 function onText() {
   if (props.edit || props.idle) return
   light(matchLocal(props.text, blocks.value), false)          // мгновенно — дословные совпадения
   clearTimeout(coverTm)
-  if (wc(props.text) - sentWords >= 4) coverTm = setTimeout(cover, 2500)          // 4+ новых слова и пауза 2,5 с — по смыслу в Gemini
+  if (wc(props.text) - sentWords >= 4) coverTm = setTimeout(cover, Math.max(2500, 8000 - (Date.now() - lastAt)))          // 4+ новых слова и пауза — по смыслу в чат; не чаще раза в 8 с
 }
 async function cover() {
   if (busy) { again = true; return }
   const text = props.text.trim(); if (!text) return
-  busy = true; sentWords = wc(text)
+  busy = true; sentWords = wc(text); lastAt = Date.now()
   try { light(await coverBlocks({ id: props.step.id, question: props.step.text || '', blocks: blocks.value, text }), true) } catch { /* статус — в подвале */ }
   finally { busy = false; if (again) { again = false; if (wc(props.text) > sentWords) cover() } }
 }
