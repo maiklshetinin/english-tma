@@ -11,6 +11,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import JsonEdit from './JsonEdit.vue'
 import { checkKeys, blankOf } from '../exercises/schema'
 import { jsonTheme, flipJsonTheme } from '../utils/jsonTheme.js'
+import { TEMPLATES } from '../utils/lesson'
 
 const props = defineProps({
   modelValue: { type: String, default: '' }, title: { type: String, default: 'JSON' }, sub: { type: String, default: '' },
@@ -18,9 +19,18 @@ const props = defineProps({
   applyText: { type: String, default: 'Применить' }, hint: { type: String, default: '' },
   readonly: { type: Boolean, default: false },          // только посмотреть: без «Применить», поле не правится
   schema: { type: Array, default: null }, kind: { type: String, default: '' },
+  tpl: { type: String, default: '' },          // ID шаблона (24.11.2026): строка «тип: talkptt · Разговор · рация · по полям: kind, ptt…» под заголовком
   reqs: { type: Array, default: null },          // «Запрос в API» (24.11.2026, exercises/requests.ts): [{ to, via, body, note?, own? }] — по тексту в поле          // что принимает упражнение (schema.ts)
 })
 const emit = defineEmits(['update:modelValue', 'apply', 'close'])
+// Тип упражнения (24.11.2026): отдельного поля «тип» в JSON нет — приложение узнаёт шаблон по kind и флагам (utils/lesson.ts → tplOf).
+// Показываем ID, название и эти поля — чтобы было видно, что это за упражнение и что в JSON его задаёт
+const TPL_KEYS = ['kind', 'ptt', 'avatar', 'busuu', 'vn', 'exam', 'dic', 'engine', 'bs']
+const tplInfo = computed(() => {
+  const t = props.tpl && TEMPLATES.find((x) => x.id === props.tpl); if (!t) return null
+  let s = {}; try { s = t.make() || {} } catch { /* */ }
+  return { id: t.id, t: t.t, keys: TPL_KEYS.filter((k) => s[k] !== undefined && s[k] !== false).map((k) => (s[k] === true ? k : `${k}: "${s[k]}"`)) }
+})
 const ed = ref(null), start = props.modelValue
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v === '1' } catch { return d } }
 const keep = (k, v) => { try { localStorage.setItem(k, v ? '1' : '0') } catch { /* приватный режим */ } }
@@ -112,7 +122,8 @@ onMounted(() => nextTick(() => ed.value?.focus()))
     <div class="jm-bg" @pointerdown.self="close" @keydown.stop="key" @keyup.stop @paste.stop @copy.stop @cut.stop @wheel.stop>
       <div class="jm" :class="jsonTheme" role="dialog" aria-modal="true" :aria-label="title">
         <header>
-          <div class="jm-t"><b>{{ title }}</b><small v-if="sub">{{ sub }}</small></div>
+          <div class="jm-t"><b>{{ title }}</b><small v-if="sub">{{ sub }}</small>
+            <span v-if="tplInfo" class="jm-tp" title="Отдельного поля «тип» в JSON нет: приложение узнаёт упражнение по этим полям (src/utils/lesson.ts → tplOf). Поменяете их — экран станет другим упражнением. Все ID — tools/make-json.py --list">тип <code>{{ tplInfo.id }}</code> · {{ tplInfo.t }}<template v-if="tplInfo.keys.length"> · задаётся полями <code v-for="k in tplInfo.keys" :key="k">{{ k }}</code></template></span></div>
           <span class="sp" />
           <button class="jb ic" :title="jsonTheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'" @click="flipJsonTheme">
             <svg v-if="jsonTheme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>
@@ -183,6 +194,7 @@ onMounted(() => nextTick(() => ed.value?.focus()))
 .jm { width: min(1320px, 100%); height: min(920px, calc(100vh - 40px)); display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 18px; background: #fff; color: #222; box-shadow: 0 24px 80px rgba(0, 0, 0, .35); font-family: inherit; text-align: left }
 .jm.dark { background: #252526; color: #ddd }
 header { display: flex; align-items: center; gap: 8px } .jm-t { display: grid; gap: 2px; min-width: 0 }
+.jm-tp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; font-size: 12px; font-weight: 700; color: #6b7a99 } .jm-tp code { padding: 1px 6px; border-radius: 5px; background: rgba(75, 141, 248, .12); color: #2f6fe0; font: 700 11.5px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace }
 .jm-t b { font-size: 17px; font-weight: 900 } .jm-t small { font-size: 12.5px; color: #8a8f98; font-weight: 600 }
 .sp { flex: 1 }
 .jm-bar, footer, .jm-end { display: flex; align-items: center; gap: 6px; flex-wrap: wrap }
