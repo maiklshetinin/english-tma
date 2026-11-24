@@ -264,8 +264,10 @@ watchEffect(() => {
 
 <template>
   <template v-if="part === 'body'">
-    <ExHead :step="step" :def="J.head" />
-    <ExText v-model="step.text" tag="p" class="tk" ph="Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски" multi>{{ step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }}</ExText>
+    <!-- 24.11.2026: у ученика заголовок «Поговорите с Gemini голосом» и описание не показываем — экран выше, микрофон ближе.
+         Во всех вариантах разговора, и у собеседования (вопрос консул задаёт сам, в чате). В правке — остаются (их можно поменять) -->
+    <ExHead v-if="p.edit" :step="step" :def="J.head" />
+    <ExText v-if="p.edit" v-model="step.text" tag="p" class="tk" ph="Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски" multi>{{ step.text || 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }}</ExText>
     <div v-if="!p.edit" class="thd" @pointerdown.stop>          <!-- вверху (21.11.2026): голос и «Оценивать речь»; пока идёт разговор — не меняются -->
       <span ref="infoEl" class="evw"><label class="ev" :class="{ off: busy }"><input type="checkbox" class="sw" :checked="evalOn" :disabled="busy" @change="setEval($event.target.checked)" />📊 Оценивать речь</label>
         <button type="button" class="evi" :class="{ on: info }" aria-label="Как это работает" title="Как это работает" @click="info = !info">i</button>
