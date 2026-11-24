@@ -31,8 +31,9 @@ export interface Course { id: string; title: string; mode: 'wave' | 'line'; prog
 export const PRESET_TPLS: Record<string, Record<string, unknown>> = { kp: { kind: 'kp' }, kpfile: { kind: 'kp', dic: 'file' }, kpapi: { kind: 'kp', engine: 'api' },
   talk: { kind: 'talk' }, talkava: { kind: 'talk', avatar: true }, talkptt: { kind: 'talk', avatar: true, ptt: true }, talkptt2: { kind: 'talk', avatar: true, ptt: true, busuu: true },
   talkvn: { kind: 'talk', avatar: true, ptt: true, vn: true },          // 24.11.2026: «Рация · голосовые»
-  talkexam: { kind: 'talk', avatar: true, ptt: true, exam: true } }          // 24.11.2026: «Собеседование · рация»
-const PRESET_DROP = ['id', 'kind', 'text', 'ideal', 'head', 'star', 'n', 'look', 'plain', 'autoplay', 'engine', 'dic', 'ball', 'keys', 'pv', 'avatar', 'ptt', 'busuu', 'vn', 'exam', 'image', 'audio', 'video', 'exAudio', 'audioBy', 'skills', 'min', 'topic']
+  talkexam: { kind: 'talk', avatar: true, ptt: true, exam: true },          // 24.11.2026: «Собеседование · рация»
+  es_talk: { kind: 'talk', lang: 'es-ES' }, es_talkptt: { kind: 'talk', avatar: true, ptt: true, lang: 'es-ES' } }          // 24.11.2026: вкладка «Испанский» (es-talk, es-talkptt)
+const PRESET_DROP = ['id', 'kind', 'text', 'ideal', 'head', 'star', 'n', 'look', 'plain', 'autoplay', 'engine', 'dic', 'ball', 'keys', 'pv', 'avatar', 'ptt', 'busuu', 'vn', 'exam', 'image', 'audio', 'video', 'exAudio', 'audioBy', 'skills', 'min', 'topic', 'lang', 'lock', 'guard']          // язык и замок — из типа, в настройках не хранятся (24.11.2026)
 export const INK_MAX = 300, INK_POINTS = 4000, TEMPLATES_MAX = 30          // TEMPLATES_MAX — своих упражнений из конструктора в курсе
 export const NOTE_COLORS = ['#ffffff', '#e6e6e6', '#ffc4b8', '#ffd6a8', '#ffe99a', '#c7efc4', '#bdeee9', '#c4e1ff', '#ddd0ff', '#ffc9e6'], NOTES_MAX = 200
 

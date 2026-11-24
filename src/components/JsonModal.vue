@@ -11,7 +11,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import JsonEdit from './JsonEdit.vue'
 import { checkKeys, blankOf } from '../exercises/schema'
 import { jsonTheme, flipJsonTheme } from '../utils/jsonTheme.js'
-import { TEMPLATES } from '../utils/lesson'
+import { TEMPLATES, typeId } from '../utils/lesson'
 
 const props = defineProps({
   modelValue: { type: String, default: '' }, title: { type: String, default: 'JSON' }, sub: { type: String, default: '' },
@@ -25,11 +25,11 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'apply', 'close'])
 // Тип упражнения (24.11.2026): отдельного поля «тип» в JSON нет — приложение узнаёт шаблон по kind и флагам (utils/lesson.ts → tplOf).
 // Показываем ID, название и эти поля — чтобы было видно, что это за упражнение и что в JSON его задаёт
-const TPL_KEYS = ['kind', 'ptt', 'avatar', 'busuu', 'vn', 'exam', 'dic', 'engine', 'bs']
+const TPL_KEYS = ['kind', 'ptt', 'avatar', 'busuu', 'vn', 'exam', 'dic', 'engine', 'bs', 'lang']
 const tplInfo = computed(() => {
   const t = props.tpl && TEMPLATES.find((x) => x.id === props.tpl); if (!t) return null
   let s = {}; try { s = t.make() || {} } catch { /* */ }
-  return { id: t.id, t: t.t, keys: TPL_KEYS.filter((k) => s[k] !== undefined && s[k] !== false).map((k) => (s[k] === true ? k : `${k}: "${s[k]}"`)) }
+  return { id: typeId(t.id), t: t.t, keys: TPL_KEYS.filter((k) => s[k] !== undefined && s[k] !== false).map((k) => (s[k] === true ? k : `${k}: "${s[k]}"`)) }
 })
 const ed = ref(null), start = props.modelValue
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v === '1' } catch { return d } }

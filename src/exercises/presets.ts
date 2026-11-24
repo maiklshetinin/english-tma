@@ -4,7 +4,7 @@
 // Ключ — id шаблона (src/utils/lesson.ts TEMPLATES): kp, kpfile, kpapi, talk, talkava, talkptt, talkptt2, talkvn (рация · голосовые), talkexam (собеседование-рация, 24.11.2026). Хранятся в курсе (server/courses.ts → presets).
 import { reactive } from 'vue'
 
-export const PRESET_TPLS = ['kp', 'kpfile', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkptt2', 'talkvn', 'talkexam'] as const
+export const PRESET_TPLS = ['kp', 'kpfile', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkptt2', 'talkvn', 'talkexam', 'es_talk', 'es_talkptt'] as const          // es_… — испанский (24.11.2026)
 export type PresetTpl = typeof PRESET_TPLS[number]
 export type Presets = Partial<Record<PresetTpl, Record<string, unknown>>>
 

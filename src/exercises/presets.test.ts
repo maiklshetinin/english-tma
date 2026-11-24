@@ -19,22 +19,28 @@ describe('настройки упражнения курса («{ }» на пл�
     expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), prompt: 'Общий' }))).toBe('')
     expect(s).toEqual({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })
   })
-  it('плитка: показывает действующее (код ← курс), сохраняет только отличия от кода; пустое — тоже значение', () => {
-    setPresets({ talkptt: { guard: '' } })
-    expect(presetJson('talkptt')).toMatchObject({ guard: '' })
+  it('плитка: показывает действующее (код ← курс), сохраняет только отличия от кода; язык, замок и просьба — только из типа', () => {
+    setPresets({ talkptt: { voice: 'Puck', guard: '', lock: 'EN', lang: 'en-US' } })
+    expect(presetJson('talkptt')).toMatchObject({ voice: 'Puck' })
+    for (const k of ['lang', 'lock', 'guard']) expect(presetJson('talkptt')).not.toHaveProperty(k)          // 24.11.2026: язык зашит в тип
+    expect(talkCfg({ ptt: true, avatar: true })).toMatchObject({ lang: 'pl-PL', guard: 'Odpowiadaj wyłącznie po polsku.' })
     const j = { ...presetJson('kp'), prompt: 'Мой мост', message: CHAT.message }
     expect(presetFromJson('kp', JSON.stringify(j)).fields).toEqual({ prompt: 'Мой мост' })
     expect(presetFromJson('kp', JSON.stringify({ format: 'без метки' })).error).toMatch(/\{id\}/)
-    expect(presetFromJson('talk', JSON.stringify({ lock: '', voice: 'Puck' })).fields).toEqual({ lock: '', voice: 'Puck' })
+    expect(presetFromJson('talk', JSON.stringify({ lock: '', lang: 'en-US', voice: 'Puck' })).fields).toEqual({ voice: 'Puck' })
     expect(presetKeys('kpfile')).toEqual(expect.arrayContaining(['sttPrompt', 'sttAsk']))
-    expect(talkCfg({ ptt: true, avatar: true }).guard).toBe('')
   })
-  it('«рация» в Karta Polaka и её копия в «Как в Busuu» — общие настройки курса у каждой свои', () => {
-    setPresets({ talkptt: { guard: 'KP' }, talkptt2: { guard: 'BUSUU' } })
-    expect(talkCfg({ ptt: true, avatar: true }).guard).toBe('KP')
-    expect(talkCfg({ ptt: true, avatar: true, busuu: true }).guard).toBe('BUSUU')
-    setPresets({ talkptt: { guard: 'KP' } })
-    expect(talkCfg({ ptt: true, avatar: true, busuu: true }).guard).toBe('Odpowiadaj wyłącznie po polsku.')          // у копии своих настроек нет — умолчания кода, а не «рации» KP
-    expect(presetJson('talkptt2')).not.toMatchObject({ guard: 'KP' })
+  it('«рация» в Karta Polaka (pl) и её копия в «Как в Busuu» (en) — общие настройки курса у каждой свои', () => {
+    setPresets({ talkptt: { voice: 'KP' }, talkptt2: { voice: 'BUSUU' } })
+    expect(talkCfg({ ptt: true, avatar: true }).voice).toBe('KP')
+    expect(talkCfg({ ptt: true, avatar: true, busuu: true }).voice).toBe('BUSUU')
+    setPresets({ talkptt: { voice: 'KP' } })
+    expect(talkCfg({ ptt: true, avatar: true, busuu: true })).toMatchObject({ voice: 'Kore', lang: 'en-US', guard: 'Please reply only in English.' })          // у копии своих настроек нет — умолчания кода; язык — английский (тип en-talkptt2)
+    expect(presetJson('talkptt2')).not.toMatchObject({ voice: 'KP' })
+  })
+  it('испанский — свой тип: es_talk, es_talkptt; язык из пресета не меняется', () => {
+    setPresets({ es_talkptt: { voice: 'Puck' }, talkptt: { lang: 'es-ES' } })
+    expect(talkCfg({ ptt: true, avatar: true, lang: 'es-ES' })).toMatchObject({ lang: 'es-ES', voice: 'Puck', guard: 'Responde solo en español.' })
+    expect(talkCfg({ ptt: true, avatar: true }).lang).toBe('pl-PL')
   })
 })

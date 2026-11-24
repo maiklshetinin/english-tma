@@ -84,7 +84,6 @@ const txt = (v: unknown) => (typeof v === 'string' && v.trim() ? v : '')
 const same = (a: string, b: string) => a.trim() === b.trim()
 const okPass = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0 && (v as number) <= 100
 const okTemp = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 2
-const okLang = (v: unknown): v is KpLang => LANGS.includes(v as KpLang)
 const okModel = (v: unknown) => typeof v === 'string' && /^[a-z0-9.-]{3,80}$/.test(v.trim())
 /** модель диктовки: auto, browser или имя модели */
 export const DIC_AUTO = 'auto'
@@ -105,7 +104,7 @@ const own = (s: any, k: string) => (typeof s?.[k] === 'string' ? (s[k] as string
 function kpCode(s: any): KpCfg {
   const b = base(s), f = own(s, 'format')
   const o: any = {
-    prompt: own(s, 'prompt')?.trim() ?? SYSTEM, pass: okPass(s?.pass) ? s.pass : PASS, lang: okLang(s?.lang) ? s.lang : 'pl-PL', topic: own(s, 'topic')?.trim() || TOPIC,
+    prompt: own(s, 'prompt')?.trim() ?? SYSTEM, pass: okPass(s?.pass) ? s.pass : PASS, lang: 'pl-PL',          /* 24.11.2026: Ответ по смыслу — тип Карты поляка, язык только польский */ topic: own(s, 'topic')?.trim() || TOPIC,
     dicModel: okModel(s?.dicModel) ? s.dicModel.trim() : DIC_AUTO,
     message: own(s, 'message') ?? b.message, format: f !== undefined && okFormat(s, f) ? f : b.format,
     model: okModel(s?.model) ? s.model.trim() : DEF.model, temperature: okTemp(s?.temperature) ? s.temperature : DEF.temperature, thinking: s?.thinking === true,
@@ -130,6 +129,7 @@ export function kpShown(s: any): Partial<KpCfg> {
   const c = kpCfg(s)
   const o: any = kpApi(s) ? { ...c } : { prompt: c.prompt, message: c.message, format: c.format, pass: c.pass, lang: c.lang, topic: c.topic, dicModel: c.dicModel, request: c.request }
   for (const k of STT_TEXTS) { if (kpFile(s)) o[k] = c[k]; else delete o[k] }
+  delete o.lang          // 24.11.2026: язык — польский, зашит в тип (pl-kp); в JSON его нет
   if (kpFile(s)) delete o.dicModel          // «целым аудио» распознаёт Flash Lite файлом — потоковая модель ему не нужна
   return o
 }

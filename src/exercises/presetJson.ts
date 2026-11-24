@@ -11,6 +11,7 @@ export const PRESET_FORM: Record<PresetTpl, Record<string, unknown>> = {
   talk: { kind: 'talk' }, talkava: { kind: 'talk', avatar: true }, talkptt: { kind: 'talk', avatar: true, ptt: true }, talkptt2: { kind: 'talk', avatar: true, ptt: true, busuu: true },
   talkvn: { kind: 'talk', avatar: true, ptt: true, vn: true },
   talkexam: { kind: 'talk', avatar: true, ptt: true, exam: true },
+  es_talk: { kind: 'talk', lang: 'es-ES' }, es_talkptt: { kind: 'talk', avatar: true, ptt: true, lang: 'es-ES' },
 }
 // key — тип (talkexam) или его пресет (talkexam-2, 24.11.2026): пресет показывается целиком (базовый + свои отличия), хранит — только отличия от базового
 const baseOf = (key: string) => (splitKey(key)?.base ?? key) as PresetTpl
@@ -22,6 +23,7 @@ const formOnly = (key: string) => { const { kind: _k, ...f } = PRESET_FORM[baseO
 export function presetJson(key: string): Record<string, unknown> {
   const o: Record<string, unknown> = isKp(key) ? { ...kpShown(formOnly(key)) } : { ...talkCfg(formOnly(key)) }
   delete o.pv
+  delete o.lang; delete o.lock; delete o.guard          // язык и замок — из типа, в JSON их нет (24.11.2026)
   return o
 }
 /** поля настроек упражнения — их же «Применить ко всем экранам» убирает у экранов */

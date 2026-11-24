@@ -22,18 +22,18 @@ import argparse, json, os, re, subprocess, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 KP = next((p for p in (os.path.join(HERE, 'lib', 'kp-json.py'), os.path.join(HERE, 'kp-json.py')) if os.path.exists(p)), os.path.join(HERE, 'lib', 'kp-json.py'))          # разбор PDF — в lib/
 
-# ID упражнения → (название, папка в tools/json/). Больше ничего: данные у всех одинаковые
+# ID упражнения → (название, папка в tools/json/). Больше ничего: данные у всех одинаковые.
+# ID начинается с языка (24.11.2026): Карта поляка — только польский, pl-… Старые ID без языка (kp, talkptt) тоже принимаются
 TYPES = {
-    'kp':       ('Ответ по смыслу',                     'мост'),
-    'kpapi':    ('Ответ по смыслу · Gemini API',        'gemini-live'),
-    'kpfile':   ('Ответ по смыслу · целым аудио',       'запись целиком'),
-    'kpball':   ('Ответ по смыслу · шар',               'шар'),
-    'talk':     ('Разговор с Gemini',                   'разговор без персонажа'),
-    'talkava':  ('Разговор с персонажем',               'разговор'),
-    'talkptt':  ('Разговор · рация',                    'рация'),
-    'talkptt2': ('Разговор · рация (Busuu)',            'рация busuu'),
-    'talkvn':   ('Рация · голосовые',                   'голосовые'),
-    'talkexam': ('Собеседование · рация',               'собеседование'),
+    'pl-kp':       ('Ответ по смыслу',                     'мост'),
+    'pl-kpapi':    ('Ответ по смыслу · Gemini API',        'gemini-live'),
+    'pl-kpfile':   ('Ответ по смыслу · целым аудио',       'запись целиком'),
+    'pl-kpball':   ('Ответ по смыслу · шар',               'шар'),
+    'pl-talk':     ('Разговор с Gemini',                   'разговор без персонажа'),
+    'pl-talkava':  ('Разговор с персонажем',               'разговор'),
+    'pl-talkptt':  ('Разговор · рация',                    'рация'),
+    'pl-talkvn':   ('Рация · голосовые',                   'голосовые'),
+    'pl-talkexam': ('Собеседование · рация',               'собеседование'),
 }
 
 ap = argparse.ArgumentParser(description='PDF домашки Karta Polaka → JSON экранов: тип + вопрос + эталон')
@@ -47,7 +47,7 @@ ARGS = ap.parse_args()
 
 def show_list():
     for i, (k, (t, folder)) in enumerate(TYPES.items(), 1):
-        print(f'  {i:>2}. {k:<9} {t:<34} → json/{folder}/')
+        print(f'  {i:>2}. {k:<12} {t:<34} → json/{folder}/')
 
 
 def pick():
@@ -56,6 +56,7 @@ def pick():
     keys = list(TYPES)
     if v.isdigit() and 1 <= int(v) <= len(keys): return keys[int(v) - 1]
     if v in TYPES: return v
+    if 'pl-' + v in TYPES: return 'pl-' + v          # старый ID без языка
     sys.exit(f'Нет такого упражнения: {v}')
 
 
@@ -134,6 +135,7 @@ def one(typ, src, out):
 if ARGS.list:
     show_list(); sys.exit(0)
 typ = ARGS.type or pick()
+if typ not in TYPES and 'pl-' + typ in TYPES: typ = 'pl-' + typ          # старый ID без языка
 if typ not in TYPES:
     print(f'Нет упражнения «{typ}». Есть:'); show_list(); sys.exit(2)
 if ARGS.src:

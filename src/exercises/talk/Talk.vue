@@ -353,7 +353,7 @@ watchEffect(() => {
             <span class="evr"><i>📊</i><span><b>Экзаменатор — {{ evalName }}</b> · отдельная модель, включается этим переключателем<br />Каждые {{ STEP }} с вашей речи переслушивает запись (последние 3 мин) и расшифровку: уровень A1–C2, понятность, словарь, грамматика, связность, беглость, произношение, ошибки. Реплики собеседника — только контекст. Меньше 20 с речи — не оценивает; чем короче запись, тем ниже уверенность.</span></span>
             <small>Как оценивать — промпт evalPrompt в JSON экрана («{ }»)</small>
           </span></span>
-        <span v-if="ptt" class="lk" :title="`Язык закреплён: ${L.ru} — и для распознавания (Transcribe Live), и для ответа Gemini (lang в JSON экрана)`"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>{{ L.code }}</span>
+        <span v-if="ptt" class="lk" :title="`Язык зашит в тип упражнения: ${L.ru} — и распознавание (Transcribe Live), и ответ Gemini. Поменять нельзя`"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>{{ L.code }}</span>
         <label class="pill" :class="{ off: anyBusy }" :title="editor ? 'Голос Gemini — пишется в экран (voice в JSON)' : 'Голос Gemini — из урока; выбор здесь — только на этот раз'">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg><span class="pv">{{ vShort }}</span>
           <select :value="vSel" :disabled="anyBusy" aria-label="Голос" @change="onVoice($event.target.value)">

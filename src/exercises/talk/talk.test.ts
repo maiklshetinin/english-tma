@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stepJson, applyStepJson, stepsFromJson, tplOf, TEMPLATES, type Step } from '../../utils/lesson'
+import { stepJson, applyStepJson, stepsFromJson, tplOf, TEMPLATES, typeId, tplFromType, type Step } from '../../utils/lesson'
 import { DEF_PROMPT, LOCK, OPENER, EN_PROMPT, EN_LOCK, EN_OPENER, LANGS, EVAL_PROMPT, EVAL_ASK, talkCfg, talkFields, talkSystem, talkRole, EXAM_PROMPT, EXAM_STAR } from './defaults'
 import { requests } from '../requests'
 
@@ -21,42 +21,48 @@ describe('«Разговор с Gemini»: JSON экрана', () => {
     expect(stepJson(s)).toEqual({ kind: 'talk', text: 'Rozmowa', ...talkCfg(s) }); expect(talkCfg(s)).toMatchObject({ lock: LOCK, opener: OPENER, prompt: DEF_PROMPT })
   })
 
-  it('свои lock / opener / model / prompt сохраняются; temperature, endSens, noiseSuppression — тоже', () => {
+  it('свои opener / model / prompt сохраняются; temperature, endSens, noiseSuppression — тоже; замок — только из типа', () => {
     const s: Step = { id: 'b', kind: 'talk' }
-    const j = { ...stepJson(s), lock: 'Mów tylko po polsku.', opener: 'Dzień dobry, proszę usiąść.', model: 'gemini-live-2.5-flash', prompt: 'Jesteś kelnerem w Krakowie.', temperature: 0.4, endSens: 'high', noiseSuppression: true }
+    const j = { ...stepJson(s), lock: 'Speak English.', opener: 'Dzień dobry, proszę usiąść.', model: 'gemini-live-2.5-flash', prompt: 'Jesteś kelnerem w Krakowie.', temperature: 0.4, endSens: 'high', noiseSuppression: true }
     expect(applyStepJson(s, JSON.stringify(j))).toBe('')
-    expect(s).toEqual({ id: 'b', kind: 'talk', lock: 'Mów tylko po polsku.', opener: 'Dzień dobry, proszę usiąść.', model: 'gemini-live-2.5-flash', prompt: 'Jesteś kelnerem w Krakowie.', temperature: 0.4, endSens: 'high', noiseSuppression: true })
-    expect(talkSystem(talkCfg(s))).toBe('Mów tylko po polsku. Jesteś kelnerem w Krakowie.')
+    expect(s).toEqual({ id: 'b', kind: 'talk', opener: 'Dzień dobry, proszę usiąść.', model: 'gemini-live-2.5-flash', prompt: 'Jesteś kelnerem w Krakowie.', temperature: 0.4, endSens: 'high', noiseSuppression: true })
+    expect(talkSystem(talkCfg(s))).toBe(LOCK + ' Jesteś kelnerem w Krakowie.')
   })
 
-  it('английский из JSON: lang хранится, умолчания роли / замка / первой реплики — английские', () => {
-    const s: any = stepsFromJson(JSON.stringify([{ kind: 'talk', lang: 'en-US', prompt: 'You are a barista.', lock: EN_LOCK, opener: EN_OPENER, voice: 'Kore' }]))!.steps[0]
-    expect(s).toMatchObject({ kind: 'talk', lang: 'en-US', prompt: 'You are a barista.' })
-    expect(s.lock).toBeUndefined(); expect(s.opener).toBeUndefined()
-    const c = talkCfg(s)
-    expect(c.lang).toBe('en-US'); expect(c.lock).toBe(EN_LOCK); expect(c.opener).toBe(EN_OPENER)
-    expect(talkCfg({ lang: 'en-GB' }).prompt).toBe(EN_PROMPT)
+  it('язык — из типа (24.11.2026): pl по умолчанию, en — рация Busuu, es — es_talk; lang из JSON у польского типа не хранится', () => {
+    const s: any = stepsFromJson(JSON.stringify([{ kind: 'talk', lang: 'en-US', prompt: 'You are a barista.', voice: 'Kore' }]))!.steps[0]
+    expect(s.lang).toBeUndefined(); expect(talkCfg(s)).toMatchObject({ lang: 'pl-PL', lock: LOCK })
+    const es: any = stepsFromJson(JSON.stringify([{ type: 'es-talkptt', text: 'Hola' }]))!.steps[0]
+    expect(es).toMatchObject({ kind: 'talk', ptt: true, lang: 'es-ES' }); expect(tplOf(es)).toBe('es_talkptt'); expect(talkCfg(es).lang).toBe('es-ES')
+    const en: any = stepsFromJson(JSON.stringify([{ type: 'en-talkptt2' }]))!.steps[0]
+    expect(talkCfg(en)).toMatchObject({ lang: 'en-US', lock: EN_LOCK, opener: EN_OPENER, prompt: EN_PROMPT })
     expect(talkCfg({ lang: 'xx' }).lang).toBe('pl-PL')
     expect(LANGS['en-US'].code).toBe('EN'); expect('Dzień dobry, jak się masz?'.match(LANGS['en-US'].alien)!.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('"" в JSON (замок, первая реплика, просьба вернуться к языку) — пусто, умолчание не возвращается; оценка речи — в общих настройках', () => {
+  it('"" в JSON у первой реплики — пусто; замок и просьба вернуться к языку — всегда из типа; оценка речи — в общих настройках', () => {
     const s: any = { id: 'z', kind: 'talk', text: 'T' }
     const all: any = talkCfg(s)
     expect(all).toMatchObject({ guard: 'Odpowiadaj wyłącznie po polsku.' }); expect(all.evalAsk).toContain('{transcript}')
     expect(applyStepJson(s, JSON.stringify({ ...stepJson(s), lock: '', opener: '', guard: '' }))).toBe('')
     const c = talkCfg(s)
-    expect([c.lock, c.opener, c.guard]).toEqual(['', '', ''])
-    expect(talkSystem(c)).toBe(c.prompt)
+    expect([c.lock, c.opener, c.guard]).toEqual([LOCK, '', 'Odpowiadaj wyłącznie po polsku.'])
   })
 
   it('неверные значения отбрасываются; умолчания не хранятся', () => {
     expect(talkFields({ lang: 'xx-XX', silenceMs: 50, temperature: 5, endSens: 'mid', voice: 'Kore', model: 'auto', prompt: DEF_PROMPT, lock: LOCK, opener: OPENER, noiseSuppression: 'yes' })).toEqual({})
   })
 
-  it('«Править → Применить» больше не теряет lang у «Транскрипции» и model у «Ответа по смыслу»', () => {
+  it('«Править → Применить» не теряет model у «Ответа по смыслу»; «Транскрипция» — только польский (pl-stt)', () => {
     const r = stepsFromJson(JSON.stringify([{ kind: 'stt', text: 'Hola', lang: 'es-ES' }, { kind: 'kp', text: 'Q', ideal: 'A', model: 'gemini-2.5-flash' }]))!
-    expect(r.steps[0].lang).toBe('es-ES'); expect(r.steps[1].model).toBe('gemini-2.5-flash')
+    expect(r.steps[0].lang).toBeUndefined(); expect(r.steps[1].model).toBe('gemini-2.5-flash')
+  })
+
+  it('ID с языком: pl-kp, pl-talkexam-2, en-choice; не тот язык — не тип', () => {
+    expect(typeId('kp')).toBe('pl-kp'); expect(typeId('choice')).toBe('en-choice'); expect(typeId('es_talk')).toBe('es-talk'); expect(typeId('talkptt2')).toBe('en-talkptt2')
+    expect(tplFromType('pl-kp')).toBe('kp'); expect(tplFromType('kp')).toBe('kp'); expect(tplFromType('en-kp')).toBeNull(); expect(tplFromType('es-talkptt')).toBe('es_talkptt')
+    const r: any = stepsFromJson(JSON.stringify([{ type: 'pl-talkexam-2', text: 'Q', ideal: 'A' }, { type: 'talkexam-3', text: 'Q' }]))!.steps
+    expect(r[0]).toMatchObject({ kind: 'talk', exam: true, pv: 2 }); expect(r[1]).toMatchObject({ exam: true, pv: 3 })
   })
 
   it('«Разговор с персонажем» (тест): тот же talk с avatar: true — свой шаблон, флаг не теряется при «Применить»', () => {

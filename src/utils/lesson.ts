@@ -217,6 +217,8 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'talkvn', kind: 'talk', t: 'Рация · голосовые', d: 'Реплики — голосовыми, как в Telegram · тест', make: () => ({ ...fishStep('talk'), avatar: true, ptt: true, vn: true }) },          // 24.11.2026, тест: Live слышит голос, в чат — голосовое (▶ переслушать), без расшифровки
   { id: 'talkexam', kind: 'talk', t: 'Собеседование · рация', d: 'Консул задаёт вопрос из домашки · тест', make: () => ({ ...fishStep('talk'), avatar: true, ptt: true, exam: true, text: 'Kiedy i jak obchodzimy Mikołajki?', ideal: (fishStep('kp') as any).ideal }) },          // 24.11.2026: рация на ОДИН вопрос Karta Polaka — вопрос и эталон у экрана, роль — шаблон курса (EXAM_PROMPT)
   { id: 'talkava', kind: 'talk', t: 'Разговор с персонажем', d: 'Говорит и шевелит губами · тест', make: () => ({ ...fishStep('talk'), avatar: true }) },          // 20.11.2026, тест: тот же разговор + анимированный персонаж (exercises/talk/TalkAvatar.vue)
+  { id: 'es_talk', kind: 'talk', t: 'Разговор с Gemini', d: 'Живой диалог голосом, по-испански', make: () => ({ ...fishStep('talk'), lang: 'es-ES' }) },          // 24.11.2026: вкладка «Испанский» — язык зашит в тип (es-talk)
+  { id: 'es_talkptt', kind: 'talk', t: 'Разговор · рация', d: 'Нажал — говоришь, нажал — ответ, по-испански', make: () => ({ ...fishStep('talk'), avatar: true, ptt: true, lang: 'es-ES' }) },
   { id: 'stt', kind: 'stt', t: 'Транскрипция', d: 'Сказать — увидеть текст', make: () => fishStep('stt') },          // 20.11.2026, эксперимент: Gemini 3.5 Transcribe Live
   // ---- Тест · упражнения Насти по учебнику (18.11.2026): отдельная группа меню, плашка — как задание в учебнике (BOOK) ----
   { id: 'bkword', kind: 'gap', t: 'Впиши слово', d: 'His, men, идиомы, do/does', make: () => ({ id: stepId(), kind: 'gap', bk: 'bkword', head: 'Write the possessive adjectives', phrase: '(He) [His] father is a doctor.', tr: 'Его отец — врач.', opts: [] }) },
@@ -256,9 +258,24 @@ for (const id of BOOK_TPL) {
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
 /** Цвета тегов — как плашки в меню упражнений (.chip.L … в CourseEditor / LessonRail) */
 export const SKILL_C: Record<string, string> = { L: '#1cb0f6', R: '#a560e8', W: '#ff9600', S: '#58cc02' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpfile: ['S'], kpball: ['S'], kpapi: ['S'], talk: ['S', 'L'], talkava: ['S', 'L'], talkptt: ['S', 'L'], talkptt2: ['S', 'L'], talkvn: ['S', 'L'], talkexam: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpfile: ['S'], kpball: ['S'], kpapi: ['S'], talk: ['S', 'L'], talkava: ['S', 'L'], talkptt: ['S', 'L'], talkptt2: ['S', 'L'], talkvn: ['S', 'L'], talkexam: ['S', 'L'], es_talk: ['S', 'L'], es_talkptt: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
 for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]          // «Учебник 1:1» — те же навыки
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
+// Язык — в самом типе (24.11.2026): ID для учителя — «pl-kp», «en-choice», «es-talk». Язык берётся только из типа, менять его нельзя.
+// Карта поляка (Ответ по смыслу, разговоры, транскрипция) — польский; Busuu и учебник — английский; es_… — испанский.
+// Внутри (экраны в курсах, пресеты в базе) — прежние ID без языка (kp, talkptt-1): старые курсы и JSON читаются как раньше.
+export type TplLang = 'pl' | 'en' | 'es'
+const PL_TPL = new Set(['kp', 'kpfile', 'kpball', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkvn', 'talkexam', 'stt'])
+export const tplLang = (id: string): TplLang => (id.startsWith('es_') ? 'es' : PL_TPL.has(id) ? 'pl' : 'en')
+/** ID шаблона → ID с языком: kp → pl-kp, es_talk → es-talk, choice → en-choice */
+export const typeId = (id: string) => (id.startsWith('es_') ? 'es-' + id.slice(3) : tplLang(id) + '-' + id)
+/** «pl-kp», «es-talkptt», старое «kp» → ID шаблона; язык не тот — null */
+export function tplFromType(t: string): string | null {
+  const m = /^(pl|en|es)-(.+)$/.exec(String(t))
+  if (!m) return TEMPLATES.some((x) => x.id === t) ? t : null
+  const id = m[1] === 'es' ? 'es_' + m[2] : m[2]
+  return TEMPLATES.some((x) => x.id === id) && tplLang(id) === m[1] ? id : null
+}
 export function tplOf(s: Step): string {
   if (s.bk && BOOK[s.bk]) return (s.bs === 'page' ? 'pg_' : '') + s.bk          // экран из группы «Тест · упражнения Насти» / «Учебник 1:1»
   if (s.kind === 'choice') return s.show === 'text' ? 'audiotest' : 'choice'
@@ -268,6 +285,7 @@ export function tplOf(s: Step): string {
   if (s.kind === 'speak') return 'sayword'
   if (s.kind === 'kp' && s.ball) return 'kpball'
   if (s.kind === 'kp' && (s.engine === 'api' || s.engine === 'live')) return 'kpapi'
+  if (s.kind === 'talk' && s.lang === 'es-ES') return s.ptt ? 'es_talkptt' : 'es_talk'          // испанский — свой тип (24.11.2026)
   if (s.kind === 'talk' && s.exam) return 'talkexam'
   if (s.kind === 'talk' && s.ptt) return s.vn ? 'talkvn' : s.busuu ? 'talkptt2' : 'talkptt'
   if (s.kind === 'talk' && s.avatar) return 'talkava'
@@ -495,14 +513,15 @@ export function kpFromHtml(h: string) {
 
 // JSON «только данные» (24.11.2026, tools/make-json.py): { "type": "talkvn", "text": вопрос, "ideal": эталон } — тип упражнения по ID шаблона
 // (TEMPLATES); kind и флаги (ptt, vn, exam, dic, engine, ball…) приложение берёт из шаблона. Промпты — тоже из шаблона, не из JSON
-const TPL_FLAGS = ['kind', 'ptt', 'avatar', 'busuu', 'vn', 'exam', 'dic', 'engine', 'ball', 'bk', 'bs'] as const
+const TPL_FLAGS = ['kind', 'ptt', 'avatar', 'busuu', 'vn', 'exam', 'dic', 'engine', 'ball', 'bk', 'bs', 'lang'] as const
 function fromType(o: any): any {
   if (!o || typeof o !== 'object' || o.kind || typeof o.type !== 'string') return o
-  const m = /^(.+?)-([1-9]\d?)$/.exec(o.type)          // «talkexam-2» — тип talkexam, пресет 2 (24.11.2026)
-  const t = TEMPLATES.find((x) => x.id === o.type) ?? (m ? TEMPLATES.find((x) => x.id === m[1]) : undefined); if (!t) return o
+  const m = /^(.+?)-([1-9]\d?)$/.exec(o.type)          // «pl-talkexam-2» — тип talkexam, пресет 2 (24.11.2026); язык впереди — по желанию (старое «talkexam»)
+  const id = tplFromType(o.type) ?? (m ? tplFromType(m[1]) : null)
+  const t = id ? TEMPLATES.find((x) => x.id === id) : undefined; if (!t) return o
   const b: any = t.make(), f: any = {}
   for (const k of TPL_FLAGS) if (b[k] !== undefined) f[k] = b[k]
-  if (m && t.id === m[1]) f.pv = +m[2]
+  if (m && !tplFromType(o.type) && t.id === tplFromType(m[1])) f.pv = +m[2]
   const { type: _t, ...rest } = o
   return { ...f, ...rest }
 }
@@ -523,7 +542,6 @@ function stepFrom(o: any): Step | null {
   if (o.kind === 'kp' && o.plain === true) s.plain = true
   if (o.kind === 'kp' && o.autoplay === true) s.autoplay = true
   if (o.kind === 'kp') { delete s.prompt; Object.assign(s, kpFields(o)); if (o.dic === 'file') s.dic = 'file'; if (o.ball === true) s.ball = true; if (Array.isArray(o.keys)) s.keys = o.keys.filter((k: any) => k && typeof k.label === 'string').map((k: any) => ({ label: String(k.label).slice(0, 60), words: (Array.isArray(k.words) ? k.words : []).map(String).slice(0, 3) })).slice(0, 16) }          // промпт, порог, модель и промпты проверки — только отличия от умолчаний (exercises/kp/defaults.ts; модель раньше терялась при «Применить»)
-  if (o.kind === 'stt' && (o.lang === 'en-US' || o.lang === 'es-ES')) s.lang = o.lang          // польский — умолчание
   if (o.kind === 'talk') { delete s.prompt; Object.assign(s, talkFields(o)); if (o.avatar === true) s.avatar = true; if (o.ptt === true) s.ptt = true; if (o.busuu === true) s.busuu = true; if (o.vn === true) s.vn = true; if (o.exam === true) { s.exam = true; s.ptt = true } }          // только отличия от умолчаний (exercises/talk/defaults.ts)
   if (o.kind === 'kp' && (o.engine === 'api' || o.engine === 'live')) s.engine = 'api'          // 'live' («Live (голос)») убран 20.11.2026 — такие экраны идут как «Gemini API»
   if (Array.isArray(o.opts)) {

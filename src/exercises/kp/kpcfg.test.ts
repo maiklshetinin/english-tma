@@ -11,10 +11,10 @@ describe('«Ответ по смыслу»: настройки проверки 
   it('через мост: в JSON экрана — только своё; общее (промпт, message, format, порог) — kpShown, на плитке меню', () => {
     const j: any = stepJson({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })
     expect(j).toEqual({ kind: 'kp', text: 'Q', ideal: 'A', ...kpShown({}) })          // 23.11.2026: как на плитке — все настройки с действующими значениями
-    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, lang: 'pl-PL', topic: TOPIC, dicModel: 'auto', request: {} })
+    expect(kpShown({})).toEqual({ prompt: SYSTEM, message: CHAT.message, format: CHAT.format, pass: PASS, topic: TOPIC, dicModel: 'auto', request: {} })
     const s: Step = { id: 'a', kind: 'kp', text: 'Q', ideal: 'A' }
     expect(applyStepJson(s, JSON.stringify(j))).toBe(''); expect(s).toEqual({ id: 'a', kind: 'kp', text: 'Q', ideal: 'A' })          // не трогали — у экрана своего нет
-    expect(kpReady(kpCfg({ lang: 'es-ES', topic: 'examen DELE' })).prompt).toContain('(examen DELE, испанский язык)')          // {topic}, {lang} — подставлены
+    expect(kpReady(kpCfg({ lang: 'es-ES', topic: 'examen DELE' })).prompt).toContain('(examen DELE, польский язык)')          // язык — только польский (pl-kp, 24.11.2026)          // {topic}, {lang} — подставлены
   })
 
   it('мост: в JSON ровно то, что уходит в чат — prompt, message, format (с {id}); свой format без {id} не принимается', () => {
@@ -56,14 +56,14 @@ describe('«Ответ по смыслу»: настройки проверки 
   it('«целым аудио»: в JSON — промпт и просьба расшифровки; у других форм их нет', () => {
     expect(kpShown({ dic: 'file' })).toMatchObject({ sttPrompt: STT.sttPrompt, sttAsk: STT.sttAsk })
     expect('sttPrompt' in kpShown({})).toBe(false)
-    expect(kpFields({ dic: 'file', sttAsk: 'Przepisz nagranie.', lang: 'en-US' })).toEqual({ sttAsk: 'Przepisz nagranie.', lang: 'en-US' })
+    expect(kpFields({ dic: 'file', sttAsk: 'Przepisz nagranie.', lang: 'en-US' })).toEqual({ sttAsk: 'Przepisz nagranie.' })
   })
 
   it('· Gemini API: в JSON — все промпты, модель, температура, размышления', () => {
     const j: any = kpShown({ engine: 'api' })
     expect(j).toMatchObject({ prompt: SYSTEM, pass: 60, model: 'auto', format: DEF.format, message: DEF.message, temperature: null, thinking: false,
       livePrompt: DEF.livePrompt, liveAsk: 'Oceń moją odpowiedź.', liveMore: DEF.liveMore, discussPrompt: DEF.discussPrompt, discussOpener: 'Proszę omówić moją odpowiedź.',
-      lang: 'pl-PL', liveTool: DEF.liveTool, liveModel: 'auto', voice: 'Kore', discussNone: 'nic ważnego' })
+      liveTool: DEF.liveTool, liveModel: 'auto', voice: 'Kore', discussNone: 'nic ważnego' })
   })
 
   it('применили JSON целиком без правок — в экране ничего лишнего', () => {

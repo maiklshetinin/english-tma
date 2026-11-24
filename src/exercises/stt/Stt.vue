@@ -17,10 +17,10 @@ const icon = aiIcon('Gemini')
 // языки (20.11.2026): по умолчанию — из правки урока, в прохождении можно переключить (запоминается в браузере); три языка: польский, английский, испанский
 const LANGS = { 'pl-PL': 'Польский', 'en-US': 'Английский', 'es-ES': 'Испанский' }
 const SHORT = { 'pl-PL': 'PL', 'en-US': 'EN', 'es-ES': 'ES' }
-const base = computed(() => (LANGS[props.step.lang] ? props.step.lang : 'pl-PL'))
+const base = computed(() => 'pl-PL')          // 24.11.2026: тип pl-stt — язык только польский, выбора нет
 const LK = 'tma.stt.lang'
 const mine = ref((() => { try { return localStorage.getItem(LK) || '' } catch { return '' } })())
-const lang = computed(() => (LANGS[mine.value] ? mine.value : base.value))
+const lang = computed(() => base.value)
 function pickLang(v) { if (st.value === 'live' || st.value === 'connecting') return; if (v !== lang.value && rec.value.length) { fin.value = []; draft.value = ''; rec.value = [] }          // другой язык — запись заново
   mine.value = v === base.value ? '' : v; try { if (mine.value) localStorage.setItem(LK, v); else localStorage.removeItem(LK) } catch { /* */ } }
 function setLang(v) { if (v === 'pl-PL') delete props.step.lang; else props.step.lang = v; ed.changed() }
@@ -65,12 +65,12 @@ const hasKeys = computed(() => ai.keys.length > 0)
     <ExText v-model="step.text" tag="p" class="sk" ph="Например: расскажите о себе по-польски — 3–4 предложения" multi>{{ step.text || 'Скажите что-нибудь по-польски' }}</ExText>
 
     <div v-if="p.edit" class="srow" @pointerdown.stop>
-      <label>Язык <select :value="base" @change="setLang($event.target.value)"><option v-for="(t, k) in LANGS" :key="k" :value="k">{{ t }}</option></select></label>
+      <span class="sn">Язык — польский (тип pl-stt)</span>
       <p class="sn">Речь уходит в Gemini 3.5 Transcribe Live сырым звуком, ключами из профиля. До 10 минут подряд.</p>
     </div>
 
     <div v-else class="sv" :class="st" @pointerdown.stop>
-      <div class="sl" role="radiogroup" aria-label="Язык речи">
+      <div v-if="false" class="sl" role="radiogroup" aria-label="Язык речи">
         <button v-for="(t, k) in SHORT" :key="k" type="button" role="radio" :aria-checked="lang === k" class="lc" :class="{ on: lang === k }" :disabled="st === 'live' || st === 'connecting'" :title="LANGS[k] + (k === base ? ' — язык урока' : '')" @click="pickLang(k)">{{ t }}</button>
       </div>
       <div class="sc">

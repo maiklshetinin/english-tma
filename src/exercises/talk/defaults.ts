@@ -86,22 +86,25 @@ const okTemp = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 
 /** Действующие настройки экрана: свои поля поверх умолчаний */
 /** шаблон экрана — по нему настройки курса (presets): рация, с персонажем, обычный */
-export const talkTpl = (s: any) => (s?.exam ? 'talkexam' : s?.ptt ? (s.vn ? 'talkvn' : s.busuu ? 'talkptt2' : 'talkptt') : s?.avatar ? 'talkava' : 'talk')
+export const talkTpl = (s: any) => (s?.lang === 'es-ES' ? (s.ptt ? 'es_talkptt' : 'es_talk') : s?.exam ? 'talkexam' : s?.ptt ? (s.vn ? 'talkvn' : s.busuu ? 'talkptt2' : 'talkptt') : s?.avatar ? 'talkava' : 'talk')
 /** Действующие настройки: умолчания кода ← настройки упражнения в курсе (src/exercises/presets.ts) ← свои поля экрана */
 export function talkCfg(s: any): TalkCfg {
   const own: any = {}
   for (const [k, v] of Object.entries(s ?? {})) if (v !== undefined && v !== null) own[k] = v
-  return talkCode({ ...presetFor(talkTpl(s), s?.pv), ...own })          // pv — пресет типа (talkexam-2), 24.11.2026
+  const { lang: _l, lock: _k, guard: _g, ...pre } = presetFor(talkTpl(s), s?.pv) as any          // язык, замок и просьба — только из типа (24.11.2026)
+  return talkCode({ ...pre, ...own })          // pv — пресет типа (talkexam-2), 24.11.2026
 }
 /** текстовые поля: свои — как есть, даже пустые (стёрли в JSON — пусто, умолчание не подставляем; 21.11.2026) */
 export const TALK_TEXTS = ['prompt', 'lock', 'opener', 'guard', 'evalPrompt', 'evalAsk'] as const
 const ownT = (s: any, k: string) => (typeof s?.[k] === 'string' ? (s[k] as string) : undefined)
+/** язык — зашит в тип (24.11.2026): es_talk / es_talkptt — испанский, рация Busuu — английский, всё остальное (Карта поляка) — польский */
+export const hardLang = (s: any): Lang => (s?.lang === 'es-ES' ? 'es-ES' : s?.busuu ? 'en-US' : 'pl-PL')
 function talkCode(s: any): TalkCfg {
-  const lang = langOf(s?.lang), d = defsOf(lang)
+  const lang = hardLang(s), d = defsOf(lang)
   return {
     lang,
     prompt: ownT(s, 'prompt')?.trim() ?? (s?.exam || txt(s?.ideal) ? EXAM_PROMPT : d.prompt),          // 24.11.2026: есть эталон у экрана — роль консула с вопросом и эталоном (как у собеседования), во всех разговорах
-    lock: ownT(s, 'lock') ?? d.lock,
+    lock: d.lock,          // замок языка — всегда из кода по языку типа
     opener: ownT(s, 'opener') ?? d.opener,
     voice: txt(s?.voice).trim() || DEF.voice,
     model: txt(s?.model).trim() || DEF.model,
@@ -109,7 +112,7 @@ function talkCode(s: any): TalkCfg {
     endSens: s?.endSens === 'high' ? 'high' : DEF.endSens,
     temperature: okTemp(s?.temperature) ? s.temperature : DEF.temperature,
     noiseSuppression: s?.noiseSuppression === true,
-    guard: ownT(s, 'guard')?.trim() ?? LANGS[lang].guard,
+    guard: LANGS[lang].guard,
     evalPrompt: ownT(s, 'evalPrompt') ?? EVAL_PROMPT,
     evalAsk: ownT(s, 'evalAsk') ?? EVAL_ASK,
     request: s?.request && typeof s.request === 'object' && !Array.isArray(s.request) ? s.request : {},
@@ -122,12 +125,13 @@ export function talkFields(raw: any): Partial<TalkCfg> {
   const o: any = {}
   if (!raw || typeof raw !== 'object') return o
   const form = { ptt: raw.ptt, avatar: raw.avatar, busuu: raw.busuu, vn: raw.vn, exam: raw.exam }
-  const x: any = talkCode(raw), d0: any = talkCfg(form)
+  const x: any = talkCode(raw)
   const d: any = talkCfg({ ...form, lang: x.lang })          // умолчания роли / замка / реплики — для языка из JSON
   for (const k of Object.keys(x)) {
-    if (raw[k] === undefined) continue
+    if (raw[k] === undefined || k === 'lock' || k === 'guard') continue
+    if (k === 'lang') { if (x.lang === 'es-ES') o.lang = 'es-ES'; continue }          // язык — флаг типа: только испанский (es_talk), остальное — из типа
     if (k === 'temperature' && raw.temperature === null && d.temperature === null) continue
-    const base = k === 'lang' ? d0.lang : d[k]
+    const base = d[k]
     if (!sameV(x[k], base)) o[k] = x[k]
   }
   return o
