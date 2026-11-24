@@ -25,6 +25,7 @@ const sc = ref({})          // Live (шар Live): i → оценка блока
 const isLive = computed(() => !!props.step.ballLive)
 const pct = computed(() => (blocks.value.length ? Math.round((blocks.value.reduce((a, _, i) => a + (ok.value.has(i) ? 1 : sc.value[i] || 0), 0) / blocks.value.length) * 100) : 0))
 const missing = computed(() => blocks.value.map((b, i) => (ok.value.has(i) ? null : b.label)).filter(Boolean))
+watch([pct, missing, blocks], () => { if (isLive.value) netOf(props.step.id).res = { pct: pct.value, missed: [...missing.value], total: blocks.value.length, ok: ok.value.size } }, { immediate: true })          // итог шара Live — для «Готово» (LessonPlayer.aiCheck)
 
 // ---------- сфера ----------
 const box = ref(null), els = []
@@ -184,7 +185,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
     <div class="kbp" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
       <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
       <small>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
-      <button v-if="!edit && !idle && !done" type="button" class="kbgo" :disabled="asking || !hasNew" :title="'Отправить всё сказанное в чат через мост: какие смысловые блоки засчитаны и где ошибки'" @click="cover"><i class="kbdot" />{{ asking ? 'Чат сверяет…' : 'Отправить на проверку' }}</button>
+      <button v-if="!edit && !idle && !done && !isLive" type="button" class="kbgo" :disabled="asking || !hasNew" :title="'Отправить всё сказанное в чат через мост: какие смысловые блоки засчитаны и где ошибки'" @click="cover"><i class="kbdot" />{{ asking ? 'Чат сверяет…' : 'Отправить на проверку' }}</button>
     </div>
     <!-- что засчитал чат: блок ✓ — что ты сказал → как правильно (что исправлено); новое — сверху -->
     <ul v-if="got.length && !edit && !idle" class="kbl">

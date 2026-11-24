@@ -70,7 +70,7 @@ const mmss = (s) => { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 6
 const spokeS = computed(() => (p.st.spoke || 0) + (dic.value === 'live' && dicT0.value ? (dicNow.value - dicT0.value) / 1000 : 0))
 const ballText = computed(() => ((p.st.text || '') + ' ' + (dicDraft.value || '')).trim())
 const BALL_ST = { on: 'open', busy: 'connecting', err: 'error', off: '' }
-const ballList = computed(() => { const n = props.step.ball && ballNet[props.step.id]; if (!n) return []
+const ballList = computed(() => { const n = props.step.ball && !props.step.ballLive && ballNet[props.step.id]; if (!n) return []
   return [{ k: 'split', name: 'Нарезка эталона' + (n.model ? ' · ' + n.model : ''), ...n.split }, { k: 'cover', name: 'Сверка смысла' + (n.model ? ' · ' + n.model : ''), ...n.cover }].filter((x) => x.txt) })
 // экран выбрали (или открыли) — сразу свежий статус, мимо 15-секундной памяти (23.11.2026): видно и в Network; дальше — раз в 15 с.
 // Спрашивает только подвал (part fb) — статус показывает он
@@ -222,7 +222,16 @@ async function dicLoad() {
 }
 onMounted(dicLoad)
 watch(idle, (v) => { if (!v && !dicAuto.value) dicLoad() })
-const isLive = computed(() => !!props.step.ballLive)          // шар Live: одна Live-сессия — мост и выбор модели диктовки в подвале не показываем
+const isLive = computed(() => !!props.step.ballLive)
+// шар Live (25.11.2026): одна строка статуса — Live-модель; ввод — только «рация»: держишь кнопку — говоришь, отпустил — Live засчитывает блоки
+const liveLine = computed(() => { const n = props.step.ballLive && ballNet[props.step.id]; if (!n) return null
+  const name = String(n.model || 'Gemini Live').replace(/ · Live$/, ''), bad = n.split.st === 'err' ? n.split : n.cover.st === 'err' ? n.cover : null
+  if (bad) return { st: 'error', t: name + ' · ' + bad.txt }
+  if (dic.value === 'live') return { st: 'open', t: name + ' · слушает' }
+  if (n.split.st === 'busy') return { st: 'connecting', t: name + ' · режет эталон на блоки' }
+  return { st: n.cover.st === 'busy' ? 'connecting' : n.cover.st === 'on' ? 'open' : '', t: name + ' · ' + (n.cover.st === 'busy' ? 'сверяет речь' : n.cover.txt || 'ждёт речь') } })
+const pttDown = () => { if (dic.value === 'idle' && !p.st.busy && !idle.value) dictate() }
+const pttUp = () => { if (dic.value === 'live' || dic.value === 'connecting') dicS?.stop() }          // шар Live: одна Live-сессия — мост и выбор модели диктовки в подвале не показываем
 const dicSel = computed(() => (props.step.dicModel && props.step.dicModel !== 'auto' ? props.step.dicModel : ''))
 function setDic(v) { if (v) props.step.dicModel = v; else delete props.step.dicModel; ed.changed() }
 // при прохождении урока курс не меняем: выбор — только в этом браузере (как модель проверки), главнее урока; '' — как в уроке
@@ -420,7 +429,7 @@ function jsApply() {
 
     <div v-if="thinking" class="kthink" aria-live="polite"><span class="kthi"><img v-if="aiIcon(thinkWho)" :src="aiIcon(thinkWho)" alt="" /></span>
       <span class="kthx">{{ thinkWho }} проверяет ответ</span><span class="kths">{{ thinkSec ? thinkSec + ' с' : '' }}</span></div>
-    <div v-else ref="resEl" class="kb miss" :class="look">
+    <div v-else-if="!isLive" ref="resEl" class="kb miss" :class="look">          <!-- шар Live: «Не прозвучало» показывает сам шар, отдельная карточка проверки не нужна -->
       <div class="kh"><span class="kht">Не прозвучало<template v-if="checked && r.missed.length"> · {{ r.missed.length }}</template></span>
         <span v-if="by" class="kby">{{ by.t }}<template v-for="s in by.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ by.sites.length === 1 ? s : '' }}</template><template v-if="by.live"> Live · {{ lv?.name || by.model }}</template><template v-else-if="by.api"> API · {{ checkName(by.model) }}</template><template v-if="by.sec"> · {{ by.sec }}</template></span></div>
       <p v-if="checked && r.note" class="ph kno">{{ r.note }}</p>
@@ -467,7 +476,18 @@ function jsApply() {
        микрофон и «Проверить»; пока диктуют — то, что модель слышит, курсивом, волна, ✕ (выбросить продиктованное) и ✓ (остановить).
        Под строкой — тихо: мост, слова и порог, модель распознавания. «Целым аудио» — по-старому, поле наверху -->
   <template v-else-if="part === 'fb' && !p.st.done && !p.edit">
-    <div v-if="!fileMode" class="kcm" :class="[dic, { busy: p.st.busy, off: idle }]" @pointerdown.stop>
+    <div v-if="isLive && !fileMode" class="kpt" :class="[dic, { off: idle }]" @pointerdown.stop>
+      <div v-if="dicDraft || dicErr" class="kcd" :class="{ er: dicErr && !dicDraft }" aria-live="polite">{{ dicDraft || dicErr }}</div>
+      <div class="kpr">
+        <button type="button" class="kptt" :class="dic" :disabled="idle || p.st.busy" title="Держите и говорите — отпустили, Live засчитает блоки" aria-label="Держите и говорите" @pointerdown.prevent="pttDown" @pointerup="pttUp" @pointerleave="pttUp" @pointercancel="pttUp" @contextmenu.prevent>
+          <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+          <span v-if="dic === 'live'" class="kcwv" aria-hidden="true"><span class="kcwvs" :style="{ transform: `translateX(${-waveOff}px)` }"><i v-for="(v, i) in wave" :key="i" :style="{ height: waveH(v) + 'px' }" /></span></span>
+          <b v-else>{{ dic === 'connecting' ? 'Подключаюсь…' : 'Держите и говорите' }}</b>
+        </button>
+        <button type="button" class="kpdone" :class="{ busy: p.st.busy }" :disabled="!p.canCheck || idle || dic !== 'idle'" title="Закончить ответ — подвести итог" @click="p.checkAny()"><span v-if="!p.st.busy">Готово</span><i v-else class="kspin" /></button>
+      </div>
+    </div>
+    <div v-else-if="!fileMode" class="kcm" :class="[dic, { busy: p.st.busy, off: idle }]" @pointerdown.stop>
       <div class="kcw"><div class="kchl" aria-hidden="true"><template v-for="(sg, i) in cyrSegs" :key="i"><mark v-if="sg.c">{{ sg.t }}</mark><template v-else>{{ sg.t }}</template></template>{{ '\n' }}</div>
       <textarea :id="'kpa-' + step.id" ref="ta" class="kci" rows="1" :readonly="p.st.busy" :placeholder="'Ответьте ' + langHow(kpCfg(step).lang) + ' — напишите или нажмите микрофон'" @input="p.st.text = $event.target.value; fit()" @keydown.stop @keyup="sync" @paste="sync" @change="sync" @blur="sync" @focus="sync" /></div>
       <div v-if="dicDraft || dic === 'live' || dic === 'connecting' || dicErr" class="kcd" :class="{ er: dicErr && !dicDraft && dic === 'idle' }" aria-live="polite">{{ dicDraft || (dic === 'connecting' ? 'Подключаюсь…' : dic === 'live' ? 'Говорите — ' + dicWho.replace(/ слышит$/, '') + ' слушает…' : dicErr) }}</div>
@@ -489,11 +509,12 @@ function jsApply() {
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
       <span v-else-if="bridge && !isLive" class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
+      <span v-if="liveLine" class="knt" :class="liveLine.st"><i />{{ liveLine.t }}<em v-if="liveLine.st === 'connecting'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span v-for="x in ballList" :key="x.k" class="knt" :class="BALL_ST[x.st]" :title="x.name + ' — ' + x.txt"><i />{{ x.name }} · {{ x.txt }}<em v-if="x.st === 'busy'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
-      <span v-if="p.st.busy && !fileMode" class="knt connecting" :title="api ? 'Ответ ушёл на проверку в Gemini API' : 'Ответ ушёл на проверку через мост в чат'"><i />проверка · запрос ушёл<em class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
+      <span v-if="p.st.busy && !fileMode && !isLive" class="knt connecting" :title="api ? 'Ответ ушёл на проверку в Gemini API' : 'Ответ ушёл на проверку через мост в чат'"><i />проверка · запрос ушёл<em class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span class="ksp" />
-      <span v-if="!fileMode && cyrN" class="kcyr" title="В ответе русские буквы — подсвечены розовым: диктовка ошиблась языком, поправьте">русские буквы: {{ cyrN }}</span>
-      <span v-if="!fileMode" class="kcn" :title="'Зачёт — от ' + pass + ' % смысла эталона'">{{ words }} · от {{ pass }}%</span>
+      <span v-if="!fileMode && cyrN && !isLive" class="kcyr" title="В ответе русские буквы — подсвечены розовым: диктовка ошиблась языком, поправьте">русские буквы: {{ cyrN }}</span>
+      <span v-if="!fileMode && !isLive" class="kcn" :title="'Зачёт — от ' + pass + ' % смысла эталона'">{{ words }} · от {{ pass }}%</span>
       <span v-if="!fileMode && canDic && !idle && !isLive" class="knt" :class="dicNet" :title="'Соединение с нейросетью диктовки (' + dicShort(dicUsed || dicSel || dicAuto || STT_MODEL) + '): открывается на каждое нажатие микрофона и закрывается после ✓'"><i />{{ { off: 'соединение закрыто', connecting: 'подключаюсь', open: 'соединение открыто · слушает', closed: 'соединение закрыто', error: 'соединение оборвалось' }[dicNet] }}<em v-if="dicNet === 'connecting'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <select v-if="idle && !fileMode && canDic && !isLive" class="kms kdm" disabled><option>🎙 {{ dicSel ? dicShort(dicSel) : 'авто' }}</option></select>
       <select v-else-if="!fileMode && canDic && !isLive" class="kms kdm" :value="dicVal" :title="editor ? 'Чем распознавать «Надиктовать с Gemini» на этом экране (dicModel в JSON). На все экраны курса — «{ }» на плитке в меню Exercise' : 'Чем распознавать диктовку — выбор только в этом браузере, урок не меняется'" @pointerdown.stop @change="pickDic($event.target.value)"><option value="">🎙 {{ dicShort((!editor && lessonDic) || dicAuto || STT_MODEL) }}</option><option v-if="dicVal && !dicOpts.some(o => o.id === dicVal)" :value="dicVal">🎙 {{ dicShort(dicVal) }}</option><template v-for="g in DIC_GROUPS" :key="g[0]"><optgroup v-if="dicOpts.some(o => o.kind === g[0])" :label="g[1]"><option v-for="o in dicOpts.filter(o => o.kind === g[0])" :key="o.id" :value="o.id">🎙 {{ dicShort(o.id) }}</option></optgroup></template></select>
@@ -593,6 +614,13 @@ function jsApply() {
 .kcx { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #f0f0f0; color: #3a3a3a; cursor: pointer; transition: background .12s }
 .kcx:hover:not(:disabled) { background: #e5e5e5 } .kcx:disabled { opacity: .4; cursor: default }
 .kcx svg, .kcgo svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.kpt { display: flex; flex-direction: column; gap: 6px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 20px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .04) } .kpt.off { opacity: .55; pointer-events: none }
+.kpr { display: flex; align-items: center; gap: 8px }
+.kptt { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; padding: 0 16px; border: 0; border-radius: 14px; background: #f0f0f0; color: #3a3a3a; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; user-select: none; touch-action: none; transition: background .12s }
+.kptt svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .kptt:hover:not(:disabled) { background: #e6e6e6 }
+.kptt.live, .kptt.connecting { background: #1cb0f6; color: #fff } .kptt:disabled { opacity: .5; cursor: default }
+.kptt .kcwv { flex: 1; min-width: 0 }
+.kpdone { flex: none; min-height: 46px; padding: 0 18px; border: 0; border-radius: 14px; background: #58cc02; color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer } .kpdone:hover:not(:disabled) { background: #4fb802 } .kpdone:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kpdone.busy:disabled { background: #58cc02; color: #fff }
 .kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
 .kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kcgo.busy:disabled { background: #1cb0f6; color: #fff }
 .kspin { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: kspin .8s linear infinite } @keyframes kspin { to { transform: rotate(360deg) } }

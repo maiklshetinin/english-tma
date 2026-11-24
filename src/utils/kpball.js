@@ -177,9 +177,10 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
     stop() { closed = true; delete liveSessions[id]; try { sess?.stop() } catch { /* */ } },
     /** Голос — прямо в Live: h = { text(кусок расшифровки), turn(), level(0..1) } или null — выключить */
     async hear(h) {
-      if (!h) { hearH = null; hearUntil = Date.now() + 2500; if (sess && micOn) sess.mute(true); return }
+      if (!h) { const h0 = hearH; hearUntil = Date.now() + 2500; if (sess && micOn) sess.mute(true); setTimeout(() => { if (hearH === h0) hearH = null }, 2500); return }          // запись кончилась — слушаем расшифровку ещё 2,5 с (хвост фразы)
       if (closed || !sess) throw new Error('Live не подключён')
       hearH = h; if (!micOn) { micOn = true; await sess.listen() } else sess.mute(false)
+      if (hearH !== h) sess.mute(true)          // отпустили, пока микрофон включался
     },
   }
   liveSessions[id] = api
@@ -224,7 +225,7 @@ export function startBallDictation({ id, on = {} }) {
   const lv = liveSessions[id]
   let buf = '', tm = 0, done = false
   const flush = () => { clearTimeout(tm); const t = buf.trim(); buf = ''; if (t) on.final?.(t); on.interim?.('') }
-  const fin = (r = '') => { if (done) return; done = true; flush(); lv?.hear(null); on.state?.(r ? 'error' : 'ended', r) }
+  const fin = (r = '') => { if (done) return; done = true; flush(); lv?.hear(null); on.state?.(r ? 'error' : 'ended', r) }          // хвост фразы, пришедший после — допишется сам (flush по таймеру)
   on.state?.('connecting')
   if (!lv?.alive) { on.state?.('error', 'Live ещё не подключился — секунду и нажмите снова'); return { stop() {} } }
   lv.hear({

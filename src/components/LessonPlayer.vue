@@ -17,6 +17,7 @@ import { providePlay, useEdit } from '../exercises/ctx'
 import { checkAnswer } from '../utils/ai'
 import { checkSmart, getPick } from '../utils/kpcheck'
 import { checkLive } from '../utils/kplive'
+import { ballNet, ballLiveOf } from '../utils/kpball'
 import { kpCfg, kpApi } from '../exercises/kp/defaults'
 import { shuffle, orderParts, gapParts, gapOk, gapList, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
@@ -292,6 +293,16 @@ function checkAny() {
 async function aiCheck() {
   const s = step.value; st.busy = true
   try {
+    if (s.ballLive) {          // «шар Live» (25.11.2026): оценку уже посчитал шар по ответам Live — ни моста, ни второй модели; ждём хвост последней реплики
+      const lv = ballLiveOf(s.id), sleep = (ms) => new Promise((res) => setTimeout(res, ms))
+      let waited = false
+      for (let i = 0; i < 40 && (lv?.hearing || ballNet[s.id]?.cover?.st === 'busy'); i++) { waited = true; await sleep(150) }
+      if (waited) await sleep(1200)
+      if (step.value !== s) return
+      const b = ballNet[s.id]?.res ?? { pct: 0, missed: [], total: 0, ok: 0 }, need = s.pass ?? 60
+      st.ai = { score: b.pct, ok: b.pct >= need, missed: b.missed, feedback: b.total ? `Засчитано блоков: ${b.ok} из ${b.total}` : 'Блоки ещё не нарезаны', site: 'Gemini Live', live: true, model: ballNet[s.id]?.model || '' }
+      return verdict(st.ai.ok)
+    }
     const q = { question: s.text ?? '', reference: s.ideal ?? '', answer: st.text, prompt: s.prompt, pass: s.pass, cfg: kpCfg(s), chat: kpApi(s) ? kpCfg({ prompt: s.prompt, lang: s.lang }) : kpCfg(s) }          // chat — что уходит в чат через мост (у «Gemini API» мост — запасной)          // cfg — все настройки моделей проверки (JSON экрана, exercises/kp/defaults.ts)
     const isApi = s.engine === 'api' || s.engine === 'live'          // 'live' — убранный «Live (голос)» (20.11.2026): как Gemini API
     const viaLive = isApi && (getPick() || s.model) === 'live'          // «Live · голосом» (20.11.2026): не вышло — Flash Lite, потом мост
