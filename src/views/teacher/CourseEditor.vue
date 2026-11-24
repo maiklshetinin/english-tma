@@ -774,7 +774,8 @@ function sdMove(e) {
 }
 async function sdUp(e) {
   removeEventListener('pointermove', sdMove); removeEventListener('pointercancel', sdUp); removeEventListener('pointerup', sdUp)
-  const P = sdP; sdP = null
+  const P = sdP; sdP = null; const mc = maskClick; maskClick = false
+  if (!sd.on && mc) { oneLive.value = pick.step; return }
   if (!sd.on) { if (P?.tileOff?.pvn) return placeStart(P.tray, e, P.tileOff.pvn); if (P?.tray && PRESET_SET.has(P.tray)) { pvOpen.value = pvOpen.value === P.tray ? '' : P.tray; return } if (P?.tray) placeStart(P.tray, e); else if (P?.extra) msel.value = []; return }     // нажатие по выделению — снять его (дальше можно нажимать внутри)
   sdDrop(e)
 }
@@ -970,6 +971,16 @@ const oneBox = computed(() => {
   const a = toScreen({ x: w.x0, y: w.y0 }), b = toScreen({ x: w.x1, y: w.y1 })
   return { left: Math.round(a.x - 6) + 'px', top: Math.round(a.y - 6) + 'px', width: Math.round(b.x - a.x + 12) + 'px', height: Math.round(b.y - a.y + 12) + 'px' }
 })
+// маска на выбранном экране (24.11.2026): тянуть — за любое место; нажали, не тянув, — маска снимается, упражнение работает
+const oneLive = ref(null)
+watch(() => pick.step, () => { oneLive.value = null })
+let maskClick = false
+function oneDown(e) {
+  if (e.button !== 0) return
+  const st = [...lessonRails.value.map(r => r.x), ...doc.items, ...doc.loose].flatMap(x => x.steps ?? []).find(v => v.id === pick.step)
+  if (!st) { oneLive.value = pick.step; return }
+  maskClick = true; grabStep({ e, s: st })
+}
 const selBox = computed(() => {
   if (chapSel.value && !sd.on) {             // выбрана глава — рамка вокруг всей главы
     void (view.x + view.y + view.z)
@@ -1987,7 +1998,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
         </div>
       </div>
       <!-- Рамка вокруг выделенного, с квадратиками по углам -->
-      <div v-if="oneBox" class="selbox" :style="oneBox"><i /><i /><i /><i /></div>
+      <div v-if="oneBox" class="selbox" :style="oneBox"><b v-if="oneLive !== pick.step" class="selmask" title="Тяните за любое место — переставить экран. Нажмите — пройти упражнение" @pointerdown.stop.prevent="oneDown" /><i /><i /><i /><i /></div>          <!-- 24.11.2026: выбранный экран — под голубой маской -->
       <div v-if="selBox" class="selbox" :style="selBox"><b v-if="canMask" class="selmask" title="Тяните — выделенное поедет вместе (на ветку, другой урок или по доске)" @pointerdown.stop.prevent="maskDown" /><i /><i /><i /><i /></div>
       <div v-if="mq" class="mq" :style="mqStyle" />
     </div>
@@ -2130,7 +2141,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .ink path { fill: none; stroke-linecap: round; stroke-linejoin: round } .ink path.on { filter: drop-shadow(0 0 2px #0d99ff) drop-shadow(0 0 1px #0d99ff) }
 .mq { position: absolute; z-index: 20; border: 1.5px solid #0d99ff; background: rgba(13, 153, 255, .12); pointer-events: none }
 .selbox { position: absolute; z-index: 19; border: 2px solid #0d99ff; pointer-events: none }
-.selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; background: rgba(13, 153, 255, .04) } .selmask:active { cursor: grabbing }
+.selmask { position: absolute; inset: 0; pointer-events: auto; cursor: grab; border-radius: 4px; background: rgba(13, 153, 255, .12) } .selmask:hover { background: rgba(13, 153, 255, .16) } .selmask:active { cursor: grabbing }
 .selbox i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid #0d99ff; border-radius: 3px; background: var(--card) }
 .selbox i:nth-of-type(1) { left: -7px; top: -7px } .selbox i:nth-of-type(2) { right: -7px; top: -7px } .selbox i:nth-of-type(3) { left: -7px; bottom: -7px } .selbox i:nth-of-type(4) { right: -7px; bottom: -7px }
 /* стрелка и рука на панели */
