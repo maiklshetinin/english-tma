@@ -48,9 +48,26 @@ function setSide(v) { side.value = v; if (v === 'how') howOn.value = true; try {
 const pos = ref({ line: 1, col: 1 })
 const text = computed({ get: () => props.modelValue, set: (v) => emit('update:modelValue', v) })
 
+// 25.11.2026: настоящий перенос строки (Enter, вставленный многострочный промпт) внутри "…" — не ошибка: читаем его как \n,
+// а при сохранении и «Форматировать» он сам превращается в \n. Так длинные промпты можно писать и вставлять абзацами
+function softNl(t) {
+  let out = '', str = false, esc = false
+  for (const c of String(t)) {
+    if (str) {
+      if (esc) { esc = false; out += c; continue }
+      if (c === '\\') { esc = true; out += c; continue }
+      if (c === '"') { str = false; out += c; continue }
+      if (c === '\n') { out += '\\n'; continue }
+      if (c === '\r') continue
+      if (c === '\t') { out += '\\t'; continue }
+      out += c
+    } else { if (c === '"') str = true; out += c }
+  }
+  return out
+}
 // Проверка на лету: где ошибка — строка и столбец (Chrome: «position N (line L column C)», Firefox: «at line L column C»)
 const parsed = computed(() => {
-  try { JSON.parse(text.value); return { ok: true } } catch (e) {
+  try { JSON.parse(softNl(text.value)); return { ok: true } } catch (e) {
     const m = String(e.message), lc = m.match(/line (\d+) column (\d+)/)
     let line = lc ? +lc[1] : 0, col = lc ? +lc[2] : 0
     const p = m.match(/position (\d+)/)
@@ -86,7 +103,7 @@ function ownReq(name) {
 // ---------- «Что принимает»: ключи упражнения ----------
 let first = {}; try { first = JSON.parse(start) ?? {} } catch { /* */ }
 const known = computed(() => { if (!props.schema) return null; const s = [...props.schema]; for (const k of Object.keys(first)) if (!s.some((x) => x.key === k)) s.push({ key: k, type: 'any', label: 'было в JSON при открытии' }); return s })
-const obj = computed(() => { if (!parsed.value.ok) return null; try { return JSON.parse(text.value) } catch { return null } })
+const obj = computed(() => { if (!parsed.value.ok) return null; try { return JSON.parse(softNl(text.value)) } catch { return null } })
 const issues = computed(() => (known.value && obj.value ? checkKeys(obj.value, known.value, props.kind || undefined) : []))
 const badKeys = computed(() => new Set(issues.value.map((x) => x.key)))
 const has = (k) => !!obj.value && typeof obj.value === 'object' && k in obj.value
@@ -101,9 +118,9 @@ function pickKey(s) {
   text.value = JSON.stringify({ ...obj.value, [s.key]: blankOf(s) }, null, 2)
   nextTick(() => { const l = text.value.split('\n').findIndex((x) => x.trimStart().startsWith(JSON.stringify(s.key) + ':')); if (l >= 0) ed.value?.goLine(l + 1) })
 }
-function apply() { if (props.readonly || !parsed.value.ok || issues.value.length) return; emit('apply') }
+function apply() { if (props.readonly || !parsed.value.ok || issues.value.length) return; const f = softNl(text.value); if (f !== text.value) text.value = f; emit('apply') }          // переносы внутри строк — в \n перед сохранением
 
-function fmt() { if (props.readonly) return; if (!parsed.value.ok) { if (parsed.value.line) ed.value?.goLine(parsed.value.line); return } text.value = JSON.stringify(JSON.parse(text.value), null, 2) }
+function fmt() { if (props.readonly) return; if (!parsed.value.ok) { if (parsed.value.line) ed.value?.goLine(parsed.value.line); return } text.value = JSON.stringify(JSON.parse(softNl(text.value)), null, 2) }
 function flipWrap() { wrap.value = !wrap.value; keep('tma.jsonWrap', wrap.value) }
 function flipHow() { howOn.value = !howOn.value; keep('tma.jsonHow', howOn.value) }
 function close() { if (dirty.value && !window.confirm('Закрыть без сохранения? Изменения в JSON пропадут.')) return; emit('close') }
