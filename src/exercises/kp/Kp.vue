@@ -611,7 +611,7 @@ function jsApply() {
 .kqg b { font-family: var(--font); font-size: 15px; font-weight: 900; color: #7b4224; font-variant-numeric: tabular-nums } .kqg.ok b { color: #2e8b00 } .kqg.low b { color: #b3261e }
 .kqh { display: none }
 @media (max-width: 560px) { .kq:has(.kqtx) { min-height: 0; margin-top: -6px }          /* вопрос — сразу под шапкой (было 84px высоты, текст по центру) */
-  .kjlb.kjlb { display: none } :global(.kjl) { display: none !important } }          /* .kjlb ниже по файлу снова ставил inline-flex — двойной класс сильнее */          /* журнал колонкой — на телефоне не нужен (25.11.2026) */
+  .kjlb.kjlb, .kntlg.kntlg { display: none } :global(.kjl), :global(.klog) { display: none !important } .kntbtn { pointer-events: none } }          /* журнал на телефоне не нужен совсем — смотрим на компьютере (25.11.2026) */          /* .kjlb ниже по файлу снова ставил inline-flex — двойной класс сильнее */          /* журнал колонкой — на телефоне не нужен (25.11.2026) */
 @media (max-width: 560px) {
   .kqh { display: flex; flex: none; align-items: center; gap: 8px; margin-left: -4px }
   .kqh .kqg { margin: 0; padding: 0; border: 0; gap: 4px } .kqh .kqg svg { width: 28px; height: 16px } .kqh .kqg b { font-size: 13px }

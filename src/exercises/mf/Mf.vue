@@ -6,7 +6,7 @@
 import { ref, computed, onMounted } from 'vue'
 import ExTool from '../parts/ExTool.vue'
 import { usePlay, useEdit } from '../ctx'
-import { mfFields, mfRich, mfWords, mfFirst, MF_ROWS, MF_OPTS } from './data'
+import { mfFields, mfRich, mfWords, mfFirst, mfTpl, MF_ROWS, MF_OPTS } from './data'
 import { gapList } from '../../utils/lesson'
 const props = defineProps({ step: { type: Object, required: true }, part: { type: String, default: 'body' } })
 const p = usePlay(), ed = useEdit()
@@ -102,6 +102,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
         <div class="mfun"><small>Unit</small><input v-if="p.edit" class="exf" :value="step.no ?? ''" placeholder="7" maxlength="8" @input="setS(step, 'no', $event.target.value)" /><b v-else>{{ step.no }}</b></div>
         <h3 class="mfut"><textarea v-if="p.edit" class="exf" rows="1" :value="step.head ?? ''" placeholder="Do you … ? (present simple questions)" @input="setHead($event.target.value)" @keydown.enter.prevent /><template v-else>{{ step.head }}</template></h3>
       </div>
+      <div class="mfsg">
       <div v-for="(o, k) in step.opts ?? []" :key="k" class="mfs">
         <div class="mfsl"><input v-if="p.edit" class="exf" :value="o.w" maxlength="2" @input="setS(o, 'w', $event.target.value)" /><b v-else>{{ o.w }}</b></div>
         <div class="mfsb">
@@ -114,6 +115,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
         </div>
         <button v-if="p.edit" type="button" class="mfdel" title="Убрать раздел" @click="delSec(k)">✕</button>
       </div>
+      </div>
       <!-- один кружок преподавателя на весь экран: справа поверх -->
       <div v-if="step.video" class="mfv" :class="{ on: playing }">
         <video ref="vid" :src="p.src(step.video, 'video')" playsinline preload="metadata" @click="vTap" @ended="playing = false" />
@@ -124,7 +126,8 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
     </div>
 
     <!-- ============ Упражнение ============ -->
-    <div v-else class="mf" :class="['m-' + mode, { two: step.two, inl: step.inl, dn: done, ed: p.edit }]">
+    <!-- 25.11.2026 (макеты «Мерфи — все упражнения»): колонки по ширине — t-<плитка>; строки по колонкам делим сами (--r2/--r3/--r4), чтобы ничего не перескакивало -->
+    <div v-else class="mf" :class="['m-' + mode, 't-' + mfTpl(step), { two: step.two, inl: step.inl, dn: done, ed: p.edit }]" :style="{ '--r2': Math.ceil(rows.length / 2), '--r3': Math.ceil(rows.length / 3), '--r4': Math.ceil(rows.length / 4) }">
       <div class="mfc">
         <div class="mfh">
           <span class="mfn"><input v-if="p.edit" class="exf" :value="step.no ?? ''" placeholder="1.1" maxlength="8" @input="setS(step, 'no', $event.target.value)" /><template v-else>{{ step.no }}</template></span>
@@ -165,11 +168,12 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
           </div>
           <!-- сопоставить: два списка -->
           <div v-if="mode === 'match'" class="mfm">
-            <ol class="mfml"><li v-for="(r, n) in rows" :key="n"><b>{{ n + 1 }}</b><textarea v-if="p.edit" class="exf" rows="1" :value="r.q" @input="r.q = $event.target.value; ed.changed()" /><span v-else>{{ r.q }}</span><button v-if="p.edit" type="button" class="mfcx mfmx" title="Убрать строку" @click="delRow(n)">✕</button></li></ol>
+            <ol class="mfml"><li v-for="(r, n) in rows" :key="n"><b>{{ n + 1 }}</b><textarea v-if="p.edit" class="exf" rows="1" :value="r.q" @input="r.q = $event.target.value; ed.changed()" /><span v-else>{{ r.q }}</span><button v-if="p.edit" type="button" class="mfcx mfmx" title="Убрать строку" @click="delRow(n)">✕</button>
+              <div v-if="!p.edit" class="mflt"><button v-for="l in letters" :key="l" type="button" class="mfltr" :class="{ on: (r.ex ? r.a : A[n]) === l, ok: done && !r.ex && l === r.a && st(String(n)) === 'bad', bad: done && !r.ex && A[n] === l && st(String(n)) === 'bad' }" :disabled="r.ex || done" @click="setA(String(n), l)">{{ l }}</button></div></li></ol>
             <ol class="mfml"><li v-for="(o, k) in step.opts ?? []" :key="k"><b>{{ letters[k] }}</b><textarea v-if="p.edit" class="exf" rows="1" :value="o.w" @input="o.w = $event.target.value; ed.changed()" /><span v-else>{{ o.w }}</span><button v-if="p.edit" type="button" class="mfcx mfmx" title="Убрать вариант" @click="optDel(k)">✕</button></li><li v-if="p.edit"><button type="button" class="mfch sm" @click="optAdd">＋ вариант {{ String.fromCharCode(65 + (step.opts?.length ?? 0)) }}</button></li></ol>
           </div>
 
-          <div class="mfrows" :style="{ '--half': Math.ceil(rows.length / 2) }">
+          <div class="mfrows" >
             <div v-for="(r, n) in rows" :key="n" class="mfr" :class="{ ex: r.ex }">
               <span class="mfi">{{ n + 1 }}</span>
               <!-- задание строки -->
@@ -209,7 +213,6 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
                 <em v-if="!r.ex && st(String(n)) === 'bad'" class="mfok">{{ mfFirst(r.a) }}{{ tail(mfFirst(r.a), r) }}</em>
               </div>
               <!-- буквы для сопоставления -->
-              <div v-if="mode === 'match' && !p.edit" class="mflt"><button v-for="l in letters" :key="l" type="button" class="mfltr" :class="{ on: (r.ex ? r.a : A[n]) === l }" :disabled="r.ex || done" @click="setA(String(n), l)">{{ l }}</button></div>
               <!-- слова плашками под полем (5.1) -->
               <div v-if="mode === 'order' && step.below && foc === String(n) && !done && !p.edit" class="mfbl"><button v-for="w in mfWords(r.q)" :key="w" type="button" class="mfch sm" :class="{ us: usedW(w, String(n)) }" @pointerdown.prevent @click="ins(w, String(n))">{{ w }}</button></div>
               <button v-if="p.edit" type="button" class="mfdel" title="Убрать строку" @click="delRow(n)">✕</button>
@@ -294,6 +297,11 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 .mflt { display: flex; flex-wrap: wrap; gap: 5px }
 .mfltr { width: 30px; height: 30px; padding: 0; border: 1.5px solid var(--mo); border-radius: 50%; background: var(--card); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer }
 .mfltr.on { border-color: var(--hw); background: #fde0e0; color: var(--hw) } .mfltr:disabled { cursor: default }
+.mfltr.ok { border-color: #1a9a5c; background: #e3f6ec; color: #1a9a5c } .mfltr.bad { text-decoration: line-through; opacity: .7 }
+.m-match:not(.ed) .mfrows { display: none }          /* буквы — прямо в списке 1–5 */
+.mfml li > .mflt { grid-column: 2; margin: 2px 0 6px }
+/* ===== колонки упражнений (телефон) ===== */
+.mf.t-mf112 .mfrows { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: column; grid-template-rows: repeat(var(--r2), auto); column-gap: 14px }
 .m-match .mfl { min-height: 32px } .m-match .mff, .m-match .mfx { text-align: center }
 .mfbl { display: flex; flex-wrap: wrap; gap: 6px }
 /* 25.11.2026: разметка не прыгает при нажатии — плашки слов всплывают поверх строк ниже, а не раздвигают их; рамка поля в фокусе той же толщины */
@@ -317,12 +325,14 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mfch { font-size: 17px; padding: 5px 14px } .mfch.sm { font-size: 16px }
   .mfi { font-size: 18px } .mfq { font-size: 19px } .mfrep { font-size: 16px } .mfhr { font-size: 17px }
   .mff, .mfx { font-size: 24px } .m-order .mff, .m-order .mfx { font-size: 21px } .mfok { font-size: 21px } .mfhint { font-size: 16px }
-  .two:not(.m-match) .mfrows { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: column; grid-template-rows: repeat(var(--half), auto); column-gap: 60px; row-gap: 14px }          /* две колонки — строки делим поровну сами (CSS columns перекладывали строку из колонки в колонку, когда высота менялась) */
+  .two:not(.m-match) .mfrows, .mf.t-mf171 .mfrows, .mf.t-mf193 .mfrows { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: column; grid-template-rows: repeat(var(--r2), auto); column-gap: 48px; row-gap: 14px }
+  .mf.t-mf112 .mfrows { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(var(--r3), auto); column-gap: 36px }
+  .mfm { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) }          /* две колонки — строки делим поровну сами (CSS columns перекладывали строку из колонки в колонку, когда высота менялась) */
   .inl .mfr { grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1.25fr); align-items: end; column-gap: 12px }
   .inl .mfr > .mfq { grid-column: 2; grid-row: 1 } .inl .mfr > .mfl { grid-column: 3; grid-row: 1 }
   .inl .mfr > .mfi { padding-bottom: 6px; align-self: end }
   .mfbody.pics { display: grid; grid-template-columns: 1.1fr 1fr; gap: 30px; align-items: start; margin-top: 12px } .mfbody.pics .mfp { margin: 0 } .mfbody.pics .mfrows { margin-top: 0 }
-  .mfm { grid-template-columns: 1fr 1fr; gap: 20px } .mfml li { font-size: 18px }
+  .mfm { gap: 20px } .mfml li { font-size: 18px }
   .m-match .mfrows { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); column-gap: 18px }
   .mfltr { width: 32px; height: 32px; font-size: 15px }
   .m-gaps .mfrows { gap: 6px } .mfg { font-size: 19px } .m-gaps .mff.in, .m-gaps .mfx.in { font-size: 24px }
@@ -355,5 +365,18 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mfst { font-size: 17px } .mfv { width: 150px; height: 150px; margin-top: -162px }
 }
 /* экран Мёрфи шире обычного: на планшете и компьютере — как страница книги */
+/* ===== компьютер (карточка ~1200): 2.5 — три колонки, 11.2 — четыре, 31.4 — буквы в строке ===== */
+@container (min-width: 1000px) {
+  .mf.t-mf25 .mfrows { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(var(--r3), auto) }
+  .mf.t-mf112 .mfrows { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(var(--r4), auto) }
+  .mfml li:has(> .mflt) { grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center } .mfml li > .mflt { grid-column: 3; margin: 0 }
+  .mfp { grid-template-columns: repeat(3, 1fr) }
+}
+/* объяснение: телефон — фото над текстом; планшет и шире — разделы 2×2, фото слева, текст справа */
+.mfsg { display: grid; gap: 12px } .mfsi, .mfsadd { order: -1 }
+@container (min-width: 700px) {
+  .mfsg { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 18px }
+  .mfsb { grid-template-columns: minmax(0, .9fr) minmax(0, 1fr); align-items: start; column-gap: 14px } .mfsb > .mfst:only-child { grid-column: 1 / -1 }
+}
 :global(.lp .body.x-mf), :global(.lp:not(.embedded):not(.single) .body.x-mf) { max-width: 1200px }          /* 25.11.2026: шире — на 1440 предложения в строку (общее правило плеера 760px было сильнее) */
 </style>
