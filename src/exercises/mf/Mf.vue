@@ -66,8 +66,25 @@ function addRow() {
   if (mode.value === 'info') { if ((s.value.opts ??= []).length < MF_OPTS) { s.value.opts.push({ w: String.fromCharCode(65 + s.value.opts.length), t: '' }); ed.changed() } return }
   if ((s.value.rows ??= []).length < MF_ROWS) { s.value.rows.push({ q: '', a: '' }); ed.changed() }
 }
+// правка слов в рамках, подсказок у поля, реплик и подписей (25.11.2026, замечания Стаси: «не могу удалить / переименовать»)
+function wSet(arr, j, v, b) {          // слово j в списке arr → v (пусто — убрать); в рамке b — и в списке «зачёркнутых»
+  v = v.trim(); const old = arr[j]
+  if (v) arr[j] = v; else arr.splice(j, 1)
+  const i = b?.x?.indexOf(old) ?? -1; if (i >= 0) { if (v) b.x[i] = v; else b.x.splice(i, 1) }
+  ed.changed()
+}
+function wAdd(arr) { if (arr.length < 14) { arr.push('…'); ed.changed() } }
+function wCross(b, w) { b.x ??= []; const i = b.x.indexOf(w); if (i >= 0) b.x.splice(i, 1); else b.x.push(w); ed.changed() }
+function bankAdd() { (s.value.banks ??= []).push({ t: '', w: ['…'], x: [] }); ed.changed() }
+function bankDel(n) { s.value.banks.splice(n, 1); if (!s.value.banks.length) delete s.value.banks; ed.changed() }
+function hintAdd() { (s.value.hints ??= []).push('…'); ed.changed() }
+function hintSet(j, v) { wSet(s.value.hints, j, v); if (!s.value.hints.length) delete s.value.hints }
+function optAdd() { if ((s.value.opts ??= []).length < MF_OPTS) { s.value.opts.push({ w: '' }); ed.changed() } }
+function optDel(k) { const o = s.value.opts[k]; ed.dropFiles([o.image].filter((f) => f && !f.startsWith('https://'))); s.value.opts.splice(k, 1); ed.changed() }
+const hasH = computed(() => rows.value.some((x) => x.h != null)), hasPre = computed(() => rows.value.some((x) => x.pre != null))
 function delRow(r) { s.value.rows.splice(r, 1); ed.changed() }
 function delSec(k) { const o = s.value.opts[k]; ed.dropFiles([o.image].filter((f) => f && !f.startsWith('https://'))); s.value.opts.splice(k, 1); ed.changed() }
+function rowSet(r, k, v) { if (v.trim()) r[k] = v.trim(); else delete r[k]; ed.changed() }
 function setS(o, k, v) { if (v.trim()) o[k] = v; else delete o[k]; ed.changed() }
 function setHead(v) { setS(s.value, 'head', v) }
 
@@ -112,12 +129,25 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
         <div class="mfh">
           <span class="mfn"><input v-if="p.edit" class="exf" :value="step.no ?? ''" placeholder="1.1" maxlength="8" @input="setS(step, 'no', $event.target.value)" /><template v-else>{{ step.no }}</template></span>
           <p class="mft"><textarea v-if="p.edit" class="exf" rows="1" :value="step.head ?? ''" placeholder="Задание: **жирный**, ==маркер==, !!красный!!" @input="setHead($event.target.value)" /><template v-else><span v-for="(x, j) in mfRich(step.head)" :key="j" :class="x.c">{{ x.x }}</span></template></p>
-          <span v-if="step.who" class="mfw"><i><img v-if="step.image" :src="p.src(step.image, 'image')" alt="" @click="p.edit && ed.pick(step, ['image'])" /><b v-else @click="p.edit && ed.pick(step, ['image'])">{{ step.who[0] }}</b></i><small>{{ step.who }}</small></span>
+          <span v-if="step.who" class="mfw"><i><img v-if="step.image" :src="p.src(step.image, 'image')" alt="" @click="p.edit && ed.pick(step, ['image'])" /><b v-else @click="p.edit && ed.pick(step, ['image'])">{{ step.who[0] }}</b></i><input v-if="p.edit" class="exf mfwn" :value="step.who" maxlength="30" title="Имя собеседника" @change="setS(step, 'who', $event.target.value)" /><small v-else>{{ step.who }}</small></span>
         </div>
         <p v-if="step.note || (p.edit && step.note != null)" class="mfnote"><textarea v-if="p.edit" class="exf" rows="1" :value="step.note ?? ''" @input="setS(step, 'note', $event.target.value)" /><template v-else>{{ step.note }}</template></p>
 
         <!-- рамки слов -->
-        <div v-if="step.banks?.length" class="mfbs">
+        <div v-if="p.edit && mode !== 'info'" class="mfbs mfbe">
+          <div v-for="(b, n) in step.banks ?? []" :key="n" class="mfbw"><input class="exf mfbt" :value="b.t" placeholder="подпись рамки (it’s …), можно пусто" @change="b.t = $event.target.value.trim(); ed.changed()" />
+            <div class="mfb" :class="{ flat: !b.t }">
+              <span v-for="(w, j) in b.w" :key="j + ':' + w" class="mfche" :class="{ cr: b.x?.includes(w) }"><input class="exf" :value="w" :size="Math.max(3, w.length)" title="Слово — исправить; пусто — убрать" @change="wSet(b.w, j, $event.target.value, b)" /><button type="button" class="mfcx" :title="b.x?.includes(w) ? 'Вернуть (не зачёркнуто)' : 'Зачеркнуть — уже в образце'" @click="wCross(b, w)">~</button><button type="button" class="mfcx" title="Убрать слово" @click="wSet(b.w, j, '', b)">✕</button></span>
+              <button type="button" class="mfch sm" @click="wAdd(b.w)">＋ слово</button>
+            </div>
+            <button type="button" class="mfdel" title="Убрать рамку" @click="bankDel(n)">✕</button>
+          </div>
+          <div class="mfbw"><small>Подсказки у поля (плашки при вводе)</small><div class="mfb flat">
+            <span v-for="(h, j) in step.hints ?? []" :key="j + ':' + h" class="mfche"><input class="exf" :value="h" :size="Math.max(3, h.length)" @change="hintSet(j, $event.target.value)" /><button type="button" class="mfcx" title="Убрать" @click="hintSet(j, '')">✕</button></span>
+            <button type="button" class="mfch sm" @click="hintAdd">＋ подсказка</button><button type="button" class="mfch sm" @click="bankAdd">＋ рамка слов</button>
+          </div></div>
+        </div>
+        <div v-else-if="step.banks?.length" class="mfbs">
           <div v-for="(b, n) in step.banks" :key="n" class="mfbw"><small v-if="b.t">{{ b.t }}</small>
             <div class="mfb" :class="{ flat: !b.t }"><button v-for="w in b.w" :key="w" type="button" class="mfch" :class="{ cr: b.x?.includes(w), us: !b.x?.includes(w) && usedW(w) }" :disabled="b.x?.includes(w) || done" @pointerdown.prevent @click="ins(w)">{{ w }}</button></div>
           </div>
@@ -129,12 +159,14 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
             <div v-for="(o, k) in step.opts" :key="k" class="mfpi" :class="'g' + (k % 6)" @click="p.edit && ed.pick(step, ['image'], k)" @dragover.prevent @drop.prevent="p.edit && ed.drop($event, step, ['image'], k)">
               <img v-if="o.image" :src="p.src(o.image, 'image')" alt="" draggable="false" /><svg v-else viewBox="0 0 24 24" class="ph"><rect x="5" y="5" width="14" height="14" rx="1.5" /></svg>
               <em>{{ k + 1 }}</em>
+              <button v-if="p.edit" type="button" class="mfcx mfpx" title="Убрать картинку" @click.stop="optDel(k)">✕</button>
             </div>
+            <button v-if="p.edit" type="button" class="mfch sm" @click="optAdd">＋ картинка</button>
           </div>
           <!-- сопоставить: два списка -->
           <div v-if="mode === 'match'" class="mfm">
-            <ol class="mfml"><li v-for="(r, n) in rows" :key="n"><b>{{ n + 1 }}</b><textarea v-if="p.edit" class="exf" rows="1" :value="r.q" @input="r.q = $event.target.value; ed.changed()" /><span v-else>{{ r.q }}</span></li></ol>
-            <ol class="mfml"><li v-for="(o, k) in step.opts ?? []" :key="k"><b>{{ letters[k] }}</b><textarea v-if="p.edit" class="exf" rows="1" :value="o.w" @input="o.w = $event.target.value; ed.changed()" /><span v-else>{{ o.w }}</span></li></ol>
+            <ol class="mfml"><li v-for="(r, n) in rows" :key="n"><b>{{ n + 1 }}</b><textarea v-if="p.edit" class="exf" rows="1" :value="r.q" @input="r.q = $event.target.value; ed.changed()" /><span v-else>{{ r.q }}</span><button v-if="p.edit" type="button" class="mfcx mfmx" title="Убрать строку" @click="delRow(n)">✕</button></li></ol>
+            <ol class="mfml"><li v-for="(o, k) in step.opts ?? []" :key="k"><b>{{ letters[k] }}</b><textarea v-if="p.edit" class="exf" rows="1" :value="o.w" @input="o.w = $event.target.value; ed.changed()" /><span v-else>{{ o.w }}</span><button v-if="p.edit" type="button" class="mfcx mfmx" title="Убрать вариант" @click="optDel(k)">✕</button></li><li v-if="p.edit"><button type="button" class="mfch sm" @click="optAdd">＋ вариант {{ String.fromCharCode(65 + (step.opts?.length ?? 0)) }}</button></li></ol>
           </div>
 
           <div class="mfrows" :style="{ '--half': Math.ceil(rows.length / 2) }">
@@ -145,7 +177,8 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
                 <textarea v-if="p.edit" class="exf" rows="1" :value="r.q" placeholder="(be / London?)" @input="r.q = $event.target.value; ed.changed()" />
                 <template v-else-if="mode === 'order' && !step.below">(<template v-for="(w, j) in mfWords(r.q)" :key="j"><button type="button" class="mfch sm" :class="{ us: r.ex || usedW(w, String(n)) }" :disabled="r.ex || done" @pointerdown.prevent @click="ins(w, String(n))">{{ w }}</button><i v-if="j < mfWords(r.q).length - 1" class="sl">/</i></template>)</template>
                 <span v-else><span v-for="(x, j) in mfRich(r.q)" :key="j" :class="x.c">{{ x.x }}</span></span>
-                <span v-if="r.r" class="mfrep">{{ r.r }}</span>
+                <input v-if="p.edit && (r.r != null || step.who)" class="exf mfrep" :value="r.r ?? ''" placeholder="ответ собеседника" title="Реплика собеседника; пусто — убрать" @change="rowSet(r, 'r', $event.target.value)" />
+                <span v-else-if="r.r" class="mfrep">{{ r.r }}</span>
               </div>
 
               <!-- предложение с пропусками -->
@@ -160,7 +193,8 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 
               <!-- строка ответа -->
               <div v-else class="mfl" :class="{ foc: foc === String(n) && !done }">
-                <b v-if="r.pre" class="mfpre">{{ r.pre }}</b>
+                <input v-if="p.edit && hasPre" class="exf mfpre" :value="r.pre ?? ''" :size="Math.max(4, (r.pre ?? '').length)" placeholder="начало" title="Начало строки (They); пусто — убрать" @change="rowSet(r, 'pre', $event.target.value)" />
+                <b v-else-if="r.pre" class="mfpre">{{ r.pre }}</b>
                 <textarea v-if="p.edit" class="exf mff" rows="1" :value="r.a ?? ''" placeholder="ответ (варианты через /)" @input="r.a = $event.target.value; ed.changed()" />
                 <span v-else-if="r.ex" class="mfx">{{ mfFirst(r.a) }}{{ tail(mfFirst(r.a), r) }}</span>
                 <template v-else>
@@ -170,7 +204,8 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
                     <button v-for="h in step.hints ?? []" v-show="!usedW(h, String(n))" :key="h" type="button" class="mfhint" @pointerdown.prevent @click="ins(h, String(n))">{{ h }}</button>
                   </span>
                 </template>
-                <small v-if="r.h" class="mfhr">{{ r.h }}</small>
+                <input v-if="p.edit && hasH" class="exf mfhr" :value="r.h ?? ''" :size="Math.max(6, (r.h ?? '').length)" placeholder="(подсказка)" title="Подсказка справа; пусто — убрать" @change="rowSet(r, 'h', $event.target.value)" />
+                <small v-else-if="r.h" class="mfhr">{{ r.h }}</small>
                 <em v-if="!r.ex && st(String(n)) === 'bad'" class="mfok">{{ mfFirst(r.a) }}{{ tail(mfFirst(r.a), r) }}</em>
               </div>
               <!-- буквы для сопоставления -->
@@ -264,6 +299,12 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 /* 25.11.2026: разметка не прыгает при нажатии — плашки слов всплывают поверх строк ниже, а не раздвигают их; рамка поля в фокусе той же толщины */
 .mfbl { position: absolute; z-index: 5; left: 28px; right: 0; top: 100%; margin-top: 3px; padding: 6px; border-radius: 12px; background: #fff; box-shadow: 0 6px 18px rgba(0, 0, 0, .14) }
 /* правка */
+.mfbe .mfbw { position: relative } .mfbe .mfbw:hover > .mfdel { opacity: 1 } .mfbt { width: 100%; margin-bottom: 3px; font-size: 12px }
+.mfche { display: inline-flex; align-items: center; gap: 1px; padding: 1px 3px 1px 6px; border: 1.5px solid #f3c48f; border-radius: 16px; background: var(--card) } .mfche input { border: 0; padding: 2px; font-size: 14px; font-weight: 600; background: transparent }
+.mfche.cr input { text-decoration: line-through; text-decoration-color: var(--mr); color: #b0b0b0 }
+.mfcx { flex: none; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--hint); font-size: 10px; font-weight: 800; cursor: pointer } .mfcx:hover { background: #f1e3e3; color: var(--mr) }
+.mfml li { position: relative } .ed .mfml li { grid-template-columns: 22px 1fr 18px } .ed .mfml li:has(> .mfch) { display: block } .mfmx { margin-left: 2px; align-self: center } .mfpi { position: relative } .mfpx { position: absolute; right: 4px; top: 4px; background: #fffd }
+.mfwn { width: 64px; font-size: 12px; text-align: center } input.mfrep { width: auto; min-width: 9ch } input.mfhr, input.mfpre { padding: 2px 4px }
 .mfdel { position: absolute; right: -8px; top: 0; width: 18px; height: 18px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--hint); font-size: 9px; cursor: pointer; opacity: 0 }
 .mfr:hover > .mfdel, .mfs:hover > .mfdel { opacity: 1 } @media (hover: none) { .mfdel { opacity: 1 } }
 
