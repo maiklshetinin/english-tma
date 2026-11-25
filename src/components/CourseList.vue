@@ -3,7 +3,7 @@
 // Как в Figma: одно нажатие — выбрать курс (он показывается ниже, в «Как видит ученик»), двойное или карандаш — редактор; корзина — удалить (холст + рельс, #/courses?id=…). Курс хранится на сервере (server/courses.ts);
 // без сервера (демо) — один курс из этого браузера.
 import { ask } from '../composables/useDialog'
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { showToast } from '../composables/useToast'
@@ -32,6 +32,16 @@ const ago = (t) => {
   return m < 1 ? 'только что' : m < 60 ? `${m} мин назад` : m < 1440 ? `${Math.round(m / 60)} ч назад` : new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'элемент' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'элемента' : 'элементов')
+// 25.11.2026 (макет «Вкладка «Курсы» — выбор курса», вариант B): курсы — ряд вкладок шириной с колонку курса (620px), все видны сразу, как плитки;
+// не влезли — ряд листается вбок, правый край плавно гаснет; выбранный — тёмный; у выбранного — карандаш и корзина. «+» — новый курс
+const COLORS = ['#a560e8', '#ff9600', '#1cb0f6', '#ff4b4b', '#58cc02', '#ce82ff', '#2b70c9']
+const colorOf = (i) => COLORS[i % COLORS.length]
+const row = ref(null), moreR = ref(false), moreL = ref(false)
+function edges() { const el = row.value; if (!el) return; moreL.value = el.scrollLeft > 2; moreR.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 2 }
+let ro = null
+onMounted(() => { ro = new ResizeObserver(edges); watch(row, (el) => { ro.disconnect(); if (el) { ro.observe(el); edges() } }, { immediate: true }) })
+onBeforeUnmount(() => ro?.disconnect())
+watch([list, () => props.selected], () => nextTick(() => { edges(); row.value?.querySelector('.cc.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }))
 async function remove(c) {
   if (!(await ask(`Удалить курс «${c.title}»?`, { text: 'Кружки и фото этого курса удалятся из хранилища.', ok: 'Удалить', danger: true }))) return
   if (!online) { localStorage.removeItem(LOCAL); return load() }
@@ -42,22 +52,22 @@ async function remove(c) {
 </script>
 <template>
   <div class="cl">
-    <!-- 24.11.2026: курсы — в шапке: слева плитки (вылезают к рейлу навигации, прокрутка — при наведении), справа «Новый курс»; заголовка «Курсы» нет -->
     <div class="ch">
-      <div v-if="list === null" class="card sk" />
-      <div v-else-if="list.length" class="grid">
-        <div v-for="c in list" :key="c.id" class="card cc" :class="{ on: c.id === selected }" role="button" tabindex="0" :title="`Нажмите — посмотреть ниже, дважды — открыть в редакторе${c.updatedAt ? ' · изменён ' + ago(c.updatedAt) : ''}`"
+      <div v-if="list === null" class="sk" />
+      <div v-else-if="list.length" ref="row" class="grid" :class="{ fr: moreR, fl: moreL }" role="tablist" aria-label="Курсы" @scroll="edges">
+        <div v-for="(c, i) in list" :key="c.id" class="cc" :class="{ on: c.id === selected }" role="tab" :aria-selected="c.id === selected" tabindex="0"
+          :title="`${c.title} · ${c.count} ${word(c.count)}${c.updatedAt ? ' · изменён ' + ago(c.updatedAt) : ''}\nНажмите — посмотреть ниже, дважды — открыть в редакторе`"
           @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
-          <span class="ic"><AppIcon name="route" :size="16" /></span>
-          <span class="tx"><b>{{ c.title }}</b><small>{{ c.count }} {{ word(c.count) }}<template v-if="c.updatedAt"> · {{ ago(c.updatedAt) }}</template></small></span>
-          <!-- как везде: справа карандаш (редактор) и корзина -->
-          <button class="icon-btn" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="13" /></button>
-          <button class="icon-btn danger" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="13" /></button>
+          <span class="ic" :style="{ background: colorOf(i) }"><AppIcon name="route" :size="15" /></span>
+          <b>{{ c.title }}</b>
+          <template v-if="c.id === selected">
+            <button class="cb" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="13" /></button>
+            <button class="cb" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="13" /></button>
+          </template>
         </div>
       </div>
       <span v-else class="sp" />
-      <!-- 24.11.2026: «Новый курс» — такая же плитка, как курсы (тот же размер), только пунктиром -->
-      <button class="card cc new" type="button" @click="open('new')"><span class="ic"><AppIcon name="plus" :size="16" /></span><span class="tx"><b>Новый курс</b><small>создать</small></span></button>
+      <button class="new" type="button" title="Новый курс" aria-label="Новый курс" @click="open('new')"><AppIcon name="plus" :size="16" /></button>
     </div>
     <p v-if="err" class="hint">Не удалось загрузить курсы {{ err }}</p>
     <div v-if="list && !list.length" class="card empty">
@@ -67,24 +77,22 @@ async function remove(c) {
   </div>
 </template>
 <style scoped>
-.cl { display: grid; gap: 6px; margin-bottom: 12px }
-@media (min-width: 720px) { .cl { margin-top: -7px } }          /* 25.11.2026: верх плиток — на одной линии с кнопками справа сверху (они на 12px от края; у страницы отступ 16px + 3px у ряда) */
-.ch { --bleed: max(0px, calc((100vw - 8px - 100%) / 2)); display: flex; align-items: stretch; gap: 10px; margin-left: calc(-1 * var(--bleed)) } .ch .new { flex: 0 0 225px; align-self: stretch; height: auto; box-sizing: border-box; margin: 3px 12px 3px 0; font: inherit; color: inherit; text-align: left } .sp, .ch .sk { flex: 1 }
-.grid { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; flex: 1; min-width: 0; padding: 3px 12px 3px 12px }          /* 24.11.2026: курсы — одна строка на всю ширину экрана (вылезает за поля страницы); полоса прокрутки — только при наведении и только если не влезло */
-@media (min-width: 1024px) { .ch { --bleed: max(0px, calc((100vw - 132px - 100%) / 2)) } }          /* слева — рейл навигации (124px) */
-.grid::-webkit-scrollbar { height: 6px; background: transparent } .grid::-webkit-scrollbar-thumb { background: transparent }
-.grid:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .28) } html[data-theme='dark'] .grid:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .3) }
-.grid > .cc { flex: 0 0 225px; box-sizing: border-box }          /* на четверть уже прежних 300px */
-.cc { user-select: none; display: flex; align-items: center; gap: 6px; padding: 5px 8px; margin: 0; cursor: pointer; transition: border-color .1s }
+/* 25.11.2026: вкладки курсов — в ширину колонки «Как видит ученик» (620px), по центру; не вылезают к рейлу навигации */
+.cl { display: grid; gap: 6px; width: 100%; max-width: 620px; margin: 0 auto 4px }
+.ch { display: flex; align-items: center; gap: 8px; min-width: 0 }
+.sp, .sk { flex: 1 } .sk { height: 44px; border-radius: 14px; background: var(--surface); opacity: .6 }
+.grid { flex: 1; min-width: 0; display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scroll-behavior: smooth; scrollbar-width: none; padding: 2px 0 }
+.grid::-webkit-scrollbar { display: none }
+.grid.fr { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent) }          /* не влезло — справа гаснет: видно, что есть ещё */
+.grid.fl { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%); mask-image: linear-gradient(90deg, transparent, #000 12%) }
+.grid.fl.fr { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 85%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 85%, transparent) }
+.cc { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; box-sizing: border-box; padding: 0 12px 0 6px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--text); cursor: pointer; user-select: none; white-space: nowrap; transition: border-color .1s, background .15s }
 .cc:hover { border-color: var(--blue) }
-.cc { position: relative }
-.cc .icon-btn { --ib: 22px; position: absolute; top: 3px; color: var(--hint); border-color: transparent; background: none } .cc .icon-btn:hover { background: var(--surface) }
-.cc .icon-btn.danger { right: 4px } .cc .icon-btn:not(.danger) { right: 27px }          /* карандаш и корзина — мелко, в правом верхнем углу: тексту вся ширина */
-.cc .tx b { padding-right: 50px }
-.ic { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--purple); color: #fff }
-.tx { flex: 1; display: grid; gap: 0; line-height: 1.15; min-width: 0 } .tx b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tx small { font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--hint) }
-.cc.new { border-style: dashed; background: none } .cc.new .ic { background: var(--surface); color: var(--hint) } .cc.new:hover .ic { background: var(--blue); color: #fff } .cc.new .tx b { padding-right: 0 }
-.cc.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) }
+.cc b { font-size: 14px; font-weight: 800; max-width: 220px; overflow: hidden; text-overflow: ellipsis }
+.cc.on { border-color: transparent; background: #1f2328; color: #fff } html[data-theme='dark'] .cc.on { background: #f1f3f5; color: #111 }
+.ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #fff }
+.cb { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: rgba(255, 255, 255, .12); color: inherit; cursor: pointer } .cb:hover { background: rgba(255, 255, 255, .24) }
+html[data-theme='dark'] .cb { background: rgba(0, 0, 0, .08) }
+.new { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px dashed var(--border); border-radius: 14px; background: none; color: var(--hint); cursor: pointer } .new:hover { border-color: var(--blue); color: var(--blue) }
 .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 24px } .empty span { max-width: 420px; color: var(--hint); font-size: 14px }
-.sk { height: 48px; opacity: .5 }
 </style>
