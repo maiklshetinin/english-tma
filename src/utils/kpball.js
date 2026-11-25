@@ -223,6 +223,7 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
     return ok
   }
   let pend = null, pendTm = 0
+  let idle0 = 0          // пустые cover подряд без реплики (модель зациклилась) — считаем, в журнал не пишем
   const deliver = () => { clearTimeout(pendTm); if (!pend) return; const g = judge(pend); pend = null; used = true; if (n.lv?.last) n.lv.last.n = g.length; onCover?.(g) }
   if (!n.lv) n.lv = { ph: '', at: 0, cut: 0, last: null }
   if (!n.log) n.log = []
@@ -269,13 +270,17 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
           if (name === 'cover') {
+            const empty = !(Array.isArray(args?.found) && args.found.length)
+            if (guard && empty && !talking && !wait) { idle0++; if (idle0 === 3) lg('err', 'модель вызывает cover сама, без реплики ученика (по кругу) — дальше такие пустые вызовы не пишу, считаю: ' + idle0); n.loops = idle0; if (idle0 >= 3) return { ok: true, $silent: true } }
+            else idle0 = 0
             lg('cover', JSON.stringify(args).slice(0, 400) + ' · ' + sec, false, JSON.stringify(args, null, 1))
             const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim(), fix: String(x?.fix ?? '').trim() })).filter((x) => x.ref)
             n.cover = { st: 'on', txt: (got.length ? `найдено ${got.length}` : 'нового нет') + ` · ${sec}` }
             if (L.ph === 'think') L.last = { n: got.length, ms: Date.now() - L.at }
             if (!guard) { onCover?.(got); return { ok: true } }
-            if (!got.length) { onCover?.(got); return { ok: true } }
-            pend = [...(pend ?? []), ...got]; clearTimeout(pendTm); pendTm = setTimeout(deliver, 1500); return { ok: true }
+            const OK = { ok: true, note: 'Принято. До следующей реплики ученика больше ничего не вызывай.', $silent: true }
+            if (!got.length) { onCover?.(got); return OK }
+            pend = [...(pend ?? []), ...got]; clearTimeout(pendTm); pendTm = setTimeout(deliver, 1500); return OK
           }
           lg('err', 'неизвестная функция ' + name)
           return { ok: false, error: 'неизвестная функция' }

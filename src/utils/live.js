@@ -130,7 +130,10 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
       return
     }
     if (m.toolCall) {          // функция (оценка и т.п.) — молча: ответ в приложение, модели — «принято»
-      const res = (m.toolCall.functionCalls ?? []).map((fc) => ({ id: fc.id, name: fc.name, response: { result: on.tool?.(fc.name, fc.args ?? {}) ?? { ok: true } } }))
+      // $silent (25.11.2026, шар Live · текст): ответ функции — с scheduling SILENT: модель только принимает его к сведению и не начинает
+      // новый ход (иначе она снова вызывает функцию — и так по кругу, каждые полсекунды)
+      const res = (m.toolCall.functionCalls ?? []).map((fc) => { const r = on.tool?.(fc.name, fc.args ?? {}) ?? { ok: true }, { $silent, ...result } = r
+        return { id: fc.id, name: fc.name, response: $silent ? { result, scheduling: 'SILENT' } : { result } } })
       if (res.length && ws?.readyState === 1) ws.send(JSON.stringify({ toolResponse: { functionResponses: res } }))
     }
     const sc = m.serverContent
