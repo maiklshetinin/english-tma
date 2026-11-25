@@ -232,7 +232,10 @@ watch(() => liveLog.value?.length, () => nextTick(() => { const el = logEl.value
 // «· текст» (ballText, 25.11.2026, макет «журнал справа»): журнал — тёмной колонкой во всю высоту справа (телефон — шторкой снизу);
 // фильтры, «Копировать», запись целиком по нажатию (инструкция, сырой JSON ответа). Экран ответа сдвигается влево и работает
 const jcol = computed(() => !!props.step.ballText)
-const txToggle = () => { txShow.value = !txShow.value }          // кнопка «Эталон» у «· текст»
+const txToggle = () => { txShow.value = !txShow.value }
+// «· текст» на телефоне (25.11.2026): «Эталон» и спидометр — в шапку урока, рядом с полосой прогресса (полоса короче, места под засчитанное больше)
+const kqEl = ref(null), topEl = ref(null)
+onMounted(() => nextTick(() => { topEl.value = kqEl.value?.closest('.lp')?.querySelector(':scope > .top') || null }))          // кнопка «Эталон» у «· текст»
 const JF = [{ k: 'all', t: 'Всё' }, { k: 'out', t: '→ ушло' }, { k: 'in', t: '← пришло' }, { k: 'cut', t: '✂ отсечено' }]
 const jf = ref('all'), jOpen = ref(new Set()), jCopied = ref(false)
 const JIN = ['cover', 'said', 'turn', 'heard']
@@ -410,14 +413,24 @@ function jsApply() {
     <ExHead v-if="p.edit || fileMode" :step="step" :def="J.head" />          <!-- 23.11.2026: у ученика без «Ответьте устно на вопрос» — вопрос сразу наверху; в правке — чтобы поменять -->
     <!-- «Шар Live · новый вид» (ballV2, 25.11.2026): вопрос с «Эталоном» переезжает в окно шара (KpBall, #kb2h-…) -->
     <Teleport :to="'#kb2h-' + step.id" defer :disabled="!v2Head">
-    <div class="kq">
-      <div class="kqw">
+    <div ref="kqEl" class="kq">
+      <Teleport v-if="topEl && step.ballText && !p.edit && !idle" :to="topEl">
+        <span class="kqh">
+          <span class="kqg" :class="txTier" :title="`Раскрыто ${txPct}% эталона · зачёт от ${pass}%`"><svg viewBox="0 0 120 66" role="img" :aria-label="`Раскрыто ${txPct} %`"><path d="M12 60 A48 48 0 0 1 108 60" class="tr" /><path v-if="txPct > 0" :d="txArc" class="fl" /><path :d="`M${tick[0][0]} ${tick[0][1]} L${tick[1][0]} ${tick[1][1]}`" class="tk" /><line x1="60" y1="60" :x2="txNeedle[0]" :y2="txNeedle[1]" class="nd" /><circle cx="60" cy="60" r="6" class="nd" /></svg><b>{{ txPct }}%</b></span>
+          <button type="button" class="krb kx kxh" :class="{ on: txShow }" :title="txShow ? 'Скрыть текст эталона' : 'Показать текст эталона'" @pointerdown.stop @click="txToggle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg></button>
+        </span>
+      </Teleport>
+      <div class="kqw" :class="{ kqtx: step.ballText && !p.edit && !idle }">
         <button v-if="p.edit" type="button" class="kst" :class="{ off: !step.star }" :title="step.star ? 'Обязательный вопрос (звезда) — убрать' : 'Сделать обязательным (красная звезда)'" @click="toggleStar"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 50L38.4 3.4L35.4 37.8Z" class="s1" /><path d="M50 50L38.4 3.4L57.1 32.4Z" class="s2" /><path d="M50 50L90.7 24.6L57.1 32.4Z" class="s1" /><path d="M50 50L90.7 24.6L69.0 51.3Z" class="s2" /><path d="M50 50L86.8 80.9L69.0 51.3Z" class="s1" /><path d="M50 50L86.8 80.9L54.6 68.4Z" class="s2" /><path d="M50 50L32.0 94.5L54.6 68.4Z" class="s1" /><path d="M50 50L32.0 94.5L33.9 60.1Z" class="s2" /><path d="M50 50L2.1 46.7L33.9 60.1Z" class="s1" /><path d="M50 50L2.1 46.7L35.4 37.8Z" class="s2" /></svg></button>
         <span v-else-if="step.star" class="kst" title="Ответ нужно знать обязательно"><svg viewBox="0 0 100 100" role="img" aria-label="Обязательный вопрос"><path d="M50 50L38.4 3.4L35.4 37.8Z" class="s1" /><path d="M50 50L38.4 3.4L57.1 32.4Z" class="s2" /><path d="M50 50L90.7 24.6L57.1 32.4Z" class="s1" /><path d="M50 50L90.7 24.6L69.0 51.3Z" class="s2" /><path d="M50 50L86.8 80.9L69.0 51.3Z" class="s1" /><path d="M50 50L86.8 80.9L54.6 68.4Z" class="s2" /><path d="M50 50L32.0 94.5L54.6 68.4Z" class="s1" /><path d="M50 50L32.0 94.5L33.9 60.1Z" class="s2" /><path d="M50 50L2.1 46.7L33.9 60.1Z" class="s1" /><path d="M50 50L2.1 46.7L35.4 37.8Z" class="s2" /></svg></span>
         <ExText v-model="step.text" tag="div" class="kqt" ph="Kiedy i jak obchodzimy Mikołajki?" multi>
           <template #before><span v-if="step.n" class="kqn">{{ step.n }}.</span></template>
           <span v-if="step.n" class="kqn">{{ step.n }}.</span>{{ step.text || '…' }}
         </ExText>
+        <span v-if="step.ballText && !p.edit && !idle" class="kqg" :class="txTier" :title="`Раскрыто ${txPct}% эталона · зачёт от ${pass}%`">          <!-- «· текст» (25.11.2026, вариант A): спидометр — в правом краю плашки вопроса, за тонкой чертой -->
+          <svg viewBox="0 0 120 66" role="img" :aria-label="`Раскрыто ${txPct} %`"><path d="M12 60 A48 48 0 0 1 108 60" class="tr" /><path v-if="txPct > 0" :d="txArc" class="fl" /><path :d="`M${tick[0][0]} ${tick[0][1]} L${tick[1][0]} ${tick[1][1]}`" class="tk" /><line x1="60" y1="60" :x2="txNeedle[0]" :y2="txNeedle[1]" class="nd" /><circle cx="60" cy="60" r="6" class="nd" /></svg>
+          <b>{{ txPct }}%</b>
+        </span>
         <button v-if="step.audio" type="button" class="kau" :class="{ on: playing }" :title="playing ? 'Пауза' : 'Послушать вопрос' + (byT ? ' — озвучено ' + byT : '')" @pointerdown.stop @click.stop="playQ"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg></button>
         <template v-if="p.edit">
           <button type="button" class="ktts" :title="step.audio ? 'Озвучить вопрос заново (Gemini)' + (byT ? ' — сейчас: ' + byT : '') : 'Озвучить вопрос (Gemini)'" :disabled="!ttsText" @pointerdown.stop @click.stop="tts = true"><img v-if="gIcon" :src="gIcon" alt="Gemini" /><span v-else>AI</span><i v-if="ed.pct(step, 'audio') != null">{{ ed.pct(step, 'audio') }}%</i></button>
@@ -438,16 +451,7 @@ function jsApply() {
           </div>
         </template>
       </div>
-      <div v-if="step.ballText && !p.edit && !idle" class="kg" :class="txTier" :title="`Раскрыто ${txPct}% эталона · зачёт от ${pass}%`">          <!-- «· текст»: живой спидометр вместо карточки с процентом -->
-        <svg viewBox="0 0 120 66" role="img" :aria-label="`Раскрыто ${txPct} %`">
-          <path d="M12 60 A48 48 0 0 1 108 60" class="tr" />
-          <path v-if="txPct > 0" :d="txArc" class="fl" />
-          <path :d="`M${tick[0][0]} ${tick[0][1]} L${tick[1][0]} ${tick[1][1]}`" class="tk" />
-          <line x1="60" y1="60" :x2="txNeedle[0]" :y2="txNeedle[1]" class="nd" /><circle cx="60" cy="60" r="5" class="nd" />
-        </svg>
-        <div class="kgv"><b>{{ txPct }}%</b><span>{{ txTier === 'ok' ? 'Зачтено' : p.st.done ? tierT[txTier] : 'раскрыто' }}</span></div>
-      </div>
-      <div v-else-if="!p.edit && (checked || p.st.busy)" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
+      <div v-if="!step.ballText && !p.edit && (checked || p.st.busy)" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
         <svg viewBox="0 0 120 66" role="img" :aria-label="checked ? `Совпадение по смыслу ${r.score} %` : 'Ещё не проверено'">
           <path d="M12 60 A48 48 0 0 1 108 60" class="tr" />
           <path v-if="checked && r.score > 0" :d="arc" class="fl" />
@@ -599,6 +603,19 @@ function jsApply() {
 .kq { display: flex; align-items: center; gap: 14px; min-height: 84px }
 /* вопрос — как заголовок вопроса в ответах домашки: номер и текст на подложке, звезда наползает слева */
 .kqw { position: relative; flex: 1; min-width: 0; display: flex; align-items: center }
+.kqw.kqtx { align-items: stretch; border-radius: 10px; background: #f2dab5 } .kqw.kqtx .kqt { background: transparent }
+.kqg { flex: none; display: flex; align-items: center; gap: 6px; margin: 6px 0; padding: 0 12px; border-left: 1px solid rgba(123, 66, 36, .18) }
+.kqg svg { width: 34px; height: 19px; overflow: visible } .kqg .tr { fill: none; stroke: rgba(0, 0, 0, .1); stroke-width: 13; stroke-linecap: round }
+.kqg .fl { fill: none; stroke: #ff9600; stroke-width: 13; stroke-linecap: round } .kqg.ok .fl { stroke: #58cc02 } .kqg.low .fl { stroke: #ff4b4b }
+.kqg .tk { stroke: #8a6a48; stroke-width: 3 } .kqg .nd { stroke: #4b4b4b; fill: #4b4b4b; stroke-width: 6; stroke-linecap: round }
+.kqg b { font-family: var(--font); font-size: 15px; font-weight: 900; color: #7b4224; font-variant-numeric: tabular-nums } .kqg.ok b { color: #2e8b00 } .kqg.low b { color: #b3261e }
+.kqh { display: none }
+@media (max-width: 560px) {
+  .kqh { display: flex; flex: none; align-items: center; gap: 8px; margin-left: -4px }
+  .kqh .kqg { margin: 0; padding: 0; border: 0; gap: 4px } .kqh .kqg svg { width: 28px; height: 16px } .kqh .kqg b { font-size: 13px }
+  .kqh .krb.kx { width: 34px; height: 34px; margin: 0; border-radius: 10px }
+  .kqw.kqtx .kqg, .kqw.kqtx ~ .krb.kx:not(.kxh), .kq .krb.kx:not(.kxh) { display: none }
+}
 .kqt { flex: 1; min-width: 0; padding: 5px 12px; border-radius: 10px; background: #f2dab5; font-family: 'PT Serif', Georgia, serif; font-size: 18px; font-weight: 400; line-height: 1.35; color: #351a05 }
 .kqt :deep(.exf) { background: transparent } .kqn { margin-right: .3em }
 .kst { flex: none; width: 30px; height: 30px; margin: 0 -9px 0 -6px; padding: 0; border: 0; background: none; position: relative; z-index: 1 } button.kst { cursor: pointer }
