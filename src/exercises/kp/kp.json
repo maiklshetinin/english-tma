@@ -10,7 +10,8 @@
     "kpballive",
     "kpballive2",
     "kpballfix",
-    "kpballtext"
+    "kpballtext",
+    "kpballsess"
   ],
   "fields": {
     "head": {
@@ -144,6 +145,10 @@
     "ballText": {
       "type": "bool",
       "label": "Без шара: эталон текстом под размытием, засчитываются только сказанные слова; без речи — отсекается (шар Live)"
+    },
+    "ballSess": {
+      "type": "bool",
+      "label": "Сессия на реплику: нажали микрофон — Live-сессия открылась, ответила — закрылась (текст под блюром)"
     }
   },
   "check": "button",
@@ -172,6 +177,9 @@
       "S"
     ],
     "kpballtext": [
+      "S"
+    ],
+    "kpballsess": [
       "S"
     ]
   },

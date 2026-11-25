@@ -253,7 +253,9 @@ const sec1 = (ms) => (Math.max(0, ms) / 1000).toFixed(1).replace('.', ',')
 watch(() => (props.step.ballLive && (ballNet[props.step.id]?.lv?.ph || (dic.value === 'live' ? 'rec' : ''))) || '', (ph) => { clearInterval(lvTm); lvTm = 0; if (ph) lvTm = setInterval(() => { lvNow.value = Date.now() }, 100) }, { immediate: true })
 onBeforeUnmount(() => clearInterval(lvTm))
 // шар Live (25.11.2026): одна строка статуса — Live-модель; ввод — «рация»: нажал — микрофон включён, нажал ещё раз — выключен
-const liveLine = computed(() => { const n = props.step.ballLive && ballNet[props.step.id]; if (!n) return null
+// «· сессия на реплику» (26.11.2026): в конце строки подвала — что с Live-сессией (нет / открываю / открыта / закрыта и почему)
+const liveLine = computed(() => { const r = liveLine0(); const ss = props.step.ballSess && ballNet[props.step.id]?.sess; return r && ss && r.st !== 'error' ? { ...r, t: r.t + ' · ' + ss } : r })
+function liveLine0() { const n = props.step.ballLive && ballNet[props.step.id]; if (!n) return null
   const name = String(n.model || 'Gemini Live').replace(/ · Live$/, ''), bad = n.split.st === 'err' ? n.split : n.cover.st === 'err' ? n.cover : null
   if (bad) return { st: 'error', t: name + ' · ' + bad.txt }
   // 25.11.2026: что сейчас — слушает → (выключили микрофон) Gemini ищет совпадения (секундомер) → засчитано за N с
@@ -262,7 +264,7 @@ const liveLine = computed(() => { const n = props.step.ballLive && ballNet[props
   if (dic.value === 'live') return { st: 'rec', t: name + ' · слушает · выключите микрофон — сверит', s: last }
   if (n.split.st === 'busy') return { st: 'connecting', t: name + ' · режет эталон на блоки' }
   if (last) return { st: 'open', t: name + ' · ' + last }
-  return { st: n.cover.st === 'busy' ? 'connecting' : n.cover.st === 'on' ? 'open' : '', t: name + ' · ' + (n.cover.st === 'busy' ? 'сверяет речь' : n.cover.txt || 'ждёт речь') } })
+  return { st: n.cover.st === 'busy' ? 'connecting' : n.cover.st === 'on' ? 'open' : '', t: name + ' · ' + (n.cover.st === 'busy' ? (n.cover.txt === 'открываю сессию…' ? n.cover.txt : 'сверяет речь') : n.cover.txt || 'ждёт речь') } }
 // рация шара Live (25.11.2026): нажал — микрофон включён (держать не надо), говоришь сколько нужно; нажал ещё раз — выключен, Live сразу засчитывает блоки
 const pttTap = () => { if (dic.value === 'live' || dic.value === 'connecting') dicS?.stop(); else if (dic.value === 'idle' && !p.st.busy && !idle.value) dictate() }          // шар Live: одна Live-сессия — мост и выбор модели диктовки в подвале не показываем
 const dicSel = computed(() => (props.step.dicModel && props.step.dicModel !== 'auto' ? props.step.dicModel : ''))
