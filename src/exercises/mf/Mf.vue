@@ -386,5 +386,5 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mfsg { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 18px }
   .mfsb { grid-template-columns: minmax(0, .9fr) minmax(0, 1fr); align-items: start; column-gap: 14px } .mfsb > .mfst:only-child { grid-column: 1 / -1 }
 }
-:global(.lp .body.x-mf), :global(.lp:not(.embedded):not(.single) .body.x-mf) { max-width: 1044px }          /* карточка 1000 px — страница Мерфи (19,5 × 26 см) в масштабе нашего шрифта */          /* 25.11.2026: шире — на 1440 предложения в строку (общее правило плеера 760px было сильнее) */
+:global(.lp .body.x-mf.x-mf), :global(.lp:not(.embedded):not(.single) .body.x-mf.x-mf) { max-width: 1044px }          /* .x-mf дважды: правило плеера (760) с атрибутом scoped было той же силы и грузилось позже — побеждало */          /* карточка 1000 px — страница Мерфи (19,5 × 26 см) в масштабе нашего шрифта */          /* 25.11.2026: шире — на 1440 предложения в строку (общее правило плеера 760px было сильнее) */
 </style>
