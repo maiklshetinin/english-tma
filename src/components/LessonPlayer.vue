@@ -299,7 +299,6 @@ async function aiCheck() {
       const busyNow = () => (lv && 'pending' in lv ? lv.pending : lv?.hearing || ballNet[s.id]?.cover?.st === 'busy')          // pending — v3: ждём только ответ на последнюю реплику
       for (let i = 0; i < 80 && busyNow(); i++) { waited = true; await sleep(150) }
       if (waited && !(lv && 'pending' in lv)) await sleep(1200)
-      if (lv?.final) await lv.final().catch(() => {})          // v3 (25.11.2026): «ИТОГ» — Live присылает, что из эталона не прозвучало; не ответила — итог по найденному
       if (step.value !== s) return
       const b = ballNet[s.id]?.res ?? { pct: 0, missed: [], total: 0, ok: 0 }, need = s.pass ?? 60
       st.ai = { score: b.pct, ok: b.pct >= need, missed: b.missed, feedback: b.note || (b.total ? `Засчитано блоков: ${b.ok} из ${b.total}` : 'Live ещё ничего не засчитал'), site: 'Gemini Live', live: true, model: ballNet[s.id]?.model || '' }

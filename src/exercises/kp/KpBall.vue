@@ -112,7 +112,7 @@ function onText() {
 }
 /** «Отправить на проверку»: в чат — только новый кусок (сказанное после прошлой отправки), блоки — с пометкой уже засчитанных */
 async function cover() {
-  if (isLive.value) return coverLive()
+  if (isLive.value) return          // шар Live сверяет сам по микрофону
   if (busy) { again = true; return }
   const all = (props.final || props.text).trim(), w = all ? all.split(/\s+/) : []
   if (w.length <= sentWords) return
@@ -127,46 +127,22 @@ async function cover() {
   } catch { /* статус — в подвале */ }
   finally { busy = false; asking.value = false; if (again) { again = false; if (wc(props.final || props.text) > sentWords) cover() } }
 }
-// ---------- шар Live (24.11.2026, тест): одна Live-сессия вместо моста — utils/kpball.js (openBallLive) ----------
-// Текст сказанного уходит в модель кусками «РЕЧЬ: …» (сразу после паузы или кнопкой), она молча вызывает cover(n, score, said): 1 — блок целиком,
-// 0.5 — частично (блок наполовину, процент считаем сами). Одно сообщение за раз: пока модель не договорила, следующий кусок ждёт
-// после первой сверки Live под шаром — два блока: «Засчитано» (что сказал) и «Не засчитано» (½ — передано частично)
+// ---------- шар Live: одна Live-сессия на экран — utils/kpball.js (openBallLive). Голос — микрофоном (рация, Kp.vue → startBallDictation);
+// выключили микрофон — модель присылает найденные куски эталона (onLiveFound). Текстом («РЕЧЬ: …») и блоками больше не шлём (убрано 25.11.2026)
 const liveChecked = ref(false)
 const passN = computed(() => (Number.isFinite(props.step.pass) ? props.step.pass : 60))          // порог экрана — для подписи под процентом
-let lv = null, lvBlocks = [], busyL = false, againL = false, busyTm = 0, autoTm = 0, fillTm = 0
-function fill(b) {          // блоки «наливаются» в шар по одному — как будто нейросеть выдаёт их
-  clearInterval(fillTm); let k = 0; blocks.value = []
-  fillTm = setInterval(() => { k++; blocks.value = b.slice(0, k); if (k >= b.length) { clearInterval(fillTm); fillTm = 0 } }, 260)
-}
-function resetSay() { liveChecked.value = false; found.value = []; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) }
-function startLive(keep = false) {          // keep — переподключение: засчитанное остаётся, вся речь уходит заново
-  lv?.stop(); if (keep) { sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) } else resetSay()
+let lv = null
+function resetSay() { liveChecked.value = false; found.value = []; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0 }
+function startLive() {
+  lv?.stop(); resetSay()
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
   try {
     const c = kpReady(kpCfg(props.step))          // промпт и функция — из JSON экрана (ballPrompt, ballTool), 25.11.2026
-    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, extra: reqOf(c, 'ballLive'),
-      onCover: onLiveFound,
-      onTurn: () => { busyL = false; asking.value = false; clearTimeout(busyTm); if (againL) { againL = false; coverLive() } } })
+    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, extra: reqOf(c, 'ballLive'), onCover: onLiveFound })
   } catch (e) { netOf(id).cover = { st: 'err', txt: String(e.message || e) }; return }
-  fast.value = false; netOf(id).split = { st: 'off', txt: '' }; if (!keep) rebuild(); liveRes()          // v3: блоков нет — эталон уже в системной инструкции
-}
-function coverLive() {
-  const all = (props.final || props.text).trim(), w = all ? all.split(/\s+/) : []
-  if (w.length <= sentWords) return
-  if (busyL) { againL = true; return }
-  if (!lv?.alive) { startLive(true); setTimeout(coverLive, 1200); return }          // сессия закрылась — открыть заново (блоки и вся речь уйдут снова)
-  const chunk = w.slice(sentWords).join(' ')
-  busyL = true; asking.value = true; sentWords = sentN.value = w.length
-  netOf(props.step.id).cover = { st: 'busy', txt: 'запрос ушёл в Live — сверяет речь с блоками' }
-  lv.send('РЕЧЬ: ' + chunk)
-  clearTimeout(busyTm); busyTm = setTimeout(() => { if (busyL) { busyL = false; asking.value = false; netOf(props.step.id).cover = { st: 'err', txt: 'Live не ответил за 25 с' } } }, 25_000)
+  fast.value = false; netOf(id).split = { st: 'off', txt: '' }; rebuild(); liveRes()
 }
 watch(() => props.idle, (v) => { if (!v && isLive.value && !props.edit && !lv) startLive() })          // экран выбрали на холсте — Live включается
-watch(() => props.final, () => {          // сказал — помолчал: само уходит в Live
-  if (!isLive.value || props.edit || props.idle || props.done) return
-  if (lv?.hearing) { sentWords = sentN.value = wc(props.final); return }          // речь слышит сама Live-сессия (микрофон) — текстом повторно не шлём
-  clearTimeout(autoTm); autoTm = setTimeout(() => { if (hasNew.value) coverLive() }, 1100)
-})
 watch(() => props.text, onText)
 watch(() => props.done, async (d) => {
   clearInterval(missTm)
@@ -194,11 +170,11 @@ function dropOwn() { delete props.step.keys; blocks.value = quickBlocks(props.st
 watch(() => props.step.keys, (k) => { if (Array.isArray(k) && k.length) { blocks.value = k; fast.value = false } })
 
 onMounted(() => { layout(); run(); if (!props.idle && !props.edit) { netOf(props.step.id); if (isLive.value) startLive(); else load() } })
-onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInterval(missTm); clearInterval(fillTm); clearTimeout(autoTm); clearTimeout(busyTm); lv?.stop() })
+onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInterval(missTm); lv?.stop() })
 </script>
 
 <template>
-  <div class="kball" :class="['th-' + theme, { idle }]" @pointerdown.stop>
+  <div class="kball" :class="['th-' + theme, { idle, lv: isLive }]" @pointerdown.stop>
     <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
     <div ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), part: !ok.has(i) && sc[i] > 0, ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
@@ -277,6 +253,8 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbl li { padding: 5px 10px; border-radius: 10px; background: #f2fbf4; font-size: 13px; line-height: 1.4 } .kbl li.fx { background: #fff7e8 }
 .kbl b { font-weight: 800; color: #128a55; margin-right: 6px } .kbs1 { color: #555; font-style: italic } .kbf { margin-left: 6px; font-weight: 800; color: #b26a00 }
 .kbl small { display: block; font-size: 12px; font-weight: 600; color: #8a6a3a }
+/* шар Live: урок шире — 960 px, как в макете (строки засчитанного без обрезки) */
+:global(.lp:not(.embedded):not(.single) .body:has(.kball.lv:not(.idle))) { max-width: 960px }
 /* шар Live: лента засчитанного (макет 25.11.2026) — строка: ✓ кусок эталона · серым что сказал; новое — точка и рамка; «Не прозвучало» — красным */
 .kblv { display: flex; flex-direction: column; gap: 6px; margin-top: 10px }
 .kblvh { display: flex; align-items: baseline; gap: 8px; margin-top: 4px } .kblvh h4 { margin: 0; font-size: 16px; font-weight: 900; color: #351a05 }
@@ -285,11 +263,11 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kblvl { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 236px; overflow-y: auto; scrollbar-width: none }
 .kblvl::-webkit-scrollbar { width: 0 } .kblvl:hover { scrollbar-width: thin; scrollbar-color: rgba(123, 66, 36, .28) transparent }
 .kblvl:hover::-webkit-scrollbar { width: 6px } .kblvl:hover::-webkit-scrollbar-thumb { background: rgba(123, 66, 36, .28); border-radius: 3px } .kblvl::-webkit-scrollbar-button { display: none }
-.kblvl li { flex: none; display: flex; align-items: baseline; gap: 10px; padding: 9px 14px; border-radius: 12px; background: #fff; white-space: nowrap; overflow: hidden }
+.kblvl li { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 9px 14px; border-radius: 12px; background: #fff; line-height: 1.35 }
 .kblvl li.nw { box-shadow: inset 0 0 0 2px #cd8a30 } .kblvd { flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%; background: #cd8a30 }
-.kblvc { flex: none; color: #cd8a30; font-weight: 900 } .kblvr { flex: none; max-width: 70%; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: 800; color: #351a05 }
-.kblvs { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 14px; font-weight: 600; color: #a08a72 }
-.kblvl.no li { background: #fff7f5 } .kblvl.no .kblvc { color: #b3261e } .kblvl.no .kblvr { max-width: 100%; flex: 1 1 auto; color: #8c1d18; font-weight: 700 }
+.kblvc { flex: none; color: #cd8a30; font-weight: 900 } .kblvr { flex: 0 1 auto; min-width: 0; font-size: 15px; font-weight: 800; color: #351a05 }          /* целиком, переносом — без «…» */
+.kblvs { flex: 1 1 180px; min-width: 0; font-size: 14px; font-weight: 600; color: #a08a72 }
+.kblvl.no li { background: #fff7f5 } .kblvl.no .kblvc { color: #b3261e } .kblvl.no .kblvr { flex: 1 1 auto; color: #8c1d18; font-weight: 700 }
 .kball .kbp.lvbad b { color: #b3261e } .kball .kbp.lvbad small { color: #b3261e } .kball .kbp.lvbad .kbbar i { background: #e5484d }
 .th-sphere .kblvh h4, .th-space .kblvh h4 { color: #e2e8f0 } .th-sphere .kblvl li, .th-space .kblvl li { background: rgba(255, 255, 255, .06) } .th-sphere .kblvr, .th-space .kblvr { color: #f1f5f9 } .th-sphere .kblvs, .th-space .kblvs { color: #8b9bb4 }
 .th-sphere .kblvl.no li, .th-space .kblvl.no li { background: rgba(251, 113, 133, .08) } .th-sphere .kblvl.no .kblvr, .th-space .kblvl.no .kblvr { color: #fda4af }

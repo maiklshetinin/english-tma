@@ -15,14 +15,9 @@
 //     шар по очереди поворачивается к каждому. Пока запрос идёт — следующий ждёт и уходит сразу после ответа.
 //  4. Итог. После «Проверить» — последняя сверка; нераскрытые блоки — «Не прозвучало», шар по очереди показывает их.
 //  Процент на шаре — доля раскрытых блоков. Оценку «Проверить» ставит как раньше (мост / Gemini API) — шар её не меняет.
-//  ШАР LIVE (24.11.2026, тест; step.ballLive, шаблон kpballive): то же самое, но без моста — одна Live-сессия (WebSocket) на упражнение.
-//  Эталон — в системной инструкции; первое сообщение «РАЗБЕЙ» (или «БЛОКИ: …», если блоки уже есть) — модель молча вызывает функцию blocks;
-//  дальше каждый новый кусок расшифровки уходит текстом «РЕЧЬ: …», модель молча вызывает cover(n, score 1 / 0.5, said). Голос модели не играет.
-//  v3 (25.11.2026): без нарезки — эталон целиком, модель только присылает найденные в нём куски (cover: found[{ ref, said }]);
-//  процент и «не прозвучало» — на фронте (refCover). Нарезка (blocks) у шара Live больше не используется.
-//  Голос (25.11.2026) — рация-переключатель: нажал — микрофон включён, нажал ещё раз — выключен, и модель СРАЗУ один раз вызывает cover
-//  (пустой — если нового нет). В подвале: слушает → Gemini ищет совпадения (секундомер от выключения) → засчитано за N с; нажатие — журнал.
-//  Статусы — те же ballNet (подвал). Реализация — openBallLive внизу файла.
+//  ШАР LIVE (step.ballLive, шаблон kpballive): без моста — одна Live-сессия (WebSocket) на экран. Эталон — в системной инструкции
+//  (ballPrompt из JSON экрана). Микрофон — рация: нажал — слушает, нажал ещё раз — модель молча вызывает cover: какие куски эталона
+//  ученик передал (ref — дословно, said — что сказал). Процент и «не прозвучало» — на фронте (refCover). Нарезки на блоки и «РЕЧЬ: …» текстом нет.
 //  Статусы запросов (нарезка, сверка) — ballNet[id экрана], их рисует подвал «Ответа по смыслу» (Kp.vue), рядом с диктовкой.
 import { reactive } from 'vue'
 import { apiRequest } from '../firebase'
@@ -179,21 +174,16 @@ export function refCover(ideal, refs) {
   const pct = words.length ? Math.round((hit.filter(Boolean).length / words.length) * 100) : 0
   return { pct, hit, words, missed, placed }
 }
-/** «БЛОКИ: 1. … 2. …» — список для модели, когда блоки уже есть (свои у экрана или из памяти браузера) */
-export const blocksMsg = (b) => 'БЛОКИ:\n' + b.map((x, i) => `${i + 1}. ${x.label}`).join('\n')
-const lck = (q, i) => 'tma.ballL.' + hash(q + '|' + i)          // нарезка Live — своя память (ballL), чтобы не путать с мостом
-/** Нарезка Live из памяти браузера (по тексту вопроса и эталона) или null */
-export const liveCached = (q, i) => { try { const c = JSON.parse(localStorage.getItem(lck(q, i)) || 'null'); return Array.isArray(c) && c.length ? c : null } catch { return null } }
-/** Live-сессия шара. cb: { onBlocks([{label, words}]), onCover([{ i (с 0), score 0..1, said }]), onTurn() — модель договорила }.
+/** Live-сессия шара. system, tool — из JSON экрана; onCover([{ ref, said }]) — найденные куски эталона; onTurn() — модель договорила.
  *  → { send(text), stop(), alive, model }. Сообщения до готовности сессии ждут в очереди */
 const liveSessions = {}          // id экрана → api открытой Live-сессии (микрофон диктовки берёт её же)
-export function openBallLive({ id, question, ideal, system, tool, extra = null, onBlocks, onCover, onTurn }) {          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
+export function openBallLive({ id, question, ideal, system, tool, extra = null, onCover, onTurn }) {          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
   const n = netOf(id), key = firstKey()
   if (!key) throw new Error('Нужен ключ Gemini в профиле')
-  let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now(), sentSplit = false
+  let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now()
   const queue = []
-  const flush = () => { if (!ready || !sess) return; while (queue.length) { const t = queue.shift(); if (/^РАЗБЕЙ/.test(t)) sentSplit = true; t0 = Date.now(); sess.send(t); lg('send', t.replace(/\n/g, ' ').slice(0, 160)) } }
-  const fail = (txt) => { lg('err', txt); closed = true; n.cover = { st: 'err', txt }; if (sentSplit && n.split.st === 'busy') n.split = { st: 'err', txt } }
+  const flush = () => { if (!ready || !sess) return; while (queue.length) { const t = queue.shift(); t0 = Date.now(); sess.send(t); lg('send', t.replace(/\n/g, ' ').slice(0, 160)) } }
+  const fail = (txt) => { lg('err', txt); closed = true; n.cover = { st: 'err', txt } }
   // рация-переключатель (25.11.2026, вернули самый стабильный вариант): нажал — микрофон включён (manual: activityStart), говоришь сколько нужно;
   // нажал ещё раз — выключен (activityEnd): Live ОДИН раз сверяет всё сказанное и присылает cover. Выключен — в Live не уходит ни звука.
   // (Пробовали засчитывать на ходу — по паузам и срезами раз в 5 с — работало нестабильно, убрали.) wait — выключили, ждём ответ
@@ -243,14 +233,6 @@ export function openBallLive({ id, question, ideal, system, tool, extra = null, 
         level: (v) => { if (talking && v > 0.06 && !heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
-          if (name === 'blocks') {
-            const b = (Array.isArray(args?.blocks) ? args.blocks : []).map((x) => ({ label: String(x?.label ?? '').trim().slice(0, 60), words: (Array.isArray(x?.words) ? x.words : []).map(String).filter(Boolean).slice(0, 3) })).filter((x) => x.label).slice(0, 16)
-            lg('blocks', JSON.stringify(args).slice(0, 400))
-            if (!b.length) return { ok: false, error: 'пустой список' }
-            n.split = { st: 'on', txt: `${b.length} блоков · ${sec}` }
-            try { localStorage.setItem(lck(question, ideal), JSON.stringify(b)) } catch { /* */ }
-            onBlocks?.(b); return { ok: true, count: b.length }
-          }
           if (name === 'cover') {
             lg('cover', JSON.stringify(args).slice(0, 400) + ' · ' + sec)
             const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim() })).filter((x) => x.ref)
