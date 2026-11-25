@@ -25,7 +25,7 @@ import { startBallDictation, ballLiveOf } from '../../utils/kpball'
 import { reqOf } from '../../utils/overlay'
 import VoiceNote from '../../components/VoiceNote.vue'
 import KpBall from './KpBall.vue'          // «· шар» (24.11.2026, тест; step.ball) — шар смысловых блоков над ответом
-import { ballNet } from '../../utils/kpball'
+import { ballNet, txShow } from '../../utils/kpball'
 import { kpCfg, fill, kpReady, langHow } from './defaults'
 import { ai } from '../../utils/gemini'
 import J from './kp.json'
@@ -232,6 +232,7 @@ watch(() => liveLog.value?.length, () => nextTick(() => { const el = logEl.value
 // «· текст» (ballText, 25.11.2026, макет «журнал справа»): журнал — тёмной колонкой во всю высоту справа (телефон — шторкой снизу);
 // фильтры, «Копировать», запись целиком по нажатию (инструкция, сырой JSON ответа). Экран ответа сдвигается влево и работает
 const jcol = computed(() => !!props.step.ballText)
+const txToggle = () => { txShow.value = !txShow.value }          // кнопка «Эталон» у «· текст»
 const JF = [{ k: 'all', t: 'Всё' }, { k: 'out', t: '→ ушло' }, { k: 'in', t: '← пришло' }, { k: 'cut', t: '✂ отсечено' }]
 const jf = ref('all'), jOpen = ref(new Set()), jCopied = ref(false)
 const JIN = ['cover', 'said', 'turn', 'heard']
@@ -419,7 +420,9 @@ function jsApply() {
         </template>
         <TtsDialog v-if="tts" :text="ttsText" what="вопрос" :by="step.audioBy || ''" :has="!!step.audio" @close="tts = false" @save="ttsSave" />
         <template v-if="!p.edit">
-          <button type="button" class="krb" :class="{ on: refOpen }" :disabled="!p.st.done" :title="p.st.done ? 'Показать эталон' : 'Эталон откроется после проверки'" @pointerdown.stop @click="refOpen = !refOpen">Эталон</button>
+          <span v-if="step.ballText && !idle" class="kxp" :class="{ bad: p.st.done && (ballNet[step.id]?.res?.pct ?? 0) < (step.pass ?? 60) }" :title="`Раскрыто ${ballNet[step.id]?.res?.pct ?? 0}% эталона · проход от ${step.pass ?? 60}%`">{{ ballNet[step.id]?.res?.pct ?? 0 }}%</span>
+          <button v-if="step.ballText" type="button" class="krb kx" :class="{ on: txShow }" :title="txShow ? 'Скрыть текст эталона' : 'Показать текст эталона — размытый, проявляются сказанные слова'" @pointerdown.stop @click="txToggle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>Эталон</button>          <!-- «· текст» (25.11.2026, макет «Без шара»): одна кнопка — показать / скрыть размытый эталон -->
+          <button v-else type="button" class="krb" :class="{ on: refOpen }" :disabled="!p.st.done" :title="p.st.done ? 'Показать эталон' : 'Эталон откроется после проверки'" @pointerdown.stop @click="refOpen = !refOpen">Эталон</button>
           <div v-if="refOpen && p.st.done" class="krp" @pointerdown.stop>
             <button type="button" class="krx" title="Закрыть" @click="refOpen = false">✕</button>
             <div class="kr">
@@ -768,6 +771,9 @@ function jsApply() {
 /* 22.11.2026: эталон — всплывающая подсказка поверх экрана, места в потоке не занимает */
 .krb { flex: none; margin-left: 6px; height: 34px; padding: 0 12px; border: 0; border-radius: 17px; background: #f2dab5; color: #7b4224; font-family: var(--font); font-size: 13px; font-weight: 800; cursor: pointer }
 .krb:disabled { opacity: .45; cursor: default } .krb.on { background: #e9c99a }
+.krb.kx { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: 12px; background: #f6e2c4; color: #7b4224 } .krb.kx:hover { background: #f0d3a8 }
+.kxp { flex: none; margin-left: 6px; padding: 3px 9px; border-radius: 999px; background: #fff6e8; box-shadow: inset 0 0 0 1px #f1dcbc; color: #cd8a30; font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums } .kxp.bad { color: #d92d20 }          /* «· текст»: процент — в строке вопроса */
+.krb.kx.on { background: #7b4224; color: #fff } .krb.kx svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .krp { position: absolute; left: 0; right: 0; top: calc(100% + 8px); z-index: 20; max-height: 60vh; overflow: auto; box-sizing: border-box; padding: 12px 38px 12px 14px; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(53, 26, 5, .22), 0 0 0 1px #ecd9b8; animation: kdd .18s ease-out }
 .krx { position: absolute; top: 6px; right: 8px; width: 24px; height: 24px; border: 0; border-radius: 50%; background: none; color: #a07a55; cursor: pointer }
 .krx:hover { background: rgba(0, 0, 0, .06) }

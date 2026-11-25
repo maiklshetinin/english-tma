@@ -8,7 +8,7 @@ import { useEdit } from '../ctx'
 import { kpCfg, kpReady, fill as fillT } from './defaults'
 import { kpPlain } from '../../utils/ai'
 import { reqOf } from '../../utils/overlay'
-import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, refCover, saidCover, fixDiff, ballLog } from '../../utils/kpball'
+import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, refCover, saidCover, fixDiff, ballLog, txShow as txOpen } from '../../utils/kpball'
 const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, final: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })          // text — всё сказанное (с черновиком), final — только готовые («чёрные») куски
 const ed = useEdit()
 // Темы шара (24.11.2026): белая (тест), «Космос» — тёмная панель со звёздами, слова светятся; «Как у Марии» — бежево-коричневая, цвета домашек
@@ -22,8 +22,6 @@ const v2 = computed(() => !!props.step.ballV2)
 // сказанные слова (saidCover: кусок от модели длиннее сказанного — лишнее размыто и в процент не идёт). Текст можно свернуть (помнится).
 // Засчитанное без речи отсекает openBallLive (guard). Тема — коричневая
 const tx = computed(() => !!props.step.ballText)
-const txOpen = ref((() => { try { return localStorage.getItem('tma.balltext.open') !== '0' } catch { return true } })())
-watch(txOpen, (v) => { try { localStorage.setItem('tma.balltext.open', v ? '1' : '0') } catch { /* */ } })
 const THEMES = props.step.ballV2 ? [{ k: 'book', t: 'Коричневая' }, { k: 'white', t: 'Светлая' }, { k: 'sphere', t: 'Чёрная' }] : THEMES_OLD
 const TK = props.step.ballV2 ? 'tma.ball2.theme' : 'tma.ball.theme'
 const theme = ref(props.step.ballText ? 'book' : (() => { try { const v = localStorage.getItem(TK); return THEMES.some((x) => x.k === v) ? v : 'sphere' } catch { return 'sphere' } })())
@@ -49,6 +47,10 @@ const txNew = computed(() => { const f = found.value; if (!f.length || props.don
 // сообщения (25.11.2026, v3): каждое нажатие микрофона — что услышала Live (расшифровка) и что из этого засчитано / отброшено
 const msgs = ref([])          // [{ at, heard, idx: [номера в found], bad: [{ ref, said }], rep }]
 const msgsDesc = computed(() => [...msgs.value].reverse())
+// подсмотреть размытое слово: нажали — видно 3 с, в процент не идёт
+const peek = ref(new Set())
+function look(k) { const s = new Set(peek.value); s.add(k); peek.value = s; setTimeout(() => { const t = new Set(peek.value); t.delete(k); peek.value = t }, 3000) }
+const partPct = (parts) => { const n = parts.length, on = parts.filter((w) => w.on).length; return n ? { on, n, p: Math.round((on / n) * 100) } : null }
 const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [] })).sort((a, b) => b.at - a.at))
 const livePct = computed(() => cov.value.pct), missedL = computed(() => cov.value.missed)
 const hiddenS = () => String(props.step.ideal || '').replace(/\*\*|==|_/g, '').split(/[.!?;\n]+/).map((x) => x.trim().split(/\s+/).slice(0, 6).join(' ')).filter((x) => x.length > 3).slice(0, 10)
@@ -199,12 +201,10 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 <template>
   <div class="kball" :class="['th-' + theme, { idle, lv: isLive, v2, fx: step.ballFix === true }]" @pointerdown.stop>
     <!-- «· текст» (ballText): без шара — эталон под размытием, проявляются только сказанные слова; свернуть — кнопкой -->
-    <section v-if="tx" class="kbtx" :class="{ shut: !txOpen }">
-      <div class="kbtxh"><b class="kbtxp" :class="{ bad: done && pct < passN }">{{ pct }}%</b>
-        <div class="kbtxb"><span class="kbbar"><i :style="{ width: pct + '%' }" /></span><small>{{ idle ? 'пример' : `покрыто ${pct}% эталона · ` + (done && pct < passN ? `пока не зачёт, проход от ${passN}%` : `проход от ${passN}%`) }}</small></div>
-        <button v-if="!idle && !edit" type="button" class="kbtxt" :title="txOpen ? 'Свернуть текст эталона' : 'Показать текст эталона (размытый)'" @click="txOpen = !txOpen">{{ txOpen ? 'Скрыть текст' : 'Показать текст' }}</button></div>
-      <p v-if="txOpen || idle || edit" class="kbtxq"><template v-for="(x, j) in cov.words" :key="j"><span :class="cov.hit[j] ? (txNew.has(j) ? 'nw' : 'on') : done ? 'ms' : 'hd'">{{ x.w }}</span>{{ ' ' }}</template></p>
-    </section>
+    <!-- 25.11.2026 (макет «Плотно»): процент — тонкой строкой под вопросом; текст эталона — по кнопке «Эталон» у вопроса (Kp.vue, txShow);
+         размытое слово — нажать, покажется на 3 с (в процент не идёт) -->
+    <!-- процент — маленькой плашкой в строке вопроса (Kp.vue, рядом с «Эталоном»), отдельной полосы нет -->
+    <p v-if="tx && (txOpen || idle || edit)" class="kbtxq kbtx"><template v-for="(x, j) in cov.words" :key="j"><span :class="cov.hit[j] ? (txNew.has(j) ? 'nw' : 'on') : done ? 'ms' : peek.has('t' + j) ? 'pk' : 'hd'" @click="!cov.hit[j] && !done && look('t' + j)">{{ x.w }}</span>{{ ' ' }}</template></p>
     <div v-if="!idle && !v2 && !tx" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
     <!-- новый вид: одно окно — сверху вопрос (из Kp.vue, Teleport в #kb2h-…) и процент справа, ниже шар, внизу полоса -->
     <div v-if="!tx" class="kb2w" :class="{ on: v2 }">
@@ -227,13 +227,15 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
     <!-- шар Live (25.11.2026, макет «Шар Live — экран ответа»): засчитанное — одной строкой: кусок эталона жирным, серым — что сказал; новое сверху, в рамке.
          После «Готово» ниже — «Не прозвучало». Полоса прокрутки — как в Telegram: только при наведении -->
     <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kblv">
-      <div class="kblvh"><h4>Засчитано</h4><i>{{ got.length }}</i><small v-if="!done">новое — сверху</small></div>
-      <ul v-if="tx && msgs.length" class="kblvl kbmsg"><li v-for="(m, k) in msgsDesc" :key="m.at" :class="{ nw: k === 0 && !done }">
-        <div class="kbmh"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg><span>{{ m.heard || 'расшифровки нет' }}</span></div>
-        <div v-for="i in m.idx" :key="'o' + i" class="kbmp"><b>✓</b><span><template v-for="(w, j) in txFeed.find((x) => x.i === i)?.parts ?? []" :key="j"><span :class="{ kbtxh2: !w.on }">{{ w.w }}</span>{{ ' ' }}</template></span></div>
-        <div v-for="(b, j) in m.bad" :key="'b' + j" class="kbmp bad"><b>✕</b><span><s>{{ b.ref }}</s><small>в услышанном этого нет — не засчитано</small></span></div>
-        <small v-if="!m.idx.length && !m.bad.length" class="kbm0">{{ m.rep ? 'повтор — уже засчитано раньше' : 'нового нет' }}</small>
-      </li></ul>
+      <div v-if="!tx" class="kblvh"><h4>Засчитано</h4><i>{{ got.length }}</i><small v-if="!done">новое — сверху</small></div>
+      <ul v-if="tx && msgs.length" class="kbmsg2"><template v-for="(m, k) in msgsDesc" :key="m.at">
+        <li v-for="i in m.idx" :key="'o' + i" class="kbr" :class="{ nw: k === 0 && !done }"><i class="kbrd" />
+          <span class="kbrr"><template v-for="(w, j) in txFeed.find((x) => x.i === i)?.parts ?? []" :key="j"><span :class="w.on ? '' : peek.has(i + ':' + j) ? 'pk' : 'kbtxh2'" @click="!w.on && look(i + ':' + j)">{{ w.w }}</span>{{ ' ' }}</template></span>
+          <template v-for="pp in [partPct(txFeed.find((x) => x.i === i)?.parts ?? [])]" :key="'p'"><b v-if="pp" class="kbrp" :class="{ full: pp.p === 100 }" :title="`сказано ${pp.on} из ${pp.n} слов куска — несказанное размыто и в процент не идёт`">{{ pp.on }}/{{ pp.n }} · {{ pp.p }}%</b></template>
+          <span class="kbrs">{{ txFeed.find((x) => x.i === i)?.said || m.heard }}</span></li>
+        <li v-for="(b, j) in m.bad" :key="'b' + j" class="kbr bad"><i class="kbrd" /><span class="kbrr"><s>{{ b.ref }}</s></span><b class="kbrp">не засчитано</b><span class="kbrs">в услышанном нет{{ m.heard ? ' · услышано: «' + m.heard + '»' : '' }}</span></li>
+        <li v-if="!m.idx.length && !m.bad.length" class="kbr none"><i class="kbrd" /><span class="kbrs">{{ m.rep ? 'повтор — уже засчитано раньше' : 'нового нет' }}{{ m.heard ? ' · услышано: «' + m.heard + '»' : '' }}</span></li>
+      </template></ul>
       <ul v-else-if="!tx && got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
       <p v-else class="kb2e">пока ничего</p>
       <template v-if="done && !tx">
@@ -370,6 +372,20 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbtxq .hd { color: #c9a77c; filter: blur(5px); user-select: none } .kbtxq .nw { background: #fde3b4; box-shadow: 0 2px 0 #cd8a30; border-radius: 3px; transition: background 1s }
 .kbtxq .ms { color: #b3261e; opacity: .8; text-decoration: underline dashed rgba(179, 38, 30, .45); text-underline-offset: 4px }
 .kbmsg li { display: flex; flex-direction: column; gap: 6px }
+/* «· текст», плотно (25.11.2026): процент строкой, строки — кусок эталона, под ним — как сказали, справа — сколько слов куска сказано */
+.kbtm { display: flex; align-items: center; gap: 8px; margin: 2px 4px 8px } .kbtm b { font-size: 15px; font-weight: 900; color: #cd8a30 } .kbtm small { font-size: 12.5px; font-weight: 700; color: #9a6f4a }
+.kbtm.bad b, .kbtm.bad small { color: #d92d20 }
+.kbtmb { position: relative; flex: 1; height: 5px; border-radius: 3px; background: #f4dcb8 } .kbtmb i { display: block; height: 100%; border-radius: 3px; background: #cd8a30; transition: width .4s }
+.kbtmb em { position: absolute; top: -2px; width: 2px; height: 9px; background: #9a6f4a; opacity: .45 }
+.kbtxq.kbtx { margin: -2px 0 10px; padding: 12px 16px; display: block }
+.kbtxq .pk, .kbrr .pk { background: #fff3dc; border-radius: 4px; box-shadow: 0 0 0 1px #e9c99c; color: #7b4224 } .kbtxq .hd, .kbrr .kbtxh2 { cursor: pointer }
+.kbmsg2 { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px }
+.kbr { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 1px 10px; align-items: baseline; padding: 6px 12px; border-radius: 10px; background: #fff }
+.kbr.nw { box-shadow: inset 0 0 0 1.5px #cd8a30 } .kbrd { width: 6px; height: 6px; border-radius: 50%; background: #e8c48e; align-self: center } .kbr.nw .kbrd { background: #cd8a30 }
+.kbrr { font-size: 15px; font-weight: 800; color: #351a05; line-height: 1.4; min-width: 0 } .kbrs { grid-column: 2 / 4; font-size: 13px; font-weight: 600; color: #a08a72; line-height: 1.35 }
+.kbrp { padding: 1px 7px; border-radius: 999px; background: #fdf0e0; color: #c2590a; font-size: 11.5px; font-weight: 900; white-space: nowrap } .kbrp.full { background: #e9f7e0; color: #2e8b00 }
+.kbr.bad { background: #fff7f5 } .kbr.bad .kbrd { background: #e5484d } .kbr.bad s { color: #b3261e; font-weight: 700 } .kbr.bad .kbrp { background: #fdecea; color: #b3261e } .kbr.bad .kbrs { color: #b3261e; opacity: .8 }
+.kbr.none { background: transparent; padding: 2px 12px } .kbr.none .kbrs { grid-column: 2 / 4; font-size: 12.5px }
 .kbmh { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 12px 12px 12px 4px; background: #fbeedb; color: #5c4632; font-size: 14px; font-weight: 600; line-height: 1.4 }
 .kbmh svg { flex: none; width: 15px; height: 15px; margin-top: 2px; fill: none; stroke: #cd8a30; stroke-width: 2; stroke-linecap: round }
 .kbmp { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; font-size: 15px; font-weight: 800; color: #351a05; line-height: 1.35 } .kbmp > b { color: #cd8a30; font-weight: 900; justify-self: center }

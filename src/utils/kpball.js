@@ -19,13 +19,16 @@
 //  (ballPrompt из JSON экрана). Микрофон — рация: нажал — слушает, нажал ещё раз — модель молча вызывает cover: какие куски эталона
 //  ученик передал (ref — дословно, said — что сказал). Процент и «не прозвучало» — на фронте (refCover). Нарезки на блоки и «РЕЧЬ: …» текстом нет.
 //  Статусы запросов (нарезка, сверка) — ballNet[id экрана], их рисует подвал «Ответа по смыслу» (Kp.vue), рядом с диктовкой.
-import { reactive } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { apiRequest } from '../firebase'
 import { firstKey, startTalk, liveModels, liveName } from './live'
 
 
 /** статусы для подвала: ballNet[id] = { split: { st, txt }, cover: { st, txt }, model } · st: off | busy | on | err */
 export const ballNet = reactive({})
+// «· текст» (25.11.2026): показан ли размытый текст эталона — кнопка «Эталон» у вопроса (Kp.vue) и карточка (KpBall) делят одно значение; помнится
+export const txShow = ref((() => { try { return localStorage.getItem('tma.balltext.open') !== '0' } catch { return true } })())
+watch(txShow, (v) => { try { localStorage.setItem('tma.balltext.open', v ? '1' : '0') } catch { /* */ } })
 // lv — шар Live (25.11.2026): что сейчас — ph: '' | 'rec' (слушает, cut — время прошлого среза) | 'think' (кусок ушёл, at — когда; Gemini ищет совпадения);
 //   last — итог прошлой сверки: { n — сколько засчитано, ms — сколько думала }
 export const netOf = (id) => (ballNet[id] ??= { split: { st: 'off', txt: '' }, cover: { st: 'off', txt: 'ждёт речь' }, model: '', lv: { ph: '', at: 0, cut: 0, last: null }, log: [] })
@@ -177,14 +180,16 @@ export function refCover(ideal, refs) {
 /** «Шар Live · текст» (kpballtext, 25.11.2026): засчитываются только СКАЗАННЫЕ слова. Кусок (ref) ищем в эталоне как refCover,
  *  но из его слов открываем лишь те, чьи основы есть в said (что сказал ученик): модель вернула кусок длиннее сказанного — лишнее
  *  остаётся размытым и в процент не идёт. said пустой — как раньше, весь кусок. → { pct, hit, words, missed, items: [{ idx: [номера слов эталона], parts: [{ w, on }] }] } */
+const NUM_W = ['jed', 'jeden', 'dwa', 'dwie', 'dwu', 'dwó', 'trz', 'czt', 'czw', 'pię', 'pią', 'sze', 'szó', 'sie', 'sió', 'osi', 'ósm', 'dzi', 'set', 'tys', 'pierw', 'drug', 'trze', 'dwud', 'trzyd', 'jedena', 'dwuna', 'kilk']          // начала польских числительных
 export function saidCover(ideal, found) {
   const words = refWords(ideal), hit = words.map(() => false), items = []
   for (const f of found) {
     const one = refCover(ideal, [f.ref])
     if (!one.placed[0]) { items.push({ idx: [], parts: String(f.ref).split(/\s+/).filter(Boolean).map((w) => ({ w, on: false })) }); continue }
     const said = String(f.said || '').trim(), ss = new Set((said || f.ref).split(/\s+/).map(stem).filter(Boolean))
+    const saidNum = /\d/.test(said) || said.toLowerCase().split(/\s+/).some((w) => NUM_W.some((p) => w.startsWith(p)))          // число сказано словом: «szóstego» = 6
     const span = one.hit.map((h, j) => (h ? j : -1)).filter((j) => j >= 0), idx = [], parts = []
-    for (let j = span[0]; j <= span.at(-1); j++) { const on = ss.has(words[j].s); parts.push({ w: words[j].w, on }); if (on) { idx.push(j); hit[j] = true } }
+    for (let j = span[0]; j <= span.at(-1); j++) { const on = ss.has(words[j].s) || (saidNum && /^\d+[.,:;]?$/.test(words[j].w)); parts.push({ w: words[j].w, on }); if (on) { idx.push(j); hit[j] = true } }
     items.push({ idx, parts })
   }
   const missed = []; let run = []
