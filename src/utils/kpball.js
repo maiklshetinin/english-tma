@@ -226,9 +226,9 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
   const deliver = () => { clearTimeout(pendTm); if (!pend) return; const g = judge(pend); pend = null; used = true; if (n.lv?.last) n.lv.last.n = g.length; onCover?.(g) }
   if (!n.lv) n.lv = { ph: '', at: 0, cut: 0, last: null }
   if (!n.log) n.log = []
-  n.log.splice(0); const T0 = Date.now()
+  n.log.splice(0); const T0 = Date.now(); n.t0 = T0
   /** в журнал; same — дописать к прошлой строке того же вида (расшифровка идёт кусками) */
-  const lg = (k, x, same = false) => { const t = +((Date.now() - T0) / 1000).toFixed(1), last = n.log.at(-1); if (same && last?.k === k) { last.x += x; return } n.log.push({ t, k, x: String(x) }); if (n.log.length > 80) n.log.splice(0, n.log.length - 80) }
+  const lg = (k, x, same = false, full = '') => { const t = +((Date.now() - T0) / 1000).toFixed(1), last = n.log.at(-1); if (same && last?.k === k) { last.x += x; return } n.log.push({ t, k, x: String(x), ...(full ? { full: String(full) } : {}) }); if (n.log.length > 120) n.log.splice(0, n.log.length - 120) }          // full — целиком (журнал колонкой, 25.11.2026)
   const L = n.lv          // реактивный — его рисует подвал (строка «слушает / ищет совпадения / засчитано»)
   const think = (at = Date.now()) => { L.ph = 'think'; L.at = t0 = at }
   const endWait = () => { clearTimeout(waitTm); if (wait) { wait = false; hearUntil = Date.now() + 3500; const h0 = hearH; setTimeout(() => { if (!talking && hearH === h0) hearH = null }, 2500) } }          // хвост расшифровки ещё 2,5 с идёт в поле; текстом не дублируем
@@ -262,14 +262,14 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
       if (closed) return
       sess = startTalk({ key, model: m, system, lang: 'pl-PL', temperature: 0.2, tools: ballTools(tool, fix), extra, micLater: true, quiet: true, manual: true, on: {
         state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
-        ready: () => { ready = true; lg('send', 'соединение готово · ' + modelId + ' · инструкция (ballPrompt): ' + String(system).replace(/\s+/g, ' ').slice(0, 300) + '…'); flush() },
+        ready: () => { ready = true; lg('send', 'соединение готово · ' + modelId + ' · инструкция (ballPrompt): ' + String(system).replace(/\s+/g, ' ').slice(0, 300) + '…', false, system); flush() },
         turn: () => { deliver(); lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
         text: (role, t) => { if (role === 'me') { said += t; lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
         level: (v) => { if (talking && v > 0.06 && !heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
           if (name === 'cover') {
-            lg('cover', JSON.stringify(args).slice(0, 400) + ' · ' + sec)
+            lg('cover', JSON.stringify(args).slice(0, 400) + ' · ' + sec, false, JSON.stringify(args, null, 1))
             const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim(), fix: String(x?.fix ?? '').trim() })).filter((x) => x.ref)
             n.cover = { st: 'on', txt: (got.length ? `найдено ${got.length}` : 'нового нет') + ` · ${sec}` }
             if (L.ph === 'think') L.last = { n: got.length, ms: Date.now() - L.at }
@@ -287,6 +287,8 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
 }
 
 export const ballLiveOf = (id) => liveSessions[id]
+/** Запись в журнал Live со стороны приложения (что сделали с ответом модели), 25.11.2026 */
+export function ballLog(id, k, x) { const n = netOf(id); if (!n.log) n.log = []; n.log.push({ t: +((Date.now() - (n.t0 || Date.now())) / 1000).toFixed(1), k, x: String(x) }) }
 /** Диктовка через Live-сессию шара — тот же вид, что у startDictation: on { state, interim, final, level } → { stop } */
 export function startBallDictation({ id, on = {} }) {
   const lv = liveSessions[id]

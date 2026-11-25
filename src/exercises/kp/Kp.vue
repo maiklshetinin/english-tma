@@ -227,8 +227,22 @@ const v2Head = computed(() => !!(props.step.ball && props.step.ballLive && props
 // журнал Live (25.11.2026, отладка): нажатие на статус в подвале — что ушло в модель и что она ответила (ballNet[id].log, пишет utils/kpball.js)
 const logOpen = ref(false), logEl = ref(null)
 const liveLog = computed(() => (props.step.ballLive ? ballNet[props.step.id]?.log ?? [] : null))
-const LOGK = { send: '→ модели', mic: '🎙', voice: '🎙 голос', pause: '⏸ пауза', heard: 'Live слышит', cover: '← засчитала', blocks: '← нарезала', said: '← сказала', turn: '← ход окончен', cut: '✂ отсечено', err: '⚠ ошибка' }
+const LOGK = { send: '→ модели', mic: '🎙', voice: '🎙 голос', pause: '⏸ пауза', heard: 'Live слышит', cover: '← засчитала', blocks: '← нарезала', said: '← сказала', turn: '← ход окончен', cut: '✂ отсечено', app: '= приложение', err: '⚠ ошибка' }
 watch(() => liveLog.value?.length, () => nextTick(() => { const el = logEl.value; if (el) el.scrollTop = el.scrollHeight }))
+// «· текст» (ballText, 25.11.2026, макет «журнал справа»): журнал — тёмной колонкой во всю высоту справа (телефон — шторкой снизу);
+// фильтры, «Копировать», запись целиком по нажатию (инструкция, сырой JSON ответа). Экран ответа сдвигается влево и работает
+const jcol = computed(() => !!props.step.ballText)
+const JF = [{ k: 'all', t: 'Всё' }, { k: 'out', t: '→ ушло' }, { k: 'in', t: '← пришло' }, { k: 'cut', t: '✂ отсечено' }]
+const jf = ref('all'), jOpen = ref(new Set()), jCopied = ref(false)
+const JIN = ['cover', 'said', 'turn', 'heard']
+const jList = computed(() => (liveLog.value ?? []).map((x, i) => ({ ...x, i })).filter((x) => jf.value === 'all' || (jf.value === 'out' ? x.k === 'send' : jf.value === 'in' ? JIN.includes(x.k) : x.k === 'cut' || x.k === 'app')))
+const jStat = computed(() => { const l = liveLog.value ?? []; const c = l.filter((x) => x.k === 'cover'); const cut = l.filter((x) => x.k === 'cut').reduce((a, x) => a + (+(/отсечено (\d+)/.exec(x.x)?.[1] || 1)), 0)
+  const ms = c.map((x) => parseFloat((/· ([\d,]+) с$/.exec(x.x)?.[1] || '').replace(',', '.'))).filter((v) => v > 0)
+  return `ответов модели ${c.length} · отсечено ${cut}` + (ms.length ? ` · средний ответ ${(ms.reduce((a, v) => a + v, 0) / ms.length).toFixed(1).replace('.', ',')} с` : '') })
+function jToggle(i) { const s = new Set(jOpen.value); s.has(i) ? s.delete(i) : s.add(i); jOpen.value = s }
+async function jCopy() { const t = (liveLog.value ?? []).map((x) => `${x.t.toFixed(1)} с\t${LOGK[x.k] || x.k}\t${x.full || x.x}`).join('\n'); try { await navigator.clipboard.writeText(t); jCopied.value = true; setTimeout(() => { jCopied.value = false }, 1500) } catch { /* */ } }
+watch(() => logOpen.value && jcol.value, (v) => { try { document.body.classList.toggle('kjl-on', !!v) } catch { /* */ } })
+onBeforeUnmount(() => { try { document.body.classList.remove('kjl-on') } catch { /* */ } })
 // секундомер строки Live в подвале — тикает, только пока слушает или Gemini думает
 const lvNow = ref(Date.now()); let lvTm = 0
 const sec1 = (ms) => (Math.max(0, ms) / 1000).toFixed(1).replace('.', ',')
@@ -530,7 +544,16 @@ function jsApply() {
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
       <span v-else-if="bridge && !isLive" class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
       <button v-if="liveLine" type="button" class="knt kntbtn" :class="[liveLine.st, { on: logOpen }]" title="Журнал Live: что ушло в модель и что она ответила" @pointerdown.stop @click="logOpen = !logOpen"><i />{{ liveLine.t }}<em v-if="liveLine.st === 'connecting' && !/с$/.test(liveLine.t)" class="kdd"><b>.</b><b>.</b><b>.</b></em><small v-if="liveLine.s" class="knts">{{ liveLine.s }}</small><b class="kntlg">журнал {{ logOpen ? '▴' : '▾' }}</b></button>
-      <div v-if="logOpen && liveLog" class="klog" @pointerdown.stop @wheel.stop>
+      <button v-if="jcol && liveLog && !idle" type="button" class="kjlb" :class="{ on: logOpen }" title="Журнал нейросети колонкой: что ушло в модель, что она ответила, что отсекло приложение" @pointerdown.stop @click="logOpen = !logOpen"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>Журнал</button>
+      <Teleport to="body"><aside v-if="jcol && logOpen && liveLog" class="kjl" @pointerdown.stop @wheel.stop>
+        <div class="kjlh"><b>Журнал Live</b><small :class="liveLine?.st">● {{ ballNet[step.id]?.model || 'Live' }}</small><button type="button" class="kjlc" @click="jCopy">{{ jCopied ? 'Скопировано' : 'Копировать' }}</button><button type="button" class="kjlx" aria-label="Закрыть журнал" @click="logOpen = false">✕</button></div>
+        <div class="kjlf"><button v-for="f in JF" :key="f.k" type="button" :class="{ on: jf === f.k }" @click="jf = f.k">{{ f.t }}</button></div>
+        <ol ref="logEl" class="kjll"><li v-if="!jList.length" class="kjl0">пока пусто</li>
+          <li v-for="x in jList" :key="x.i" :class="'k-' + x.k"><time>{{ x.t.toFixed(1) }} с</time><b>{{ LOGK[x.k] || x.k }}</b>
+            <span :class="{ mono: x.k === 'cover' }">{{ jOpen.has(x.i) && x.full ? x.full : x.x }}<button v-if="x.full" type="button" class="kjlm" @click="jToggle(x.i)">{{ jOpen.has(x.i) ? 'свернуть' : 'целиком' }}</button></span></li></ol>
+        <div class="kjls">{{ jStat }}</div>
+      </aside></Teleport>
+      <div v-if="logOpen && liveLog && !jcol" class="klog" @pointerdown.stop @wheel.stop>
         <div class="klogh"><b>Журнал Live</b><small>что ушло в модель и что она ответила · новое внизу</small><button type="button" class="klogx" aria-label="Закрыть журнал" @click="logOpen = false">✕</button></div>
         <ol ref="logEl" class="klogl"><li v-if="!liveLog.length" class="klk0">пока пусто</li><li v-for="(x, i) in liveLog" :key="i" :class="'k-' + x.k"><time>{{ x.t.toFixed(1) }}</time><b>{{ LOGK[x.k] || x.k }}</b><span>{{ x.x }}</span></li></ol>
       </div>
@@ -665,6 +688,24 @@ function jsApply() {
 .klog { position: absolute; left: 0; right: 0; bottom: calc(100% + 70px); z-index: 50; display: flex; flex-direction: column; max-height: 300px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 14px; background: #fff; box-shadow: 0 6px 24px rgba(0, 0, 0, .12); overflow: hidden }
 .klogh { display: flex; align-items: baseline; gap: 8px; padding: 8px 12px; border-bottom: 1px solid rgba(0, 0, 0, .07) } .klogh b { font-size: 13px } .klogh small { flex: 1; color: #9a9a9a; font-size: 12px }
 .klogx { border: 0; background: none; color: #8f8f8f; font-size: 14px; cursor: pointer }
+/* журнал колонкой («· текст», 25.11.2026) */
+.kjlb { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 0; border-radius: 8px; background: #12151a; color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer } .kjlb.on { background: #2f3540 }
+.kjlb svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round }
+:global(body.kjl-on .lp:not(.embedded)) { padding-right: 460px; box-sizing: border-box }          /* экран ответа сдвигается влево */
+@media (max-width: 899px) { :global(body.kjl-on .lp:not(.embedded)) { padding-right: 0 } }
+.kjl { position: fixed; z-index: 1000; top: 0; right: 0; bottom: 0; width: 460px; box-sizing: border-box; display: flex; flex-direction: column; background: #12151a; color: #d6dbe3; border-left: 1px solid #2a2f37; font-family: inherit; box-shadow: -10px 0 40px rgba(0, 0, 0, .18) }
+@media (max-width: 899px) { .kjl { top: 72px; width: auto; left: 0; border-left: 0; border-radius: 20px 20px 0 0 } }
+.kjlh { display: flex; align-items: center; gap: 10px; padding: 14px 16px 8px } .kjlh b { font-size: 15px; font-weight: 900; color: #fff } .kjlh small { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; color: #58cc02; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .kjlh small.error { color: #ff6b6b } .kjlh small.connecting { color: #f5b14c }
+.kjlc, .kjlx { flex: none; border: 0; border-radius: 8px; background: #232831; color: #d6dbe3; font: inherit; font-size: 12px; font-weight: 800; padding: 5px 9px; cursor: pointer } .kjlc:hover, .kjlx:hover { background: #2f3540 }
+.kjlf { display: flex; gap: 4px; padding: 0 12px 8px } .kjlf button { border: 0; border-radius: 8px; background: none; color: #8b94a3; font: inherit; font-size: 12px; font-weight: 800; padding: 4px 9px; cursor: pointer } .kjlf button.on { background: #2f3540; color: #fff }
+.kjll { flex: 1; min-height: 0; margin: 0; padding: 0 16px; list-style: none; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #39404b transparent }
+.kjll li { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 2px 10px; padding: 8px 0; border-top: 1px solid #232831 }
+.kjll time { font-size: 11.5px; color: #6b7380; font-variant-numeric: tabular-nums; padding-top: 1px } .kjll b { font-size: 12px; font-weight: 800; color: #9fb3c8 }
+.kjll span { grid-column: 2; font-size: 13px; line-height: 1.45; color: #d6dbe3; overflow-wrap: anywhere; white-space: pre-wrap }
+.kjll span.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: #1b1f26; border-radius: 6px; padding: 6px 8px }
+.kjll .k-send b { color: #7fb8ff } .kjll .k-cover b { color: #7ee08a } .kjll .k-cut b, .kjll .k-err b, .kjll .k-said b { color: #ff7b72 } .kjll .k-app b { color: #f5b14c } .kjll .k-heard span { font-style: italic }
+.kjlm { margin-left: 6px; border: 0; background: none; color: #7fb8ff; font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0 }
+.kjl0 { color: #6b7380; padding: 10px 0 } .kjls { padding: 10px 16px 14px; border-top: 1px solid #232831; font-size: 12px; color: #8b94a3 }
 .klogl { margin: 0; padding: 6px 0; list-style: none; overflow-y: auto; font-size: 12.5px; line-height: 1.45 }
 .klogl li { display: flex; gap: 8px; padding: 2px 12px } .klogl time { flex: none; width: 34px; color: #b0b0b0; font-variant-numeric: tabular-nums; text-align: right }
 .klogl b { flex: none; width: 92px; color: #6b7280; font-weight: 700 } .klogl span { flex: 1; min-width: 0; color: #333; word-break: break-word }

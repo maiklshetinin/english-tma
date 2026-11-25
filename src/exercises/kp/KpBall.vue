@@ -8,7 +8,7 @@ import { useEdit } from '../ctx'
 import { kpCfg, kpReady, fill as fillT } from './defaults'
 import { kpPlain } from '../../utils/ai'
 import { reqOf } from '../../utils/overlay'
-import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, refCover, saidCover, fixDiff } from '../../utils/kpball'
+import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, refCover, saidCover, fixDiff, ballLog } from '../../utils/kpball'
 const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, final: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })          // text — всё сказанное (с черновиком), final — только готовые («чёрные») куски
 const ed = useEdit()
 // Темы шара (24.11.2026): белая (тест), «Космос» — тёмная панель со звёздами, слова светятся; «Как у Марии» — бежево-коричневая, цвета домашек
@@ -63,6 +63,12 @@ function onLiveFound(list) {
   const have = new Set(found.value.map((x) => x.ref.toLowerCase())), at = Date.now(), add = list.filter((x) => !have.has(x.ref.toLowerCase())).map((x, k) => ({ ...x, at: at - k }))
   const start = found.value.length; found.value = [...found.value, ...add]
   rebuild(add.map((_, k) => start + k)); liveRes()
+  if (tx.value) add.forEach((_, k) => {          // журнал колонкой (25.11.2026): что приложение сделало с куском — сколько слов открыто, что осталось размытым
+    const it = cov.value.items?.[start + k]; if (!it) return
+    const off = it.parts.filter((w) => !w.on).map((w) => w.w)
+    ballLog(props.step.id, 'app', it.parts.length ? `открыто ${it.parts.length - off.length} из ${it.parts.length} слов` + (off.length ? ` · не сказано — размыто, в процент не идёт: «${off.join(' ')}»` : ' · всё сказано') : 'кусок не найден в эталоне — не засчитан')
+  })
+  if (tx.value && list.length && !add.length) ballLog(props.step.id, 'app', 'повтор — уже засчитано раньше')
 }
 
 
