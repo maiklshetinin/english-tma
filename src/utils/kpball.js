@@ -213,6 +213,24 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
   // «нового вида». Вне окна (никто не нажимал микрофон) — отсекаем и пишем в журнал. Голос и расшифровку больше не требуем: у Live в этом
   // режиме их может не быть (v1 из-за этого отсекала настоящие ответы)
   let cuts = 0
+  // v3 (25.11.2026): расшифровка реплики («облачко» — что услышала Live) копится за нажатие (heard) и уходит вместе с ответом —
+  // KpBall хранит её сообщением. Куски модели сверяем с ней: в услышанном нет хотя бы половины слов куска (said) — кусок отбрасываем.
+  // Расшифровка приходит чуть позже функции — ответ держим до конца хода + 0,6 с тишины расшифровки (не дольше 3 с)
+  let heard = '', pend = null, pendTm = 0, turnDone = false
+  const stems = (t) => String(t).split(/\s+/).map(stem).filter((x) => x.length >= 3)
+  function deliver() {
+    clearTimeout(pendTm); if (!pend) return
+    const got = pend, h = heard.trim(); pend = null
+    let ok = got, bad = []
+    if (h) {
+      const hs = new Set(stems(h)); ok = []; bad = []
+      for (const x of got) { const ss = stems(x.said || x.ref); (ss.length && ss.filter((v) => hs.has(v)).length / ss.length >= 0.5 ? ok : bad).push(x) }
+      if (bad.length) { cuts += bad.length; n.cut = cuts; lg('cut', `отсечено ${bad.length}: в услышанном этого нет · ` + bad.map((x) => x.said || x.ref).join(' | ')) }
+    } else if (got.length) lg('app', 'расшифровки реплики нет — проверить нечем, засчитано как прислала модель')
+    if (n.lv?.last) n.lv.last.n = ok.length
+    onCover?.(ok, { heard: h, bad })
+  }
+  const later = (ms) => { clearTimeout(pendTm); pendTm = setTimeout(deliver, ms) }
   if (!n.lv) n.lv = { ph: '', at: 0, cut: 0, last: null }
   if (!n.log) n.log = []
   n.log.splice(0); const T0 = Date.now(); n.t0 = T0
@@ -238,7 +256,7 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
       if (closed || !sess || !ready) throw new Error('Live не подключён')
       hearH = h; if (!micOn) { micOn = true; await sess.listen() }
       if (hearH !== h) return          // отпустили, пока микрофон включался — реплики не было
-      talking = true; L.ph = 'rec'; sess.talkStart(); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; n.cover = { st: 'on', txt: 'слушает' }          // включили — звук пошёл в Live
+      talking = true; L.ph = 'rec'; sess.talkStart(); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; heard = ''; pend = null; turnDone = false; clearTimeout(pendTm); n.cover = { st: 'on', txt: 'слушает' }          // включили — звук пошёл в Live
     },
   }
   liveSessions[id] = api
@@ -252,8 +270,8 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
       sess = startTalk({ key, model: m, system, lang: 'pl-PL', temperature: 0.2, tools: ballTools(tool, fix), extra, micLater: true, quiet: true, manual: true, on: {
         state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
         ready: () => { ready = true; lg('send', 'соединение готово · ' + modelId + ' · инструкция (ballPrompt): ' + String(system).replace(/\s+/g, ' ').slice(0, 300) + '…', false, system); flush() },
-        turn: () => { lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
-        text: (role, t) => { if (role === 'me') { lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
+        turn: () => { if (guard && pend) { turnDone = true; later(heard ? 600 : 1500) } lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
+        text: (role, t) => { if (role === 'me') { if (guard) { heard += t; if (pend && turnDone) later(600) } lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
         level: (v) => { if (talking && v > 0.06 && !heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
@@ -264,8 +282,9 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
             if (L.ph === 'think') L.last = { n: got.length, ms: Date.now() - L.at }
             if (guard && got.length && !(talking || wait || Date.now() < hearUntil)) {          // вне окна реплики — модель сама, без речи
               cuts += got.length; n.cut = cuts; lg('cut', `отсечено ${got.length}: микрофон не нажимали — модель прислала сама · ` + got.map((x) => x.ref).join(' | '))
-              onCover?.([]); return { ok: true }
+              return { ok: true }
             }
+            if (guard) { if (!(talking || wait || Date.now() < hearUntil)) return { ok: true }; if (got.length || !pend) { pend = [...(pend ?? []), ...got]; later(3000) } return { ok: true } }          // пустой вне окна — модель гоняет по кругу, молча          // ждём конец хода и расшифровку
             onCover?.(got); return { ok: true }
           }
           lg('err', 'неизвестная функция ' + name)

@@ -46,6 +46,9 @@ const found = ref([])          // [{ ref, said, at }]
 const cov = computed(() => tx.value ? saidCover(props.step.ideal || '', found.value) : refCover(props.step.ideal || '', found.value.map((x) => x.ref)))
 // текст: слова эталона — открыто (сказано) / новое (последний засчитанный кусок) / размыто; лента — новое сверху, у куска несказанное размыто
 const txNew = computed(() => { const f = found.value; if (!f.length || props.done) return new Set(); let k = 0; f.forEach((x, i) => { if (x.at > f[k].at) k = i }); return new Set(cov.value.items?.[k]?.idx ?? []) })
+// сообщения (25.11.2026, v3): каждое нажатие микрофона — что услышала Live (расшифровка) и что из этого засчитано / отброшено
+const msgs = ref([])          // [{ at, heard, idx: [номера в found], bad: [{ ref, said }], rep }]
+const msgsDesc = computed(() => [...msgs.value].reverse())
 const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [] })).sort((a, b) => b.at - a.at))
 const livePct = computed(() => cov.value.pct), missedL = computed(() => cov.value.missed)
 const hiddenS = () => String(props.step.ideal || '').replace(/\*\*|==|_/g, '').split(/[.!?;\n]+/).map((x) => x.trim().split(/\s+/).slice(0, 6).join(' ')).filter((x) => x.length > 3).slice(0, 10)
@@ -58,7 +61,7 @@ function rebuild(fresh = []) {          // шар Live: блоки шара = н
   const all = new Set(f.map((_, i) => i)), old = new Set([...all].filter((i) => !fresh.includes(i)))
   ok.value = old; byAi.value = new Set(old); light(fresh, true)
 }
-function onLiveFound(list) {
+function onLiveFound(list, meta = null) {
   liveChecked.value = true
   const have = new Set(found.value.map((x) => x.ref.toLowerCase())), at = Date.now(), add = list.filter((x) => !have.has(x.ref.toLowerCase())).map((x, k) => ({ ...x, at: at - k }))
   const start = found.value.length; found.value = [...found.value, ...add]
@@ -69,6 +72,7 @@ function onLiveFound(list) {
     ballLog(props.step.id, 'app', it.parts.length ? `открыто ${it.parts.length - off.length} из ${it.parts.length} слов` + (off.length ? ` · не сказано — размыто, в процент не идёт: «${off.join(' ')}»` : ' · всё сказано') : 'кусок не найден в эталоне — не засчитан')
   })
   if (tx.value && list.length && !add.length) ballLog(props.step.id, 'app', 'повтор — уже засчитано раньше')
+  if (tx.value && meta) msgs.value = [...msgs.value, { at, heard: meta.heard || '', idx: add.map((_, k) => start + k), bad: meta.bad || [], rep: list.length - add.length }]
 }
 
 
@@ -151,7 +155,7 @@ async function cover() {
 const liveChecked = ref(false)
 const passN = computed(() => (Number.isFinite(props.step.pass) ? props.step.pass : 60))          // порог экрана — для подписи под процентом
 let lv = null
-function resetSay() { liveChecked.value = false; found.value = []; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0 }
+function resetSay() { liveChecked.value = false; found.value = []; msgs.value = []; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0 }
 function startLive() {
   lv?.stop(); resetSay()
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
@@ -224,7 +228,12 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
          После «Готово» ниже — «Не прозвучало». Полоса прокрутки — как в Telegram: только при наведении -->
     <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kblv">
       <div class="kblvh"><h4>Засчитано</h4><i>{{ got.length }}</i><small v-if="!done">новое — сверху</small></div>
-      <ul v-if="tx && txFeed.length" class="kblvl"><li v-for="(x, k) in txFeed" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr"><template v-for="(w, j) in x.parts" :key="j"><span :class="{ kbtxh2: !w.on }">{{ w.w }}</span>{{ ' ' }}</template></span><span v-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
+      <ul v-if="tx && msgs.length" class="kblvl kbmsg"><li v-for="(m, k) in msgsDesc" :key="m.at" :class="{ nw: k === 0 && !done }">
+        <div class="kbmh"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg><span>{{ m.heard || 'расшифровки нет' }}</span></div>
+        <div v-for="i in m.idx" :key="'o' + i" class="kbmp"><b>✓</b><span><template v-for="(w, j) in txFeed.find((x) => x.i === i)?.parts ?? []" :key="j"><span :class="{ kbtxh2: !w.on }">{{ w.w }}</span>{{ ' ' }}</template></span></div>
+        <div v-for="(b, j) in m.bad" :key="'b' + j" class="kbmp bad"><b>✕</b><span><s>{{ b.ref }}</s><small>в услышанном этого нет — не засчитано</small></span></div>
+        <small v-if="!m.idx.length && !m.bad.length" class="kbm0">{{ m.rep ? 'повтор — уже засчитано раньше' : 'нового нет' }}</small>
+      </li></ul>
       <ul v-else-if="!tx && got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
       <p v-else class="kb2e">пока ничего</p>
       <template v-if="done && !tx">
@@ -360,6 +369,12 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbtxq { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 19px; line-height: 1.75; color: #351a05 }
 .kbtxq .hd { color: #c9a77c; filter: blur(5px); user-select: none } .kbtxq .nw { background: #fde3b4; box-shadow: 0 2px 0 #cd8a30; border-radius: 3px; transition: background 1s }
 .kbtxq .ms { color: #b3261e; opacity: .8; text-decoration: underline dashed rgba(179, 38, 30, .45); text-underline-offset: 4px }
+.kbmsg li { display: flex; flex-direction: column; gap: 6px }
+.kbmh { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 12px 12px 12px 4px; background: #fbeedb; color: #5c4632; font-size: 14px; font-weight: 600; line-height: 1.4 }
+.kbmh svg { flex: none; width: 15px; height: 15px; margin-top: 2px; fill: none; stroke: #cd8a30; stroke-width: 2; stroke-linecap: round }
+.kbmp { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; font-size: 15px; font-weight: 800; color: #351a05; line-height: 1.35 } .kbmp > b { color: #cd8a30; font-weight: 900; justify-self: center }
+.kbmp.bad > b { color: #b3261e } .kbmp.bad s { color: #b3261e; font-weight: 700; text-decoration-thickness: 2px } .kbmp.bad small { display: block; font-size: 12px; font-weight: 700; color: #b3261e; opacity: .8 }
+.kbm0 { font-size: 12.5px; font-weight: 700; color: #a08a72; padding-left: 24px }
 .kbtxh2 { filter: blur(4px); opacity: .7; user-select: none }          /* в ленте: часть куска, которую не сказали, — размыта */
 @media (max-width: 560px) { .kbtx { padding: 12px 14px } .kbtxp { font-size: 26px } .kbtxq { font-size: 16px } } .kblvl.no .kblvc { color: #b3261e } .kblvl.no .kblvr { color: #8c1d18; font-weight: 700 }
 .kball .kbp.lvbad b { color: #b3261e } .kball .kbp.lvbad small { color: #b3261e } .kball .kbp.lvbad .kbbar i { background: #e5484d }
