@@ -201,7 +201,7 @@ export function saidCover(ideal, found) {
 /** Live-сессия шара. system, tool — из JSON экрана; onCover([{ ref, said }]) — найденные куски эталона; onTurn() — модель договорила.
  *  → { send(text), stop(), alive, model }. Сообщения до готовности сессии ждут в очереди */
 const liveSessions = {}          // id экрана → api открытой Live-сессии (микрофон диктовки берёт её же)
-export function openBallLive({ id, question, ideal, system, tool, fix = false, guard = false, extra = null, onCover, onTurn }) {          // guard — «· текст» (25.11.2026): засчитанное без речи отсекаем (см. ниже)          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
+export function openBallLive({ id, question, ideal, system, tool, fix = false, guard = false, fresh = false, extra = null, onCover, onTurn }) {          // fresh — «· текст» (25.11.2026): после каждого ответа связь рвём и открываем новую — один запрос, один ответ          // guard — «· текст» (25.11.2026): засчитанное без речи отсекаем (см. ниже)          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
   const n = netOf(id), key = firstKey()
   if (!key) throw new Error('Нужен ключ Gemini в профиле')
   let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now()
@@ -243,7 +243,7 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
   const lg = (k, x, same = false, full = '') => { const t = +((Date.now() - T0) / 1000).toFixed(1), last = n.log.at(-1); if (same && last?.k === k) { last.x += x; return } n.log.push({ t, k, x: String(x), ...(full ? { full: String(full) } : {}) }); if (n.log.length > 120) n.log.splice(0, n.log.length - 120) }          // full — целиком (журнал колонкой, 25.11.2026)
   const L = n.lv          // реактивный — его рисует подвал (строка «слушает / ищет совпадения / засчитано»)
   const think = (at = Date.now()) => { L.ph = 'think'; L.at = t0 = at }
-  const endWait = () => { clearTimeout(waitTm); if (wait) { wait = false; hearUntil = Date.now() + 3500; const h0 = hearH; setTimeout(() => { if (!talking && hearH === h0) hearH = null }, 2500) } }          // хвост расшифровки ещё 2,5 с идёт в поле; текстом не дублируем
+  const endWait = () => { clearTimeout(waitTm); if (wait) { wait = false; hearUntil = Date.now() + 3500; if (fresh) setTimeout(recycle, 300); const h0 = hearH; setTimeout(() => { if (!talking && hearH === h0) hearH = null }, 2500) } }          // хвост расшифровки ещё 2,5 с идёт в поле; текстом не дублируем
   const api = {
     get model() { return modelName }, get modelId() { return modelId }, get alive() { return !closed },
     get hearing() { return !!hearH || wait || Date.now() < hearUntil },
@@ -258,6 +258,7 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
         clearTimeout(waitTm); waitTm = setTimeout(endWait, 12_000)          // ответа нет 12 с — не держим
         return
       }
+      if (fresh && !closed && !ready) await Promise.race([readyP, new Promise((r) => setTimeout(r, 6000))])          // новая связь ещё открывается — подождать
       if (closed || !sess || !ready) throw new Error('Live не подключён')
       hearH = h; if (!micOn) { micOn = true; await sess.listen() }
       if (hearH !== h) return          // отпустили, пока микрофон включался — реплики не было
@@ -266,15 +267,18 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
   }
   liveSessions[id] = api
   n.cover = { st: 'busy', txt: 'подключаюсь к Live-модели…' }
-  ;(async () => {
+  // связь с Live; fresh — после каждого ответа старая закрывается (recycle) и сразу открывается новая: модель не может прислать что-то
+  // «от себя» позже, у каждой реплики — своя чистая сессия (тот же промпт)
+  let readyOk = null, readyP = new Promise((r) => { readyOk = r })
+  async function connect() {
     try {
-      const m = (await liveModels(key))[0]
-      if (!m) throw new Error('Google не дал ключу Live-модели')
-      modelId = m; modelName = liveName(m); n.model = modelName + ' · Live'
+      if (!modelId) { const m = (await liveModels(key))[0]; if (!m) throw new Error('Google не дал ключу Live-модели'); modelId = m; modelName = liveName(m); n.model = modelName + ' · Live' }
+      const m = modelId
       if (closed) return
-      sess = startTalk({ key, model: m, system, lang: 'pl-PL', temperature: 0.2, tools: ballTools(tool, fix), extra, micLater: true, quiet: true, manual: true, on: {
-        state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
-        ready: () => { ready = true; lg('send', 'соединение готово · ' + modelId + ' · инструкция (ballPrompt): ' + String(system).replace(/\s+/g, ' ').slice(0, 300) + '…', false, system); flush() },
+      let me = null
+      me = sess = startTalk({ key, model: m, system, lang: 'pl-PL', temperature: 0.2, tools: ballTools(tool, fix), extra, micLater: true, quiet: true, manual: true, on: {
+        state: (st, info) => { if (me && me !== sess) return; if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
+        ready: () => { ready = true; readyOk?.(); lg('send', 'соединение готово · ' + modelId + ' · инструкция (ballPrompt): ' + String(system).replace(/\s+/g, ' ').slice(0, 300) + '…', false, system); flush() },
         turn: () => { if (guard && pend) { turnDone = true; later(heard ? 600 : 1500) } lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
         text: (role, t) => { if (role === 'me') { if (guard) { heard += t; if (pend && turnDone) later(600) } lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
         level: (v) => { if (talking && v > 0.06 && !heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
@@ -297,7 +301,15 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
         },
       } })
     } catch (e) { fail('Live: ' + (e.message || e)) }
-  })()
+  }
+  function recycle() {
+    if (closed || talking || !sess) return
+    const old = sess; sess = null; ready = false; micOn = false; readyP = new Promise((r) => { readyOk = r })
+    try { old.stop() } catch { /* */ }
+    lg('app', 'связь закрыта — один запрос, один ответ; открываю новую сессию'); n.cover = { st: 'busy', txt: 'новая сессия…' }
+    connect()
+  }
+  connect()
   return api
 }
 

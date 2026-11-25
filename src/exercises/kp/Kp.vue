@@ -425,7 +425,7 @@ function jsApply() {
         </template>
         <TtsDialog v-if="tts" :text="ttsText" what="вопрос" :by="step.audioBy || ''" :has="!!step.audio" @close="tts = false" @save="ttsSave" />
         <template v-if="!p.edit">
-          <button v-if="step.ballText" type="button" class="krb kx" :class="{ on: txShow }" :title="txShow ? 'Скрыть текст эталона' : 'Показать текст эталона — размытый, проявляются сказанные слова'" @pointerdown.stop @click="txToggle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>Эталон</button>          <!-- «· текст» (25.11.2026, макет «Без шара»): одна кнопка — показать / скрыть размытый эталон -->
+          <button v-if="step.ballText" type="button" class="krb kx" :class="{ on: txShow }" :title="txShow ? 'Скрыть текст эталона' : 'Показать текст эталона — размытый, проявляются сказанные слова'" @pointerdown.stop @click="txToggle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg><span class="kxl">Эталон</span></button>          <!-- «· текст» (25.11.2026, макет «Без шара»): одна кнопка — показать / скрыть размытый эталон -->
           <button v-else type="button" class="krb" :class="{ on: refOpen }" :disabled="!p.st.done" :title="p.st.done ? 'Показать эталон' : 'Эталон откроется после проверки'" @pointerdown.stop @click="refOpen = !refOpen">Эталон</button>
           <div v-if="refOpen && p.st.done" class="krp" @pointerdown.stop>
             <button type="button" class="krx" title="Закрыть" @click="refOpen = false">✕</button>
@@ -689,6 +689,12 @@ function jsApply() {
 .kptt.live b { font-variant-numeric: tabular-nums; white-space: nowrap }
 /* телефон (25.11.2026, макет): пока слушает — «Готово» прячется, красная кнопка на всю ширину, подпись короткая «Слушаю · 0:12» */
 @media (max-width: 560px) { .kpt.live .kpdone { display: none } .kptlong { display: none } .kptt .kcwv { width: auto; flex: 1 } }
+/* телефон (25.11.2026): кнопка микрофона не вылезает за экран, строка статуса переносится, «Эталон» — одним глазом, вопросу больше места */
+@media (max-width: 560px) {
+  .kpt { padding: 8px } .kpr { min-width: 0 } .kptt { min-width: 0; padding: 0 12px; gap: 8px; overflow: hidden } .kptt .kcwv { min-width: 0; overflow: hidden } .kptt b { min-width: 0; overflow: hidden; text-overflow: ellipsis }
+  .knt { white-space: normal; flex-wrap: wrap; row-gap: 2px } .kntbtn { text-align: left; white-space: normal }
+  .krb.kx { width: 40px; height: 40px; padding: 0; justify-content: center } .krb.kx .kxl { display: none }
+}
 .kpdone { flex: none; min-height: 46px; padding: 0 18px; border: 0; border-radius: 14px; background: #58cc02; color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer } .kpdone:hover:not(:disabled) { background: #4fb802 } .kpdone:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kpdone.busy:disabled { background: #58cc02; color: #fff }
 .kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
 .kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kcgo.busy:disabled { background: #1cb0f6; color: #fff }
