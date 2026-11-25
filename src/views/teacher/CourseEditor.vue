@@ -1331,6 +1331,8 @@ function editTitle() { titleEdit.value = true; nextTick(() => document.querySele
 const chMenu = ref(null)                 // открытый список в меню главы: 'color'
 // вид подсветки: 'rail' — рельс главы, 'wide' — с ветками, 'none' — без подсветки; цвет — отдельно
 // 25.11.2026: как ученик видит уроки Chapter — кружками (как было) или квадратиками, как иконки iPhone; линия-путь та же
+// Кружки / Квадратики главы (25.11.2026): и на доске редактора уроки и чекпоинт главы — квадратиками
+const sqIds = computed(() => { const out = new Set(); let on = false; for (const x of order.value) { if (x.type === 'unit') on = x.look === 'sq'; else if (on) out.add(x.id) } return out })
 function setLook(u, v) { if (v === 'sq') u.look = 'sq'; else delete u.look; save() }
 function setHl(u, how) { delete u.hl; delete u.hlw; if (how === 'none') u.hl = 'none'; if (how === 'wide') u.hlw = true; save() }
 function setHlc(u, c) { if (c === HL_DEF) delete u.hlc; else u.hlc = c; if (u.hl === 'none') delete u.hl; chMenu.value = null; save() }
@@ -1897,7 +1899,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
           </div>
         </template>
         <!-- Рельс -->
-        <div v-for="(x, i) in order" :key="x.id" :data-sel="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { ren: renaming === x.id, lift: drag.on && drag.item?.id === x.id, on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]"
+        <div v-for="(x, i) in order" :key="x.id" :data-sel="x.id" class="bead" :class="[x.type, stateOf(x, i), 's-' + pos(i).side, { sq: sqIds.has(x.id), ren: renaming === x.id, lift: drag.on && drag.item?.id === x.id, on: sel === x.id || isM(x.id), rsel: !!selColor[x.id] }]"
           :style="beadStyle(x, pos(i), colorOf(x, i))" @pointerdown.stop="startDrag($event, { item: x, from: 'rail' })" @dblclick.stop="x.type === 'unit' && rename(x)" @pointerenter="play($event, true)" @pointerleave="play($event, false)">
           <template v-if="x.type === 'unit'">
             <!-- меню главы, как в Figma: подсветка блока главы -->
@@ -2212,6 +2214,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .bead.current { box-shadow: 0 6px 0 var(--d), 0 0 0 7px #fff, 0 0 0 11px color-mix(in srgb, var(--c) 35%, transparent); animation: pulse 1.6s ease-in-out infinite }
 @keyframes pulse { 50% { box-shadow: 0 6px 0 var(--d), 0 0 0 7px #fff, 0 0 0 16px color-mix(in srgb, var(--c) 12%, transparent) } }
 .bead.on { outline: 3px solid #0d99ff; outline-offset: 6px }
+.bead.sq { border-radius: 20%; animation: none } .bead.sq .vid, .bead.sq .img { border-radius: 20% !important }          /* глава «Квадратики» */
 /* Место, куда встанет взятое: пустое кольцо на рельсе */
 .bead.lift { background: var(--card) !important; color: transparent; box-shadow: none !important; outline: 3px dashed var(--c); outline-offset: -3px; animation: none; transform: none }
 .bead.lift > * { visibility: hidden }
