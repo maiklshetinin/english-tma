@@ -237,10 +237,10 @@ onBeforeUnmount(() => clearInterval(lvTm))
 const liveLine = computed(() => { const n = props.step.ballLive && ballNet[props.step.id]; if (!n) return null
   const name = String(n.model || 'Gemini Live').replace(/ · Live$/, ''), bad = n.split.st === 'err' ? n.split : n.cover.st === 'err' ? n.cover : null
   if (bad) return { st: 'error', t: name + ' · ' + bad.txt }
-  // 25.11.2026: что сейчас — слушает → (пауза) Gemini ищет совпадения (секундомер от паузы) → засчитано за N с
+  // 25.11.2026: что сейчас — слушает → (выключили микрофон) Gemini ищет совпадения (секундомер) → засчитано за N с
   const L = n.lv, tk = lvNow.value, last = L?.last ? (L.last.n ? `засчитано ${L.last.n}` : 'нового нет') + ' за ' + sec1(L.last.ms) + ' с' : ''
   if (L?.ph === 'think') return { st: 'connecting', t: name + ' · Gemini ищет совпадения… ' + sec1(tk - L.at) + ' с' }
-  if (dic.value === 'live') return { st: 'rec', t: name + ' · слушает · засчитает на паузе', s: last }
+  if (dic.value === 'live') return { st: 'rec', t: name + ' · слушает · выключите микрофон — сверит', s: last }
   if (n.split.st === 'busy') return { st: 'connecting', t: name + ' · режет эталон на блоки' }
   if (last) return { st: 'open', t: name + ' · ' + last }
   return { st: n.cover.st === 'busy' ? 'connecting' : n.cover.st === 'on' ? 'open' : '', t: name + ' · ' + (n.cover.st === 'busy' ? 'сверяет речь' : n.cover.txt || 'ждёт речь') } })

@@ -81,6 +81,7 @@ const sentN = ref(0)          // сколько слов уже ушло — д�
 const hasNew = computed(() => wc(props.final || props.text) > sentN.value)
 function onText() {
   if (props.edit || props.idle) return
+  if (isLive.value) return          // шар Live (25.11.2026): засчитывает только Live — без мгновенной подсветки по словам
   light(matchLocal(props.text, blocks.value), false)          // мгновенно — дословные совпадения (и по черновику)
 }
 /** «Отправить на проверку»: в чат — только новый кусок (сказанное после прошлой отправки), блоки — с пометкой уже засчитанных */
@@ -103,12 +104,15 @@ async function cover() {
 // ---------- шар Live (24.11.2026, тест): одна Live-сессия вместо моста — utils/kpball.js (openBallLive) ----------
 // Текст сказанного уходит в модель кусками «РЕЧЬ: …» (сразу после паузы или кнопкой), она молча вызывает cover(n, score, said): 1 — блок целиком,
 // 0.5 — частично (блок наполовину, процент считаем сами). Одно сообщение за раз: пока модель не договорила, следующий кусок ждёт
+// после первой сверки Live под шаром — два блока: «Засчитано» (что сказал) и «Не засчитано» (½ — передано частично)
+const liveChecked = ref(false)
+const notGot = computed(() => blocks.value.map((b, i) => ({ i, label: b.label, half: (sc.value[i] || 0) > 0 })).filter((x) => !ok.value.has(x.i)))
 let lv = null, lvBlocks = [], busyL = false, againL = false, busyTm = 0, autoTm = 0, fillTm = 0
 function fill(b) {          // блоки «наливаются» в шар по одному — как будто нейросеть выдаёт их
   clearInterval(fillTm); let k = 0; blocks.value = []
   fillTm = setInterval(() => { k++; blocks.value = b.slice(0, k); if (k >= b.length) { clearInterval(fillTm); fillTm = 0 } }, 260)
 }
-function resetSay() { ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) }
+function resetSay() { liveChecked.value = false; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) }
 function startLive(keep = false) {          // keep — переподключение: засчитанное остаётся, вся речь уходит заново
   lv?.stop(); if (keep) { sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) } else resetSay()
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
@@ -129,7 +133,7 @@ function onLiveCover(list) {
     if (x.score > (s[x.i] || 0)) s[x.i] = x.score
     if (x.score >= 0.75) { lit.push(x.i); if (x.said) inf[x.i] = { said: x.said, fix: '', note: '', at: at - k } }
   })
-  sc.value = s; info.value = inf; light(lit, true)
+  sc.value = s; info.value = inf; liveChecked.value = true; light(lit, true)
 }
 function coverLive() {
   const all = (props.final || props.text).trim(), w = all ? all.split(/\s+/) : []
@@ -187,12 +191,20 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
       <small>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
       <button v-if="!edit && !idle && !done && !isLive" type="button" class="kbgo" :disabled="asking || !hasNew" :title="'Отправить всё сказанное в чат через мост: какие смысловые блоки засчитаны и где ошибки'" @click="cover"><i class="kbdot" />{{ asking ? 'Чат сверяет…' : 'Отправить на проверку' }}</button>
     </div>
+    <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kb2">
+      <section class="kb2s ok"><h4>Засчитано · {{ got.length }}</h4>
+        <ul v-if="got.length" class="kbl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span></li></ul>
+        <p v-else class="kb2e">пока ничего</p></section>
+      <section class="kb2s no"><h4>Не засчитано · {{ notGot.length }}</h4>
+        <ul v-if="notGot.length" class="kbl"><li v-for="x in notGot" :key="x.i" :class="{ half: x.half }"><b>{{ x.half ? '½' : '✕' }} {{ x.label }}</b><small v-if="x.half">передано частично</small></li></ul>
+        <p v-else class="kb2e">всё раскрыто</p></section>
+    </div>
     <!-- что засчитал чат: блок ✓ — что ты сказал → как правильно (что исправлено); новое — сверху -->
-    <ul v-if="got.length && !edit && !idle" class="kbl">
+    <ul v-if="!isLive && got.length && !edit && !idle" class="kbl">
       <li v-for="(x, k) in got" :key="x.i" :class="{ fx: x.fix, nw: k === 0 && isLive }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span>
         <template v-if="x.fix"><span class="kbf">→ {{ x.fix }}</span><small v-if="x.note">{{ x.note }}</small></template></li>
     </ul>
-    <p v-if="done && missing.length" class="kbm"><b>Не прозвучало:</b> {{ missing.join(' · ') }}</p>
+    <p v-if="!isLive && done && missing.length" class="kbm"><b>Не прозвучало:</b> {{ missing.join(' · ') }}</p>
     <div v-if="edit" class="kbe">
       <small>{{ own ? 'Свои блоки экрана (keys в JSON) — ученик увидит их' : 'Блоков у экрана нет — у ученика Gemini нарежет эталон сама (и запомнит в браузере). Можно нарезать сейчас и поправить в JSON' }}</small>
       <div class="kbb"><button type="button" class="kbc" :disabled="cutting || !step.ideal" @click="cut">{{ cutting ? 'Gemini режет…' : own ? '✂ Нарезать заново' : '✂ Нарезать эталон (Gemini)' }}</button>
@@ -243,6 +255,14 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbl li { padding: 5px 10px; border-radius: 10px; background: #f2fbf4; font-size: 13px; line-height: 1.4 } .kbl li.fx { background: #fff7e8 }
 .kbl b { font-weight: 800; color: #128a55; margin-right: 6px } .kbs1 { color: #555; font-style: italic } .kbf { margin-left: 6px; font-weight: 800; color: #b26a00 }
 .kbl small { display: block; font-size: 12px; font-weight: 600; color: #8a6a3a }
+/* шар Live: два блока под шаром — засчитано / не засчитано (25.11.2026) */
+.kb2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px } @media (max-width: 560px) { .kb2 { grid-template-columns: 1fr } }
+.kb2s { min-width: 0 } .kb2s h4 { margin: 0 0 4px; font-size: 12px; font-weight: 800; color: #128a55 } .kb2s.no h4 { color: #b3261e }
+.kb2s .kbl { margin: 0 } .kb2s.no .kbl li { background: #fff3f2 } .kb2s.no .kbl b { color: #b3261e } .kb2s.no .kbl li.half { background: #fff8e8 } .kb2s.no .kbl li.half b { color: #b26a00 }
+.kb2e { margin: 0; font-size: 12.5px; font-weight: 600; color: #9a9a9a }
+.th-book .kb2s h4 { color: #7b4224 } .th-book .kb2s.no h4 { color: #b3261e } .th-book .kb2s.no .kbl li { background: #fff7ea }
+.th-sphere .kb2s h4, .th-space .kb2s h4 { color: #7dd3fc } .th-sphere .kb2s.no h4, .th-space .kb2s.no h4 { color: #fda4af }
+.th-sphere .kb2s.no .kbl li, .th-space .kb2s.no .kbl li { background: rgba(251, 113, 133, .08) } .th-sphere .kb2s.no .kbl b, .th-space .kb2s.no .kbl b { color: #fda4af }
 /* шар Live (25.11.2026): полоска из делений — одно деление = один блок; наполовину переданный — закрашен наполовину; свежий засчитанный в списке — обведён */
 .kbseg { flex: 1; display: flex; gap: 4px; height: 8px } .kbseg i { flex: 1; border-radius: 4px; background: #eef0f3; transition: background .4s }
 .kbseg i.f { background: #2bb34a } .kbseg i.h { background: linear-gradient(90deg, #2bb34a 50%, #eef0f3 50%) }

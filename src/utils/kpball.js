@@ -18,8 +18,8 @@
 //  ШАР LIVE (24.11.2026, тест; step.ballLive, шаблон kpballive): то же самое, но без моста — одна Live-сессия (WebSocket) на упражнение.
 //  Эталон — в системной инструкции; первое сообщение «РАЗБЕЙ» (или «БЛОКИ: …», если блоки уже есть) — модель молча вызывает функцию blocks;
 //  дальше каждый новый кусок расшифровки уходит текстом «РЕЧЬ: …», модель молча вызывает cover(n, score 1 / 0.5, said). Голос модели не играет.
-//  Голос (25.11.2026) — рация-переключатель: нажал — микрофон включён, нажал ещё раз — выключен. Пока говорят, после каждой короткой паузы (0,5 с)
-//  модель СРАЗУ вызывает cover (пустой — если нового нет): блоки загораются по ходу. В подвале: слушает → Gemini ищет совпадения (секундомер от паузы) → засчитано за N с.
+//  Голос (25.11.2026) — рация-переключатель: нажал — микрофон включён, нажал ещё раз — выключен, и модель СРАЗУ один раз вызывает cover
+//  (пустой — если нового нет). В подвале: слушает → Gemini ищет совпадения (секундомер от выключения) → засчитано за N с; нажатие — журнал.
 //  Статусы — те же ballNet (подвал). Реализация — openBallLive внизу файла.
 //  Статусы запросов (нарезка, сверка) — ballNet[id экрана], их рисует подвал «Ответа по смыслу» (Kp.vue), рядом с диктовкой.
 import { reactive } from 'vue'
@@ -151,11 +151,11 @@ const LIVE_SYS = (question, ideal) => 'Ты — молчаливый помощ�
   'понятная сама по себе; words — 1–3 самых характерных слова пункта, как они написаны в эталоне. Не добавляй того, чего нет в эталоне.\n' +
   '2. «БЛОКИ: 1. … 2. …» — готовый нумерованный список пунктов: запомни номера, ничего не вызывай.\n' +
   '3. «РЕЧЬ: …» — текстом то, что сказал ученик; а когда ученик говорит в микрофон (как по рации: включил микрофон — говорит, выключил — реплика кончилась), ты слышишь его сам — ' +
-  'СРАЗУ после каждой паузы в речи (не жди, пока ученик договорит весь ответ; пауза — не конец ответа) поступай так же, как с «РЕЧЬ» (в речи бывают оговорки и ошибки произношения). Сверь всё сказанное с пунктами и вызови функцию cover: ' +
+  'СРАЗУ после конца реплики (ученик выключил микрофон) поступай так же, как с «РЕЧЬ» (в речи бывают оговорки и ошибки произношения). Сверь всё сказанное с пунктами и вызови функцию cover: ' +
   'для каждого пункта, который передан впервые или полнее, чем раньше: n — номер пункта; score — 1, если мысль передана целиком, 0.5 — если только часть; ' +
   'said — что ученик сказал (2–8 слов). Засчитывай по смыслу: синонимы, другие слова, грамматические ошибки не мешают; если о пункте ничего не сказано — не засчитывай. ' +
   'Пункт, уже засчитанный с тем же score, не повторяй. Нового нет — всё равно вызови cover с пустым covered: приложение ждёт ответ. ' +
-  'Отвечай мгновенно, одним вызовом cover на каждую паузу; мысль, начатую до паузы, засчитывай, когда она договорена; ошибки не разбирай, не говори и не пиши ничего, кроме вызовов функций.'
+  'Отвечай мгновенно, одним вызовом cover на реплику; ошибки не разбирай, не говори и не пиши ничего, кроме вызовов функций.'
 const LIVE_TOOLS = [
   { name: 'blocks', description: 'Смысловые пункты эталона (ответ на «РАЗБЕЙ»)',
     parameters: { type: 'OBJECT', properties: { blocks: { type: 'ARRAY', items: { type: 'OBJECT', properties: { label: { type: 'STRING' }, words: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['label'] } } }, required: ['blocks'] } },
@@ -177,13 +177,11 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
   const queue = []
   const flush = () => { if (!ready || !sess) return; while (queue.length) { const t = queue.shift(); if (/^РАЗБЕЙ/.test(t)) sentSplit = true; t0 = Date.now(); sess.send(t); lg('send', t.replace(/\n/g, ' ').slice(0, 160)) } }
   const fail = (txt) => { lg('err', txt); closed = true; n.cover = { st: 'err', txt }; if (sentSplit && n.split.st === 'busy') n.split = { st: 'err', txt } }
-  // рация-переключатель (25.11.2026): нажал — микрофон включён, нажал ещё раз — выключен; выключен — в Live не уходит НИ звука (gated).
-  // Пока говорят — Live САМА ловит короткие паузы (0,5 с, чувствительно) и после каждой сразу шлёт cover: блоки загораются по ходу ответа;
-  // новая речь ответ не обрывает (NO_INTERRUPTION). Выключили — audioStreamEnd: последняя фраза — сразу. wait — выключили, ждём последний ответ.
-  // (Пробовали резать речь сами раз в 5 с в ручном режиме — хуже: расшифровка там приходит только после реплики, отвечало с задержкой.)
-  // Статус для подвала (n.lv): голос стих на 0,4 с после речи — 'think' (Gemini ищет совпадения, секундомер от паузы), пришёл ответ — снова 'rec'
+  // рация-переключатель (25.11.2026, вернули самый стабильный вариант): нажал — микрофон включён (manual: activityStart), говоришь сколько нужно;
+  // нажал ещё раз — выключен (activityEnd): Live ОДИН раз сверяет всё сказанное и присылает cover. Выключен — в Live не уходит ни звука.
+  // (Пробовали засчитывать на ходу — по паузам и срезами раз в 5 с — работало нестабильно, убрали.) wait — выключили, ждём ответ
   let hearH = null, hearUntil = 0, micOn = false, wait = false, waitTm = 0
-  let talking = false, voiced = 0, voiceAt = 0, stTm = 0, heardV = false
+  let talking = false, heardV = false
   if (!n.lv) n.lv = { ph: '', at: 0, cut: 0, last: null }
   if (!n.log) n.log = []
   n.log.splice(0); const T0 = Date.now()
@@ -191,30 +189,24 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
   const lg = (k, x, same = false) => { const t = +((Date.now() - T0) / 1000).toFixed(1), last = n.log.at(-1); if (same && last?.k === k) { last.x += x; return } n.log.push({ t, k, x: String(x) }); if (n.log.length > 80) n.log.splice(0, n.log.length - 80) }
   const L = n.lv          // реактивный — его рисует подвал (строка «слушает / ищет совпадения / засчитано»)
   const think = (at = Date.now()) => { L.ph = 'think'; L.at = t0 = at }
-  function watchPause() {
-    if (!talking) return
-    if (L.ph === 'think' && Date.now() - L.at > 12_000) L.ph = 'rec'          // ответа нет 12 с — не висим в «ищет»
-    if (L.ph === 'rec' && voiced >= 3 && Date.now() - voiceAt > 400) { voiced = 0; think(voiceAt); lg('pause', 'голос стих — ждём ответ модели') }          // сказал — замолчал: модель сейчас сверяет
-  }
   const endWait = () => { clearTimeout(waitTm); if (wait) { wait = false; hearUntil = Date.now() + 3500; const h0 = hearH; setTimeout(() => { if (!talking && hearH === h0) hearH = null }, 2500) } }          // хвост расшифровки ещё 2,5 с идёт в поле; текстом не дублируем
   const api = {
     get model() { return modelName }, get modelId() { return modelId }, get alive() { return !closed },
     get hearing() { return !!hearH || wait || Date.now() < hearUntil },
     send(text) { if (closed) return; queue.push(text); flush() },
-    stop() { closed = true; clearInterval(stTm); L.ph = ''; delete liveSessions[id]; try { sess?.stop() } catch { /* */ } },
+    stop() { closed = true; L.ph = ''; delete liveSessions[id]; try { sess?.stop() } catch { /* */ } },
     /** Голос — прямо в Live: h = { text(кусок расшифровки), turn(), level(0..1) } или null — выключить */
     async hear(h) {
       if (!h) {          // отпустили кнопку — конец реплики: модель отвечает сразу; хвост расшифровки и ответ ещё идут прежнему слушателю
         if (!sess || !talking) { hearH = null; return }
-        talking = false; clearInterval(stTm); sess.gate(false); lg('mic', 'микрофон выключен — ждём последний ответ'); wait = true; think(); n.cover = { st: 'busy', txt: 'сверяет последнюю фразу' }
+        talking = false; sess.talkEnd(); lg('mic', 'микрофон выключен — Live сверяет всё сказанное'); wait = true; think(); n.cover = { st: 'busy', txt: 'сверяет речь' }
         clearTimeout(waitTm); waitTm = setTimeout(endWait, 12_000)          // ответа нет 12 с — не держим
         return
       }
       if (closed || !sess || !ready) throw new Error('Live не подключён')
       hearH = h; if (!micOn) { micOn = true; await sess.listen() }
       if (hearH !== h) return          // отпустили, пока микрофон включался — реплики не было
-      talking = true; voiced = 0; L.ph = 'rec'; sess.gate(true); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; n.cover = { st: 'on', txt: 'слушает · засчитывает на паузах' }          // включили — звук пошёл в Live
-      clearInterval(stTm); stTm = setInterval(watchPause, 100)
+      talking = true; L.ph = 'rec'; sess.talkStart(); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; n.cover = { st: 'on', txt: 'слушает' }          // включили — звук пошёл в Live
     },
   }
   liveSessions[id] = api
@@ -225,12 +217,12 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
       if (!m) throw new Error('Google не дал ключу Live-модели')
       modelId = m; modelName = liveName(m); n.model = modelName + ' · Live'
       if (closed) return
-      sess = startTalk({ key, model: m, system: LIVE_SYS(question, ideal), lang: 'pl-PL', temperature: 0.2, tools: LIVE_TOOLS, micLater: true, quiet: true, gated: true, noInterrupt: true, silenceMs: 500, endSens: 'high', on: {
+      sess = startTalk({ key, model: m, system: LIVE_SYS(question, ideal), lang: 'pl-PL', temperature: 0.2, tools: LIVE_TOOLS, micLater: true, quiet: true, manual: true, on: {
         state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
         ready: () => { ready = true; lg('send', 'соединение готово · ' + modelId); flush() },
         turn: () => { lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
         text: (role, t) => { if (role === 'me') { lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
-        level: (v) => { if (talking && v > 0.06) { voiced++; voiceAt = Date.now(); if (!heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
+        level: (v) => { if (talking && v > 0.06 && !heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
           if (name === 'blocks') {
