@@ -7,7 +7,7 @@ import { talkCfg, talkDefaults } from './talk/defaults'
 import { splitKey, presetFor, type PresetTpl } from './presets'
 
 export const PRESET_FORM: Record<PresetTpl, Record<string, unknown>> = {
-  kp: { kind: 'kp' }, kpfile: { kind: 'kp', dic: 'file' }, kpapi: { kind: 'kp', engine: 'api' },
+  kp: { kind: 'kp' }, kpfile: { kind: 'kp', dic: 'file' }, kpapi: { kind: 'kp', engine: 'api' }, kpballive: { kind: 'kp', ball: true, ballLive: true },          // шар Live — 25.11.2026
   talk: { kind: 'talk' }, talkava: { kind: 'talk', avatar: true }, talkptt: { kind: 'talk', avatar: true, ptt: true }, talkptt2: { kind: 'talk', avatar: true, ptt: true, busuu: true },
   talkvn: { kind: 'talk', avatar: true, ptt: true, vn: true },
   talkexam: { kind: 'talk', avatar: true, ptt: true, exam: true },

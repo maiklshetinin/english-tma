@@ -136,7 +136,7 @@ function kpCode(s: any): KpCfg {
   return o
 }
 /** шаблон экрана — по нему настройки курса (presets) */
-export const kpTpl = (s: any) => (kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')
+export const kpTpl = (s: any) => (s?.ballLive === true ? 'kpballive' : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
 /** Действующие настройки экрана: умолчания кода ← настройки упражнения в курсе ← свои поля экрана */
 export function kpCfg(s: any): KpCfg {
   const mine: any = {}
