@@ -163,7 +163,7 @@ function startLive() {
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
   try {
     const c = kpReady(kpCfg(props.step))          // промпт и функция — из JSON экрана (ballPrompt, ballTool), 25.11.2026
-    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, fix: props.step.ballFix === true, guard: tx.value, extra: reqOf(c, 'ballLive'), onCover: onLiveFound })
+    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, fix: props.step.ballFix === true, guard: false,          /* 25.11.2026: проверка «была ли речь» по расшифровке ломала засчитывание (Live расшифровывает польский кириллицей) — как у «нового вида», без неё */ extra: reqOf(c, 'ballLive'), onCover: onLiveFound })
   } catch (e) { netOf(id).cover = { st: 'err', txt: String(e.message || e) }; return }
   fast.value = false; netOf(id).split = { st: 'off', txt: '' }; rebuild(); liveRes()
 }
@@ -201,10 +201,13 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 <template>
   <div class="kball" :class="['th-' + theme, { idle, lv: isLive, v2, fx: step.ballFix === true }]" @pointerdown.stop>
     <!-- «· текст» (ballText): без шара — эталон под размытием, проявляются только сказанные слова; свернуть — кнопкой -->
-    <!-- 25.11.2026 (макет «Плотно»): процент — тонкой строкой под вопросом; текст эталона — по кнопке «Эталон» у вопроса (Kp.vue, txShow);
+    <!-- «· текст» (ballText): процент — карточкой, как было; текст эталона под размытием — по кнопке «Эталон» у вопроса (Kp.vue, txShow);
          размытое слово — нажать, покажется на 3 с (в процент не идёт) -->
-    <!-- процент — маленькой плашкой в строке вопроса (Kp.vue, рядом с «Эталоном»), отдельной полосы нет -->
-    <p v-if="tx && (txOpen || idle || edit)" class="kbtxq kbtx"><template v-for="(x, j) in cov.words" :key="j"><span :class="cov.hit[j] ? (txNew.has(j) ? 'nw' : 'on') : done ? 'ms' : peek.has('t' + j) ? 'pk' : 'hd'" @click="!cov.hit[j] && !done && look('t' + j)">{{ x.w }}</span>{{ ' ' }}</template></p>
+    <section v-if="tx" class="kbtx" :class="{ shut: !txOpen }">
+      <div class="kbtxh"><b class="kbtxp" :class="{ bad: done && pct < passN }">{{ pct }}%</b>
+        <div class="kbtxb"><span class="kbbar"><i :style="{ width: pct + '%' }" /></span><small>{{ idle ? 'пример' : `покрыто ${pct}% эталона · ` + (done && pct < passN ? `пока не зачёт, проход от ${passN}%` : `проход от ${passN}%`) }}</small></div></div>
+      <p v-if="txOpen || idle || edit" class="kbtxq"><template v-for="(x, j) in cov.words" :key="j"><span :class="cov.hit[j] ? (txNew.has(j) ? 'nw' : 'on') : done ? 'ms' : peek.has('t' + j) ? 'pk' : 'hd'" @click="!cov.hit[j] && !done && look('t' + j)">{{ x.w }}</span>{{ ' ' }}</template></p>
+    </section>
     <div v-if="!idle && !v2 && !tx" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
     <!-- новый вид: одно окно — сверху вопрос (из Kp.vue, Teleport в #kb2h-…) и процент справа, ниже шар, внизу полоса -->
     <div v-if="!tx" class="kb2w" :class="{ on: v2 }">
@@ -228,14 +231,12 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
          После «Готово» ниже — «Не прозвучало». Полоса прокрутки — как в Telegram: только при наведении -->
     <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kblv">
       <div v-if="!tx" class="kblvh"><h4>Засчитано</h4><i>{{ got.length }}</i><small v-if="!done">новое — сверху</small></div>
-      <ul v-if="tx && msgs.length" class="kbmsg2"><template v-for="(m, k) in msgsDesc" :key="m.at">
-        <li v-for="i in m.idx" :key="'o' + i" class="kbr" :class="{ nw: k === 0 && !done }"><i class="kbrd" />
-          <span class="kbrr"><template v-for="(w, j) in txFeed.find((x) => x.i === i)?.parts ?? []" :key="j"><span :class="w.on ? '' : peek.has(i + ':' + j) ? 'pk' : 'kbtxh2'" @click="!w.on && look(i + ':' + j)">{{ w.w }}</span>{{ ' ' }}</template></span>
-          <template v-for="pp in [partPct(txFeed.find((x) => x.i === i)?.parts ?? [])]" :key="'p'"><b v-if="pp" class="kbrp" :class="{ full: pp.p === 100 }" :title="`сказано ${pp.on} из ${pp.n} слов куска — несказанное размыто и в процент не идёт`">{{ pp.on }}/{{ pp.n }} · {{ pp.p }}%</b></template>
-          <span class="kbrs">{{ txFeed.find((x) => x.i === i)?.said || m.heard }}</span></li>
-        <li v-for="(b, j) in m.bad" :key="'b' + j" class="kbr bad"><i class="kbrd" /><span class="kbrr"><s>{{ b.ref }}</s></span><b class="kbrp">не засчитано</b><span class="kbrs">в услышанном нет{{ m.heard ? ' · услышано: «' + m.heard + '»' : '' }}</span></li>
-        <li v-if="!m.idx.length && !m.bad.length" class="kbr none"><i class="kbrd" /><span class="kbrs">{{ m.rep ? 'повтор — уже засчитано раньше' : 'нового нет' }}{{ m.heard ? ' · услышано: «' + m.heard + '»' : '' }}</span></li>
-      </template></ul>
+      <ul v-if="tx && txFeed.length" class="kbmsg2">          <!-- 25.11.2026: строки — кусок эталона (несказанное размыто), под ним — как сказали, справа — сколько слов куска сказано -->
+        <li v-for="(x, k) in txFeed" :key="x.i" class="kbr" :class="{ nw: k === 0 && !done }"><i class="kbrd" />
+          <span class="kbrr"><template v-for="(w, j) in x.parts" :key="j"><span :class="w.on ? '' : peek.has(x.i + ':' + j) ? 'pk' : 'kbtxh2'" @click="!w.on && look(x.i + ':' + j)">{{ w.w }}</span>{{ ' ' }}</template></span>
+          <template v-for="pp in [partPct(x.parts)]" :key="'p'"><b v-if="pp" class="kbrp" :class="{ full: pp.p === 100 }" :title="`сказано ${pp.on} из ${pp.n} слов куска — несказанное размыто и в процент не идёт`">{{ pp.on }}/{{ pp.n }} · {{ pp.p }}%</b></template>
+          <span v-if="x.said" class="kbrs">{{ x.said }}</span></li>
+      </ul>
       <ul v-else-if="!tx && got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
       <p v-else class="kb2e">пока ничего</p>
       <template v-if="done && !tx">
@@ -377,7 +378,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbtm.bad b, .kbtm.bad small { color: #d92d20 }
 .kbtmb { position: relative; flex: 1; height: 5px; border-radius: 3px; background: #f4dcb8 } .kbtmb i { display: block; height: 100%; border-radius: 3px; background: #cd8a30; transition: width .4s }
 .kbtmb em { position: absolute; top: -2px; width: 2px; height: 9px; background: #9a6f4a; opacity: .45 }
-.kbtxq.kbtx { margin: -2px 0 10px; padding: 12px 16px; display: block }
+
 .kbtxq .pk, .kbrr .pk { background: #fff3dc; border-radius: 4px; box-shadow: 0 0 0 1px #e9c99c; color: #7b4224 } .kbtxq .hd, .kbrr .kbtxh2 { cursor: pointer }
 .kbmsg2 { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px }
 .kbr { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 1px 10px; align-items: baseline; padding: 6px 12px; border-radius: 10px; background: #fff }

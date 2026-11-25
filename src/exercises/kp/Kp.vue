@@ -420,7 +420,6 @@ function jsApply() {
         </template>
         <TtsDialog v-if="tts" :text="ttsText" what="вопрос" :by="step.audioBy || ''" :has="!!step.audio" @close="tts = false" @save="ttsSave" />
         <template v-if="!p.edit">
-          <span v-if="step.ballText && !idle" class="kxp" :class="{ bad: p.st.done && (ballNet[step.id]?.res?.pct ?? 0) < (step.pass ?? 60) }" :title="`Раскрыто ${ballNet[step.id]?.res?.pct ?? 0}% эталона · проход от ${step.pass ?? 60}%`">{{ ballNet[step.id]?.res?.pct ?? 0 }}%</span>
           <button v-if="step.ballText" type="button" class="krb kx" :class="{ on: txShow }" :title="txShow ? 'Скрыть текст эталона' : 'Показать текст эталона — размытый, проявляются сказанные слова'" @pointerdown.stop @click="txToggle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>Эталон</button>          <!-- «· текст» (25.11.2026, макет «Без шара»): одна кнопка — показать / скрыть размытый эталон -->
           <button v-else type="button" class="krb" :class="{ on: refOpen }" :disabled="!p.st.done" :title="p.st.done ? 'Показать эталон' : 'Эталон откроется после проверки'" @pointerdown.stop @click="refOpen = !refOpen">Эталон</button>
           <div v-if="refOpen && p.st.done" class="krp" @pointerdown.stop>
