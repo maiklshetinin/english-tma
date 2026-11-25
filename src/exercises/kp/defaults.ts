@@ -93,6 +93,21 @@ export const BALL = {
     'Отвечай мгновенно, одним вызовом; проценты не считай, ошибки не разбирай, не говори и не пиши ничего, кроме вызова функции.',
   ballTool: 'Какие куски эталона (дословно) ученик передал в последней реплике',
 }
+/** «Шар Live · новый вид» (kpballive2, 25.11.2026) — промпт, который автор отладил на пресете: + условие «не дописывать хвост предложения» */
+export const BALL2 = {
+  ballPrompt: 'Ты — молчаливый помощник в устном упражнении ({topic}, {lang} язык). Ты НИЧЕГО не говоришь и не пишешь ученику: весь твой ответ — только вызов функции, его читает приложение.\n\n' +
+    'Вопрос: {question}\n\nЭталонный ответ:\n{reference}\n\n' +
+    'Ученик отвечает устно частями, как по рации: включает микрофон, говорит, выключает — реплика кончилась; потом может включить и добавить ещё. Ты слышишь его сам. ' +
+    'СРАЗУ после каждой реплики сверь сказанное с эталоном и вызови функцию cover: found — что из эталона ученик передал в этой реплике впервые. ' +
+    'Для каждого: ref — кусок эталона, скопированный ДОСЛОВНО, слово в слово, как написан в эталоне (одна мысль, 3–12 слов; если ученик передал всё предложение — всё предложение); ' +
+    'said — что сказал ученик (2–8 слов, как услышал). ' +
+    'Не дописывай ref до конца предложения: если ученик остановился раньше и последнюю часть фразы не сказал ни так, ни своими словами, ref заканчивается там, где закончилась его мысль; ' +
+    'то, что он передал своими словами, остаётся в ref. ' +
+    'Засчитывай по смыслу: синонимы, другие слова, порядок, грамматические ошибки и оговорки не мешают; о чём не сказано — не засчитывай. ' +
+    'Уже найденное в прошлых репликах не повторяй. Нового нет — всё равно вызови cover с пустым found: приложение ждёт ответ. ' +
+    'Отвечай мгновенно, одним вызовом; проценты не считай, ошибки не разбирай, не говори и не пиши ничего, кроме вызова функции.',
+  ballTool: BALL.ballTool,
+}
 const BALL_TEXTS = ['ballPrompt', 'ballTool'] as const
 const API_TEXTS = ['livePrompt', 'liveAsk', 'liveMore', 'liveTool', 'discussPrompt', 'discussOpener', 'discussNone'] as const
 const STT_TEXTS = ['sttPrompt', 'sttAsk'] as const
@@ -132,11 +147,11 @@ function kpCode(s: any): KpCfg {
   }
   for (const k of API_TEXTS) o[k] = own(s, k) ?? DEF[k]
   for (const k of STT_TEXTS) o[k] = own(s, k) ?? STT[k]
-  for (const k of BALL_TEXTS) o[k] = own(s, k) ?? BALL[k]
+  for (const k of BALL_TEXTS) o[k] = own(s, k) ?? (s?.ballV2 === true ? BALL2 : BALL)[k]          // новый вид — свой отлаженный промпт
   return o
 }
 /** шаблон экрана — по нему настройки курса (presets) */
-export const kpTpl = (s: any) => (s?.ballLive === true ? 'kpballive' : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
+export const kpTpl = (s: any) => (s?.ballLive === true ? (s?.ballV2 === true ? 'kpballive2' : 'kpballive') : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
 /** Действующие настройки экрана: умолчания кода ← настройки упражнения в курсе ← свои поля экрана */
 export function kpCfg(s: any): KpCfg {
   const mine: any = {}
@@ -162,7 +177,7 @@ const eq = sameV
 export function kpFields(raw: any): Partial<KpCfg> {
   const o: any = {}
   if (!raw || typeof raw !== 'object') return o
-  const form = { engine: raw.engine, dic: raw.dic, ballLive: raw.ballLive }
+  const form = { engine: raw.engine, dic: raw.dic, ballLive: raw.ballLive, ballV2: raw.ballV2 }
   const x: any = kpCode({ ...form, ...raw }), d: any = kpCfg(form)          // x — значения JSON (неверные — умолчания кода), d — что было бы без своих полей
   for (const k of Object.keys(x)) {
     if (raw[k] === undefined) continue

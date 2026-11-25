@@ -49,12 +49,15 @@
 
 Новое упражнение — одна строка в `TYPES` в начале `make-json.py`.
 
+**ID с номером (25.11.2026).** На вопрос «Номер или ID» можно ввести ID из списка с припиской `-N`: `pl-kp-1` (или `kp-1`) — в каждом JSON будет `"type": "pl-kp-1"`, файлы лягут в `json/мост-1/<урок>/`, отдельно от основного `pl-kp`. Без подтверждения. Работает и из терминала: `python tools/make-json.py pl-kp-1`.
+
 Из терминала:
 ```
 python tools/make-json.py --list                    # все типы
 python tools/make-json.py talkvn                    # все PDF из tools/pdf/ → папка типа / папка урока / файл на вопрос
 python tools/make-json.py kpball "ДЗ 8.pdf"         # рядом появится папка «ДЗ 8.kpball»
 python tools/make-json.py talkptt "json/мост/ДЗ 8. Кухня.json"   # можно из готового JSON
+python tools/make-json.py pl-kp-1                   # ID с номером → "type": "pl-kp-1", папка json/мост-1/
 ```
 
 В папке `tools` — один скрипт `make-json.py` и одна кнопка `Сделать JSON.bat`. Разбор PDF — `tools/lib/kp-json.py`, его не трогать.

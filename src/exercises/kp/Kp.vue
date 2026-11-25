@@ -223,6 +223,7 @@ async function dicLoad() {
 onMounted(dicLoad)
 watch(idle, (v) => { if (!v && !dicAuto.value) dicLoad() })
 const isLive = computed(() => !!props.step.ballLive)
+const v2Head = computed(() => !!(props.step.ball && props.step.ballLive && props.step.ballV2 && !p.edit && !idle.value))          // новый вид: вопрос — в окне шара
 // журнал Live (25.11.2026, отладка): нажатие на статус в подвале — что ушло в модель и что она ответила (ballNet[id].log, пишет utils/kpball.js)
 const logOpen = ref(false), logEl = ref(null)
 const liveLog = computed(() => (props.step.ballLive ? ballNet[props.step.id]?.log ?? [] : null))
@@ -387,6 +388,8 @@ function jsApply() {
 <template>
   <template v-if="part === 'body'">
     <ExHead v-if="p.edit || fileMode" :step="step" :def="J.head" />          <!-- 23.11.2026: у ученика без «Ответьте устно на вопрос» — вопрос сразу наверху; в правке — чтобы поменять -->
+    <!-- «Шар Live · новый вид» (ballV2, 25.11.2026): вопрос с «Эталоном» переезжает в окно шара (KpBall, #kb2h-…) -->
+    <Teleport :to="'#kb2h-' + step.id" defer :disabled="!v2Head">
     <div class="kq">
       <div class="kqw">
         <button v-if="p.edit" type="button" class="kst" :class="{ off: !step.star }" :title="step.star ? 'Обязательный вопрос (звезда) — убрать' : 'Сделать обязательным (красная звезда)'" @click="toggleStar"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 50L38.4 3.4L35.4 37.8Z" class="s1" /><path d="M50 50L38.4 3.4L57.1 32.4Z" class="s2" /><path d="M50 50L90.7 24.6L57.1 32.4Z" class="s1" /><path d="M50 50L90.7 24.6L69.0 51.3Z" class="s2" /><path d="M50 50L86.8 80.9L69.0 51.3Z" class="s1" /><path d="M50 50L86.8 80.9L54.6 68.4Z" class="s2" /><path d="M50 50L32.0 94.5L54.6 68.4Z" class="s1" /><path d="M50 50L32.0 94.5L33.9 60.1Z" class="s2" /><path d="M50 50L2.1 46.7L33.9 60.1Z" class="s1" /><path d="M50 50L2.1 46.7L35.4 37.8Z" class="s2" /></svg></button>
@@ -424,6 +427,7 @@ function jsApply() {
         <div class="kgv"><b>{{ p.st.busy ? '…' : checked ? r.score + '%' : '—' }}</b><span >{{ p.st.busy ? 'проверяю' : tierT[tier] }}</span></div>
       </div>
     </div>
+    </Teleport>
 
     <KpBall v-if="step.ball" :step="step" :text="ballText" :final="p.st.text || ''" :done="!!p.st.done" :edit="!!p.edit" :idle="idle" />
     <div class="kth">
@@ -497,7 +501,7 @@ function jsApply() {
           <svg v-if="dic === 'live'" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
           <svg v-else viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
           <span v-if="dic === 'live'" class="kcwv" aria-hidden="true"><span class="kcwvs" :style="{ transform: `translateX(${-waveOff}px)` }"><i v-for="(v, i) in wave" :key="i" :style="{ height: waveH(v) + 'px' }" /></span></span>
-          <b v-if="dic === 'live'">Слушаю · нажмите, чтобы сверить · {{ dicSec }}</b>
+          <b v-if="dic === 'live'">Слушаю<span class="kptlong"> · нажмите, чтобы сверить</span> · {{ dicSec }}</b>
           <b v-else>{{ dic === 'connecting' ? 'Подключаюсь…' : 'Нажмите и говорите' }}</b>
         </button>
         <button type="button" class="kpdone" :class="{ busy: p.st.busy }" :disabled="!p.canCheck || idle || dic !== 'idle'" title="Закончить ответ — подвести итог" @click="p.checkAny()"><span v-if="!p.st.busy">Готово</span><i v-else class="kspin" /></button>
@@ -644,6 +648,8 @@ function jsApply() {
 .kptt.live { background: #e5484d } .kptt.live:hover:not(:disabled) { background: #d93d42 } .kptt.live svg { fill: #fff; stroke: none }
 .kptt.live .kcwv i { background: rgba(255, 255, 255, .65) } .kptt.live .kcwv i:nth-last-child(-n + 3) { background: #fff }
 .kptt.live b { font-variant-numeric: tabular-nums; white-space: nowrap }
+/* телефон (25.11.2026, макет): пока слушает — «Готово» прячется, красная кнопка на всю ширину, подпись короткая «Слушаю · 0:12» */
+@media (max-width: 560px) { .kpt.live .kpdone { display: none } .kptlong { display: none } .kptt .kcwv { width: auto; flex: 1 } }
 .kpdone { flex: none; min-height: 46px; padding: 0 18px; border: 0; border-radius: 14px; background: #58cc02; color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer } .kpdone:hover:not(:disabled) { background: #4fb802 } .kpdone:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kpdone.busy:disabled { background: #58cc02; color: #fff }
 .kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
 .kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kcgo.busy:disabled { background: #1cb0f6; color: #fff }

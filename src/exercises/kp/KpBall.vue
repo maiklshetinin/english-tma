@@ -14,8 +14,12 @@ const ed = useEdit()
 // Темы шара (24.11.2026): белая (тест), «Космос» — тёмная панель со звёздами, слова светятся; «Как у Марии» — бежево-коричневая, цвета домашек
 // Марии Кобрыни. Выбор — кружками над шаром, помнится в браузере
 // «Сфера» (24.11.2026) — тёмная, как «Голосовая сфера слов»: блоки-пилюли, засчитанное — голубым свечением, только что засчитанное — розово-голубым, шар можно крутить мышью
-const THEMES = [{ k: 'sphere', t: 'Сфера' }, { k: 'white', t: 'Белая' }, { k: 'space', t: 'Космос' }, { k: 'book', t: 'Как у Марии' }]
-const TK = 'tma.ball.theme'
+const THEMES_OLD = [{ k: 'sphere', t: 'Сфера' }, { k: 'white', t: 'Белая' }, { k: 'space', t: 'Космос' }, { k: 'book', t: 'Как у Марии' }]
+// «Шар Live · новый вид» (ballV2, 25.11.2026, макет «Шар Live — экран ответа»): три темы на весь экран — коричневая, светлая, чёрная (= «Сфера»);
+// по умолчанию чёрная (плитку видно среди остальных), помнится отдельно от старого шара
+const v2 = computed(() => !!props.step.ballV2)
+const THEMES = props.step.ballV2 ? [{ k: 'book', t: 'Коричневая' }, { k: 'white', t: 'Светлая' }, { k: 'sphere', t: 'Чёрная' }] : THEMES_OLD
+const TK = props.step.ballV2 ? 'tma.ball2.theme' : 'tma.ball.theme'
 const theme = ref((() => { try { const v = localStorage.getItem(TK); return THEMES.some((x) => x.k === v) ? v : 'sphere' } catch { return 'sphere' } })())
 watch(theme, (v) => { try { localStorage.setItem(TK, v) } catch { /* */ } })
 
@@ -174,12 +178,20 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 </script>
 
 <template>
-  <div class="kball" :class="['th-' + theme, { idle, lv: isLive }]" @pointerdown.stop>
+  <div class="kball" :class="['th-' + theme, { idle, lv: isLive, v2 }]" @pointerdown.stop>
     <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
+    <!-- новый вид: одно окно — сверху вопрос (из Kp.vue, Teleport в #kb2h-…) и процент справа, ниже шар, внизу полоса -->
+    <div class="kb2w" :class="{ on: v2 }">
+      <div v-if="v2" class="kb2h">
+        <div :id="'kb2h-' + step.id" class="kb2q" />
+        <div class="kb2pc" :class="{ bad: done && pct < passN }"><b>{{ pct }}%</b><small>{{ done && pct < passN ? 'пока не зачёт · ' : '' }}проход {{ passN }}%</small></div>
+      </div>
     <div ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), part: !ok.has(i) && sc[i] > 0, ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
-    <div class="kbp" :class="{ lvbad: isLive && done && pct < passN }" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
+      <div v-if="v2" class="kb2bar" :class="{ bad: done && pct < passN }"><i :style="{ width: pct + '%' }" /></div>
+    </div>
+    <div v-if="!v2" class="kbp" :class="{ lvbad: isLive && done && pct < passN }" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
       <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
       <small v-if="isLive && !edit">{{ idle ? 'пример' : `покрыто ${pct}% текста эталона · ` + (done && pct < passN ? `пока не зачёт, проход от ${passN}%` : `проход от ${passN}%`) }}</small>
       <small v-else>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
@@ -253,6 +265,43 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbl li { padding: 5px 10px; border-radius: 10px; background: #f2fbf4; font-size: 13px; line-height: 1.4 } .kbl li.fx { background: #fff7e8 }
 .kbl b { font-weight: 800; color: #128a55; margin-right: 6px } .kbs1 { color: #555; font-style: italic } .kbf { margin-left: 6px; font-weight: 800; color: #b26a00 }
 .kbl small { display: block; font-size: 12px; font-weight: 600; color: #8a6a3a }
+/* ---------- «Шар Live · новый вид» (ballV2, 25.11.2026, макет «Шар Live — экран ответа»): одно окно — вопрос и процент сверху, шар, полоса ---------- */
+.kb2w { display: contents }
+.kb2w.on { position: relative; display: block; padding: 12px 14px 12px; border-radius: 22px; border: 1px solid #ecd2ab; background: #fff4e2; overflow: hidden }
+.kb2h { position: relative; z-index: 3; display: flex; align-items: flex-start; gap: 14px }
+.kb2q { flex: 1; min-width: 0 } .kb2q:empty { display: none }
+.kb2q :deep(.kq) { min-height: 0 }
+.kb2pc { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding-top: 2px }
+.kb2pc b { font-size: 30px; font-weight: 900; line-height: 1; color: #cd8a30 } .kb2pc small { font-size: 12px; font-weight: 700; color: #9a6f4a; white-space: nowrap }
+.kb2pc.bad b, .kb2pc.bad small { color: #b3261e }
+.kball.v2 .kbs, .kball.v2.th-sphere .kbs { height: 230px } .kball.v2.idle .kbs { height: 150px }
+.kb2bar { height: 6px; border-radius: 3px; background: #f4dcb8; overflow: hidden } .kb2bar i { display: block; height: 100%; background: #cd8a30; transition: width .4s } .kb2bar.bad i { background: #e5484d }
+.kball.v2 .kbth { position: static; justify-content: flex-end; margin: 0 0 6px }
+/* светлая */
+.th-white .kb2w.on { background: #fff; border-color: #e3e6ea } .th-white .kb2pc b { color: #2bb34a } .th-white .kb2pc small { color: #6b7280 }
+.th-white .kb2bar { background: #e3f5e7 } .th-white .kb2bar i { background: #2bb34a }
+.kball.v2.th-white .kb2q :deep(.kqt) { background: #eef0f3; color: #1f2328 }
+/* чёрная (= «Сфера», как «Голосовая сфера слов») */
+.th-sphere .kb2w.on { background: radial-gradient(circle at 50% 55%, rgba(56, 189, 248, .14) 0%, rgba(244, 114, 182, .05) 45%, rgba(20, 25, 38, .8) 75%); border-color: rgba(255, 255, 255, .09) }
+.th-sphere .kb2pc b { color: #7dd3fc } .th-sphere .kb2pc small { color: #8b9bb4 } .th-sphere .kb2pc.bad b, .th-sphere .kb2pc.bad small { color: #fda4af }
+.th-sphere .kb2bar { background: rgba(255, 255, 255, .08) } .th-sphere .kb2bar i { background: linear-gradient(90deg, #38bdf8, #f472b6) }
+.kball.v2.th-sphere .kb2q :deep(.kqt) { background: rgba(255, 255, 255, .07); color: #f1f5f9 }
+.kball.v2.th-sphere .kb2q :deep(.krb) { background: rgba(255, 255, 255, .08); color: #cbd5e1 }
+/* телефон: вопрос без подложки (макет) */
+@media (max-width: 560px) {
+  .kb2w.on { padding: 10px 12px }
+  .kball.v2 .kb2q :deep(.kqt), .kball.v2.th-white .kb2q :deep(.kqt), .kball.v2.th-sphere .kb2q :deep(.kqt) { background: none; padding: 0; font-size: 17px }
+  .kb2pc b { font-size: 22px } .kball.v2 .kbs, .kball.v2.th-sphere .kbs { height: 170px }
+}
+/* темы нового вида — на весь экран урока */
+:global(.lp:has(.kball.v2.th-white:not(.idle))), :global(.lp:has(.kball.v2.th-white:not(.idle)) .body), :global(.lp:has(.kball.v2.th-white:not(.idle)) .foot:not(.good):not(.bad)) { background: #f5f6f8 !important }
+:global(.lp:has(.kball.v2.th-sphere:not(.idle))), :global(.lp:has(.kball.v2.th-sphere:not(.idle)) .body), :global(.lp:has(.kball.v2.th-sphere:not(.idle)) .foot:not(.good):not(.bad)) { background: #090b10 !important; color: #f1f5f9 }
+:global(.lp:has(.kball.v2.th-sphere:not(.idle)) .body) { background: radial-gradient(circle at 50% 30%, #161d2f 0%, #090b10 72%) !important }
+:global(.lp:has(.kball.v2.th-sphere:not(.idle)) .kpt) { background: rgba(20, 25, 38, .72) !important; border-color: rgba(255, 255, 255, .09) !important; box-shadow: none !important }
+:global(.lp:has(.kball.v2.th-sphere:not(.idle)) .kptt:not(.live):not(.connecting)) { background: rgba(255, 255, 255, .06) !important; color: #f1f5f9 !important }
+:global(.lp:has(.kball.v2.th-sphere:not(.idle)) .kpdone:not(:disabled)) { background: rgba(56, 189, 248, .18) !important; color: #7dd3fc !important; box-shadow: inset 0 0 0 1px rgba(56, 189, 248, .5) !important }
+:global(.lp:has(.kball.v2.th-sphere:not(.idle)) .foot) { border-top-color: rgba(255, 255, 255, .09) !important }
+
 /* шар Live: урок шире — 960 px, как в макете (строки засчитанного без обрезки) */
 :global(.lp:not(.embedded):not(.single) .body:has(.kball.lv:not(.idle))) { max-width: 960px }
 /* шар Live: лента засчитанного (макет 25.11.2026) — строка: ✓ кусок эталона · серым что сказал; новое — точка и рамка; «Не прозвучало» — красным */
