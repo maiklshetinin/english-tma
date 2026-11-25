@@ -182,6 +182,13 @@ export function refCover(ideal, refs) {
  *  но из его слов открываем лишь те, чьи основы есть в said (что сказал ученик): модель вернула кусок длиннее сказанного — лишнее
  *  остаётся размытым и в процент не идёт. said пустой — как раньше, весь кусок. → { pct, hit, words, missed, items: [{ idx: [номера слов эталона], parts: [{ w, on }] }] } */
 const NUM_W = ['jed', 'jeden', 'dwa', 'dwie', 'dwu', 'dwó', 'trz', 'czt', 'czw', 'pię', 'pią', 'sze', 'szó', 'sie', 'sió', 'osi', 'ósm', 'dzi', 'set', 'tys', 'pierw', 'drug', 'trze', 'dwud', 'trzyd', 'jedena', 'dwuna', 'kilk']          // начала польских числительных
+// 26.11.2026: и наоборот — Live записала сказанное числительное цифрой («trwa 4 tygodnie»), а в эталоне слово («cztery»): цифра → начала польских слов
+const NUMP = { 0: ['zer'], 1: ['jed', 'pierw'], 2: ['dwa', 'dwie', 'dwó', 'dwu', 'drug'], 3: ['trzy', 'trzec', 'trzej'], 4: ['czter', 'czwar'], 5: ['pięć', 'pięci', 'piąt'],
+  6: ['sześ', 'szóst'], 7: ['siedem', 'siedmi', 'siódm'], 8: ['osiem', 'ośmi', 'ósm'], 9: ['dziewię', 'dziewią'], 10: ['dziesię', 'dziesią'], 11: ['jedena'], 12: ['dwuna'], 13: ['trzyna'],
+  14: ['czterna'], 15: ['piętna'], 16: ['szesna'], 17: ['siedemna'], 18: ['osiemna'], 19: ['dziewiętna'], 20: ['dwadzie', 'dwudzie'], 30: ['trzydzie'], 40: ['czterdzie'],
+  50: ['pięćdzie'], 60: ['sześćdzie'], 70: ['siedemdzie'], 80: ['osiemdzie'], 90: ['dziewięćdzie'], 100: ['sto', 'set'], 1000: ['tysi'] }
+const numPre = (t) => { const n = +t; if (NUMP[n]) return NUMP[n]; if (n > 20 && n < 100) return [...(NUMP[n - (n % 10)] ?? []), ...(NUMP[n % 10] ?? [])]; return [] }
+const lowW = (w) => String(w).toLowerCase().normalize('NFC').replace(/[^\p{L}]/gu, '')
 export function saidCover(ideal, found) {
   const words = refWords(ideal), hit = words.map(() => false), items = []
   for (const f of found) {
@@ -189,8 +196,9 @@ export function saidCover(ideal, found) {
     if (!one.placed[0]) { items.push({ idx: [], parts: String(f.ref).split(/\s+/).filter(Boolean).map((w) => ({ w, on: false })) }); continue }
     const said = String(f.said || '').trim(), ss = new Set((said || f.ref).split(/\s+/).map(stem).filter(Boolean))
     const saidNum = /\d/.test(said) || said.toLowerCase().split(/\s+/).some((w) => NUM_W.some((p) => w.startsWith(p)))          // число сказано словом: «szóstego» = 6
+    const pre = [...said.matchAll(/\d+/g)].flatMap((m) => numPre(m[0]))          // цифры в сказанном → какие слова эталона они означают
     const span = one.hit.map((h, j) => (h ? j : -1)).filter((j) => j >= 0), idx = [], parts = []
-    for (let j = span[0]; j <= span.at(-1); j++) { const on = ss.has(words[j].s) || (saidNum && /^\d+[.,:;]?$/.test(words[j].w)); parts.push({ w: words[j].w, on }); if (on) { idx.push(j); hit[j] = true } }
+    for (let j = span[0]; j <= span.at(-1); j++) { const on = ss.has(words[j].s) || (saidNum && /^\d+[.,:;]?$/.test(words[j].w)) || (pre.length > 0 && pre.some((x) => lowW(words[j].w).startsWith(x))); parts.push({ w: words[j].w, on }); if (on) { idx.push(j); hit[j] = true } }
     items.push({ idx, parts })
   }
   const missed = []; let run = []
