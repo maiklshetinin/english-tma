@@ -5,6 +5,9 @@
 // В правке — список блоков и кнопка «Нарезать эталон» (Gemini) — пишет блоки в экран (keys в JSON).
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useEdit } from '../ctx'
+import { kpCfg, kpReady, fill as fillT } from './defaults'
+import { kpPlain } from '../../utils/ai'
+import { reqOf } from '../../utils/overlay'
 import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, refCover } from '../../utils/kpball'
 const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, final: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })          // text — всё сказанное (с черновиком), final — только готовые («чёрные») куски
 const ed = useEdit()
@@ -129,6 +132,7 @@ async function cover() {
 // 0.5 — частично (блок наполовину, процент считаем сами). Одно сообщение за раз: пока модель не договорила, следующий кусок ждёт
 // после первой сверки Live под шаром — два блока: «Засчитано» (что сказал) и «Не засчитано» (½ — передано частично)
 const liveChecked = ref(false)
+const passN = computed(() => (Number.isFinite(props.step.pass) ? props.step.pass : 60))          // порог экрана — для подписи под процентом
 let lv = null, lvBlocks = [], busyL = false, againL = false, busyTm = 0, autoTm = 0, fillTm = 0
 function fill(b) {          // блоки «наливаются» в шар по одному — как будто нейросеть выдаёт их
   clearInterval(fillTm); let k = 0; blocks.value = []
@@ -139,7 +143,8 @@ function startLive(keep = false) {          // keep — переподключе
   lv?.stop(); if (keep) { sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) } else resetSay()
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
   try {
-    lv = openBallLive({ id, question: q, ideal,
+    const c = kpReady(kpCfg(props.step))          // промпт и функция — из JSON экрана (ballPrompt, ballTool), 25.11.2026
+    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, extra: reqOf(c, 'ballLive'),
       onCover: onLiveFound,
       onTurn: () => { busyL = false; asking.value = false; clearTimeout(busyTm); if (againL) { againL = false; coverLive() } } })
   } catch (e) { netOf(id).cover = { st: 'err', txt: String(e.message || e) }; return }
@@ -195,23 +200,26 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 <template>
   <div class="kball" :class="['th-' + theme, { idle }]" @pointerdown.stop>
     <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
-    <!-- шар Live (25.11.2026): самого шара нет — только процент и списки (шар — лишнее); в правке и миниатюре — показываем, как пример -->
-    <div v-if="!isLive || edit || idle" ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
+    <div ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), part: !ok.has(i) && sc[i] > 0, ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
-    <div class="kbp" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
+    <div class="kbp" :class="{ lvbad: isLive && done && pct < passN }" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
       <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
-      <small v-if="isLive && !edit">{{ idle ? 'пример' : 'засчитано кусков: ' + found.length }}</small>
+      <small v-if="isLive && !edit">{{ idle ? 'пример' : `покрыто ${pct}% текста эталона · ` + (done && pct < passN ? `пока не зачёт, проход от ${passN}%` : `проход от ${passN}%`) }}</small>
       <small v-else>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
       <button v-if="!edit && !idle && !done && !isLive" type="button" class="kbgo" :disabled="asking || !hasNew" :title="'Отправить всё сказанное в чат через мост: какие смысловые блоки засчитаны и где ошибки'" @click="cover"><i class="kbdot" />{{ asking ? 'Чат сверяет…' : 'Отправить на проверку' }}</button>
     </div>
-    <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kb2" :class="{ one: !done }">
-      <section class="kb2s ok"><h4>Засчитано · {{ got.length }}</h4>
-        <ul v-if="got.length" class="kbl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span></li></ul>
-        <p v-else class="kb2e">пока ничего</p></section>
-      <section v-if="done" class="kb2s no"><h4>Не прозвучало · {{ missedL.length }}</h4>
-        <ul v-if="missedL.length" class="kbl"><li v-for="(m, k) in missedL" :key="k"><b>✕ {{ m }}</b></li></ul>
-        <p v-else class="kb2e">всё сказано</p></section>
+    <!-- шар Live (25.11.2026, макет «Шар Live — экран ответа»): засчитанное — одной строкой: кусок эталона жирным, серым — что сказал; новое сверху, в рамке.
+         После «Готово» ниже — «Не прозвучало». Полоса прокрутки — как в Telegram: только при наведении -->
+    <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kblv">
+      <div class="kblvh"><h4>Засчитано</h4><i>{{ got.length }}</i><small v-if="!done">новое — сверху</small></div>
+      <ul v-if="got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
+      <p v-else class="kb2e">пока ничего</p>
+      <template v-if="done">
+        <div class="kblvh no"><h4>Не прозвучало</h4><i>{{ missedL.length }}</i></div>
+        <ul v-if="missedL.length" class="kblvl no"><li v-for="(m, k) in missedL" :key="k"><b class="kblvc">✕</b><span class="kblvr">{{ m }}</span></li></ul>
+        <p v-else class="kb2e">всё сказано</p>
+      </template>
     </div>
     <!-- что засчитал чат: блок ✓ — что ты сказал → как правильно (что исправлено); новое — сверху -->
     <ul v-if="!isLive && got.length && !edit && !idle" class="kbl">
@@ -269,6 +277,22 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbl li { padding: 5px 10px; border-radius: 10px; background: #f2fbf4; font-size: 13px; line-height: 1.4 } .kbl li.fx { background: #fff7e8 }
 .kbl b { font-weight: 800; color: #128a55; margin-right: 6px } .kbs1 { color: #555; font-style: italic } .kbf { margin-left: 6px; font-weight: 800; color: #b26a00 }
 .kbl small { display: block; font-size: 12px; font-weight: 600; color: #8a6a3a }
+/* шар Live: лента засчитанного (макет 25.11.2026) — строка: ✓ кусок эталона · серым что сказал; новое — точка и рамка; «Не прозвучало» — красным */
+.kblv { display: flex; flex-direction: column; gap: 6px; margin-top: 10px }
+.kblvh { display: flex; align-items: baseline; gap: 8px; margin-top: 4px } .kblvh h4 { margin: 0; font-size: 16px; font-weight: 900; color: #351a05 }
+.kblvh i { padding: 1px 9px; border-radius: 999px; background: #cd8a30; color: #fff; font-size: 12.5px; font-weight: 800; font-style: normal } .kblvh small { margin-left: auto; font-size: 12.5px; font-weight: 700; color: #9a6f4a }
+.kblvh.no h4 { color: #b3261e } .kblvh.no i { background: #e5484d }
+.kblvl { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 236px; overflow-y: auto; scrollbar-width: none }
+.kblvl::-webkit-scrollbar { width: 0 } .kblvl:hover { scrollbar-width: thin; scrollbar-color: rgba(123, 66, 36, .28) transparent }
+.kblvl:hover::-webkit-scrollbar { width: 6px } .kblvl:hover::-webkit-scrollbar-thumb { background: rgba(123, 66, 36, .28); border-radius: 3px } .kblvl::-webkit-scrollbar-button { display: none }
+.kblvl li { flex: none; display: flex; align-items: baseline; gap: 10px; padding: 9px 14px; border-radius: 12px; background: #fff; white-space: nowrap; overflow: hidden }
+.kblvl li.nw { box-shadow: inset 0 0 0 2px #cd8a30 } .kblvd { flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%; background: #cd8a30 }
+.kblvc { flex: none; color: #cd8a30; font-weight: 900 } .kblvr { flex: none; max-width: 70%; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: 800; color: #351a05 }
+.kblvs { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 14px; font-weight: 600; color: #a08a72 }
+.kblvl.no li { background: #fff7f5 } .kblvl.no .kblvc { color: #b3261e } .kblvl.no .kblvr { max-width: 100%; flex: 1 1 auto; color: #8c1d18; font-weight: 700 }
+.kball .kbp.lvbad b { color: #b3261e } .kball .kbp.lvbad small { color: #b3261e } .kball .kbp.lvbad .kbbar i { background: #e5484d }
+.th-sphere .kblvh h4, .th-space .kblvh h4 { color: #e2e8f0 } .th-sphere .kblvl li, .th-space .kblvl li { background: rgba(255, 255, 255, .06) } .th-sphere .kblvr, .th-space .kblvr { color: #f1f5f9 } .th-sphere .kblvs, .th-space .kblvs { color: #8b9bb4 }
+.th-sphere .kblvl.no li, .th-space .kblvl.no li { background: rgba(251, 113, 133, .08) } .th-sphere .kblvl.no .kblvr, .th-space .kblvl.no .kblvr { color: #fda4af }
 /* шар Live: два блока под шаром — засчитано / не засчитано (25.11.2026) */
 .kb2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px } .kb2.one { grid-template-columns: 1fr } @media (max-width: 560px) { .kb2 { grid-template-columns: 1fr } }
 .kb2s { min-width: 0 } .kb2s h4 { margin: 0 0 4px; font-size: 12px; font-weight: 800; color: #128a55 } .kb2s.no h4 { color: #b3261e }

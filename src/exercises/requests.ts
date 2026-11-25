@@ -11,6 +11,7 @@ import { liveCheckText, gradeTool } from '../utils/kplive'
 import { evalBody } from '../utils/speech'
 import { sttBody } from '../utils/sttfile'
 import { reqOf } from '../utils/overlay'
+import { ballTools } from '../utils/kpball'
 
 export interface Req { to: string; via: string; body: unknown; note?: string; own?: string }
 const GEN = 'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -25,6 +26,12 @@ export function requests(raw: any): Req[] {
   if (raw.kind === 'kp') {
     const c: any = kpReady(kpCfg(raw))
     const q = { question: raw.text || '‹вопрос›', reference: raw.ideal || '‹эталон›', answer: '‹ответ ученика›' }
+    if (raw.ballLive === true) {          // «· шар Live» (25.11.2026): одна Live-сессия; модель присылает куски эталона, процент считает приложение
+      out.push({ to: 'Шар Live · Live API (на всё упражнение)', via: ws, body: liveSetup({ model: '‹auto: свежая Live-модель ключа›', system: fill(c.ballPrompt, { question: q.question, reference: kpPlain(q.reference) }), lang: c.lang, temperature: 0.2, manual: true, tools: ballTools(c.ballTool), extra: reqOf(c, 'ballLive') }), own: 'ballLive',
+        note: 'Микрофон — как рация: нажали — activityStart, нажали ещё раз — activityEnd, модель сразу вызывает cover' })
+      out.push({ to: 'Шар Live · дальше — голос кусками, пока микрофон включён', via: 'WebSocket, каждые 100 мс', body: audioMsg(PCM) })
+      return out
+    }
     if (!kpApi(raw)) {
       out.push({ to: 'Проверка через мост · экран → наш сервер', via: 'POST ‹сервер›/ai/check  ·  Authorization: Bearer ‹вход›', body: bridgeBody(c, q),
         note: 'Свои поля request тут не действуют: чат в браузере получает текст, а не объект API' })

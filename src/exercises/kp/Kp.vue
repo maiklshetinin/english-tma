@@ -497,6 +497,7 @@ function jsApply() {
           <svg v-if="dic === 'live'" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
           <svg v-else viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
           <span v-if="dic === 'live'" class="kcwv" aria-hidden="true"><span class="kcwvs" :style="{ transform: `translateX(${-waveOff}px)` }"><i v-for="(v, i) in wave" :key="i" :style="{ height: waveH(v) + 'px' }" /></span></span>
+          <b v-if="dic === 'live'">Слушаю · нажмите, чтобы сверить · {{ dicSec }}</b>
           <b v-else>{{ dic === 'connecting' ? 'Подключаюсь…' : 'Нажмите и говорите' }}</b>
         </button>
         <button type="button" class="kpdone" :class="{ busy: p.st.busy }" :disabled="!p.canCheck || idle || dic !== 'idle'" title="Закончить ответ — подвести итог" @click="p.checkAny()"><span v-if="!p.st.busy">Готово</span><i v-else class="kspin" /></button>
@@ -638,7 +639,11 @@ function jsApply() {
 .kptt { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; padding: 0 16px; border: 0; border-radius: 14px; background: #f0f0f0; color: #3a3a3a; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; user-select: none; touch-action: none; transition: background .12s }
 .kptt svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round } .kptt:hover:not(:disabled) { background: #e6e6e6 }
 .kptt.live, .kptt.connecting { background: #1cb0f6; color: #fff } .kptt:disabled { opacity: .5; cursor: default }
-.kptt .kcwv { flex: 1; min-width: 0 }
+.kptt .kcwv { flex: none; width: 120px }
+/* шар Live (25.11.2026, макет «Шар Live — экран ответа»): микрофон включён — кнопка красная, белая волна, стоп-квадрат, «Слушаю · … · 0:12» */
+.kptt.live { background: #e5484d } .kptt.live:hover:not(:disabled) { background: #d93d42 } .kptt.live svg { fill: #fff; stroke: none }
+.kptt.live .kcwv i { background: rgba(255, 255, 255, .65) } .kptt.live .kcwv i:nth-last-child(-n + 3) { background: #fff }
+.kptt.live b { font-variant-numeric: tabular-nums; white-space: nowrap }
 .kpdone { flex: none; min-height: 46px; padding: 0 18px; border: 0; border-radius: 14px; background: #58cc02; color: #fff; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer } .kpdone:hover:not(:disabled) { background: #4fb802 } .kpdone:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kpdone.busy:disabled { background: #58cc02; color: #fff }
 .kcgo { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: #1cb0f6; color: #fff; cursor: pointer; transition: background .12s }
 .kcgo:hover:not(:disabled) { background: #1899d6 } .kcgo:disabled { background: #e8e8e8; color: #b0b0b0; cursor: default } .kcgo.busy:disabled { background: #1cb0f6; color: #fff }

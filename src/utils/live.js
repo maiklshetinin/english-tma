@@ -19,7 +19,7 @@ export function liveSetup({ model, system, voice, lang, temperature = null, sile
     inputAudioTranscription: lang && !plain ? { languageCodes: [lang] } : {}, outputAudioTranscription: {},
     // рация (manual): «договорил» решает не модель по паузе, а кнопка — шлём activityStart / activityEnd сами
     // noInterrupt (шар Live, 25.11.2026): новая речь не обрывает ответ модели — оценка по прошлой паузе доходит, пока ученик говорит дальше
-    ...(manual ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } } : plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs }, ...(noInterrupt ? { activityHandling: 'NO_INTERRUPTION' } : {}) } }),
+    ...(manual ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true }, ...(noInterrupt ? { activityHandling: 'NO_INTERRUPTION' } : {}) } } : plain ? {} : { realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: endSens === 'high' ? 'END_SENSITIVITY_HIGH' : 'END_SENSITIVITY_LOW', silenceDurationMs: silenceMs }, ...(noInterrupt ? { activityHandling: 'NO_INTERRUPTION' } : {}) } }),
     ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
   }, extra) }
 }
@@ -155,9 +155,11 @@ export function startTalk({ key, model, system, voice, opener, lang = 'pl-PL', t
   /** Рация (manual): начало реплики — Gemini замолкает (звук обрывается сразу), голос идёт в модель; конец — модель отвечает */
   function talkStart() { if (!manual || talking || done || ws?.readyState !== 1) return; hush(); talking = true; ws.send(JSON.stringify({ realtimeInput: { activityStart: {} } })) }
   function talkEnd() { if (!manual || !talking) return; talking = false; if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { activityEnd: {} } })) }
+  /** Рация (manual): «срез» посреди речи — конец реплики и сразу начало новой, микрофон не прерывается: модель отвечает на сказанное, пока говорят дальше (шар Live, 25.11.2026; с noInterrupt ответ не обрывается) */
+  function talkCut() { if (!manual || !talking || ws?.readyState !== 1) return; ws.send(JSON.stringify({ realtimeInput: { activityEnd: {} } })); ws.send(JSON.stringify({ realtimeInput: { activityStart: {} } })) }
   /** gated: включить / выключить микрофон; выключили — audioStreamEnd: модель доделывает последнюю фразу сразу, без ожидания паузы */
   function gate(v) { v = !!v; if (!gated || v === gateOn) return; gateOn = v; if (!v && ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) }
-  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() }, outLevel, talkStart, talkEnd, gate,
+  return { stop: () => stop(''), mute: (v) => { muted = !!v }, quiet: (v) => { hushed = !!v; if (hushed) hush() }, outLevel, talkStart, talkEnd, talkCut, gate,
     send: (text) => { if (ws?.readyState === 1) ws.send(JSON.stringify({ realtimeInput: { text } })) },
     listen: async () => { if (mic || done) return; try { await startMic() } catch (err) { stop(err?.name === 'NotAllowedError' ? 'Нет доступа к микрофону — разрешите его в браузере' : 'Микрофон не запустился: ' + (err?.message || err)) } } }
 }

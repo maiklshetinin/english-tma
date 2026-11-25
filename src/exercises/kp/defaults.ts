@@ -36,6 +36,7 @@ export interface KpCfg {
   livePrompt: string; liveAsk: string; liveMore: string; liveTool: string; liveModel: string; voice: string
   discussPrompt: string; discussOpener: string; discussNone: string
   sttPrompt: string; sttAsk: string
+  ballPrompt: string; ballTool: string          // «· шар Live» (25.11.2026): системная инструкция Live-сессии шара и описание её функции cover
 }
 
 /** Мост (чат): сервер склеит prompt + message + format, {id} — его метка задания */
@@ -77,6 +78,22 @@ export const STT = {
     'Ответь только текстом расшифровки. Речи не слышно — ответь пустой строкой.',
   sttAsk: 'Расшифруй запись.',
 }
+/** «Ответ по смыслу · шар Live» (ballLive, 25.11.2026): одна Live-сессия на экран. Модель знает эталон и после каждой реплики (выключили
+ *  микрофон) вызывает cover — какие куски эталона ученик передал (ref дословно, said — что сказал). Процент и «не прозвучало» считает
+ *  фронт (utils/kpball.js, refCover) — модель их не считает. {question}, {reference} — вопрос и эталон, {topic}, {lang}, {langHow} — как везде */
+export const BALL = {
+  ballPrompt: 'Ты — молчаливый помощник в устном упражнении ({topic}, {lang} язык). Ты НИЧЕГО не говоришь и не пишешь ученику: ' +
+    'весь твой ответ — только вызов функции, его читает приложение.\n\nВопрос: {question}\n\nЭталонный ответ:\n{reference}\n\n' +
+    'Ученик отвечает устно частями, как по рации: включает микрофон, говорит, выключает — реплика кончилась; потом может включить и добавить ещё. ' +
+    'Ты слышишь его сам (бывает и текстом: «РЕЧЬ: …»). СРАЗУ после каждой реплики сверь сказанное с эталоном и вызови функцию cover: ' +
+    'found — что из эталона ученик передал в этой реплике впервые. Для каждого: ref — кусок эталона, скопированный ДОСЛОВНО, слово в слово, как написан в эталоне ' +
+    '(одна мысль, 3–12 слов; если ученик передал всё предложение — всё предложение); said — что сказал ученик (2–8 слов, как услышал). ' +
+    'Засчитывай по смыслу: синонимы, другие слова, порядок, грамматические ошибки и оговорки не мешают; о чём не сказано — не засчитывай. ' +
+    'Уже найденное в прошлых репликах не повторяй. Нового нет — всё равно вызови cover с пустым found: приложение ждёт ответ. ' +
+    'Отвечай мгновенно, одним вызовом; проценты не считай, ошибки не разбирай, не говори и не пиши ничего, кроме вызова функции.',
+  ballTool: 'Какие куски эталона (дословно) ученик передал в последней реплике',
+}
+const BALL_TEXTS = ['ballPrompt', 'ballTool'] as const
 const API_TEXTS = ['livePrompt', 'liveAsk', 'liveMore', 'liveTool', 'discussPrompt', 'discussOpener', 'discussNone'] as const
 const STT_TEXTS = ['sttPrompt', 'sttAsk'] as const
 
@@ -99,7 +116,9 @@ const okFormat = (s: any, v: string) => kpApi(s) || v.includes('{id}')
 
 /** Умолчания кода, свои поля поверх (без настроек курса) */
 /** текстовые поля: свои у экрана — как есть, даже пустые (стёрли в JSON — значит пусто, умолчание не подставляем; 21.11.2026) */
-export const KP_TEXTS = ['prompt', 'message', 'format', ...API_TEXTS, ...STT_TEXTS] as const
+export const KP_TEXTS = ['prompt', 'message', 'format', ...API_TEXTS, ...STT_TEXTS, ...BALL_TEXTS] as const
+/** «· шар Live» — у экрана есть ballPrompt и ballTool */
+export const kpBallLive = (s: any) => s?.ballLive === true
 const own = (s: any, k: string) => (typeof s?.[k] === 'string' ? (s[k] as string) : undefined)
 function kpCode(s: any): KpCfg {
   const b = base(s), f = own(s, 'format')
@@ -113,6 +132,7 @@ function kpCode(s: any): KpCfg {
   }
   for (const k of API_TEXTS) o[k] = own(s, k) ?? DEF[k]
   for (const k of STT_TEXTS) o[k] = own(s, k) ?? STT[k]
+  for (const k of BALL_TEXTS) o[k] = own(s, k) ?? BALL[k]
   return o
 }
 /** шаблон экрана — по нему настройки курса (presets) */
@@ -129,6 +149,8 @@ export function kpShown(s: any): Partial<KpCfg> {
   const c = kpCfg(s)
   const o: any = kpApi(s) ? { ...c } : { prompt: c.prompt, message: c.message, format: c.format, pass: c.pass, lang: c.lang, topic: c.topic, dicModel: c.dicModel, request: c.request }
   for (const k of STT_TEXTS) { if (kpFile(s)) o[k] = c[k]; else delete o[k] }
+  for (const k of BALL_TEXTS) delete o[k]
+  if (kpBallLive(s)) return { ballPrompt: c.ballPrompt, ballTool: c.ballTool, pass: c.pass, topic: c.topic, request: c.request }          // шар Live: мост, проверка и диктовка не участвуют — только его промпт
   delete o.lang          // 24.11.2026: язык — польский, зашит в тип (pl-kp); в JSON его нет
   if (kpFile(s)) delete o.dicModel          // «целым аудио» распознаёт Flash Lite файлом — потоковая модель ему не нужна
   return o
@@ -140,12 +162,13 @@ const eq = sameV
 export function kpFields(raw: any): Partial<KpCfg> {
   const o: any = {}
   if (!raw || typeof raw !== 'object') return o
-  const form = { engine: raw.engine, dic: raw.dic }
+  const form = { engine: raw.engine, dic: raw.dic, ballLive: raw.ballLive }
   const x: any = kpCode({ ...form, ...raw }), d: any = kpCfg(form)          // x — значения JSON (неверные — умолчания кода), d — что было бы без своих полей
   for (const k of Object.keys(x)) {
     if (raw[k] === undefined) continue
     if (!kpApi(raw) && (API_ONLY as readonly string[]).includes(k)) continue
     if (!kpFile(raw) && (STT_TEXTS as readonly string[]).includes(k)) continue
+    if (!kpBallLive(raw) && (BALL_TEXTS as readonly string[]).includes(k)) continue
     if (k === 'temperature' && raw.temperature === null && d.temperature === null) continue
     if (!eq(x[k], d[k])) o[k] = x[k]
   }
