@@ -7,7 +7,9 @@
     "kpfile",
     "kpapi",
     "kpball",
-    "kpballive"
+    "kpballive",
+    "kpballive2",
+    "kpballfix"
   ],
   "fields": {
     "head": {
@@ -133,6 +135,10 @@
       "type": "object",
       "default": {},
       "label": "Свои поля запросов в API — накладываются поверх собранного (вложенное сливается, null — убрать поле). Ключи: check — проверка Gemini API, liveCheck — проверка голосом, discuss — разбор голосом, dictation — «Надиктовать» потоком, stt — расшифровка записи целиком, ballLive — Live-сессия шара. Итог — вкладка «Запрос в API»"
+    },
+    "ballFix": {
+      "type": "bool",
+      "label": "Разбор ошибок: cover присылает ещё fix — фраза ученика исправленная (шар Live)"
     }
   },
   "check": "button",
@@ -152,6 +158,12 @@
       "S"
     ],
     "kpballive": [
+      "S"
+    ],
+    "kpballive2": [
+      "S"
+    ],
+    "kpballfix": [
       "S"
     ]
   },

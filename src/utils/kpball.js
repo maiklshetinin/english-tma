@@ -145,9 +145,9 @@ function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5
 // от модели (врут): процент и «не прозвучало» считает фронт — refCover() ниже: какие слова эталона покрыты найденными кусками
 // Текст инструкции и описание функции — из JSON экрана (ballPrompt, ballTool; умолчания — exercises/kp/defaults.ts, BALL), 25.11.2026
 /** Функция шара Live: имена и типы — здесь (их читает приложение), описание — из JSON экрана (ballTool) */
-export const ballTools = (description) => [
+export const ballTools = (description, fix = false) => [          // fix — «· разбор ошибок» (kpballfix, 25.11.2026): ещё и как правильно сказать фразу ученика
   { name: 'cover', description,
-    parameters: { type: 'OBJECT', properties: { found: { type: 'ARRAY', items: { type: 'OBJECT', properties: { ref: { type: 'STRING' }, said: { type: 'STRING' } }, required: ['ref'] } } }, required: ['found'] } },
+    parameters: { type: 'OBJECT', properties: { found: { type: 'ARRAY', items: { type: 'OBJECT', properties: { ref: { type: 'STRING' }, said: { type: 'STRING' }, ...(fix ? { fix: { type: 'STRING' } } : {}) }, required: ['ref'] } } }, required: ['found'] } },
 ]
 /** Слова эталона (как написаны) и их основы — для подсчёта на фронте */
 export function refWords(ideal) { return plain(ideal).split(/\s+/).filter(Boolean).map((w) => ({ w, s: stem(w) })).filter((x) => x.s) }
@@ -177,7 +177,7 @@ export function refCover(ideal, refs) {
 /** Live-сессия шара. system, tool — из JSON экрана; onCover([{ ref, said }]) — найденные куски эталона; onTurn() — модель договорила.
  *  → { send(text), stop(), alive, model }. Сообщения до готовности сессии ждут в очереди */
 const liveSessions = {}          // id экрана → api открытой Live-сессии (микрофон диктовки берёт её же)
-export function openBallLive({ id, question, ideal, system, tool, extra = null, onCover, onTurn }) {          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
+export function openBallLive({ id, question, ideal, system, tool, fix = false, extra = null, onCover, onTurn }) {          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
   const n = netOf(id), key = firstKey()
   if (!key) throw new Error('Нужен ключ Gemini в профиле')
   let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now()
@@ -225,7 +225,7 @@ export function openBallLive({ id, question, ideal, system, tool, extra = null, 
       if (!m) throw new Error('Google не дал ключу Live-модели')
       modelId = m; modelName = liveName(m); n.model = modelName + ' · Live'
       if (closed) return
-      sess = startTalk({ key, model: m, system, lang: 'pl-PL', temperature: 0.2, tools: ballTools(tool), extra, micLater: true, quiet: true, manual: true, on: {
+      sess = startTalk({ key, model: m, system, lang: 'pl-PL', temperature: 0.2, tools: ballTools(tool, fix), extra, micLater: true, quiet: true, manual: true, on: {
         state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
         ready: () => { ready = true; lg('send', 'соединение готово · ' + modelId + ' · инструкция (ballPrompt): ' + String(system).replace(/\s+/g, ' ').slice(0, 300) + '…'); flush() },
         turn: () => { lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
@@ -235,7 +235,7 @@ export function openBallLive({ id, question, ideal, system, tool, extra = null, 
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
           if (name === 'cover') {
             lg('cover', JSON.stringify(args).slice(0, 400) + ' · ' + sec)
-            const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim() })).filter((x) => x.ref)
+            const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim(), fix: String(x?.fix ?? '').trim() })).filter((x) => x.ref)
             n.cover = { st: 'on', txt: (got.length ? `найдено ${got.length}` : 'нового нет') + ` · ${sec}` }
             if (L.ph === 'think') L.last = { n: got.length, ms: Date.now() - L.at }
             onCover?.(got); return { ok: true }
@@ -264,4 +264,24 @@ export function startBallDictation({ id, on = {} }) {
     level: (v) => on.level?.(v),
   }).then(() => { if (!done) on.state?.('live') }, (e) => fin('Микрофон: ' + (e?.message || e)))
   return { stop: () => fin('') }
+}
+
+/** «· разбор ошибок» (25.11.2026): фраза ученика → исправленная, по словам. Кусочки: { t } — как было, { del, ins } — зачеркнуть del, сверху ins */
+export function fixDiff(said, fix) {
+  const a = String(said ?? '').split(/\s+/).filter(Boolean), b = String(fix ?? '').split(/\s+/).filter(Boolean)
+  const k = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+  if (!b.length || a.map(k).join(' ') === b.map(k).join(' ')) return a.length ? [{ t: a.join(' ') }] : []
+  // LCS с конца: совпадения прижимаем к концу фразы — ошибка и исправление встают рядом одним кусочком
+  const P = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0))
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) P[i][j] = k(a[i - 1]) === k(b[j - 1]) ? P[i - 1][j - 1] + 1 : Math.max(P[i - 1][j], P[i][j - 1])
+  const ops = []
+  let i = a.length, j = b.length
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && k(a[i - 1]) === k(b[j - 1])) { ops.push({ t: b[j - 1] }); i--; j-- }
+    else if (j > 0 && (i === 0 || P[i][j - 1] >= P[i - 1][j])) { ops.push({ ins: b[j - 1] }); j-- }
+    else { ops.push({ del: a[i - 1] }); i-- }
+  }
+  const out = [], push = (x) => { const p = out[out.length - 1]; if (x.t != null && p?.t != null) p.t += ' ' + x.t; else if (x.t == null && p && p.t == null) { if (x.del) p.del = (p.del ? p.del + ' ' : '') + x.del; if (x.ins) p.ins = (p.ins ? p.ins + ' ' : '') + x.ins } else out.push({ ...x }) }
+  ops.reverse().forEach(push)
+  return out
 }

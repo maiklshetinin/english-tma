@@ -108,6 +108,14 @@ export const BALL2 = {
     'Отвечай мгновенно, одним вызовом; проценты не считай, ошибки не разбирай, не говори и не пиши ничего, кроме вызова функции.',
   ballTool: BALL.ballTool,
 }
+/** «Шар Live · разбор ошибок» (kpballfix, 25.11.2026, тест) — промпт BALL2 почти без изменений: said — дословно со всеми ошибками, + fix — как правильно */
+export const BALL3 = {
+  ballPrompt: BALL2.ballPrompt
+    .replace("said — что сказал ученик (2–8 слов, как услышал). ", "said — что сказал ученик по этому куску, ДОСЛОВНО как услышал, со всеми его ошибками (2–12 слов); " +
+      "fix — та же фраза ученика, но исправленная: падежи, окончания, предлоги, род, вид глагола, порядок слов — меняй только ошибочные слова, остальное оставь его словами; ошибок нет — fix такой же, как said. ")
+    .replace("проценты не считай, ошибки не разбирай, не говори", "проценты не считай, не говори"),
+  ballTool: 'Какие куски эталона (дословно) ученик передал в последней реплике; said — как сказал ученик, fix — как правильно',
+}
 const BALL_TEXTS = ['ballPrompt', 'ballTool'] as const
 const API_TEXTS = ['livePrompt', 'liveAsk', 'liveMore', 'liveTool', 'discussPrompt', 'discussOpener', 'discussNone'] as const
 const STT_TEXTS = ['sttPrompt', 'sttAsk'] as const
@@ -147,11 +155,11 @@ function kpCode(s: any): KpCfg {
   }
   for (const k of API_TEXTS) o[k] = own(s, k) ?? DEF[k]
   for (const k of STT_TEXTS) o[k] = own(s, k) ?? STT[k]
-  for (const k of BALL_TEXTS) o[k] = own(s, k) ?? (s?.ballV2 === true ? BALL2 : BALL)[k]          // новый вид — свой отлаженный промпт
+  for (const k of BALL_TEXTS) o[k] = own(s, k) ?? (s?.ballFix === true ? BALL3 : s?.ballV2 === true ? BALL2 : BALL)[k]          // новый вид — свой отлаженный промпт
   return o
 }
 /** шаблон экрана — по нему настройки курса (presets) */
-export const kpTpl = (s: any) => (s?.ballLive === true ? (s?.ballV2 === true ? 'kpballive2' : 'kpballive') : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
+export const kpTpl = (s: any) => (s?.ballLive === true ? (s?.ballFix === true ? 'kpballfix' : s?.ballV2 === true ? 'kpballive2' : 'kpballive') : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
 /** Действующие настройки экрана: умолчания кода ← настройки упражнения в курсе ← свои поля экрана */
 export function kpCfg(s: any): KpCfg {
   const mine: any = {}
@@ -177,7 +185,7 @@ const eq = sameV
 export function kpFields(raw: any): Partial<KpCfg> {
   const o: any = {}
   if (!raw || typeof raw !== 'object') return o
-  const form = { engine: raw.engine, dic: raw.dic, ballLive: raw.ballLive, ballV2: raw.ballV2 }
+  const form = { engine: raw.engine, dic: raw.dic, ballLive: raw.ballLive, ballV2: raw.ballV2, ballFix: raw.ballFix }
   const x: any = kpCode({ ...form, ...raw }), d: any = kpCfg(form)          // x — значения JSON (неверные — умолчания кода), d — что было бы без своих полей
   for (const k of Object.keys(x)) {
     if (raw[k] === undefined) continue
