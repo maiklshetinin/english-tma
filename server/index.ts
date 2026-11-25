@@ -310,6 +310,7 @@ app.post('/progress/log/remove', requireUser, requireTeacher, wrap(async (req, r
 app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(), storage: storage.ready })))
 app.get('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.get(req.params.id))))
 app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.put(req.user.uid, req.params.id, req.body))))
+app.post('/courses/:id/cover', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.setCover(req.params.id, req.body))))      // { cover: ключ | null } — картинка на иконке курса (25.11.2026)
 app.delete('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => {
   const c = await courses.get(req.params.id)
   await courses.remove(req.params.id)

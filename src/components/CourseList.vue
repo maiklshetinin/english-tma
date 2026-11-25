@@ -35,7 +35,46 @@ const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'элемент' : [2, 3, 
 // 25.11.2026 (макет «Вкладка «Курсы» — выбор курса», вариант B): курсы — ряд вкладок шириной с колонку курса (620px), все видны сразу, как плитки;
 // не влезли — ряд листается вбок, правый край плавно гаснет; выбранный — тёмный; у выбранного — карандаш и корзина. «+» — новый курс
 // 25.11.2026 (макет E2): все курсы одного цвета; выбранный — на сиреневой подложке; карандаш и корзина — в строке прогресса под курсами (TeacherPath)
-defineExpose({ open, removeSel: () => { const c = list.value?.find((x) => x.id === props.selected); if (c) remove(c) } })
+defineExpose({ open, removeSel: () => { const c = list.value?.find((x) => x.id === props.selected); if (c) remove(c) }, pickCover: () => coverIn.value?.click(), dropCover: () => setCover(props.selected, null), hasCover: (id) => !!list.value?.find((x) => x.id === id)?.cover, coverBusy: () => !!coverBusy.value })
+// Картинка на иконке курса (25.11.2026, как превью плиток меню): выбрали курс → «🖼» в строке прогресса, или перетащили картинку на иконку,
+// или Ctrl+V. Режется по центру в квадрат 240×240 и уходит в хранилище курса (сервер: POST /courses/:id/cover). Убрать — «Сбросить»
+const coverIn = ref(null), coverBusy = ref(''), coverUrl = ref({})
+async function coverUrls() {
+  const keys = (list.value ?? []).map((c) => c.cover).filter((k) => k && !(k in coverUrl.value))
+  if (!keys.length || !online) return
+  try { const r = await apiRequest('/media/view', { method: 'POST', body: JSON.stringify({ keys }) }); if (r.ok) coverUrl.value = { ...coverUrl.value, ...(await r.json()).urls } } catch { /* без сети — позже */ }
+}
+watch(list, coverUrls)
+async function coverCut(file) {
+  const bmp = await createImageBitmap(file), s = Math.min(bmp.width, bmp.height), c = document.createElement('canvas'); c.width = c.height = 240
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 240, 240)
+  return new Promise((ok) => c.toBlob((b) => ok(new File([b], 'cover.webp', { type: 'image/webp' })), 'image/webp', 0.88))
+}
+async function sendCover(file, courseId) {
+  const token = await fb?.currentUser?.getIdToken()
+  return new Promise((ok, no) => {
+    const x = new XMLHttpRequest(); x.open('POST', `${API}/media/upload?courseId=${encodeURIComponent(courseId)}`)
+    x.setRequestHeader('Content-Type', file.type); if (token) x.setRequestHeader('Authorization', `Bearer ${token}`)
+    x.onload = () => (x.status < 300 ? ok(JSON.parse(x.responseText).key) : no(new Error(String(x.status)))); x.onerror = () => no(new Error('network')); x.send(file)
+  })
+}
+async function setCover(id, file) {
+  const c = list.value?.find((x) => x.id === id); if (!c) return
+  if (!online) return showToast('Картинка курса хранится на сервере — сейчас без сети', null, 'bad')
+  if (file && !/^image\//.test(file.type)) return
+  coverBusy.value = id
+  try {
+    const key = file ? await sendCover(await coverCut(file), id) : null
+    const r = await apiRequest(`/courses/${id}/cover`, { method: 'POST', body: JSON.stringify({ cover: key }) }); if (!r.ok) throw new Error(String(r.status))
+    const old = c.cover; if (key) c.cover = key; else delete c.cover
+    if (old && old !== key) apiRequest('/media/delete', { method: 'POST', body: JSON.stringify({ key: old }) }).catch(() => {})
+    list.value = [...list.value]; showToast(key ? 'Картинка курса поставлена' : 'Картинка курса убрана')
+  } catch (e) { showToast('Не удалось поставить картинку курса: ' + (e.message || e), null, 'bad') }
+  finally { coverBusy.value = '' }
+}
+function coverFile(e) { const f = e.target.files?.[0]; e.target.value = ''; if (f && props.selected) setCover(props.selected, f) }
+function coverPaste(e) { if (!props.selected || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName ?? '')) return; const f = [...(e.clipboardData?.files ?? [])].find((x) => /^image\//.test(x.type)); if (f) { e.preventDefault(); setCover(props.selected, f) } }
+onMounted(() => addEventListener('paste', coverPaste)); onBeforeUnmount(() => removeEventListener('paste', coverPaste))
 const row = ref(null), moreR = ref(false), moreL = ref(false)
 function edges() { const el = row.value; if (!el) return; moreL.value = el.scrollLeft > 2; moreR.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 2 }
 let ro = null
@@ -57,14 +96,15 @@ async function remove(c) {
       <div v-else-if="list.length" ref="row" class="grid" :class="{ fr: moreR, fl: moreL }" role="tablist" aria-label="Курсы" @scroll="edges">
         <div v-for="(c, i) in list" :key="c.id" class="cc" :class="{ on: c.id === selected }" role="tab" :aria-selected="c.id === selected" tabindex="0"
           :title="`${c.title} · ${c.count} ${word(c.count)}${c.updatedAt ? ' · изменён ' + ago(c.updatedAt) : ''}\nНажмите — посмотреть ниже, дважды — открыть в редакторе`"
-          @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
-          <span class="ic"><AppIcon name="route" :size="26" /></span>
+          @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)" @dragover.prevent @drop.prevent="emit('update:selected', c.id); setCover(c.id, $event.dataTransfer?.files?.[0])">
+          <span class="ic" :class="{ img: c.cover && coverUrl[c.cover], busy: coverBusy === c.id }"><img v-if="c.cover && coverUrl[c.cover]" :src="coverUrl[c.cover]" alt="" draggable="false" /><AppIcon v-else name="route" :size="26" /></span>
           <b>{{ c.title }}</b>
         </div>
         <button class="new" type="button" title="Новый курс" aria-label="Новый курс" @click="open('new')"><span class="ic"><AppIcon name="plus" :size="22" /></span><small>Новый курс</small></button>
       </div>
       <button v-else class="new" type="button" title="Новый курс" aria-label="Новый курс" @click="open('new')"><span class="ic"><AppIcon name="plus" :size="22" /></span><small>Новый курс</small></button>
     </div>
+    <input ref="coverIn" type="file" accept="image/*" hidden @change="coverFile" />
     <p v-if="err" class="hint">Не удалось загрузить курсы {{ err }}</p>
     <div v-if="list && !list.length" class="card empty">
       <b>Курсов пока нет</b><span>Курс — это путь ученика: задания по порядку на одной линии, кружки из Telegram, фото. Собирается на холсте, как во Figma.</span>
@@ -90,6 +130,7 @@ async function remove(c) {
 .cc, .new { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; width: 86px; box-sizing: border-box; padding: 8px 4px; border: 0; border-radius: 18px; background: none; font: inherit; color: var(--text); cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; transition: background .15s }
 .ic { position: relative; display: grid; place-items: center; width: 60px; height: 60px; box-sizing: border-box; border-radius: 14px; background: var(--purple); color: #fff; transition: transform .12s }
 .cc:hover .ic { transform: translateY(-2px) } .cc:active .ic { transform: scale(.96) }
+.ic.img { overflow: hidden; background: #eee } .ic.img img { width: 100%; height: 100%; object-fit: cover; display: block } .ic.busy { opacity: .5 }          /* своя картинка курса (25.11.2026) */
 .cc.on { background: #f1e8fd } html[data-theme='dark'] .cc.on { background: rgba(165, 96, 232, .2) }          /* выбранный — мягкая подложка, без обводки */
 .cc b { width: 100%; font-size: 11.5px; font-weight: 700; line-height: 1.2; text-align: center; color: var(--hint); overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
 .cc.on b { font-weight: 900; color: var(--text) }
