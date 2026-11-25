@@ -134,6 +134,11 @@ const kindName = (e) => (e.kind ? exName(e) : 'Экран')
 .sn { font-size: 12px; color: var(--hint); font-weight: 700; font-variant-numeric: tabular-nums }
 .sw { min-width: 0; overflow-wrap: anywhere } .sw b { font-weight: 800 } .sw small { display: block; font-size: 12px; color: var(--hint); font-weight: 600; margin-top: 1px }
 .sm { font-size: 12px; color: var(--hint); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums }
+/* 25.11.2026: строки ниже — одна линия: название · курс серым; «82% зачтено» в строку (на телефоне — как было, в две) */
+@media (min-width: 561px) {
+  .rh { padding: 5px 16px; gap: 10px } .tt { display: flex; align-items: baseline; gap: 8px } .tt b { flex: 0 1 auto; min-width: 0 } .tt small { flex: 1 1 0; min-width: 40px }
+  .rs { display: flex; align-items: baseline; gap: 5px } .dh { padding: 12px 16px 8px }
+}
 @media (max-width: 560px) {
   .rh { grid-template-columns: 40px minmax(0, 1fr) auto 44px 26px; gap: 8px; padding: 10px 12px }
   .dh { padding: 12px 12px 8px } .st { padding: 2px 12px 10px 12px } .rdel { padding: 0 12px 10px } .tt b { white-space: normal; line-height: 1.2 }
