@@ -19,6 +19,7 @@ import { checkSmart, getPick } from '../utils/kpcheck'
 import { checkLive } from '../utils/kplive'
 import { ballNet, ballLiveOf } from '../utils/kpball'
 import { kpCfg, kpApi } from '../exercises/kp/defaults'
+import { mfFields, mfCheck } from '../exercises/mf/data'
 import { shuffle, orderParts, gapParts, gapOk, gapList, BOOK, twLayout, twCheck, speechMatch } from '../utils/lesson'
 
 const props = defineProps({
@@ -60,7 +61,7 @@ const src = (v, k) => (!v || (props.idle && (k === 'audio' || k === 'video')) ? 
 let au = null
 const mine = reactive({ ok: 0, all: 0 })           // счёт этого экрана (для ветки в редакторе)
 const { hapticResult, hapticTick } = useTelegram()      // виброотклик на ответы (в Профиле можно выключить)
-const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false, took: null, spoke: 0 })          // took — время выполнения, с; spoke — сколько говорил (Kp), 24.11.2026; ai, busy — «Ответ по смыслу» (проверка через мост с чатом)
+const st = reactive({ wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], order: [], L: [], R: [], pool: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false, took: null, spoke: 0, mf: {}, mfr: null })          // mf, mfr — «Красный Мерфи»: вписанное по полям и итог проверки (25.11.2026); took — время выполнения, с; spoke — сколько говорил (Kp), 24.11.2026; ai, busy — «Ответ по смыслу» (проверка через мост с чатом)
 // Время выполнения упражнения (24.11.2026): от открытия экрана до результата (проверки); пока вкладка скрыта — не считается.
 // Его видно в подвале у результата, оно же уходит в журнал заходов (answer → took), урок = сумма этих времён (spent).
 // Экраны без оценки (вступление, подсказка, разговор) — до «Продолжить»
@@ -73,7 +74,7 @@ onMounted(() => document.addEventListener('visibilitychange', exVis)); onUnmount
 const tookT = computed(() => { const s = st.took ?? 0; return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
 function setup() {
   exClose()
-  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false, took: null, spoke: 0 }); Object.assign(mine, { ok: 0, all: 0 })
+  Object.assign(st, { wrong: [], picked: null, done: false, left: null, right: null, matched: [], bad: [], built: [], typed: '', tys: [], res: null, showTr: false, hint: false, mode: '', text: '', place: {}, sel: null, tw: [], twr: null, ai: null, busy: false, took: null, spoke: 0, mf: {}, mfr: null }); Object.assign(mine, { ok: 0, all: 0 })
   if (!props.edit && !props.mini && !props.idle && step.value) { exT0 = Date.now(); exHid = 0; exHidAt = document.hidden ? Date.now() : 0 }
   recStop(true); rec.url = ''; rec.err = ''; rec.heard = ''; rec.miss = false
   const s = step.value; if (!s || props.edit) return
@@ -87,7 +88,7 @@ function setup() {
   if (s.kind === 'gap' && s.opts?.length) { const idx = s.opts.map((_, k) => k); st.order = keep ? idx : shuffle(idx) }
   if (s.kind === 'sort' && s.tw) st.tw = twLayout(s).cols.map(c => Array(c.need).fill(''))          // «Заполни таблицу»: что ученик вписал, по колонкам
   if (s.kind === 'odd' || s.kind === 'sort') { const idx = (s.kind === 'odd' ? s.opts : s.items ?? []).map((_, k) => k); st.order = keep || s.mix === false ? idx : shuffle(idx) }
-  if (s.kind === 'intro' || s.kind === 'tip' || s.kind === 'talk' || s.kind === 'stt') { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
+  if (s.kind === 'intro' || s.kind === 'tip' || s.kind === 'talk' || s.kind === 'stt' || (s.kind === 'mf' && s.mode === 'info')) { st.done = true; if (props.track) emit('answer', { step: s, ok: null }) }
   if (s.kind === 'answer' && s.bk && s.bs === 'page') st.mode = 'write'          // Т4 «Answer the questions about you» — сразу пишем, как в книге
   if (s.kind === 'speak' && props.track) emit('answer', { step: s, ok: null })          // «Повтори» — без оценки, но «Продолжить» — только когда ученик правда что-то сказал (17.11.2026: молчание засчитывалось)          // без оценки — только «встречалось»
   if (!props.single && !props.embedded) autoplay()
@@ -110,7 +111,7 @@ function pick(k) {
   st.picked = k; verdict(k === (step.value.ans ?? 0))
 }
 const right = computed(() => step.value?.kind === 'choice' ? st.picked === (step.value.ans ?? 0) : st.res === true)
-const checks = computed(() => ['choice', 'order', 'gap', 'odd', 'sort', 'kp'].includes(step.value?.kind))
+const checks = computed(() => ['choice', 'order', 'gap', 'odd', 'sort', 'kp'].includes(step.value?.kind) || (step.value?.kind === 'mf' && step.value.mode !== 'info'))
 
 // ---- пары ----
 function tap(side, k) {
@@ -218,7 +219,7 @@ function again() { const v = vid.value; if (v) { v.currentTime = 0; v.play().cat
 function sendText() { if (st.text.trim()) st.done = true }
 
 // ---- дальше ----
-const later = computed(() => (retry || props.again) && st.done && ['choice', 'order', 'gap', 'odd', 'sort', 'kp'].includes(step.value?.kind) && !right.value && !st.ai?.error)          // ошибка → «вернёмся в конце» (без проверки ИИ — не ошибка)
+const later = computed(() => (retry || props.again) && st.done && (['choice', 'order', 'gap', 'odd', 'sort', 'kp'].includes(step.value?.kind) || (step.value?.kind === 'mf' && step.value.mode !== 'info')) && !right.value && !st.ai?.error)          // ошибка → «вернёмся в конце» (без проверки ИИ — не ошибка)
 // «Ответ по смыслу» меньше 60 % возвращается в конце урока только один раз: вторая попытка снова мимо — урок идёт дальше
 const kpBack = new Set()
 // на ветке в редакторе повтор встаёт в конец сразу, как только ответили неверно (не ждём «Продолжить»)
@@ -252,11 +253,12 @@ function answerText(s) {
   if (s.kind === 'order') return st.built.map(x => pw.value[x]).join(s.by === 'letters' ? '' : ' ')
   if (s.kind === 'gap') return st.typed
   if (s.kind === 'kp' || s.kind === 'answer') return st.text
+  if (s.kind === 'mf') return mfFields(s).map(f => st.mf[f.k] ?? '').join(' | ')
   return ''
 }
 // экран решён (или показан, если без оценки) — ответ в Review: верно / нет, у «Пар» — какие пары перепутали
 watch(() => st.done, (d) => {
-  const s = step.value; if (!d || !s || !['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp', 'answer'].includes(s.kind)) return
+  const s = step.value; if (!d || !s || !['choice', 'order', 'gap', 'pairs', 'odd', 'sort', 'kp', 'answer'].includes(s.kind) && !(s.kind === 'mf' && s.mode !== 'info')) return
   if (st.took == null && exT0) st.took = Math.round(exMs() / 1000)          // результат пришёл — время выполнения зафиксировано
   if (!props.track || s.kind === 'answer') return
   emit('answer', { took: st.took, step: s, ok: s.kind === 'kp' && st.ai?.error ? null : s.kind === 'pairs' ? !st.wrong.length : s.kind === 'choice' ? st.picked === (s.ans ?? 0) : st.res === true, wrong: [...st.wrong], text: answerText(s), score: st.ai?.score })          // ИИ не ответил — без оценки
@@ -270,12 +272,12 @@ const onKey = (e) => { if (e.key === 'Enter' && !props.single && !props.embedded
 const isBook = computed(() => !isFinal.value && !!step.value?.bk && !!BOOK[step.value.bk])
 // «Учебник 1:1» (18.11.2026) — отдельная вкладка: оформление точно как в книге (bs: 'page'); без bs — Настин вид
 const isPage = computed(() => isBook.value && step.value?.bs === 'page')
-const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !step.value.opts?.length) || step.value?.kind === 'odd' || step.value?.kind === 'sort' || step.value?.kind === 'kp'))
+const needCheck = computed(() => !st.done && ((step.value?.kind === 'gap' && !step.value.opts?.length) || step.value?.kind === 'odd' || step.value?.kind === 'sort' || step.value?.kind === 'kp' || (step.value?.kind === 'mf' && step.value.mode !== 'info')))
 // ---- книжные (экспериментальные): «Найди лишнее» и «Распредели по колонкам» ----
 const sortLeft = computed(() => (step.value?.kind !== 'sort' ? 0 : step.value.tw ? st.tw.flat().filter(v => !v.trim()).length : st.order.filter(k => st.place[k] == null).length))
 // «Заполни таблицу» (Настя, 18.11.2026): банк слов, образцы зачёркнуты; ученик вписывает форму в колонку — порядок в колонке не важен
 const chatKp = computed(() => step.value?.kind === 'kp' && step.value.dic !== 'file')          // строка ввода как в чате — в подвале экрана
-const canCheck = computed(() => { const k = step.value?.kind; return k === 'kp' ? !!st.text.trim() && !st.busy : k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
+const canCheck = computed(() => { const k = step.value?.kind; return k === 'mf' ? mfFields(step.value).length > 0 && mfFields(step.value).every(f => (st.mf[f.k] ?? '').trim()) : k === 'kp' ? !!st.text.trim() && !st.busy : k === 'odd' ? st.picked != null : k === 'sort' ? (step.value.tw ? st.tw.flat().length > 0 : (step.value.items?.length ?? 0) > 0) && sortLeft.value === 0 : typedAll.value })
 function sortPick(k) { if (!st.done) st.sel = st.sel === k ? null : k }
 function sortPut(c) { if (st.done || st.sel == null) return; st.place = { ...st.place, [st.sel]: c }; st.sel = null; hapticTick?.() }
 function sortBack(k) { if (st.done) return; const p = { ...st.place }; delete p[k]; st.place = p }
@@ -283,6 +285,7 @@ const sortOkAt = (k) => st.place[k] === step.value.items[k].c
 function checkAny() {
   const s = step.value; if (st.done || !canCheck.value) return
   if (s.kind === 'kp') return aiCheck()
+  if (s.kind === 'mf') { st.mfr = mfCheck(s, st.mf); return verdict(st.mfr.all) }
   if (s.kind === 'odd') return verdict(st.picked === (s.ans ?? 0))
   if (s.kind === 'sort' && s.tw) { st.twr = twCheck(s, st.tw); return verdict(st.twr.all) }
   if (s.kind === 'sort') return verdict((s.items ?? []).every((_, k) => sortOkAt(k)))

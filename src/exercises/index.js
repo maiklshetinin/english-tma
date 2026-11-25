@@ -15,6 +15,7 @@ import Sort from './sort/Sort.vue'
 import Kp from './kp/Kp.vue'
 import Talk from './talk/Talk.vue'
 import Stt from './stt/Stt.vue'
+import Mf from './mf/Mf.vue'
 import intro from './intro/intro.json'
 import choice from './choice/choice.json'
 import tip from './tip/tip.json'
@@ -28,6 +29,7 @@ import sort from './sort/sort.json'
 import kp from './kp/kp.json'
 import talk from './talk/talk.json'
 import stt from './stt/stt.json'
+import mf from './mf/mf.json'
 
 export const EX = {
   intro: { ...intro, view: Intro },
@@ -42,6 +44,7 @@ export const EX = {
   sort: { ...sort, view: Sort },
   kp: { ...kp, view: Kp },
   talk: { ...talk, view: Talk },
+  mf: { ...mf, view: Mf },          // «Красный Мерфи» (25.11.2026): объяснение A–D и упражнения как в English Grammar in Use
   stt: { ...stt, view: Stt },        // «Транскрипция» — Gemini 3.5 Transcribe Live (20.11.2026, эксперимент)     // «Разговор с Gemini» — живой голосовой диалог, Live API (20.11.2026, эксперимент)          // «Ответ по смыслу» — Karta Polaka, проверяет Gemini (19.11.2026)
 }
 /** Шаблон экрана по его типу (все 11 типов — тут) */

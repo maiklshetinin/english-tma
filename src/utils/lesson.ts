@@ -18,8 +18,10 @@
 
 import { talkFields, talkCfg, type EndSens } from '../exercises/talk/defaults'
 import { kpFields, kpShown } from '../exercises/kp/defaults'
+import { mfClean, mfFields, mfTpl, MF_OPTS } from '../exercises/mf/data'
+import { MF_TPL } from '../exercises/mf/tpl'
 
-export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk' | 'stt'
+export type StepKind = 'intro' | 'choice' | 'pairs' | 'order' | 'tip' | 'speak' | 'gap' | 'answer' | 'sort' | 'odd' | 'kp' | 'talk' | 'stt' | 'mf'
 export interface Opt { w: string; t?: string; image?: string; audio?: string; k?: string }
 export interface SortItem { w: string; c: number; k?: string; a?: string; ex?: boolean }          // «Заполни таблицу» (tw): a — что вписать (bag → bags, варианты через /), ex — образец (зачёркнут в банке, вписан в таблицу)
 export interface Pair { a: string; b: string }
@@ -52,7 +54,9 @@ export interface Step {
   avatar?: boolean                                                    // «Разговор с персонажем» (тест): над разговором — анимированный персонаж, рот по голосу Gemini
   lock?: string; opener?: string; silenceMs?: number; endSens?: EndSens; temperature?: number; noiseSuppression?: boolean   // «Разговор с Gemini»: замок языка, первая реплика, пауза до «договорил», чувствительность конца речи, температура, шумодав (нет — умолчания, exercises/talk/defaults.ts)
   format?: string; message?: string; thinking?: boolean; livePrompt?: string; liveAsk?: string; liveMore?: string; discussPrompt?: string; discussOpener?: string; liveTool?: string; liveModel?: string; discussNone?: string; sttPrompt?: string; sttAsk?: string   // (21.11.2026: + описание функции оценки, Live-модель, «ничего не упущено», промпт и просьба расшифровки «целым аудио») «Ответ по смыслу · Gemini API»: промпты и настройки моделей проверки (нет — умолчания, exercises/kp/defaults.ts)
-  cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean; tw?: boolean; rows?: number; cs?: boolean; noEx?: boolean   // tw — «Заполни таблицу» (Настя, 18.11.2026): rows — строк, cs — с учётом регистра, noEx — без образцов; «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
+  mode?: string; no?: string; who?: string; post?: string; two?: boolean; inl?: boolean; copy?: boolean; below?: boolean; hints?: string[]          // «Красный Мерфи» (25.11.2026) — exercises/mf/data.ts
+  banks?: { t: string; w: string[]; x: string[] }[]
+  cols?: { t: string }[]; items?: SortItem[]; mix?: boolean; hint?: boolean; tw?: boolean; rows?: number | any[]; cs?: boolean; noEx?: boolean   // tw — «Заполни таблицу» (Настя, 18.11.2026): rows — строк, cs — с учётом регистра, noEx — без образцов; «Распредели по колонкам» / «Найди лишнее»: mix: false — не перемешивать, hint: false — без подсказки
 }
 
 /** Задания курса, в которые можно собрать экраны */
@@ -88,6 +92,8 @@ export const KINDS: Record<StepKind, { t: string; d: string; c: string; dk: stri
     ic: '<path d="M4 6h10v7H8l-4 3z"/><path d="M14 10h6v7h-2l-3 2.5V17h-1z"/><path d="M18.5 2.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>' },
   stt: { t: 'Транскрипция', d: 'Сказать вслух — Gemini пишет текстом, что услышал (Live API)', c: '#2fa36b', dk: '#1f7a4f', head: 'Скажите — и посмотрите, что услышал Gemini',
     ic: '<rect x="4" y="3" width="5" height="9" rx="2.5"/><path d="M2.5 9.5a4 4 0 0 0 8 0M6.5 14v3"/><path d="M13 7h8M13 11h8M13 15h6M13 19h4"/>' },
+  mf: { t: 'Красный Мерфи', d: 'Объяснение A, B, C, D и упражнения как в English Grammar in Use', c: '#c8232c', dk: '#9e1820', head: 'Write the answers.',
+    ic: '<path d="M5 4h11l3 3v13H5z"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/>' },
   odd: { t: 'Найди лишнее', d: 'Слово, которое не подходит к остальным', c: 'var(--pink, #ec4899)', dk: 'var(--pink-d, #be185d)', head: 'Найдите лишнее слово',
     ic: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="M15 15l3 3M18 15l-3 3"/>' },
 }
@@ -111,7 +117,7 @@ export function tileOf(k: string | undefined, i: number): { bg: string; fg: stri
 export const KIND_LIST = Object.keys(KINDS) as StepKind[]
 
 /** Примерное время экрана по типу, в минутах (как «11 MIN» у урока в Busuu); репетитор может поставить своё */
-export const KIND_MIN: Record<StepKind, number> = { intro: 0.5, choice: 0.5, pairs: 1, order: 1, tip: 1, speak: 1, gap: 0.5, answer: 1.5, sort: 1, odd: 0.5, kp: 2, talk: 5, stt: 2 }
+export const KIND_MIN: Record<StepKind, number> = { intro: 0.5, choice: 0.5, pairs: 1, order: 1, tip: 1, speak: 1, gap: 0.5, answer: 1.5, sort: 1, odd: 0.5, kp: 2, talk: 5, stt: 2, mf: 3 }
 export const MIN_CHOICES = [0.5, 1, 1.5, 2, 3, 5, 10]
 export const stepMin = (s: Step) => (typeof s.min === 'number' && s.min > 0 ? s.min : KIND_MIN[s.kind] ?? 1)
 /** Время урока — только сумма экранов (своё время ставят у экранов), округлённая вверх до минуты (пустой урок — 0) */
@@ -134,6 +140,7 @@ export function newStep(kind: StepKind): Step {
   if (kind === 'kp') return { id: stepId(), kind, text: '', ideal: '' }
   if (kind === 'talk') return { id: stepId(), kind, text: '' }
   if (kind === 'stt') return { id: stepId(), kind, text: '' }
+  if (kind === 'mf') return { id: stepId(), kind, rows: [{ q: '', a: '' }] } as any
   if (kind === 'odd') return { id: stepId(), kind, opts: [], ans: 0 }
   if (kind === 'sort') return { id: stepId(), kind, cols: [{ t: '' }, { t: '' }], items: [] }
   return { id: stepId(), kind, word: '', tr: '', ex: '', exTr: '' }
@@ -166,6 +173,7 @@ export function fishStep(kind: StepKind): Step {
     ideal: '==Mikołajki== obchodzimy **6 grudnia** na cześć świętego Mikołaja, biskupa z Miry, który czynił cuda.\nTego dnia dzieci otrzymują ==drobne prezenty==, które zazwyczaj są ukrywane pod poduszką, w butach lub specjalnych skarpetach – najczęściej są to słodycze, zabawki lub książki.' }          // «рыба» — с оформлением, как в домашке (20.11.2026)
   if (kind === 'talk') return { id: stepId(), kind, text: 'Собеседование на Карту поляка: консул задаёт вопросы — отвечайте по-польски' }
   if (kind === 'stt') return { id: stepId(), kind, text: 'Расскажите о себе по-польски: 3–4 предложения' }
+  if (kind === 'mf') return mfMake('mf171')
   if (kind === 'odd') return { id: stepId(), kind, ans: 1, note: 'Coffee — напиток, остальное — еда.', opts: [{ w: 'egg', k: '#fbedb0' }, { w: 'coffee', k: '#cfe6f7' }, { w: 'apple', k: '#cfeccf' }, { w: 'banana', k: '#fbe1c8' }] }
   if (kind === 'sort') return { id: stepId(), kind, cols: [{ t: 'Active voice' }, { t: 'Passive voice' }], items: [
     { w: 'Mike eats an apple', c: 0, k: '#cfeccf' }, { w: 'An apple is eaten by Mike', c: 1, k: '#fbe1c8' }, { w: 'Mike buys apples', c: 0, k: '#fbe1c8' },
@@ -237,6 +245,10 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
       ['cherry', 'cherries', 2], ['owl', 'owls', 0], ['foot', 'feet', 4], ['wolf', 'wolves', 3], ['strawberry', 'strawberries', 2], ['watch', 'watches', 1]] as [string, string, number, number?][])
       .map(([w, a, c, ex]) => ({ w, a, c, ...(ex ? { ex: true } : {}) })) }) },
 ]
+// «Красный Мерфи» (25.11.2026): своя вкладка меню — объяснение и упражнения (exercises/mf)
+function mfMake(id: string): Step { const t = MF_TPL.find((x) => x.id === id)!; return { id: stepId(), kind: 'mf', ...JSON.parse(JSON.stringify(t.s)) } }
+for (const t of MF_TPL) TEMPLATES.push({ id: t.id, kind: 'mf', t: t.t, d: t.d, make: () => mfMake(t.id) })
+export const MF_IDS = MF_TPL.map((t) => t.id)
 /** Задания учебника: номер в кружке и задание как в книге — на плашке меню и миниатюре (ExerciseMini); also — какие ещё задания закрывает */
 export const BOOK: Record<string, { n: number; en: string; also?: string; pic?: boolean }> = {
   bkword: { n: 5, en: 'Write the possessive adjectives.', also: 'Write the plurals · Fill in the correct idiom · Write do, does and short answers' },
@@ -262,7 +274,8 @@ export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение
 /** Цвета тегов — как плашки в меню упражнений (.chip.L … в CourseEditor / LessonRail) */
 export const SKILL_C: Record<string, string> = { L: '#1cb0f6', R: '#a560e8', W: '#ff9600', S: '#58cc02' }
 export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpfile: ['S'], kpball: ['S'], kpballive: ['S'], kpballive2: ['S'], kpapi: ['S'], talk: ['S', 'L'], talkava: ['S', 'L'], talkptt: ['S', 'L'], talkptt2: ['S', 'L'], talkvn: ['S', 'L'], talkexam: ['S', 'L'], es_talk: ['S', 'L'], es_talkptt: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
-for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]          // «Учебник 1:1» — те же навыки
+for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]
+for (const id of MF_IDS) SKILLS[id] = id === 'mfinfo' || id === 'mf314' ? ['R'] : ['W']          // «Учебник 1:1» — те же навыки
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
 // Язык — в самом типе (24.11.2026), только у упражнений с ИИ: «pl-kp», «en-talkptt2», «es-talk». Язык берётся только из типа, менять его нельзя.
 // Карта поляка (Ответ по смыслу, разговоры, транскрипция) — польский; рация Busuu — английский; es_… — испанский. Остальные (choice, pairs…) — без языка, как были.
@@ -294,6 +307,7 @@ export function tplOf(s: Step): string {
   if (s.kind === 'talk' && s.ptt) return s.vn ? 'talkvn' : s.busuu ? 'talkptt2' : 'talkptt'
   if (s.kind === 'talk' && s.avatar) return 'talkava'
   if (s.kind === 'kp' && s.dic === 'file') return 'kpfile'
+  if (s.kind === 'mf') return mfTpl(s)
   if (s.kind === 'gap') return s.opts?.length ? 'fill' : isWhole(s.phrase) ? 'translate' : hasHint(s.phrase) ? 'brackets' : 'type'
   return s.kind
 }
@@ -317,6 +331,7 @@ export function stepTitle(s: Step): string {
   if (s.kind === 'kp') return s.text?.trim() || KINDS.kp.t
   if (s.kind === 'talk') return KINDS.talk.t
   if (s.kind === 'stt') return s.text?.trim() || KINDS.stt.t
+  if (s.kind === 'mf') return [s.no, (s.head ?? '').replace(/\*\*|==|!!|__/g, '')].filter(Boolean).join(' ').trim() || KINDS.mf.t
   if (s.kind === 'odd') return s.opts?.[s.ans ?? 0]?.w?.trim() || KINDS.odd.t
   if (s.kind === 'sort') return s.cols?.map(c => c.t).filter(Boolean).join(' / ') || KINDS.sort.t
   const n = s.pairs?.filter(p => p.a.trim() && p.b.trim()).length ?? 0
@@ -349,6 +364,7 @@ export function stepIssue(s: Step): string {
   if (s.kind === 'answer') return s.text?.trim() ? '' : 'Нет вопроса'
   if (s.kind === 'kp') return !s.text?.trim() ? 'Нет вопроса' : !s.ideal?.trim() ? 'Нет эталона' : ''
   if (s.kind === 'talk' && s.exam) return !s.text?.trim() ? 'Нет вопроса' : !s.ideal?.trim() ? 'Нет эталона' : ''          // собеседование: без вопроса консулу нечего спросить
+  if (s.kind === 'mf') return s.mode === 'info' ? ((s.opts?.length ?? 0) ? '' : 'Нет разделов') : !mfFields(s).length ? 'Нет строк для ответа' : mfFields(s).some((f) => !f.a.trim()) ? 'Не у всех строк есть ответ' : ''
   if (s.kind === 'talk' || s.kind === 'stt') return ''          // роль Gemini необязательна — по умолчанию консул на Карту поляка
   if (s.kind === 'odd') { const o = (s.opts ?? []).filter(x => x.w?.trim()); return o.length < 3 ? 'Нужно хотя бы 3 слова' : !s.opts?.[s.ans ?? 0]?.w?.trim() ? 'Не отмечено лишнее' : '' }
   if (s.kind === 'sort') {
@@ -378,7 +394,7 @@ export function twLayout(s: Step) {
     const all = it.filter(x => x.c === ci && x.a?.trim()), ex = s.noEx ? [] : all.filter(x => x.ex)
     return { ex, need: all.length - ex.length }
   })
-  const rows = Math.max(s.rows ?? 0, ...cols.map(c => c.ex.length + c.need), 1)
+  const rows = Math.max((s.rows as number) ?? 0, ...cols.map(c => c.ex.length + c.need), 1)
   return { cols, rows, bank: it.filter(x => x.w?.trim()) }
 }
 /** Проверка таблицы: в колонке порядок не важен — каждое вписанное слово ищем среди ещё не найденных ответов колонки (a: «leaves/leafs») */
@@ -551,9 +567,10 @@ function stepFrom(o: any): Step | null {
   if (Array.isArray(o.opts)) {
     const opts = o.opts.map((x: any) => (typeof x === 'string' ? { w: x } : x)).filter((x: any) => str(x?.w))
       .map((x: any) => ({ w: x.w.trim(), ...(tileHex(x.k) ? { k: tileHex(x.k) } : {}), ...(str(x.t) ? { t: x.t } : {}), ...(str(x.image) ? { image: x.image } : {}), ...(str(x.audio) ? { audio: x.audio } : {}) }))
-    if (opts.length) s.opts = o.kind === 'tip' ? opts : opts.slice(0, o.kind === 'odd' ? ODD_MAX : o.kind === 'gap' ? GAP_OPTS_MAX : OPTS_MAX)
+    if (opts.length) s.opts = o.kind === 'tip' ? opts : opts.slice(0, o.kind === 'odd' ? ODD_MAX : o.kind === 'gap' ? GAP_OPTS_MAX : o.kind === 'mf' ? MF_OPTS : OPTS_MAX)
     if (s.ans != null && s.opts && s.ans >= s.opts.length) delete s.ans
   }
+  if (o.kind === 'mf') { Object.assign(s, mfClean(o)) }          // «Красный Мерфи»: свои поля (exercises/mf/data.ts)
   if (o.mix === false) s.mix = false
   if (o.hint === false) s.hint = false
   if (Array.isArray(o.cols)) s.cols = o.cols.map((x: any) => ({ t: String(typeof x === 'string' ? x : x?.t ?? '').trim() })).slice(0, SORT_COLS_MAX)

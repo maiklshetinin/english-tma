@@ -34,7 +34,7 @@ import { presetSchema, stepSchema } from '../../exercises/schema'          // «
 import { shrinkPhoto, PHOTO } from '../../utils/shrink'
 import LessonPlayer from '../../components/LessonPlayer.vue'
 import { TOPICS, detectTopic } from '../../utils/skills'
-import { INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, BOOK_TPL, PAGE_TPL, BOOK, tplOf, typeId } from '../../utils/lesson'
+import { MF_IDS, INTERACTIVE, KINDS, TEMPLATES, STEPS_MAX, RAIL_H, RAIL_X0, fishLesson, stepIssue, stepsOut, keepLocalFiles, stepRefs, stepId, lessonMin, stepJson, stepsFromJson, SKILL_T, SKILLS, BOOK_TPL, PAGE_TPL, BOOK, tplOf, typeId } from '../../utils/lesson'
 import { audSrc, imgSrc } from '../../composables/useCardMedia'
 const AI_SITES = ['ChatGPT', 'Gemini', 'Claude']          // чаты, с которыми работает мост (значки — public/ai/)
 
@@ -370,7 +370,7 @@ const slotOf = (sid, opt) => { const s = findStep(sid); return opt == null ? s :
 async function putStepFile(sid, field, file, opt = null) {
   const obj = slotOf(sid, opt); if (!obj) return
   if (field === 'image') {             // фото — как в Busuu: обрезаем под 16:9 (у варианта ответа 3:2) и сжимаем
-    const kind = opt == null ? 'main' : 'opt', r = await shrinkPhoto(file, kind); file = r.file
+    const kind = findStep(sid)?.kind === 'mf' ? 'free' : opt == null ? 'main' : 'opt', r = await shrinkPhoto(file, kind); file = r.file          // «Красный Мерфи»: фото из книги — без обрезки
     if (r.small) showToast(`Фото маленькое (${r.w}×${r.h}) — на большом экране будет мутным. Лучше ${PHOTO[kind].label.split(', ')[1].replace('лучше ', '')} и больше.`, null, 'bad')
   }
   const id = `m${sid}_${field}${opt ?? ''}_${Date.now().toString(36)}`
@@ -609,7 +609,7 @@ const XGROUPS_STD = (() => {
     { k: 'W', t: 'Письмо', d: 'собрать и написать', ids: ['order', 'type', 'translate'], cols: 2 },
     { k: 'S', t: 'Речь', d: 'сказать вслух', ids: ['sayword', 'answer'], cols: 2 },
   ]
-  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpfile', 'kpapi', 'kpball', 'kpballive', 'kpballive2', 'talk', 'talkava', 'talkptt', 'talkvn', 'talkexam', 'stt', 'es_talk', 'es_talkptt'])          // kp, talkava и talkptt — на своей вкладке «Karta Polaka»; talkptt2 (копия рации) — в «Как в Busuu», в «Речи»
+  const used = new Set([...gs.flatMap(g => g.ids), ...BOOK_TPL, ...PAGE_TPL, 'kp', 'kpfile', 'kpapi', 'kpball', 'kpballive', 'kpballive2', 'talk', 'talkava', 'talkptt', 'talkvn', 'talkexam', 'stt', 'es_talk', 'es_talkptt', ...MF_IDS])          // kp, talkava и talkptt — на своей вкладке «Karta Polaka»; talkptt2 (копия рации) — в «Как в Busuu», в «Речи»
   for (const x of TPL.filter(v => !used.has(v.id))) (gs.find(g => g.k === (SKILLS[x.id] ?? [])[0]) ?? gs[0]).ids.push(x.id)          // новый шаблон — в группу его первого тега
   return gs.map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 })()
@@ -626,7 +626,11 @@ const XGROUPS_KP = [{ k: 'S', t: 'Ответ по смыслу', d: 'прове�
 // «Испанский» (24.11.2026): разговоры с Gemini по-испански — язык зашит в тип (es-talk, es-talkptt)
 const XGROUPS_ES = [{ k: 'S', t: 'Разговор с Gemini', d: 'живой голос, по-испански', items: TPL.filter(v => v.id === 'es_talk') }, { k: 'S', t: 'Разговор · рация', d: 'нажал — говоришь, по-испански', items: TPL.filter(v => v.id === 'es_talkptt') }]
 // «Красный Мерфи» (25.11.2026): упражнения по English Grammar in Use (красный Мёрфи) — вкладка пока пустая, упражнения добавляются по одному
-const XGROUPS_MURPHY = []
+const XGROUPS_MURPHY = [
+  { k: 'intro', t: 'Объяснение', d: 'разделы A, B, C, D с фото из книги и кружком преподавателя', ids: ['mfinfo'] },
+  { k: 'W', t: 'Упражнения', d: 'как в English Grammar in Use: вписать, собрать, исправить', ids: MF_IDS.filter(id => id !== 'mfinfo' && id !== 'mf314') },
+  { k: 'R', t: 'Чтение', d: 'найти одинаковый смысл', ids: ['mf314'] },
+].map(g => ({ ...g, items: g.ids.map(id => TPL.find(v => v.id === id)).filter(Boolean) }))
 const TRAY_TABS = [{ k: 'app', t: 'Как в Busuu' }, { k: 'book', t: 'Настины · из учебника', exp: true }, { k: 'page', t: 'Как в учебнике', exp: true }, { k: 'kp', t: 'Karta Polaka', exp: true }, { k: 'murphy', t: 'Красный Мерфи', exp: true }, { k: 'es', t: 'Испанский' }, { k: 'arch', t: 'Архив' }]
 const ONE_TABS = ['kp', 'es', 'arch']          // вкладки, где у каждой плитки своя группа — заголовок группы не показываем
 const trayTab = ref((() => { try { const v = localStorage.getItem('ce.trayTab'); return TRAY_TABS.some(b => b.k === v) ? v : 'app' } catch { return 'app' } })())          // была вкладка «Мои» (конструктор убран 18.11.2026) — откроется «Как в Busuu»

@@ -31,6 +31,7 @@ src/exercises/
 | `answer` | Ответь на вопрос | `answer`, `bkfree` (+ `pg_bkfree`) |
 | `odd` | Найди лишнее | `odd` (+ `pg_odd`) |
 | `sort` | Распредели / Заполни таблицу (`tw`) | `sort` (+ `pg_sort`) |
+| `mf` | Красный Мерфи: объяснение A–D (`mode: 'info'`) и упражнения как в English Grammar in Use — поля в `mf/data.ts` | `mfinfo`, `mf171`, `mf25`, `mf112`, `mf51`, `mf395`, `mf212`, `mf314`, `mf43`, `mf31`, `mf15`, `mf193` |
 
 `pg_…` — вкладка «Как в учебнике»: тот же экран с `step.bs === 'page'`. Книжные (Настины) — `step.bk` (список заданий — `BOOK` в `utils/lesson.ts`).
 

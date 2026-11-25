@@ -14,7 +14,7 @@ import { isMediaUrl } from './media.js'
 export interface CoursesDeps { db: Firestore; FieldValue: Pick<typeof FV, 'serverTimestamp'> }
 export const COURSE_TYPES = ['unit', 'video', 'photo', 'lesson', 'checkpoint', 'words', 'hw', 'test', 'tutor', 'reward']
 export const COURSE_ITEMS_MAX = 500, COURSES_MAX = 100
-export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer', 'sort', 'odd', 'kp', 'talk', 'stt'], STEPS_MAX = 40
+export const INTERACTIVE = ['lesson', 'checkpoint', 'words', 'hw', 'test'], STEP_KINDS = ['intro', 'choice', 'pairs', 'order', 'tip', 'speak', 'gap', 'answer', 'sort', 'odd', 'kp', 'talk', 'stt', 'mf'], STEPS_MAX = 40
 const ID = /^[\w-]{1,64}$/
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 /** Число в пределах (иначе — нет поля): настройки моделей экрана — пауза, температура */
@@ -124,6 +124,18 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
       o.items = (Array.isArray(r.items) ? r.items : []).slice(0, 30).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 120), c: Math.max(0, Math.min(Math.max(0, n - 1), num(q.c))) }; put(out, 'k', kc(q.k)); put(out, 'a', str(q.a, 120)); if (q.ex === true) out.ex = true; return out })
       if (r.hint === false) o.hint = false
       if (r.tw === true) { o.tw = true; if (Number.isInteger(r.rows) && (r.rows as number) > 0) o.rows = Math.min(8, r.rows as number); if (r.cs === true) o.cs = true; if (r.noEx === true) o.noEx = true }          // «Заполни таблицу» (Настя, 18.11.2026): a — что вписать, ex — образец
+    }
+    // «Красный Мерфи» (25.11.2026, src/exercises/mf/data.ts): вид, номер, задание, рамки слов, строки (q, a, ex, r, pre, h), разделы / картинки / буквы (opts), кружок (video)
+    if (kind === 'mf') {
+      const S = (v: unknown, n: number) => (typeof v === 'string' && v.trim() ? v.slice(0, n) : undefined)
+      const L = (v: unknown, n: number, m: number) => (Array.isArray(v) ? v.map((x) => S(x, m)).filter(Boolean).slice(0, n) as string[] : [])
+      if (['info', 'gaps', 'match', 'order'].includes(String(r.mode))) o.mode = r.mode
+      put(o, 'no', S(r.no, 8)); put(o, 'who', S(r.who, 30)); put(o, 'post', S(r.post, 4)); put(o, 'note', S(r.note, 600)); put(o, 'head', S(r.head, 300))
+      for (const k of ['two', 'inl', 'copy', 'below']) if (r[k] === true) o[k] = true
+      { const h = L(r.hints, 6, 40); if (h.length) o.hints = h }
+      if (Array.isArray(r.banks)) { const b = r.banks.slice(0, 3).map((x) => { const q = (x ?? {}) as Record<string, unknown>; return { t: S(q.t, 30) ?? '', w: L(q.w, 14, 40), x: L(q.x, 14, 40) } }).filter((x) => x.w.length); if (b.length) o.banks = b }
+      if (Array.isArray(r.rows)) o.rows = r.rows.slice(0, 16).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { q: S(q.q, 300) ?? '' }; for (const [k, n] of [['a', 300], ['r', 40], ['pre', 30], ['h', 40]] as const) put(out, k, S(q[k], n)); if (q.ex === true) out.ex = true; return out })
+      if (Array.isArray(r.opts)) o.opts = r.opts.slice(0, 8).map((x) => { const q = (x ?? {}) as Record<string, unknown>, out: Record<string, unknown> = { w: str(q.w, 300) }; put(out, 't', str(q.t, 1500)); put(out, 'image', ref(q.image)); return out })
     }
     if (kind === 'pairs') o.pairs = (Array.isArray(r.pairs) ? r.pairs : []).slice(0, 6).map((x) => { const q = (x ?? {}) as Record<string, unknown>; return { a: str(q.a, 120), b: str(q.b, 120) } })
     return o
