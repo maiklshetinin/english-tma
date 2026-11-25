@@ -31,6 +31,8 @@ const small = computed(() => props.size === 'tray' || props.size === 'rail')
 .sc.big { height: calc(102px * 460 / 148); transform: scale(calc(148 / 460)) }
 .mini.xmt .sc :deep(.lp) { height: 100%; border-radius: 0 }
 .mini.xmt .sc :deep(.lp > .body) { flex: 1 1 auto; min-height: 0; overflow: hidden }
+/* 25.11.2026: подвал в значке — того же цвета, что экран (у «Ответа по смыслу» там своя панель с микрофоном и «Готово»), без белой полосы под ней */
+.mini.xmt .sc :deep(.lp .foot:not(.good):not(.bad)) { background: transparent; border-top-color: transparent }
 .mini.xmt:has(.lp.book) { background: #fffdf6; border-color: #eadfc4 } .mini.xmt:has(.lp.bkpg) { background: #fff; border-color: #d3d1c7 }
 /* «Готовый урок» и прочее — стопка карточек */
 .mini .ms { position: relative; width: 120px; height: 90px; transform: scale(.82); transform-origin: top center }
