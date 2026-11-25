@@ -116,7 +116,7 @@ async function remove(c) {
 /* 25.11.2026 (макет «Вкладка «Курсы»», вариант C): курсы — как иконки приложений на iPhone: цветной скруглённый квадрат, название под ним.
    Компьютер — все курсы видны, ряд переносится на новые строки; телефон — карусель, листается вбок (край гаснет).
    Выбранный — тёмное кольцо. Карандаш (левый угол) и корзина (правый) — при наведении, а на телефоне — у выбранного */
-.cl { display: grid; gap: 6px; width: 100%; max-width: 620px; margin: 0 auto 4px }
+.cl { display: grid; gap: 6px; width: 100%; max-width: 620px; margin: 0 auto }
 .ch { display: flex; align-items: flex-start; min-width: 0 }
 .sk { flex: 1; height: 84px; border-radius: 18px; background: var(--surface); opacity: .6 }
 .grid { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px 4px; padding: 2px 0 }

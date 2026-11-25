@@ -24,6 +24,7 @@ const list = ref(null)          // 25.11.2026: карандаш и корзин�
   </div>
 </template>
 <style scoped>
+.page { gap: 4px }          /* 25.11.2026: курсы и строка прогресса — ближе друг к другу (было 14 + 4 px) */
 .tpa { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--hint); cursor: pointer }
 .tpa:hover { color: var(--blue); border-color: var(--blue) } .tpa.del:hover { color: var(--red, #e5484d); border-color: var(--red, #e5484d) }
 </style>
