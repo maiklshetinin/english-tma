@@ -263,11 +263,11 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kblvl { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 236px; overflow-y: auto; scrollbar-width: none }
 .kblvl::-webkit-scrollbar { width: 0 } .kblvl:hover { scrollbar-width: thin; scrollbar-color: rgba(123, 66, 36, .28) transparent }
 .kblvl:hover::-webkit-scrollbar { width: 6px } .kblvl:hover::-webkit-scrollbar-thumb { background: rgba(123, 66, 36, .28); border-radius: 3px } .kblvl::-webkit-scrollbar-button { display: none }
-.kblvl li { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 9px 14px; border-radius: 12px; background: #fff; line-height: 1.35 }
-.kblvl li.nw { box-shadow: inset 0 0 0 2px #cd8a30 } .kblvd { flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%; background: #cd8a30 }
-.kblvc { flex: none; color: #cd8a30; font-weight: 900 } .kblvr { flex: 0 1 auto; min-width: 0; font-size: 15px; font-weight: 800; color: #351a05 }          /* целиком, переносом — без «…» */
-.kblvs { flex: 1 1 180px; min-width: 0; font-size: 14px; font-weight: 600; color: #a08a72 }
-.kblvl.no li { background: #fff7f5 } .kblvl.no .kblvc { color: #b3261e } .kblvl.no .kblvr { flex: 1 1 auto; color: #8c1d18; font-weight: 700 }
+.kblvl li { flex: none; display: grid; grid-template-columns: 14px minmax(0, 1fr); align-items: baseline; gap: 2px 10px; padding: 9px 14px; border-radius: 12px; background: #fff; line-height: 1.35 }          /* всегда две строки: кусок эталона, под ним серым — что сказал, ровно под текстом */
+.kblvl li.nw { box-shadow: inset 0 0 0 2px #cd8a30 } .kblvd { justify-self: center; align-self: center; width: 8px; height: 8px; border-radius: 50%; background: #cd8a30 }
+.kblvc { justify-self: center; color: #cd8a30; font-weight: 900 } .kblvr { grid-column: 2; min-width: 0; font-size: 15px; font-weight: 800; color: #351a05 }          /* целиком, переносом — без «…» */
+.kblvs { grid-column: 2; min-width: 0; font-size: 14px; font-weight: 600; color: #a08a72 }
+.kblvl.no li { background: #fff7f5 } .kblvl.no .kblvc { color: #b3261e } .kblvl.no .kblvr { color: #8c1d18; font-weight: 700 }
 .kball .kbp.lvbad b { color: #b3261e } .kball .kbp.lvbad small { color: #b3261e } .kball .kbp.lvbad .kbbar i { background: #e5484d }
 .th-sphere .kblvh h4, .th-space .kblvh h4 { color: #e2e8f0 } .th-sphere .kblvl li, .th-space .kblvl li { background: rgba(255, 255, 255, .06) } .th-sphere .kblvr, .th-space .kblvr { color: #f1f5f9 } .th-sphere .kblvs, .th-space .kblvs { color: #8b9bb4 }
 .th-sphere .kblvl.no li, .th-space .kblvl.no li { background: rgba(251, 113, 133, .08) } .th-sphere .kblvl.no .kblvr, .th-space .kblvl.no .kblvr { color: #fda4af }
