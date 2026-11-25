@@ -223,6 +223,11 @@ async function dicLoad() {
 onMounted(dicLoad)
 watch(idle, (v) => { if (!v && !dicAuto.value) dicLoad() })
 const isLive = computed(() => !!props.step.ballLive)
+// журнал Live (25.11.2026, отладка): нажатие на статус в подвале — что ушло в модель и что она ответила (ballNet[id].log, пишет utils/kpball.js)
+const logOpen = ref(false), logEl = ref(null)
+const liveLog = computed(() => (props.step.ballLive ? ballNet[props.step.id]?.log ?? [] : null))
+const LOGK = { send: '→ модели', mic: '🎙', voice: '🎙 голос', pause: '⏸ пауза', heard: 'Live слышит', cover: '← засчитала', blocks: '← нарезала', said: '← сказала', turn: '← ход окончен', err: '⚠ ошибка' }
+watch(() => liveLog.value?.length, () => nextTick(() => { const el = logEl.value; if (el) el.scrollTop = el.scrollHeight }))
 // секундомер строки Live в подвале — тикает, только пока слушает или Gemini думает
 const lvNow = ref(Date.now()); let lvTm = 0
 const sec1 = (ms) => (Math.max(0, ms) / 1000).toFixed(1).replace('.', ',')
@@ -519,7 +524,11 @@ function jsApply() {
       <select class="kms" :value="cSel" :title="editor ? 'Модель проверки — пишется в экран (model в JSON)' : 'Модель проверки — из урока; выбор здесь — только на этот раз'" @change="pickCheck($event.target.value)"><option value="">авто · {{ cModels[0] ? nameOf(cModels[0]) : 'Flash Lite' }}</option><option v-if="step.model && step.model !== 'live' && !cModels.includes(step.model)" :value="step.model">{{ nameOf(step.model) }} · из урока</option><option value="live">Live · голосом — быстро, без лимита</option><option v-for="m in cModels" :key="m" :value="m">{{ checkName(m) }}{{ limitOf(m) ? ' · ' + limitOf(m) : '' }}</option></select>
       <em :class="{ off: !bridge?.online }">запасной — мост {{ bridge?.online ? 'в сети' : 'не в сети' }}</em></span>
       <span v-else-if="bridge && !isLive" class="kbr" :class="{ off: !bridge.online }"><i />{{ bridge.online ? 'Мост подключён' : 'Мост не в сети — проверки не будет' }}<template v-for="s in bridge.sites" :key="s"><img v-if="aiIcon(s)" :src="aiIcon(s)" alt="" />{{ s }}</template></span>
-      <span v-if="liveLine" class="knt" :class="liveLine.st"><i />{{ liveLine.t }}<em v-if="liveLine.st === 'connecting' && !/с$/.test(liveLine.t)" class="kdd"><b>.</b><b>.</b><b>.</b></em><small v-if="liveLine.s" class="knts">{{ liveLine.s }}</small></span>
+      <button v-if="liveLine" type="button" class="knt kntbtn" :class="[liveLine.st, { on: logOpen }]" title="Журнал Live: что ушло в модель и что она ответила" @pointerdown.stop @click="logOpen = !logOpen"><i />{{ liveLine.t }}<em v-if="liveLine.st === 'connecting' && !/с$/.test(liveLine.t)" class="kdd"><b>.</b><b>.</b><b>.</b></em><small v-if="liveLine.s" class="knts">{{ liveLine.s }}</small><b class="kntlg">журнал {{ logOpen ? '▴' : '▾' }}</b></button>
+      <div v-if="logOpen && liveLog" class="klog" @pointerdown.stop @wheel.stop>
+        <div class="klogh"><b>Журнал Live</b><small>что ушло в модель и что она ответила · новое внизу</small><button type="button" class="klogx" aria-label="Закрыть журнал" @click="logOpen = false">✕</button></div>
+        <ol ref="logEl" class="klogl"><li v-if="!liveLog.length" class="klk0">пока пусто</li><li v-for="(x, i) in liveLog" :key="i" :class="'k-' + x.k"><time>{{ x.t.toFixed(1) }}</time><b>{{ LOGK[x.k] || x.k }}</b><span>{{ x.x }}</span></li></ol>
+      </div>
       <span v-for="x in ballList" :key="x.k" class="knt" :class="BALL_ST[x.st]" :title="x.name + ' — ' + x.txt"><i />{{ x.name }} · {{ x.txt }}<em v-if="x.st === 'busy'" class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span v-if="p.st.busy && !fileMode && !isLive" class="knt connecting" :title="api ? 'Ответ ушёл на проверку в Gemini API' : 'Ответ ушёл на проверку через мост в чат'"><i />проверка · запрос ушёл<em class="kdd"><b>.</b><b>.</b><b>.</b></em></span>
       <span class="ksp" />
@@ -638,7 +647,18 @@ function jsApply() {
 .kcwvs { display: flex; align-items: center; gap: 4px; height: 100%; will-change: transform } .kcwv i { flex: none; width: 3px; min-height: 3px; border-radius: 2px; background: #6f6f6f }
 .kcwv i:nth-last-child(-n + 3) { background: #3a3a3a }          /* свежие полоски — темнее */
 .kcm, .kcst { width: 100%; box-sizing: border-box }
-.kcst { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; padding: 0 10px; font-size: 12px; line-height: 1.2 }
+.kcst { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; padding: 0 10px; font-size: 12px; line-height: 1.2 }
+/* журнал Live — окошко над подвалом, ничего не сдвигает */
+.kntbtn { padding: 2px 6px; margin-left: -6px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer } .kntbtn:hover, .kntbtn.on { background: rgba(0, 0, 0, .05) }
+.kntlg { margin-left: 4px; font-weight: 700; color: #9a9a9a }
+.klog { position: absolute; left: 0; right: 0; bottom: calc(100% + 70px); z-index: 50; display: flex; flex-direction: column; max-height: 300px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 14px; background: #fff; box-shadow: 0 6px 24px rgba(0, 0, 0, .12); overflow: hidden }
+.klogh { display: flex; align-items: baseline; gap: 8px; padding: 8px 12px; border-bottom: 1px solid rgba(0, 0, 0, .07) } .klogh b { font-size: 13px } .klogh small { flex: 1; color: #9a9a9a; font-size: 12px }
+.klogx { border: 0; background: none; color: #8f8f8f; font-size: 14px; cursor: pointer }
+.klogl { margin: 0; padding: 6px 0; list-style: none; overflow-y: auto; font-size: 12.5px; line-height: 1.45 }
+.klogl li { display: flex; gap: 8px; padding: 2px 12px } .klogl time { flex: none; width: 34px; color: #b0b0b0; font-variant-numeric: tabular-nums; text-align: right }
+.klogl b { flex: none; width: 92px; color: #6b7280; font-weight: 700 } .klogl span { flex: 1; min-width: 0; color: #333; word-break: break-word }
+.klogl .k-cover b, .klogl .k-blocks b { color: #1f7a3a } .klogl .k-cover { background: #f2fbf4 } .klogl .k-heard span { font-style: italic; color: #555 }
+.klogl .k-err b, .klogl .k-said b { color: #b3261e } .klogl .k-pause b { color: #1a73e8 } .klogl .k-send span { color: #8f8f8f } .klk0 { color: #9a9a9a; padding: 6px 12px }
 .kcst > * { flex: none } .kcst .kbr { white-space: nowrap }
 .ksp { flex: 1 1 0 !important } .kcn { color: #8f8f8f; font-size: 12.5px; font-weight: 500 }
 .kcst .kdm { height: 28px; max-width: 165px; margin-left: 0; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: #3a3a3a; font-size: 12.5px; font-weight: 600; cursor: pointer } .kcst .kdm:hover:not(:disabled) { background: #f0f0f0 } .kcst .kdm:disabled { color: #b0b0b0; background: transparent }

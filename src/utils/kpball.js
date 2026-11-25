@@ -31,7 +31,9 @@ import { firstKey, startTalk, liveModels, liveName } from './live'
 export const ballNet = reactive({})
 // lv — шар Live (25.11.2026): что сейчас — ph: '' | 'rec' (слушает, cut — время прошлого среза) | 'think' (кусок ушёл, at — когда; Gemini ищет совпадения);
 //   last — итог прошлой сверки: { n — сколько засчитано, ms — сколько думала }
-export const netOf = (id) => (ballNet[id] ??= { split: { st: 'off', txt: '' }, cover: { st: 'off', txt: 'ждёт речь' }, model: '', lv: { ph: '', at: 0, cut: 0, last: null } })
+export const netOf = (id) => (ballNet[id] ??= { split: { st: 'off', txt: '' }, cover: { st: 'off', txt: 'ждёт речь' }, model: '', lv: { ph: '', at: 0, cut: 0, last: null }, log: [] })
+// log — журнал Live-сессии шара (25.11.2026, для отладки): что ушло и что ответила модель — открывается нажатием на статус в подвале.
+//   { t — с от начала, k — вид (mic | voice | pause | heard | cover | blocks | said | turn | err | send), x — текст }
 
 /** Слово → основа для сверки: строчные, только буквы, первые 5 */
 export const stem = (w) => String(w).toLowerCase().normalize('NFC').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 5)
@@ -173,22 +175,26 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
   if (!key) throw new Error('Нужен ключ Gemini в профиле')
   let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now(), sentSplit = false
   const queue = []
-  const flush = () => { if (!ready || !sess) return; while (queue.length) { const t = queue.shift(); if (/^РАЗБЕЙ/.test(t)) sentSplit = true; t0 = Date.now(); sess.send(t) } }
-  const fail = (txt) => { closed = true; n.cover = { st: 'err', txt }; if (sentSplit && n.split.st === 'busy') n.split = { st: 'err', txt } }
+  const flush = () => { if (!ready || !sess) return; while (queue.length) { const t = queue.shift(); if (/^РАЗБЕЙ/.test(t)) sentSplit = true; t0 = Date.now(); sess.send(t); lg('send', t.replace(/\n/g, ' ').slice(0, 160)) } }
+  const fail = (txt) => { lg('err', txt); closed = true; n.cover = { st: 'err', txt }; if (sentSplit && n.split.st === 'busy') n.split = { st: 'err', txt } }
   // рация-переключатель (25.11.2026): нажал — микрофон включён, нажал ещё раз — выключен; выключен — в Live не уходит НИ звука (gated).
   // Пока говорят — Live САМА ловит короткие паузы (0,5 с, чувствительно) и после каждой сразу шлёт cover: блоки загораются по ходу ответа;
   // новая речь ответ не обрывает (NO_INTERRUPTION). Выключили — audioStreamEnd: последняя фраза — сразу. wait — выключили, ждём последний ответ.
   // (Пробовали резать речь сами раз в 5 с в ручном режиме — хуже: расшифровка там приходит только после реплики, отвечало с задержкой.)
   // Статус для подвала (n.lv): голос стих на 0,4 с после речи — 'think' (Gemini ищет совпадения, секундомер от паузы), пришёл ответ — снова 'rec'
   let hearH = null, hearUntil = 0, micOn = false, wait = false, waitTm = 0
-  let talking = false, voiced = 0, voiceAt = 0, stTm = 0
+  let talking = false, voiced = 0, voiceAt = 0, stTm = 0, heardV = false
   if (!n.lv) n.lv = { ph: '', at: 0, cut: 0, last: null }
+  if (!n.log) n.log = []
+  n.log.splice(0); const T0 = Date.now()
+  /** в журнал; same — дописать к прошлой строке того же вида (расшифровка идёт кусками) */
+  const lg = (k, x, same = false) => { const t = +((Date.now() - T0) / 1000).toFixed(1), last = n.log.at(-1); if (same && last?.k === k) { last.x += x; return } n.log.push({ t, k, x: String(x) }); if (n.log.length > 80) n.log.splice(0, n.log.length - 80) }
   const L = n.lv          // реактивный — его рисует подвал (строка «слушает / ищет совпадения / засчитано»)
   const think = (at = Date.now()) => { L.ph = 'think'; L.at = t0 = at }
   function watchPause() {
     if (!talking) return
     if (L.ph === 'think' && Date.now() - L.at > 12_000) L.ph = 'rec'          // ответа нет 12 с — не висим в «ищет»
-    if (L.ph === 'rec' && voiced >= 3 && Date.now() - voiceAt > 400) { voiced = 0; think(voiceAt) }          // сказал — замолчал: модель сейчас сверяет
+    if (L.ph === 'rec' && voiced >= 3 && Date.now() - voiceAt > 400) { voiced = 0; think(voiceAt); lg('pause', 'голос стих — ждём ответ модели') }          // сказал — замолчал: модель сейчас сверяет
   }
   const endWait = () => { clearTimeout(waitTm); if (wait) { wait = false; hearUntil = Date.now() + 3500; const h0 = hearH; setTimeout(() => { if (!talking && hearH === h0) hearH = null }, 2500) } }          // хвост расшифровки ещё 2,5 с идёт в поле; текстом не дублируем
   const api = {
@@ -200,14 +206,14 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
     async hear(h) {
       if (!h) {          // отпустили кнопку — конец реплики: модель отвечает сразу; хвост расшифровки и ответ ещё идут прежнему слушателю
         if (!sess || !talking) { hearH = null; return }
-        talking = false; clearInterval(stTm); sess.gate(false); wait = true; think(); n.cover = { st: 'busy', txt: 'сверяет последнюю фразу' }
+        talking = false; clearInterval(stTm); sess.gate(false); lg('mic', 'микрофон выключен — ждём последний ответ'); wait = true; think(); n.cover = { st: 'busy', txt: 'сверяет последнюю фразу' }
         clearTimeout(waitTm); waitTm = setTimeout(endWait, 12_000)          // ответа нет 12 с — не держим
         return
       }
       if (closed || !sess || !ready) throw new Error('Live не подключён')
       hearH = h; if (!micOn) { micOn = true; await sess.listen() }
       if (hearH !== h) return          // отпустили, пока микрофон включался — реплики не было
-      talking = true; voiced = 0; L.ph = 'rec'; sess.gate(true); n.cover = { st: 'on', txt: 'слушает · засчитывает на паузах' }          // включили — звук пошёл в Live
+      talking = true; voiced = 0; L.ph = 'rec'; sess.gate(true); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; n.cover = { st: 'on', txt: 'слушает · засчитывает на паузах' }          // включили — звук пошёл в Live
       clearInterval(stTm); stTm = setInterval(watchPause, 100)
     },
   }
@@ -221,25 +227,28 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
       if (closed) return
       sess = startTalk({ key, model: m, system: LIVE_SYS(question, ideal), lang: 'pl-PL', temperature: 0.2, tools: LIVE_TOOLS, micLater: true, quiet: true, gated: true, noInterrupt: true, silenceMs: 500, endSens: 'high', on: {
         state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
-        ready: () => { ready = true; flush() },
-        turn: () => { hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
-        text: (role, t) => { if (role === 'me') { hearH?.text?.(t) } },
-        level: (v) => { if (talking && v > 0.06) { voiced++; voiceAt = Date.now() } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
+        ready: () => { ready = true; lg('send', 'соединение готово · ' + modelId); flush() },
+        turn: () => { lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
+        text: (role, t) => { if (role === 'me') { lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
+        level: (v) => { if (talking && v > 0.06) { voiced++; voiceAt = Date.now(); if (!heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
           if (name === 'blocks') {
             const b = (Array.isArray(args?.blocks) ? args.blocks : []).map((x) => ({ label: String(x?.label ?? '').trim().slice(0, 60), words: (Array.isArray(x?.words) ? x.words : []).map(String).filter(Boolean).slice(0, 3) })).filter((x) => x.label).slice(0, 16)
+            lg('blocks', JSON.stringify(args).slice(0, 400))
             if (!b.length) return { ok: false, error: 'пустой список' }
             n.split = { st: 'on', txt: `${b.length} блоков · ${sec}` }
             try { localStorage.setItem(lck(question, ideal), JSON.stringify(b)) } catch { /* */ }
             onBlocks?.(b); return { ok: true, count: b.length }
           }
           if (name === 'cover') {
+            lg('cover', JSON.stringify(args?.covered ?? args).slice(0, 400) + ' · ' + sec)
             const got = (Array.isArray(args?.covered) ? args.covered : []).map((x) => ({ i: Math.round(Number(x?.n)) - 1, score: Math.max(0, Math.min(1, Number(x?.score) || 0)), said: String(x?.said ?? '').trim() })).filter((x) => x.i >= 0 && x.score > 0)
             n.cover = { st: 'on', txt: (got.length ? `засчитано ${got.length}` : 'нового нет') + ` · ${sec}` }
             if (L.ph === 'think') L.last = { n: got.length, ms: Date.now() - L.at }
             onCover?.(got); return { ok: true }
           }
+          lg('err', 'неизвестная функция ' + name)
           return { ok: false, error: 'неизвестная функция' }
         },
       } })
