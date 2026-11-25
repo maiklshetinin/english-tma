@@ -691,7 +691,13 @@ const XGROUPS = computed(() => (trayTab.value === 'arch'
   ? [{ k: 'arch', t: 'Архив', d: 'убраны из меню — вернуть или удалить в коде', items: arch.value.map(id => TPL.find(v => v.id === id)).filter(Boolean) }].filter(g => g.items.length)
   : (trayTab.value === 'book' ? XGROUPS_BOOK : trayTab.value === 'page' ? XGROUPS_PAGE : trayTab.value === 'kp' ? XGROUPS_KP : trayTab.value === 'murphy' ? XGROUPS_MURPHY : trayTab.value === 'es' ? XGROUPS_ES : XGROUPS_STD)
     .map(g => ({ ...g, items: g.items.filter(t => !archSet.value.has(t.id)) })).filter(g => g.items.length))
-  .map((g, _, all) => ({ ...g, cols: all.length > 1 ? g.items.length : Math.max(1, Math.min(g.items.length, Math.floor((W.value - 32 - 44) / 130))) })))
+  .map((g, _, all) => ({ ...g, cols: all.length > 1 || trayFit(g.items.length) ? g.items.length : Math.max(1, Math.floor((W.value - 16 - TRAY_PAD + TILE_GAP) / TILE_W)) })))
+// 25.11.2026: одна группа во вкладке — сначала в один ряд до края окна; чуть не влезает (до 15 %) — меню слегка уменьшается (zoom),
+// второй ряд — только когда совсем никак. TILE_W — плитка 126 + промежуток 2, TRAY_PAD — поля меню и группы
+const TILE_W = 128, TILE_GAP = 2, TRAY_PAD = 30
+const trayNeed = (n) => n * TILE_W - TILE_GAP + TRAY_PAD
+const trayFit = (n) => trayNeed(n) * 0.85 <= W.value - 16
+const trayZoom = computed(() => { if (tray.value !== 'inter') return 1; const g = XGROUPS.value; if (g.length !== 1) return 1; const need = trayNeed(g[0].items.length); return need > W.value - 16 && trayFit(g[0].items.length) ? +((W.value - 16) / need).toFixed(3) : 1 })
 // все плашки группы — в один ряд; группа во вкладке одна (Karta Polaka) — сколько влезает по ширине окна, остальные следующим рядом,
 // без горизонтального скролла (21.11.2026). 140 — плашка 132 + промежуток; 32 — отступы меню от краёв окна, 44 — поля меню и группы
 const NEW_MINI = [...BOOK_TPL, ...PAGE_TPL]          // миниатюры новых шаблонов — из ExerciseMini (у остальных — своя разметка в меню)
@@ -2110,7 +2116,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
       <small><b>{{ tileItem.t }}</b><span>{{ tileItem.d }}</span></small>
       <span v-if="skillsT(tileItem).length" class="skl"><i v-for="k in skillsT(tileItem)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i></span>
     </div>
-    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter', kpw: tray === 'inter' && ONE_TABS.includes(trayTab) }" role="toolbar" @pointerdown.stop @wheel.stop="trayWheel">
+    <div v-if="tray" class="fl tray" :class="{ inter: tray === 'inter', kpw: tray === 'inter' && ONE_TABS.includes(trayTab) }" :style="trayZoom < 1 ? { '--tz': trayZoom } : null" role="toolbar" @pointerdown.stop @wheel.stop="trayWheel">
       <!-- Задания — схемой, как они лягут: кружок урока, вправо ветка с экранами и итог (у чекпоинта — проверка и замок следующего юнита) -->
       <template v-if="tray === 'tasks'"><button v-for="k in TASKS" :key="k" class="ts" :title="T[k].t + ' — тяните на рельс, или нажмите и поставьте'" :style="{ '--c': T[k].c, '--d': T[k].d }" @pointerdown.prevent="startDrag($event, { type: k })">
         <!-- чекпоинт — как на рельсе: экраны НАД линией, линия снизу, в конце — итог Chapter -->
@@ -2539,8 +2545,8 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .och b { font-size: 22px; font-weight: 900 } .och small { font-size: 12px; font-weight: 700; color: var(--hint) }
 .bead.ro { cursor: default } .bead.ro:hover { transform: none }
 .allr.on { background: var(--blue-l); border-color: var(--blue); color: var(--blue-d) }
-.tray.inter { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 8px; overflow-x: auto; overflow-y: visible; max-width: calc(100vw - 32px); box-sizing: border-box }          /* группы по тегам — в один ряд (так легче читать); не влезло по ширине — листается вбок */
-.tray.inter .xg { flex: none } .tray.inter .tt2 { align-self: center }
+.tray.inter { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 8px; overflow-x: auto; overflow-y: visible; max-width: calc(100vw - 16px); box-sizing: border-box }          /* группы по тегам — в один ряд (так легче читать); не влезло по ширине — листается вбок */
+.tray.inter .xg { flex: none; zoom: var(--tz, 1) }          /* --tz — чуть уменьшить плитки, чтобы влезли в один ряд (trayZoom) */ .tray.inter .tt2 { align-self: center }
 .xg { display: grid; align-content: start; gap: 2px; padding: 4px 3px 4px; border-radius: 12px } .xg.intro { background: #f6f6f6 } .xg.L { background: #eef7ff } .xg.R { background: #f6f0ff } .xg.W { background: #fff5e8 } .xg.S { background: #effaea } .xg.book { background: #fff8e6; outline: 1.5px dashed #f3c969; outline-offset: -1.5px }          /* книжные — экспериментальные */          /* группы упражнений — рядом, по горизонтали */
 .miw { position: relative; display: grid }
 /* пресеты (24.11.2026): счётчик на плитке и ряд сверху */
