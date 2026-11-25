@@ -58,16 +58,15 @@ async function remove(c) {
         <div v-for="(c, i) in list" :key="c.id" class="cc" :class="{ on: c.id === selected }" role="tab" :aria-selected="c.id === selected" tabindex="0"
           :title="`${c.title} · ${c.count} ${word(c.count)}${c.updatedAt ? ' · изменён ' + ago(c.updatedAt) : ''}\nНажмите — посмотреть ниже, дважды — открыть в редакторе`"
           @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
-          <span class="ic" :style="{ background: colorOf(i) }"><AppIcon name="route" :size="15" /></span>
+          <span class="ic" :style="{ background: colorOf(i) }"><AppIcon name="route" :size="26" />
+            <button class="cb ed" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="11" /></button>
+            <button class="cb del" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="11" /></button>
+          </span>
           <b>{{ c.title }}</b>
-          <template v-if="c.id === selected">
-            <button class="cb" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="13" /></button>
-            <button class="cb" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="13" /></button>
-          </template>
         </div>
+        <button class="new" type="button" title="Новый курс" aria-label="Новый курс" @click="open('new')"><span class="ic"><AppIcon name="plus" :size="22" /></span><small>Новый курс</small></button>
       </div>
-      <span v-else class="sp" />
-      <button class="new" type="button" title="Новый курс" aria-label="Новый курс" @click="open('new')"><AppIcon name="plus" :size="16" /></button>
+      <button v-else class="new" type="button" title="Новый курс" aria-label="Новый курс" @click="open('new')"><span class="ic"><AppIcon name="plus" :size="22" /></span><small>Новый курс</small></button>
     </div>
     <p v-if="err" class="hint">Не удалось загрузить курсы {{ err }}</p>
     <div v-if="list && !list.length" class="card empty">
@@ -77,22 +76,31 @@ async function remove(c) {
   </div>
 </template>
 <style scoped>
-/* 25.11.2026: вкладки курсов — в ширину колонки «Как видит ученик» (620px), по центру; не вылезают к рейлу навигации */
+/* 25.11.2026 (макет «Вкладка «Курсы»», вариант C): курсы — как иконки приложений на iPhone: цветной скруглённый квадрат, название под ним.
+   Компьютер — все курсы видны, ряд переносится на новые строки; телефон — карусель, листается вбок (край гаснет).
+   Выбранный — тёмное кольцо. Карандаш (левый угол) и корзина (правый) — при наведении, а на телефоне — у выбранного */
 .cl { display: grid; gap: 6px; width: 100%; max-width: 620px; margin: 0 auto 4px }
-.ch { display: flex; align-items: center; gap: 8px; min-width: 0 }
-.sp, .sk { flex: 1 } .sk { height: 44px; border-radius: 14px; background: var(--surface); opacity: .6 }
-.grid { flex: 1; min-width: 0; display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scroll-behavior: smooth; scrollbar-width: none; padding: 2px 0 }
-.grid::-webkit-scrollbar { display: none }
-.grid.fr { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent) }          /* не влезло — справа гаснет: видно, что есть ещё */
-.grid.fl { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%); mask-image: linear-gradient(90deg, transparent, #000 12%) }
-.grid.fl.fr { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 85%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 85%, transparent) }
-.cc { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; box-sizing: border-box; padding: 0 12px 0 6px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--text); cursor: pointer; user-select: none; white-space: nowrap; transition: border-color .1s, background .15s }
-.cc:hover { border-color: var(--blue) }
-.cc b { font-size: 14px; font-weight: 800; max-width: 220px; overflow: hidden; text-overflow: ellipsis }
-.cc.on { border-color: transparent; background: #1f2328; color: #fff } html[data-theme='dark'] .cc.on { background: #f1f3f5; color: #111 }
-.ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #fff }
-.cb { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: rgba(255, 255, 255, .12); color: inherit; cursor: pointer } .cb:hover { background: rgba(255, 255, 255, .24) }
-html[data-theme='dark'] .cb { background: rgba(0, 0, 0, .08) }
-.new { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px dashed var(--border); border-radius: 14px; background: none; color: var(--hint); cursor: pointer } .new:hover { border-color: var(--blue); color: var(--blue) }
+.ch { display: flex; align-items: flex-start; min-width: 0 }
+.sk { flex: 1; height: 84px; border-radius: 18px; background: var(--surface); opacity: .6 }
+.grid { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 14px 10px; padding: 9px 9px 2px }          /* отступ — чтобы значки в углах иконок не обрезались */
+@media (max-width: 719px) {
+  .grid { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scroll-behavior: smooth; scroll-snap-type: x proximity; scrollbar-width: none; gap: 8px }
+  .grid::-webkit-scrollbar { display: none } .grid > * { scroll-snap-align: start }
+  .grid.fr { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent) }
+  .grid.fl { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%); mask-image: linear-gradient(90deg, transparent, #000 12%) }
+  .grid.fl.fr { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 85%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 85%, transparent) }
+}
+.cc, .new { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; width: 76px; padding: 0; border: 0; background: none; font: inherit; color: var(--text); cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent }
+.ic { position: relative; display: grid; place-items: center; width: 60px; height: 60px; box-sizing: border-box; border-radius: 16px; color: #fff; transition: transform .12s, box-shadow .15s }
+.cc:hover .ic { transform: translateY(-2px) } .cc:active .ic { transform: scale(.96) }
+.cc.on .ic { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px #1f2328 } html[data-theme='dark'] .cc.on .ic { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px #f1f3f5 }
+.cc b { width: 100%; font-size: 11.5px; font-weight: 700; line-height: 1.2; text-align: center; color: var(--hint); overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
+.cc.on b { font-weight: 900; color: var(--text) }
+.cb { position: absolute; top: -7px; display: none; place-items: center; width: 22px; height: 22px; padding: 0; border: 2px solid var(--card); border-radius: 50%; background: #1f2328; color: #fff; cursor: pointer }
+.cb.ed { left: -7px } .cb.del { right: -7px; background: #e5484d }
+.cc.on .cb { display: grid }          /* телефон: значки — у выбранного */
+@media (hover: hover) { .cc .cb { display: none } .cc:hover .cb { display: grid } }          /* мышь: значки — при наведении на любой курс */
+.new { color: var(--hint) } .new .ic { border: 2px dashed var(--border); color: var(--hint) } .new small { font-size: 11.5px; font-weight: 700 }
+.new:hover .ic { border-color: var(--blue); color: var(--blue) }
 .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 24px } .empty span { max-width: 420px; color: var(--hint); font-size: 14px }
 </style>
