@@ -376,6 +376,11 @@ const pt = (f, rad) => { const a = Math.PI * (1 - f); return [(60 + rad * Math.c
 const arc = computed(() => { const [x, y] = pt((r.value?.score ?? 0) / 100, 48); return `M12 60 A48 48 0 0 1 ${x} ${y}` })
 const needle = computed(() => pt(checked.value ? r.value.score / 100 : 0, 38))
 const tick = computed(() => [pt(pass.value / 100, 40), pt(pass.value / 100, 56)])
+// «· текст» (25.11.2026): тот же спидометр, но живой — процент раскрытого эталона (KpBall → ballNet[id].res.pct), растёт по ходу ответа
+const txPct = computed(() => ballNet[props.step.id]?.res?.pct ?? 0)
+const txTier = computed(() => (txPct.value >= pass.value ? 'ok' : !p.st.done ? '' : txPct.value >= 40 ? 'mid' : 'low'))
+const txArc = computed(() => { const [x, y] = pt(txPct.value / 100, 48); return `M12 60 A48 48 0 0 1 ${x} ${y}` })
+const txNeedle = computed(() => pt(txPct.value / 100, 38))
 
 // «JSON» в правке: экран текстом (как присылает Gemini) — поправили и «Применить»; промпт и порог по умолчанию не сохраняются
 const jsOpen = ref(false), js = ref(''), jsErr = ref('')
@@ -433,7 +438,16 @@ function jsApply() {
           </div>
         </template>
       </div>
-      <div v-if="!p.edit && (checked || p.st.busy)" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
+      <div v-if="step.ballText && !p.edit && !idle" class="kg" :class="txTier" :title="`Раскрыто ${txPct}% эталона · зачёт от ${pass}%`">          <!-- «· текст»: живой спидометр вместо карточки с процентом -->
+        <svg viewBox="0 0 120 66" role="img" :aria-label="`Раскрыто ${txPct} %`">
+          <path d="M12 60 A48 48 0 0 1 108 60" class="tr" />
+          <path v-if="txPct > 0" :d="txArc" class="fl" />
+          <path :d="`M${tick[0][0]} ${tick[0][1]} L${tick[1][0]} ${tick[1][1]}`" class="tk" />
+          <line x1="60" y1="60" :x2="txNeedle[0]" :y2="txNeedle[1]" class="nd" /><circle cx="60" cy="60" r="5" class="nd" />
+        </svg>
+        <div class="kgv"><b>{{ txPct }}%</b><span>{{ txTier === 'ok' ? 'Зачтено' : p.st.done ? tierT[txTier] : 'раскрыто' }}</span></div>
+      </div>
+      <div v-else-if="!p.edit && (checked || p.st.busy)" class="kg" :class="checked && tier">          <!-- в правке спидометра нет (20.11.2026): в узкой карточке он сжимал вопрос в столбик -->
         <svg viewBox="0 0 120 66" role="img" :aria-label="checked ? `Совпадение по смыслу ${r.score} %` : 'Ещё не проверено'">
           <path d="M12 60 A48 48 0 0 1 108 60" class="tr" />
           <path v-if="checked && r.score > 0" :d="arc" class="fl" />

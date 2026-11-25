@@ -203,10 +203,9 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
     <!-- «· текст» (ballText): без шара — эталон под размытием, проявляются только сказанные слова; свернуть — кнопкой -->
     <!-- «· текст» (ballText): процент — карточкой, как было; текст эталона под размытием — по кнопке «Эталон» у вопроса (Kp.vue, txShow);
          размытое слово — нажать, покажется на 3 с (в процент не идёт) -->
-    <section v-if="tx" class="kbtx" :class="{ shut: !txOpen }">
-      <div class="kbtxh"><b class="kbtxp" :class="{ bad: done && pct < passN }">{{ pct }}%</b>
-        <div class="kbtxb"><span class="kbbar"><i :style="{ width: pct + '%' }" /></span><small>{{ idle ? 'пример' : `покрыто ${pct}% эталона · ` + (done && pct < passN ? `пока не зачёт, проход от ${passN}%` : `проход от ${passN}%`) }}</small></div></div>
-      <p v-if="txOpen || idle || edit" class="kbtxq"><template v-for="(x, j) in cov.words" :key="j"><span :class="cov.hit[j] ? (txNew.has(j) ? 'nw' : 'on') : done ? 'ms' : peek.has('t' + j) ? 'pk' : 'hd'" @click="!cov.hit[j] && !done && look('t' + j)">{{ x.w }}</span>{{ ' ' }}</template></p>
+    <!-- процент — спидометром у вопроса (Kp.vue, как у «Ответа по смыслу»); здесь только текст эталона по кнопке «Эталон» -->
+    <section v-if="tx && (txOpen || idle || edit)" class="kbtx">
+      <p class="kbtxq"><template v-for="(x, j) in cov.words" :key="j"><span :class="cov.hit[j] ? (txNew.has(j) ? 'nw' : 'on') : done ? 'ms' : peek.has('t' + j) ? 'pk' : 'hd'" @click="!cov.hit[j] && !done && look('t' + j)">{{ x.w }}</span>{{ ' ' }}</template></p>
     </section>
     <div v-if="!idle && !v2 && !tx" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
     <!-- новый вид: одно окно — сверху вопрос (из Kp.vue, Teleport в #kb2h-…) и процент справа, ниже шар, внизу полоса -->
