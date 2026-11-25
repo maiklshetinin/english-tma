@@ -610,10 +610,12 @@ function jsApply() {
 .kqg .tk { stroke: #8a6a48; stroke-width: 3 } .kqg .nd { stroke: #4b4b4b; fill: #4b4b4b; stroke-width: 6; stroke-linecap: round }
 .kqg b { font-family: var(--font); font-size: 15px; font-weight: 900; color: #7b4224; font-variant-numeric: tabular-nums } .kqg.ok b { color: #2e8b00 } .kqg.low b { color: #b3261e }
 .kqh { display: none }
+@media (max-width: 560px) { .kq:has(.kqtx) { min-height: 0; margin-top: -6px }          /* вопрос — сразу под шапкой (было 84px высоты, текст по центру) */
+  .kjlb { display: none } :global(.kjl) { display: none !important } }          /* журнал колонкой — на телефоне не нужен (25.11.2026) */
 @media (max-width: 560px) {
   .kqh { display: flex; flex: none; align-items: center; gap: 8px; margin-left: -4px }
   .kqh .kqg { margin: 0; padding: 0; border: 0; gap: 4px } .kqh .kqg svg { width: 28px; height: 16px } .kqh .kqg b { font-size: 13px }
-  .kqh .krb.kx { width: 34px; height: 34px; margin: 0; border-radius: 10px }
+  .kqh .krb.kx { flex: none; display: grid; place-items: center; width: 36px; height: 36px; margin: 0 2px 0 0; padding: 0; border-radius: 12px } .kqh .krb.kx svg { display: block; width: 20px; height: 20px; min-width: 20px }          /* глаз был крошечный и прижат к углу (25.11.2026) */
   .kqw.kqtx .kqg, .kqw.kqtx ~ .krb.kx:not(.kxh), .kq .krb.kx:not(.kxh) { display: none }
 }
 .kqt { flex: 1; min-width: 0; padding: 5px 12px; border-radius: 10px; background: #f2dab5; font-family: 'PT Serif', Georgia, serif; font-size: 18px; font-weight: 400; line-height: 1.35; color: #351a05 }

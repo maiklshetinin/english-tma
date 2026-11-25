@@ -680,7 +680,8 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .x { position: absolute; left: 18px; top: 18px }
 /* на компьютере меню приложения слева остаётся видно поверх урока — в любой момент можно уйти в другой раздел */
 @media (min-width: 1024px) { .full { z-index: 9; padding-left: 116px } .x { left: 134px } }
-@media (min-width: 1024px) { .rvt { left: 180px } }          /* 19.11.2026: «Графики» — сверху, справа от «назад» (было внизу слева) */
+@media (min-width: 1024px) { .rvt { left: 180px } }
+@media (max-width: 560px) { .rvt, .rvd, .spl { display: none !important } }          /* 25.11.2026: на телефоне графиков нет — место под полосу прогресса */          /* 19.11.2026: «Графики» — сверху, справа от «назад» (было внизу слева) */
 .rvt svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 @media (max-width: 600px) { .rvt span { display: none } .rvt { padding: 8px 9px } }
 @media (max-width: 600px) { .un { padding: 16px 14px 10px; border-radius: 18px } .uh b { font-size: 20px } }          /* телефон: модуль с меньшими полями */          /* на телефоне — только значок, не налезает на полоску */
