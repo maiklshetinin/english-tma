@@ -179,12 +179,13 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 
 <template>
   <div class="kball" :class="['th-' + theme, { idle, lv: isLive, v2 }]" @pointerdown.stop>
-    <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
+    <div v-if="!idle && !v2" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
     <!-- новый вид: одно окно — сверху вопрос (из Kp.vue, Teleport в #kb2h-…) и процент справа, ниже шар, внизу полоса -->
     <div class="kb2w" :class="{ on: v2 }">
       <div v-if="v2" class="kb2h">
         <div :id="'kb2h-' + step.id" class="kb2q" />
-        <div class="kb2pc" :class="{ bad: done && pct < passN }"><b>{{ pct }}%</b><small>{{ done && pct < passN ? 'пока не зачёт · ' : '' }}проход {{ passN }}%</small></div>
+        <div class="kb2pc" :class="{ bad: done && pct < passN }"><b>{{ pct }}%</b><small>{{ done && pct < passN ? 'пока не зачёт · ' : '' }}проход {{ passN }}%</small>
+          <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div></div>          <!-- темы — под процентом, окно поднимается к самому верху -->
       </div>
     <div ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), part: !ok.has(i) && sc[i] > 0, ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
@@ -274,9 +275,9 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kb2pc { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding-top: 2px }
 .kb2pc b { font-size: 30px; font-weight: 900; line-height: 1; color: #cd8a30 } .kb2pc small { font-size: 12px; font-weight: 700; color: #9a6f4a; white-space: nowrap }
 .kb2pc.bad b, .kb2pc.bad small { color: #b3261e }
-.kball.v2 .kbs, .kball.v2.th-sphere .kbs { height: 230px } .kball.v2.idle .kbs { height: 150px }
-.kb2bar { height: 6px; border-radius: 3px; background: #f4dcb8; overflow: hidden } .kb2bar i { display: block; height: 100%; background: #cd8a30; transition: width .4s } .kb2bar.bad i { background: #e5484d }
-.kball.v2 .kbth { position: static; justify-content: flex-end; margin: 0 0 6px }
+.kball.v2 .kbs, .kball.v2.th-sphere .kbs { height: 170px } .kball.v2.idle .kbs { height: 130px }          /* 25.11.2026: ниже — меньше пустоты между вопросом и полосой */
+.kb2bar { height: 4px; border-radius: 2px; background: #f4dcb8; overflow: hidden } .kb2bar i { display: block; height: 100%; background: #cd8a30; transition: width .4s } .kb2bar.bad i { background: #e5484d }
+.kball.v2 .kbth { position: static; justify-content: flex-end; margin: 4px 0 0 } .kball.v2 { margin-top: 0 }
 /* светлая */
 .th-white .kb2w.on { background: #fff; border-color: #e3e6ea } .th-white .kb2pc b { color: #2bb34a } .th-white .kb2pc small { color: #6b7280 }
 .th-white .kb2bar { background: #e3f5e7 } .th-white .kb2bar i { background: #2bb34a }
@@ -291,8 +292,10 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 @media (max-width: 560px) {
   .kb2w.on { padding: 10px 12px }
   .kball.v2 .kb2q :deep(.kqt), .kball.v2.th-white .kb2q :deep(.kqt), .kball.v2.th-sphere .kb2q :deep(.kqt) { background: none; padding: 0; font-size: 17px }
-  .kb2pc b { font-size: 22px } .kball.v2 .kbs, .kball.v2.th-sphere .kbs { height: 170px }
+  .kb2pc b { font-size: 22px } .kball.v2 .kbs, .kball.v2.th-sphere .kbs { height: 150px }
 }
+/* нижняя панель (микрофон, «Готово», статус) — той же ширины, что окно и список, а не шире (25.11.2026) */
+:global(.lp:has(.kball.v2:not(.idle)) .kpt), :global(.lp:has(.kball.v2:not(.idle)) .kcst) { max-width: 916px; margin-left: auto !important; margin-right: auto !important }
 /* темы нового вида — на весь экран урока */
 :global(.lp:has(.kball.v2.th-white:not(.idle))), :global(.lp:has(.kball.v2.th-white:not(.idle)) .body), :global(.lp:has(.kball.v2.th-white:not(.idle)) .foot:not(.good):not(.bad)) { background: #f5f6f8 !important }
 :global(.lp:has(.kball.v2.th-sphere:not(.idle))), :global(.lp:has(.kball.v2.th-sphere:not(.idle)) .body), :global(.lp:has(.kball.v2.th-sphere:not(.idle)) .foot:not(.good):not(.bad)) { background: #090b10 !important; color: #f1f5f9 }
