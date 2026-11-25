@@ -18,6 +18,8 @@
 //  ШАР LIVE (24.11.2026, тест; step.ballLive, шаблон kpballive): то же самое, но без моста — одна Live-сессия (WebSocket) на упражнение.
 //  Эталон — в системной инструкции; первое сообщение «РАЗБЕЙ» (или «БЛОКИ: …», если блоки уже есть) — модель молча вызывает функцию blocks;
 //  дальше каждый новый кусок расшифровки уходит текстом «РЕЧЬ: …», модель молча вызывает cover(n, score 1 / 0.5, said). Голос модели не играет.
+//  v3 (25.11.2026): без нарезки — эталон целиком, модель сама присылает найденные в нём куски (cover: found[{ ref, said }], percent),
+//  по «Готово» — ИТОГ → summary (missed, percent). Нарезка (blocks) у шара Live больше не используется.
 //  Голос (25.11.2026) — рация-переключатель: нажал — микрофон включён, нажал ещё раз — выключен, и модель СРАЗУ один раз вызывает cover
 //  (пустой — если нового нет). В подвале: слушает → Gemini ищет совпадения (секундомер от выключения) → засчитано за N с; нажатие — журнал.
 //  Статусы — те же ballNet (подвал). Реализация — openBallLive внизу файла.
@@ -143,24 +145,24 @@ function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5
 
 
 // =====================================  ШАР LIVE  =====================================
+// v3 (25.11.2026): БЕЗ нарезки на блоки — нарезка дробила мысли и путала засчитывание. Эталон целиком — в системной инструкции, модель сама
+// находит в нём куски, которые ученик передал (ref — дословно из эталона), и после каждой реплики шлёт cover; по «ИТОГ» («Готово») — summary
 const LIVE_SYS = (question, ideal) => 'Ты — молчаливый помощник в устном упражнении к собеседованию по-польски. Ты НИЧЕГО не говоришь и не пишешь ученику: ' +
   'весь твой ответ — только вызовы функций, их читает приложение.\n\nВопрос: ' + question + '\n\nЭталонный ответ:\n' + plain(ideal) + '\n\n' +
-  'Сообщения от приложения бывают трёх видов.\n' +
-  '1. «РАЗБЕЙ» — вызови функцию blocks: разбей эталон на 5–10 смысловых пунктов — фактов, которые экзаменатор ждёт услышать (когда, кто, что делают, где, зачем, почему). ' +
-  'Один пункт — одна законченная мысль; перечисления («słodycze, zabawki lub książki») — части одного пункта, не дроби их. label — суть пункта на языке эталона, 3–6 слов, ' +
-  'понятная сама по себе; words — 1–3 самых характерных слова пункта, как они написаны в эталоне. Не добавляй того, чего нет в эталоне.\n' +
-  '2. «БЛОКИ: 1. … 2. …» — готовый нумерованный список пунктов: запомни номера, ничего не вызывай.\n' +
-  '3. «РЕЧЬ: …» — текстом то, что сказал ученик; а когда ученик говорит в микрофон (как по рации: включил микрофон — говорит, выключил — реплика кончилась), ты слышишь его сам — ' +
-  'СРАЗУ после конца реплики (ученик выключил микрофон) поступай так же, как с «РЕЧЬ» (в речи бывают оговорки и ошибки произношения). Сверь всё сказанное с пунктами и вызови функцию cover: ' +
-  'для каждого пункта, который передан впервые или полнее, чем раньше: n — номер пункта; score — 1, если мысль передана целиком, 0.5 — если только часть; ' +
-  'said — что ученик сказал (2–8 слов). Засчитывай по смыслу: синонимы, другие слова, грамматические ошибки не мешают; если о пункте ничего не сказано — не засчитывай. ' +
-  'Пункт, уже засчитанный с тем же score, не повторяй. Нового нет — всё равно вызови cover с пустым covered: приложение ждёт ответ. ' +
-  'Отвечай мгновенно, одним вызовом cover на реплику; ошибки не разбирай, не говори и не пиши ничего, кроме вызовов функций.'
+  'Ученик отвечает устно частями, как по рации: включает микрофон, говорит, выключает — реплика кончилась; потом может включить и добавить ещё. ' +
+  'Ты слышишь его сам (бывает и текстом: «РЕЧЬ: …»). СРАЗУ после каждой реплики сверь сказанное с эталоном и вызови функцию cover:\n' +
+  '- found — что из эталона ученик передал в этой реплике впервые. Для каждого: ref — дословный кусок эталона (одна мысль, 3–10 слов, как написано в эталоне), ' +
+  'смысл которого ученик передал; said — что сказал ученик (2–8 слов, как услышал).\n' +
+  '- percent — сколько процентов смысла всего эталона ученик передал за все реплики вместе (0–100).\n' +
+  'Засчитывай по смыслу: синонимы, другие слова, порядок, грамматические ошибки и оговорки не мешают; о чём не сказано — не засчитывай. ' +
+  'Уже найденное в прошлых репликах не повторяй. Нового нет — всё равно вызови cover с пустым found и прежним percent: приложение ждёт ответ.\n' +
+  'Сообщение «ИТОГ» — ученик закончил: вызови функцию summary: missed — мысли эталона, которые ученик так и не передал, каждая — дословный кусок эталона (3–10 слов); ' +
+  'percent — итоговый процент.\nОтвечай мгновенно, одним вызовом функции; ошибки не разбирай, не говори и не пиши ничего, кроме вызовов функций.'
 const LIVE_TOOLS = [
-  { name: 'blocks', description: 'Смысловые пункты эталона (ответ на «РАЗБЕЙ»)',
-    parameters: { type: 'OBJECT', properties: { blocks: { type: 'ARRAY', items: { type: 'OBJECT', properties: { label: { type: 'STRING' }, words: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['label'] } } }, required: ['blocks'] } },
-  { name: 'cover', description: 'Какие пункты эталона ученик передал в сказанном (ответ на «РЕЧЬ»)',
-    parameters: { type: 'OBJECT', properties: { covered: { type: 'ARRAY', items: { type: 'OBJECT', properties: { n: { type: 'INTEGER' }, score: { type: 'NUMBER' }, said: { type: 'STRING' } }, required: ['n', 'score'] } } }, required: ['covered'] } },
+  { name: 'cover', description: 'Что из эталона ученик передал в последней реплике (после каждой реплики)',
+    parameters: { type: 'OBJECT', properties: { found: { type: 'ARRAY', items: { type: 'OBJECT', properties: { ref: { type: 'STRING' }, said: { type: 'STRING' } }, required: ['ref'] } }, percent: { type: 'INTEGER' } }, required: ['found', 'percent'] } },
+  { name: 'summary', description: 'Итог по «ИТОГ»: что из эталона так и не прозвучало',
+    parameters: { type: 'OBJECT', properties: { missed: { type: 'ARRAY', items: { type: 'STRING' } }, percent: { type: 'INTEGER' } }, required: ['missed', 'percent'] } },
 ]
 /** «БЛОКИ: 1. … 2. …» — список для модели, когда блоки уже есть (свои у экрана или из памяти браузера) */
 export const blocksMsg = (b) => 'БЛОКИ:\n' + b.map((x, i) => `${i + 1}. ${x.label}`).join('\n')
@@ -170,7 +172,7 @@ export const liveCached = (q, i) => { try { const c = JSON.parse(localStorage.ge
 /** Live-сессия шара. cb: { onBlocks([{label, words}]), onCover([{ i (с 0), score 0..1, said }]), onTurn() — модель договорила }.
  *  → { send(text), stop(), alive, model }. Сообщения до готовности сессии ждут в очереди */
 const liveSessions = {}          // id экрана → api открытой Live-сессии (микрофон диктовки берёт её же)
-export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn }) {
+export function openBallLive({ id, question, ideal, onBlocks, onCover, onSummary, onTurn }) {          // onCover([{ ref, said }], percent), onSummary([ref], percent)
   const n = netOf(id), key = firstKey()
   if (!key) throw new Error('Нужен ключ Gemini в профиле')
   let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now(), sentSplit = false
@@ -181,7 +183,7 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
   // нажал ещё раз — выключен (activityEnd): Live ОДИН раз сверяет всё сказанное и присылает cover. Выключен — в Live не уходит ни звука.
   // (Пробовали засчитывать на ходу — по паузам и срезами раз в 5 с — работало нестабильно, убрали.) wait — выключили, ждём ответ
   let hearH = null, hearUntil = 0, micOn = false, wait = false, waitTm = 0
-  let talking = false, heardV = false
+  let talking = false, heardV = false, finRes = null
   if (!n.lv) n.lv = { ph: '', at: 0, cut: 0, last: null }
   if (!n.log) n.log = []
   n.log.splice(0); const T0 = Date.now()
@@ -193,7 +195,13 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
   const api = {
     get model() { return modelName }, get modelId() { return modelId }, get alive() { return !closed },
     get hearing() { return !!hearH || wait || Date.now() < hearUntil },
+    get pending() { return talking || wait },          // «Готово» ждёт: микрофон ещё включён или ответ на последнюю реплику не пришёл
     send(text) { if (closed) return; queue.push(text); flush() },
+    /** «Готово»: ИТОГ → summary — что не прозвучало. → Promise<{ missed, percent }> (нет ответа 15 с — ошибка) */
+    final() {
+      if (closed) return Promise.reject(new Error('Live не на связи'))
+      return new Promise((ok, no) => { finRes = ok; think(); setTimeout(() => { if (finRes === ok) { finRes = null; no(new Error('Live не прислал итог за 15 с')) } }, 15_000); api.send('ИТОГ') })
+    },
     stop() { closed = true; L.ph = ''; delete liveSessions[id]; try { sess?.stop() } catch { /* */ } },
     /** Голос — прямо в Live: h = { text(кусок расшифровки), turn(), level(0..1) } или null — выключить */
     async hear(h) {
@@ -233,12 +241,19 @@ export function openBallLive({ id, question, ideal, onBlocks, onCover, onTurn })
             try { localStorage.setItem(lck(question, ideal), JSON.stringify(b)) } catch { /* */ }
             onBlocks?.(b); return { ok: true, count: b.length }
           }
+          const pc = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)))
           if (name === 'cover') {
-            lg('cover', JSON.stringify(args?.covered ?? args).slice(0, 400) + ' · ' + sec)
-            const got = (Array.isArray(args?.covered) ? args.covered : []).map((x) => ({ i: Math.round(Number(x?.n)) - 1, score: Math.max(0, Math.min(1, Number(x?.score) || 0)), said: String(x?.said ?? '').trim() })).filter((x) => x.i >= 0 && x.score > 0)
-            n.cover = { st: 'on', txt: (got.length ? `засчитано ${got.length}` : 'нового нет') + ` · ${sec}` }
+            lg('cover', JSON.stringify(args).slice(0, 400) + ' · ' + sec)
+            const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim() })).filter((x) => x.ref)
+            n.cover = { st: 'on', txt: (got.length ? `найдено ${got.length}` : 'нового нет') + ` · ${sec}` }
             if (L.ph === 'think') L.last = { n: got.length, ms: Date.now() - L.at }
-            onCover?.(got); return { ok: true }
+            onCover?.(got, pc(args?.percent)); return { ok: true }
+          }
+          if (name === 'summary') {
+            lg('cover', 'ИТОГ ' + JSON.stringify(args).slice(0, 400) + ' · ' + sec)
+            const missed = (Array.isArray(args?.missed) ? args.missed : []).map((x) => String(x ?? '').trim().slice(0, 120)).filter(Boolean)
+            n.cover = { st: 'on', txt: `итог · ${sec}` }
+            onSummary?.(missed, pc(args?.percent)); finRes?.({ missed, percent: pc(args?.percent) }); finRes = null; return { ok: true }
           }
           lg('err', 'неизвестная функция ' + name)
           return { ok: false, error: 'неизвестная функция' }

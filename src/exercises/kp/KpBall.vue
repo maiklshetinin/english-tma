@@ -23,9 +23,31 @@ const ok = ref(new Set()), byAi = ref(new Set()), hit = ref(-1), info = ref({}) 
 const got = computed(() => Object.entries(info.value).map(([i, x]) => ({ i: +i, label: blocks.value[+i]?.label ?? '', ...x })).filter((x) => x.label).sort((a, b) => b.at - a.at))
 const sc = ref({})          // Live (шар Live): i → оценка блока 0..1 (1 — целиком, 0.5 — частично); у обычного шара пусто
 const isLive = computed(() => !!props.step.ballLive)
-const pct = computed(() => (blocks.value.length ? Math.round((blocks.value.reduce((a, _, i) => a + (ok.value.has(i) ? 1 : sc.value[i] || 0), 0) / blocks.value.length) * 100) : 0))
-const missing = computed(() => blocks.value.map((b, i) => (ok.value.has(i) ? null : b.label)).filter(Boolean))
-watch([pct, missing, blocks], () => { if (isLive.value) netOf(props.step.id).res = { pct: pct.value, missed: [...missing.value], total: blocks.value.length, ok: ok.value.size } }, { immediate: true })          // итог шара Live — для «Готово» (LessonPlayer.aiCheck)
+const pct = computed(() => isLive.value ? livePct.value : (blocks.value.length ? Math.round((blocks.value.reduce((a, _, i) => a + (ok.value.has(i) ? 1 : sc.value[i] || 0), 0) / blocks.value.length) * 100) : 0))
+const missing = computed(() => isLive.value ? missedL.value : blocks.value.map((b, i) => (ok.value.has(i) ? null : b.label)).filter(Boolean))
+// ---------- шар Live v3 (25.11.2026): без нарезки. Эталон — целиком в Live; модель сама присылает найденные в нём куски (ref) и процент.
+// В шаре: найденные куски — светятся; пока не «Готово» — для вида размытые начала предложений эталона (ничего не подсказывают); после «Готово» —
+// не прозвучавшее (summary) — красным. Под шаром: «Засчитано» сразу, «Не засчитано» — только после «Готово»
+const livePct = ref(0), found = ref([]), missedL = ref([]), summed = ref(false)          // found: [{ ref, said, at }]
+const hiddenS = () => String(props.step.ideal || '').replace(/\*\*|==|_/g, '').split(/[.!?;\n]+/).map((x) => x.trim().split(/\s+/).slice(0, 6).join(' ')).filter((x) => x.length > 3).slice(0, 10)
+const liveRes = () => { netOf(props.step.id).res = { pct: livePct.value, missed: [...missedL.value], total: found.value.length + missedL.value.length, ok: found.value.length,
+  note: `Засчитано фраз эталона: ${found.value.length}` + (summed.value ? ` · не прозвучало: ${missedL.value.length}` : '') } }          // итог — для «Готово» (LessonPlayer.aiCheck)
+function rebuild(fresh = []) {          // шар Live: блоки шара = найденное + (размытое | не прозвучавшее)
+  const f = found.value, tail = summed.value ? missedL.value : props.done ? [] : hiddenS()
+  blocks.value = [...f.map((x) => ({ label: x.ref, words: [] })), ...tail.map((t) => ({ label: t, words: [] }))]
+  const inf = {}; f.forEach((x, i) => { inf[i] = { said: x.said, fix: '', note: '', at: x.at } }); info.value = inf; sc.value = {}
+  const all = new Set(f.map((_, i) => i)), old = new Set([...all].filter((i) => !fresh.includes(i)))
+  ok.value = old; byAi.value = new Set(old); light(fresh, true)
+}
+function onLiveFound(list, percent) {
+  liveChecked.value = true
+  const have = new Set(found.value.map((x) => x.ref.toLowerCase())), at = Date.now(), add = list.filter((x) => !have.has(x.ref.toLowerCase())).map((x, k) => ({ ...x, at: at - k }))
+  if (percent > livePct.value) livePct.value = percent
+  const start = found.value.length; found.value = [...found.value, ...add]
+  rebuild(add.map((_, k) => start + k)); liveRes()
+}
+function onLiveSummary(missed, percent) { missedL.value = missed; summed.value = true; if (percent) livePct.value = percent; rebuild(); liveRes() }
+
 
 // ---------- сфера ----------
 const box = ref(null), els = []
@@ -106,34 +128,21 @@ async function cover() {
 // 0.5 — частично (блок наполовину, процент считаем сами). Одно сообщение за раз: пока модель не договорила, следующий кусок ждёт
 // после первой сверки Live под шаром — два блока: «Засчитано» (что сказал) и «Не засчитано» (½ — передано частично)
 const liveChecked = ref(false)
-const notGot = computed(() => blocks.value.map((b, i) => ({ i, label: b.label, half: (sc.value[i] || 0) > 0 })).filter((x) => !ok.value.has(x.i)))
 let lv = null, lvBlocks = [], busyL = false, againL = false, busyTm = 0, autoTm = 0, fillTm = 0
 function fill(b) {          // блоки «наливаются» в шар по одному — как будто нейросеть выдаёт их
   clearInterval(fillTm); let k = 0; blocks.value = []
   fillTm = setInterval(() => { k++; blocks.value = b.slice(0, k); if (k >= b.length) { clearInterval(fillTm); fillTm = 0 } }, 260)
 }
-function resetSay() { liveChecked.value = false; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) }
+function resetSay() { liveChecked.value = false; livePct.value = 0; found.value = []; missedL.value = []; summed.value = false; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) }
 function startLive(keep = false) {          // keep — переподключение: засчитанное остаётся, вся речь уходит заново
   lv?.stop(); if (keep) { sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) } else resetSay()
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
   try {
     lv = openBallLive({ id, question: q, ideal,
-      onBlocks: (b) => { lvBlocks = b; fast.value = false; resetSay(); fill(b) },
-      onCover: onLiveCover,
+      onCover: onLiveFound, onSummary: onLiveSummary,
       onTurn: () => { busyL = false; asking.value = false; clearTimeout(busyTm); if (againL) { againL = false; coverLive() } } })
   } catch (e) { netOf(id).cover = { st: 'err', txt: String(e.message || e) }; return }
-  const have = lvBlocks.length ? lvBlocks : own.value || liveCached(q, ideal)
-  if (have) { lvBlocks = have; blocks.value = have; fast.value = false; netOf(id).split = { st: 'on', txt: `${have.length} блоков · ${own.value ? 'из экрана' : 'из памяти браузера'}` }; lv.send(blocksMsg(have)); onText() }
-  else { netOf(id).split = { st: 'busy', txt: 'эталон ушёл в Live — режет на блоки' }; lv.send('РАЗБЕЙ') }
-}
-function onLiveCover(list) {
-  const s = { ...sc.value }, inf = { ...info.value }, at = Date.now(), lit = []
-  list.forEach((x, k) => {
-    if (x.i >= blocks.value.length) return
-    if (x.score > (s[x.i] || 0)) s[x.i] = x.score
-    if (x.score >= 0.75) { lit.push(x.i); if (x.said) inf[x.i] = { said: x.said, fix: '', note: '', at: at - k } }
-  })
-  sc.value = s; info.value = inf; liveChecked.value = true; light(lit, true)
+  fast.value = false; netOf(id).split = { st: 'off', txt: '' }; if (!keep) rebuild(); liveRes()          // v3: блоков нет — эталон уже в системной инструкции
 }
 function coverLive() {
   const all = (props.final || props.text).trim(), w = all ? all.split(/\s+/) : []
@@ -155,8 +164,10 @@ watch(() => props.final, () => {          // сказал — помолчал: 
 watch(() => props.text, onText)
 watch(() => props.done, async (d) => {
   clearInterval(missTm)
-  if (!d) { ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; if (isLive.value && !props.idle && !props.edit) startLive(); return }
-  if (wc(props.text) > sentWords) await cover()          // последняя сверка — по всему ответу
+  if (!d) { if (isLive.value) { resetSay(); summed.value = false }
+    ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; if (isLive.value && !props.idle && !props.edit) startLive(); return }
+  if (isLive.value) rebuild()          // шар Live: размытое уходит, не прозвучавшее (summary) — уже пришло к «Готово»
+  else if (wc(props.text) > sentWords) await cover()          // последняя сверка — по всему ответу
   missTm = setInterval(() => { const m = blocks.value.map((_, i) => i).filter((i) => !ok.value.has(i)); if (m.length) { face(m[missI++ % m.length]); hit.value = -1 } }, 1800)          // по очереди — что не прозвучало
 })
 
@@ -187,17 +198,18 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), part: !ok.has(i) && sc[i] > 0, ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
     <div class="kbp" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
-      <b>{{ pct }}%</b><span v-if="isLive" class="kbseg" aria-hidden="true"><i v-for="(b, i) in blocks" :key="i" :class="{ f: ok.has(i), h: !ok.has(i) && sc[i] > 0 }" /></span><span v-else class="kbbar"><i :style="{ width: pct + '%' }" /></span>
-      <small>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
+      <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
+      <small v-if="isLive && !edit">{{ idle ? 'пример' : 'засчитано фраз: ' + found.length }}</small>
+      <small v-else>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
       <button v-if="!edit && !idle && !done && !isLive" type="button" class="kbgo" :disabled="asking || !hasNew" :title="'Отправить всё сказанное в чат через мост: какие смысловые блоки засчитаны и где ошибки'" @click="cover"><i class="kbdot" />{{ asking ? 'Чат сверяет…' : 'Отправить на проверку' }}</button>
     </div>
-    <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kb2">
+    <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kb2" :class="{ one: !(done && summed) }">
       <section class="kb2s ok"><h4>Засчитано · {{ got.length }}</h4>
-        <ul v-if="got.length" class="kbl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span></li></ul>
+        <ul v-if="got.length" class="kbl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span></li></ul>
         <p v-else class="kb2e">пока ничего</p></section>
-      <section class="kb2s no"><h4>Не засчитано · {{ notGot.length }}</h4>
-        <ul v-if="notGot.length" class="kbl"><li v-for="x in notGot" :key="x.i" :class="{ half: x.half }"><b>{{ x.half ? '½' : '✕' }} {{ x.label }}</b><small v-if="x.half">передано частично</small></li></ul>
-        <p v-else class="kb2e">всё раскрыто</p></section>
+      <section v-if="done && summed" class="kb2s no"><h4>Не прозвучало · {{ missedL.length }}</h4>
+        <ul v-if="missedL.length" class="kbl"><li v-for="(m, k) in missedL" :key="k"><b>✕ {{ m }}</b></li></ul>
+        <p v-else class="kb2e">всё сказано</p></section>
     </div>
     <!-- что засчитал чат: блок ✓ — что ты сказал → как правильно (что исправлено); новое — сверху -->
     <ul v-if="!isLive && got.length && !edit && !idle" class="kbl">
@@ -256,7 +268,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbl b { font-weight: 800; color: #128a55; margin-right: 6px } .kbs1 { color: #555; font-style: italic } .kbf { margin-left: 6px; font-weight: 800; color: #b26a00 }
 .kbl small { display: block; font-size: 12px; font-weight: 600; color: #8a6a3a }
 /* шар Live: два блока под шаром — засчитано / не засчитано (25.11.2026) */
-.kb2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px } @media (max-width: 560px) { .kb2 { grid-template-columns: 1fr } }
+.kb2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px } .kb2.one { grid-template-columns: 1fr } @media (max-width: 560px) { .kb2 { grid-template-columns: 1fr } }
 .kb2s { min-width: 0 } .kb2s h4 { margin: 0 0 4px; font-size: 12px; font-weight: 800; color: #128a55 } .kb2s.no h4 { color: #b3261e }
 .kb2s .kbl { margin: 0 } .kb2s.no .kbl li { background: #fff3f2 } .kb2s.no .kbl b { color: #b3261e } .kb2s.no .kbl li.half { background: #fff8e8 } .kb2s.no .kbl li.half b { color: #b26a00 }
 .kb2e { margin: 0; font-size: 12.5px; font-weight: 600; color: #9a9a9a }
