@@ -151,7 +151,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
           </div></div>
         </div>
         <div v-else-if="step.banks?.length" class="mfbs">
-          <div v-for="(b, n) in step.banks" :key="n" class="mfbw"><small v-if="b.t">{{ b.t }}</small>
+          <div v-for="(b, n) in step.banks" :key="n" class="mfbw" :class="{ lb: b.t }" :style="{ '--br': Math.ceil(b.w.length / 2) }"><small v-if="b.t">{{ b.t.replace(/\s*(…|\.\.\.)\s*$/, '') }}</small>
             <div class="mfb" :class="{ flat: !b.t }"><button v-for="w in b.w" :key="w" type="button" class="mfch" :class="{ cr: b.x?.includes(w), us: !b.x?.includes(w) && usedW(w) }" :disabled="b.x?.includes(w) || done" @pointerdown.prevent @click="ins(w)">{{ w }}</button></div>
           </div>
         </div>
@@ -252,6 +252,12 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 .mfch.sm { padding: 3px 10px; font-size: 14px } .mfch:hover:not(:disabled) { border-color: var(--mo) }
 .mfch.us { border-style: dashed; border-color: #cfcfcf; color: #b0b0b0 } .mfch.cr { border-style: dashed; border-color: #cfcfcf; color: #b0b0b0; text-decoration: line-through; text-decoration-color: var(--mr); cursor: default }
 .mfb.flat { justify-content: space-around }
+/* рамка с подписью (39.5, 25.11.2026) — как в книге: «it’s» / «to» слева, слова в рамке двумя столбиками, рамки одной ширины */
+.mfbw.lb { display: grid; grid-template-columns: 2.4em minmax(0, 1fr); align-items: center; gap: 8px }
+.mfbw.lb > small { margin: 0; font-size: 1.05em; font-weight: 800; color: var(--text) }
+.mfbw.lb .mfb { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--br), auto); grid-auto-flow: column; gap: 2px 14px; padding: 8px 12px; border-color: #f3c48f; background: var(--card) }
+.mfbw.lb .mfch { border: 0; background: none; padding: 2px 6px; border-radius: 6px; font-weight: 700; text-align: left; white-space: normal }
+.mfbw.lb .mfch:hover:not(:disabled) { background: #fff3e3 } .mfbw.lb .mfch.us { color: #b0b0b0 } .mfbw.lb .mfch.cr { color: #b0b0b0 }
 /* картинки */
 .mfp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; border: 2px solid #f4a7ae; border-radius: 16px; margin-bottom: 10px }
 .mfpi { position: relative; aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: linear-gradient(135deg, #d9d58e, #86cfcf) }
@@ -329,6 +335,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mff, .mfx { font-size: 24px } .m-order .mff, .m-order .mfx { font-size: 21px } .mfok { font-size: 21px } .mfhint { font-size: 16px }
   .two:not(.m-match) .mfrows, .mf.t-mf171 .mfrows, .mf.t-mf193 .mfrows { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: column; grid-template-rows: repeat(var(--r2), auto); column-gap: 48px; row-gap: 14px }
   .mf.t-mf112 .mfrows { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(var(--r3), auto); column-gap: 36px }
+  .mf.t-mf212 .mfrows { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-flow: row }          /* 21.2 — как в книге: одна колонка во всю страницу */
   .mfm { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) }          /* две колонки — строки делим поровну сами (CSS columns перекладывали строку из колонки в колонку, когда высота менялась) */
   .inl .mfr { grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1.25fr); align-items: end; column-gap: 12px }
   .inl .mfr > .mfq { grid-column: 2; grid-row: 1 } .inl .mfr > .mfl { grid-column: 3; grid-row: 1 }
@@ -367,9 +374,8 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mfst { font-size: 17px } .mfv { width: 150px; height: 150px; margin-top: -162px }
 }
 /* экран Мёрфи шире обычного: на планшете и компьютере — как страница книги */
-/* ===== компьютер (карточка ~1200): 2.5 — три колонки, 11.2 — четыре, 31.4 — буквы в строке ===== */
+/* ===== компьютер (карточка 1000): 11.2 — четыре колонки, 31.4 — буквы в строке ===== */
 @container (min-width: 1000px) {
-  .mf.t-mf25 .mfrows { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(var(--r3), auto) }
   .mf.t-mf112 .mfrows { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(var(--r4), auto) }
   .mfml li:has(> .mflt) { grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center } .mfml li > .mflt { grid-column: 3; margin: 0 }
   .mfp { grid-template-columns: repeat(3, 1fr) }
@@ -380,5 +386,5 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mfsg { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 18px }
   .mfsb { grid-template-columns: minmax(0, .9fr) minmax(0, 1fr); align-items: start; column-gap: 14px } .mfsb > .mfst:only-child { grid-column: 1 / -1 }
 }
-:global(.lp .body.x-mf), :global(.lp:not(.embedded):not(.single) .body.x-mf) { max-width: 1200px }          /* 25.11.2026: шире — на 1440 предложения в строку (общее правило плеера 760px было сильнее) */
+:global(.lp .body.x-mf), :global(.lp:not(.embedded):not(.single) .body.x-mf) { max-width: 1044px }          /* карточка 1000 px — страница Мерфи (19,5 × 26 см) в масштабе нашего шрифта */          /* 25.11.2026: шире — на 1440 предложения в строку (общее правило плеера 760px было сильнее) */
 </style>
