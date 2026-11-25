@@ -155,11 +155,11 @@ function kpCode(s: any): KpCfg {
   }
   for (const k of API_TEXTS) o[k] = own(s, k) ?? DEF[k]
   for (const k of STT_TEXTS) o[k] = own(s, k) ?? STT[k]
-  for (const k of BALL_TEXTS) o[k] = own(s, k) ?? (s?.ballFix === true ? BALL3 : s?.ballV2 === true ? BALL2 : BALL)[k]          // новый вид — свой отлаженный промпт
+  for (const k of BALL_TEXTS) o[k] = own(s, k) ?? (s?.ballFix === true ? BALL3 : s?.ballV2 === true || s?.ballText === true ? BALL2 : BALL)[k]          // новый вид — свой отлаженный промпт
   return o
 }
 /** шаблон экрана — по нему настройки курса (presets) */
-export const kpTpl = (s: any) => (s?.ballLive === true ? (s?.ballFix === true ? 'kpballfix' : s?.ballV2 === true ? 'kpballive2' : 'kpballive') : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
+export const kpTpl = (s: any) => (s?.ballLive === true ? (s?.ballText === true ? 'kpballtext' : s?.ballFix === true ? 'kpballfix' : s?.ballV2 === true ? 'kpballive2' : 'kpballive') : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
 /** Действующие настройки экрана: умолчания кода ← настройки упражнения в курсе ← свои поля экрана */
 export function kpCfg(s: any): KpCfg {
   const mine: any = {}
@@ -185,7 +185,7 @@ const eq = sameV
 export function kpFields(raw: any): Partial<KpCfg> {
   const o: any = {}
   if (!raw || typeof raw !== 'object') return o
-  const form = { engine: raw.engine, dic: raw.dic, ballLive: raw.ballLive, ballV2: raw.ballV2, ballFix: raw.ballFix }
+  const form = { engine: raw.engine, dic: raw.dic, ballLive: raw.ballLive, ballV2: raw.ballV2, ballFix: raw.ballFix, ballText: raw.ballText }
   const x: any = kpCode({ ...form, ...raw }), d: any = kpCfg(form)          // x — значения JSON (неверные — умолчания кода), d — что было бы без своих полей
   for (const k of Object.keys(x)) {
     if (raw[k] === undefined) continue

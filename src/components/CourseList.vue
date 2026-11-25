@@ -95,5 +95,7 @@ async function remove(c) {
 .cc.on b { font-weight: 900; color: var(--text) }
 .new { color: var(--hint) } .new .ic { border: 2px dashed var(--border); background: none; color: var(--hint) } .new small { font-size: 11.5px; font-weight: 700 }
 .new:hover .ic { border-color: var(--blue); color: var(--blue) }
+/* 25.11.2026: «Новый курс» в ряду — маленький «+» рядом с курсами, без подписи (подсказка при наведении), чтобы не уходил на новую строку */
+.grid .new { width: 44px; padding: 20px 2px 0; gap: 0 } .grid .new .ic { width: 36px; height: 36px; border-radius: 11px } .grid .new small { display: none }
 .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 24px } .empty span { max-width: 420px; color: var(--hint); font-size: 14px }
 </style>

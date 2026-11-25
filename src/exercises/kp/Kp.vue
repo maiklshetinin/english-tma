@@ -227,7 +227,7 @@ const v2Head = computed(() => !!(props.step.ball && props.step.ballLive && props
 // журнал Live (25.11.2026, отладка): нажатие на статус в подвале — что ушло в модель и что она ответила (ballNet[id].log, пишет utils/kpball.js)
 const logOpen = ref(false), logEl = ref(null)
 const liveLog = computed(() => (props.step.ballLive ? ballNet[props.step.id]?.log ?? [] : null))
-const LOGK = { send: '→ модели', mic: '🎙', voice: '🎙 голос', pause: '⏸ пауза', heard: 'Live слышит', cover: '← засчитала', blocks: '← нарезала', said: '← сказала', turn: '← ход окончен', err: '⚠ ошибка' }
+const LOGK = { send: '→ модели', mic: '🎙', voice: '🎙 голос', pause: '⏸ пауза', heard: 'Live слышит', cover: '← засчитала', blocks: '← нарезала', said: '← сказала', turn: '← ход окончен', cut: '✂ отсечено', err: '⚠ ошибка' }
 watch(() => liveLog.value?.length, () => nextTick(() => { const el = logEl.value; if (el) el.scrollTop = el.scrollHeight }))
 // секундомер строки Live в подвале — тикает, только пока слушает или Gemini думает
 const lvNow = ref(Date.now()); let lvTm = 0
@@ -239,7 +239,7 @@ const liveLine = computed(() => { const n = props.step.ballLive && ballNet[props
   const name = String(n.model || 'Gemini Live').replace(/ · Live$/, ''), bad = n.split.st === 'err' ? n.split : n.cover.st === 'err' ? n.cover : null
   if (bad) return { st: 'error', t: name + ' · ' + bad.txt }
   // 25.11.2026: что сейчас — слушает → (выключили микрофон) Gemini ищет совпадения (секундомер) → засчитано за N с
-  const L = n.lv, tk = lvNow.value, last = L?.last ? (L.last.n ? `засчитано ${L.last.n}` : 'нового нет') + ' за ' + sec1(L.last.ms) + ' с' : ''
+  const L = n.lv, tk = lvNow.value, last = L?.last ? (L.last.n ? `засчитано ${L.last.n}` : 'нового нет') + ' за ' + sec1(L.last.ms) + ' с' + (n.cut ? ` · отсечено ${n.cut} (без речи)` : '') : ''          // отсечено — «· текст», guard в utils/kpball.js
   if (L?.ph === 'think') return { st: 'connecting', t: name + ' · Gemini ищет совпадения… ' + sec1(tk - L.at) + ' с' }
   if (dic.value === 'live') return { st: 'rec', t: name + ' · слушает · выключите микрофон — сверит', s: last }
   if (n.split.st === 'busy') return { st: 'connecting', t: name + ' · режет эталон на блоки' }

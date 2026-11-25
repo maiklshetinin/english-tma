@@ -174,10 +174,29 @@ export function refCover(ideal, refs) {
   const pct = words.length ? Math.round((hit.filter(Boolean).length / words.length) * 100) : 0
   return { pct, hit, words, missed, placed }
 }
+/** «Шар Live · текст» (kpballtext, 25.11.2026): засчитываются только СКАЗАННЫЕ слова. Кусок (ref) ищем в эталоне как refCover,
+ *  но из его слов открываем лишь те, чьи основы есть в said (что сказал ученик): модель вернула кусок длиннее сказанного — лишнее
+ *  остаётся размытым и в процент не идёт. said пустой — как раньше, весь кусок. → { pct, hit, words, missed, items: [{ idx: [номера слов эталона], parts: [{ w, on }] }] } */
+export function saidCover(ideal, found) {
+  const words = refWords(ideal), hit = words.map(() => false), items = []
+  for (const f of found) {
+    const one = refCover(ideal, [f.ref])
+    if (!one.placed[0]) { items.push({ idx: [], parts: String(f.ref).split(/\s+/).filter(Boolean).map((w) => ({ w, on: false })) }); continue }
+    const said = String(f.said || '').trim(), ss = new Set((said || f.ref).split(/\s+/).map(stem).filter(Boolean))
+    const span = one.hit.map((h, j) => (h ? j : -1)).filter((j) => j >= 0), idx = [], parts = []
+    for (let j = span[0]; j <= span.at(-1); j++) { const on = ss.has(words[j].s); parts.push({ w: words[j].w, on }); if (on) { idx.push(j); hit[j] = true } }
+    items.push({ idx, parts })
+  }
+  const missed = []; let run = []
+  const end = () => { if (run.length >= 3) missed.push(run.join(' ').replace(/[,;:]$/, '')); run = [] }
+  words.forEach((x, i) => { if (hit[i]) end(); else { run.push(x.w); if (/[.!?]$/.test(x.w)) end() } }); end()
+  const pct = words.length ? Math.round((hit.filter(Boolean).length / words.length) * 100) : 0
+  return { pct, hit, words, missed, items }
+}
 /** Live-сессия шара. system, tool — из JSON экрана; onCover([{ ref, said }]) — найденные куски эталона; onTurn() — модель договорила.
  *  → { send(text), stop(), alive, model }. Сообщения до готовности сессии ждут в очереди */
 const liveSessions = {}          // id экрана → api открытой Live-сессии (микрофон диктовки берёт её же)
-export function openBallLive({ id, question, ideal, system, tool, fix = false, extra = null, onCover, onTurn }) {          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
+export function openBallLive({ id, question, ideal, system, tool, fix = false, guard = false, extra = null, onCover, onTurn }) {          // guard — «· текст» (25.11.2026): засчитанное без речи отсекаем (см. ниже)          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
   const n = netOf(id), key = firstKey()
   if (!key) throw new Error('Нужен ключ Gemini в профиле')
   let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now()
@@ -189,6 +208,22 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, e
   // (Пробовали засчитывать на ходу — по паузам и срезами раз в 5 с — работало нестабильно, убрали.) wait — выключили, ждём ответ
   let hearH = null, hearUntil = 0, micOn = false, wait = false, waitTm = 0
   let talking = false, heardV = false
+  // guard (kpballtext, 25.11.2026): модель иногда сама «выплёвывает» засчитанное, когда речи не было. Сверяем со своей стороной:
+  // за это нажатие микрофон слышал голос (heardV) и/или пришла расшифровка (said) — иначе отсекаем. Есть расшифровка — кусок
+  // остаётся, только если хотя бы половина основ его said есть в ней. Расшифровка приходит чуть позже функции — ждём конец хода (до 1,5 с).
+  let said = '', used = false, cuts = 0
+  const sayStems = (t) => new Set(String(t).split(/\s+/).map(stem).filter((x) => x.length >= 2))
+  function judge(got) {
+    if (!guard || !got.length) return got
+    if (used || (!heardV && !said.trim())) { cuts += got.length; lg('cut', `отсечено ${got.length}: не было речи · ` + got.map((x) => x.ref).join(' | ')); n.cut = cuts; return [] }
+    if (!said.trim()) return got          // голос был, расшифровки нет — проверить нечем, принимаем
+    const hs = sayStems(said), ok = [], bad = []
+    for (const x of got) { const ss = [...sayStems(x.said || x.ref)]; (ss.length && ss.filter((s) => hs.has(s)).length / ss.length >= 0.5 ? ok : bad).push(x) }
+    if (bad.length) { cuts += bad.length; n.cut = cuts; lg('cut', `отсечено ${bad.length}: в речи этого нет · ` + bad.map((x) => x.said || x.ref).join(' | ')) }
+    return ok
+  }
+  let pend = null, pendTm = 0
+  const deliver = () => { clearTimeout(pendTm); if (!pend) return; const g = judge(pend); pend = null; used = true; if (n.lv?.last) n.lv.last.n = g.length; onCover?.(g) }
   if (!n.lv) n.lv = { ph: '', at: 0, cut: 0, last: null }
   if (!n.log) n.log = []
   n.log.splice(0); const T0 = Date.now()
@@ -214,7 +249,7 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, e
       if (closed || !sess || !ready) throw new Error('Live не подключён')
       hearH = h; if (!micOn) { micOn = true; await sess.listen() }
       if (hearH !== h) return          // отпустили, пока микрофон включался — реплики не было
-      talking = true; L.ph = 'rec'; sess.talkStart(); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; n.cover = { st: 'on', txt: 'слушает' }          // включили — звук пошёл в Live
+      talking = true; L.ph = 'rec'; sess.talkStart(); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; said = ''; used = false; n.cover = { st: 'on', txt: 'слушает' }          // включили — звук пошёл в Live
     },
   }
   liveSessions[id] = api
@@ -228,8 +263,8 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, e
       sess = startTalk({ key, model: m, system, lang: 'pl-PL', temperature: 0.2, tools: ballTools(tool, fix), extra, micLater: true, quiet: true, manual: true, on: {
         state: (st, info) => { if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
         ready: () => { ready = true; lg('send', 'соединение готово · ' + modelId + ' · инструкция (ballPrompt): ' + String(system).replace(/\s+/g, ' ').slice(0, 300) + '…'); flush() },
-        turn: () => { lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
-        text: (role, t) => { if (role === 'me') { lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
+        turn: () => { deliver(); lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
+        text: (role, t) => { if (role === 'me') { said += t; lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
         level: (v) => { if (talking && v > 0.06 && !heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
@@ -238,7 +273,9 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, e
             const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim(), fix: String(x?.fix ?? '').trim() })).filter((x) => x.ref)
             n.cover = { st: 'on', txt: (got.length ? `найдено ${got.length}` : 'нового нет') + ` · ${sec}` }
             if (L.ph === 'think') L.last = { n: got.length, ms: Date.now() - L.at }
-            onCover?.(got); return { ok: true }
+            if (!guard) { onCover?.(got); return { ok: true } }
+            if (!got.length) { onCover?.(got); return { ok: true } }
+            pend = [...(pend ?? []), ...got]; clearTimeout(pendTm); pendTm = setTimeout(deliver, 1500); return { ok: true }
           }
           lg('err', 'неизвестная функция ' + name)
           return { ok: false, error: 'неизвестная функция' }

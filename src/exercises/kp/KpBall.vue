@@ -8,7 +8,7 @@ import { useEdit } from '../ctx'
 import { kpCfg, kpReady, fill as fillT } from './defaults'
 import { kpPlain } from '../../utils/ai'
 import { reqOf } from '../../utils/overlay'
-import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, refCover, fixDiff } from '../../utils/kpball'
+import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, refCover, saidCover, fixDiff } from '../../utils/kpball'
 const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, final: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })          // text — всё сказанное (с черновиком), final — только готовые («чёрные») куски
 const ed = useEdit()
 // Темы шара (24.11.2026): белая (тест), «Космос» — тёмная панель со звёздами, слова светятся; «Как у Марии» — бежево-коричневая, цвета домашек
@@ -18,10 +18,16 @@ const THEMES_OLD = [{ k: 'sphere', t: 'Сфера' }, { k: 'white', t: 'Бела
 // «Шар Live · новый вид» (ballV2, 25.11.2026, макет «Шар Live — экран ответа»): три темы на весь экран — коричневая, светлая, чёрная (= «Сфера»);
 // по умолчанию чёрная (плитку видно среди остальных), помнится отдельно от старого шара
 const v2 = computed(() => !!props.step.ballV2)
+// «Шар Live · текст» (ballText, kpballtext, 25.11.2026, макет «Без шара»): шара нет — эталон текстом под размытием; проявляются только
+// сказанные слова (saidCover: кусок от модели длиннее сказанного — лишнее размыто и в процент не идёт). Текст можно свернуть (помнится).
+// Засчитанное без речи отсекает openBallLive (guard). Тема — коричневая
+const tx = computed(() => !!props.step.ballText)
+const txOpen = ref((() => { try { return localStorage.getItem('tma.balltext.open') !== '0' } catch { return true } })())
+watch(txOpen, (v) => { try { localStorage.setItem('tma.balltext.open', v ? '1' : '0') } catch { /* */ } })
 const THEMES = props.step.ballV2 ? [{ k: 'book', t: 'Коричневая' }, { k: 'white', t: 'Светлая' }, { k: 'sphere', t: 'Чёрная' }] : THEMES_OLD
 const TK = props.step.ballV2 ? 'tma.ball2.theme' : 'tma.ball.theme'
-const theme = ref((() => { try { const v = localStorage.getItem(TK); return THEMES.some((x) => x.k === v) ? v : 'sphere' } catch { return 'sphere' } })())
-watch(theme, (v) => { try { localStorage.setItem(TK, v) } catch { /* */ } })
+const theme = ref(props.step.ballText ? 'book' : (() => { try { const v = localStorage.getItem(TK); return THEMES.some((x) => x.k === v) ? v : 'sphere' } catch { return 'sphere' } })())
+watch(theme, (v) => { if (tx.value) return; try { localStorage.setItem(TK, v) } catch { /* */ } })
 
 const own = computed(() => (Array.isArray(props.step.keys) && props.step.keys.length ? props.step.keys : null))
 const blocks = ref(own.value || quickBlocks(props.step.ideal))
@@ -37,7 +43,10 @@ const missing = computed(() => isLive.value ? missedL.value : blocks.value.map((
 // В шаре: найденные куски — светятся; пока не «Готово» — для вида размытые начала предложений эталона (ничего не подсказывают); после «Готово» —
 // непокрытые куски эталона — красным. Под шаром: «Засчитано» сразу, «Не прозвучало» — только после «Готово»
 const found = ref([])          // [{ ref, said, at }]
-const cov = computed(() => refCover(props.step.ideal || '', found.value.map((x) => x.ref)))
+const cov = computed(() => tx.value ? saidCover(props.step.ideal || '', found.value) : refCover(props.step.ideal || '', found.value.map((x) => x.ref)))
+// текст: слова эталона — открыто (сказано) / новое (последний засчитанный кусок) / размыто; лента — новое сверху, у куска несказанное размыто
+const txNew = computed(() => { const f = found.value; if (!f.length || props.done) return new Set(); let k = 0; f.forEach((x, i) => { if (x.at > f[k].at) k = i }); return new Set(cov.value.items?.[k]?.idx ?? []) })
+const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [] })).sort((a, b) => b.at - a.at))
 const livePct = computed(() => cov.value.pct), missedL = computed(() => cov.value.missed)
 const hiddenS = () => String(props.step.ideal || '').replace(/\*\*|==|_/g, '').split(/[.!?;\n]+/).map((x) => x.trim().split(/\s+/).slice(0, 6).join(' ')).filter((x) => x.length > 3).slice(0, 10)
 const liveRes = () => { netOf(props.step.id).res = { pct: livePct.value, missed: [...missedL.value], total: found.value.length, ok: found.value.length,
@@ -142,7 +151,7 @@ function startLive() {
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
   try {
     const c = kpReady(kpCfg(props.step))          // промпт и функция — из JSON экрана (ballPrompt, ballTool), 25.11.2026
-    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, fix: props.step.ballFix === true, extra: reqOf(c, 'ballLive'), onCover: onLiveFound })
+    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, fix: props.step.ballFix === true, guard: tx.value, extra: reqOf(c, 'ballLive'), onCover: onLiveFound })
   } catch (e) { netOf(id).cover = { st: 'err', txt: String(e.message || e) }; return }
   fast.value = false; netOf(id).split = { st: 'off', txt: '' }; rebuild(); liveRes()
 }
@@ -179,9 +188,16 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 
 <template>
   <div class="kball" :class="['th-' + theme, { idle, lv: isLive, v2, fx: step.ballFix === true }]" @pointerdown.stop>
-    <div v-if="!idle && !v2" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
+    <!-- «· текст» (ballText): без шара — эталон под размытием, проявляются только сказанные слова; свернуть — кнопкой -->
+    <section v-if="tx" class="kbtx" :class="{ shut: !txOpen }">
+      <div class="kbtxh"><b class="kbtxp" :class="{ bad: done && pct < passN }">{{ pct }}%</b>
+        <div class="kbtxb"><span class="kbbar"><i :style="{ width: pct + '%' }" /></span><small>{{ idle ? 'пример' : `покрыто ${pct}% эталона · ` + (done && pct < passN ? `пока не зачёт, проход от ${passN}%` : `проход от ${passN}%`) }}</small></div>
+        <button v-if="!idle && !edit" type="button" class="kbtxt" :title="txOpen ? 'Свернуть текст эталона' : 'Показать текст эталона (размытый)'" @click="txOpen = !txOpen">{{ txOpen ? 'Скрыть текст' : 'Показать текст' }}</button></div>
+      <p v-if="txOpen || idle || edit" class="kbtxq"><template v-for="(x, j) in cov.words" :key="j"><span :class="cov.hit[j] ? (txNew.has(j) ? 'nw' : 'on') : done ? 'ms' : 'hd'">{{ x.w }}</span>{{ ' ' }}</template></p>
+    </section>
+    <div v-if="!idle && !v2 && !tx" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
     <!-- новый вид: одно окно — сверху вопрос (из Kp.vue, Teleport в #kb2h-…) и процент справа, ниже шар, внизу полоса -->
-    <div class="kb2w" :class="{ on: v2 }">
+    <div v-if="!tx" class="kb2w" :class="{ on: v2 }">
       <div v-if="v2" class="kb2h">
         <div :id="'kb2h-' + step.id" class="kb2q" />
         <div class="kb2pc" :class="{ bad: done && pct < passN }"><b>{{ pct }}%</b><small>{{ done && pct < passN ? 'пока не зачёт · ' : '' }}проход {{ passN }}%</small>
@@ -192,7 +208,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
     </div>
       <div v-if="v2" class="kb2bar" :class="{ bad: done && pct < passN }"><i :style="{ width: pct + '%' }" /></div>
     </div>
-    <div v-if="!v2" class="kbp" :class="{ lvbad: isLive && done && pct < passN }" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
+    <div v-if="!v2 && !tx" class="kbp" :class="{ lvbad: isLive && done && pct < passN }" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
       <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
       <small v-if="isLive && !edit">{{ idle ? 'пример' : `покрыто ${pct}% текста эталона · ` + (done && pct < passN ? `пока не зачёт, проход от ${passN}%` : `проход от ${passN}%`) }}</small>
       <small v-else>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
@@ -202,9 +218,10 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
          После «Готово» ниже — «Не прозвучало». Полоса прокрутки — как в Telegram: только при наведении -->
     <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kblv">
       <div class="kblvh"><h4>Засчитано</h4><i>{{ got.length }}</i><small v-if="!done">новое — сверху</small></div>
-      <ul v-if="got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
+      <ul v-if="tx && txFeed.length" class="kblvl"><li v-for="(x, k) in txFeed" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr"><template v-for="(w, j) in x.parts" :key="j"><span :class="{ kbtxh2: !w.on }">{{ w.w }}</span>{{ ' ' }}</template></span><span v-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
+      <ul v-else-if="!tx && got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
       <p v-else class="kb2e">пока ничего</p>
-      <template v-if="done">
+      <template v-if="done && !tx">
         <div class="kblvh no"><h4>Не прозвучало</h4><i>{{ missedL.length }}</i></div>
         <ul v-if="missedL.length" class="kblvl no"><li v-for="(m, k) in missedL" :key="k"><b class="kblvc">✕</b><span class="kblvr">{{ m }}</span></li></ul>
         <p v-else class="kb2e">всё сказано</p>
@@ -326,7 +343,19 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kfx s { color: #d0302f; text-decoration: line-through 2px #e5484d; padding: 0 3px; border-radius: 4px; background: #fdecec } .kfx s.kfx0 { background: none; text-decoration: none; min-height: 1em }
 .kfx ins { text-decoration: none; color: #1a7f4b; font-weight: 800; font-size: 13.5px; padding: 0 4px; border-radius: 4px; background: #e3f6ea }
 .th-sphere .kblvf, .th-space .kblvf { color: #cbd5e1 } .th-sphere .kfx s, .th-space .kfx s { background: rgba(229, 72, 77, .15); color: #fca5a5 } .th-sphere .kfx ins, .th-space .kfx ins { background: rgba(26, 127, 75, .25); color: #86efac }
-.kblvl.no li { background: #fff7f5 } .kblvl.no .kblvc { color: #b3261e } .kblvl.no .kblvr { color: #8c1d18; font-weight: 700 }
+.kblvl.no li { background: #fff7f5 }
+/* «· текст» (kpballtext): карточка эталона под размытием */
+.kbtx { margin: 4px 0 12px; padding: 16px 20px 18px; border-radius: 20px; background: #fff6e8; border: 1px solid #f1dcbc; display: flex; flex-direction: column; gap: 12px }
+.kbtx.shut { padding-bottom: 14px }
+.kbtxh { display: flex; align-items: center; gap: 14px } .kbtxp { font-size: 34px; font-weight: 900; color: #cd8a30; line-height: 1 } .kbtxp.bad { color: #d92d20 }
+.kbtxb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px } .kbtxb .kbbar { display: block; height: 8px; border-radius: 4px; background: #f4dcb8; overflow: hidden } .kbtxb .kbbar i { display: block; height: 100%; background: #cd8a30; border-radius: 4px; transition: width .4s }
+.kbtxb small { font-size: 12.5px; font-weight: 700; color: #9a6f4a }
+.kbtxt { flex: none; border: 0; border-radius: 11px; padding: 7px 13px; background: #f6e2c4; color: #7b4224; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer } .kbtxt:hover { background: #f0d3a8 }
+.kbtxq { margin: 0; font-family: 'PT Serif', Georgia, serif; font-size: 19px; line-height: 1.75; color: #351a05 }
+.kbtxq .hd { color: #c9a77c; filter: blur(5px); user-select: none } .kbtxq .nw { background: #fde3b4; box-shadow: 0 2px 0 #cd8a30; border-radius: 3px; transition: background 1s }
+.kbtxq .ms { color: #b3261e; opacity: .8; text-decoration: underline dashed rgba(179, 38, 30, .45); text-underline-offset: 4px }
+.kbtxh2 { filter: blur(4px); opacity: .7; user-select: none }          /* в ленте: часть куска, которую не сказали, — размыта */
+@media (max-width: 560px) { .kbtx { padding: 12px 14px } .kbtxp { font-size: 26px } .kbtxq { font-size: 16px } } .kblvl.no .kblvc { color: #b3261e } .kblvl.no .kblvr { color: #8c1d18; font-weight: 700 }
 .kball .kbp.lvbad b { color: #b3261e } .kball .kbp.lvbad small { color: #b3261e } .kball .kbp.lvbad .kbbar i { background: #e5484d }
 .th-sphere .kblvh h4, .th-space .kblvh h4 { color: #e2e8f0 } .th-sphere .kblvl li, .th-space .kblvl li { background: rgba(255, 255, 255, .06) } .th-sphere .kblvr, .th-space .kblvr { color: #f1f5f9 } .th-sphere .kblvs, .th-space .kblvs { color: #8b9bb4 }
 .th-sphere .kblvl.no li, .th-space .kblvl.no li { background: rgba(251, 113, 133, .08) } .th-sphere .kblvl.no .kblvr, .th-space .kblvl.no .kblvr { color: #fda4af }
