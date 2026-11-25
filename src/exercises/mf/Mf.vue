@@ -137,7 +137,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
             <ol class="mfml"><li v-for="(o, k) in step.opts ?? []" :key="k"><b>{{ letters[k] }}</b><textarea v-if="p.edit" class="exf" rows="1" :value="o.w" @input="o.w = $event.target.value; ed.changed()" /><span v-else>{{ o.w }}</span></li></ol>
           </div>
 
-          <div class="mfrows">
+          <div class="mfrows" :style="{ '--half': Math.ceil(rows.length / 2) }">
             <div v-for="(r, n) in rows" :key="n" class="mfr" :class="{ ex: r.ex }">
               <span class="mfi">{{ n + 1 }}</span>
               <!-- задание строки -->
@@ -235,7 +235,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 .mfrep { margin-left: auto; padding: 2px 10px; border: 1.5px solid #cfcfcf; border-radius: 14px; font-size: 13px; color: var(--hint); white-space: nowrap; background: var(--card) }
 /* строка ответа: рукописный красный, пунктир; в фокусе — голубая подложка */
 .mfl { position: relative; display: flex; align-items: flex-end; gap: 6px; min-height: 36px; border-bottom: 1.5px dotted #9a9a9a }
-.mfl.foc { background: var(--fl); border-bottom: 2px solid var(--fb); border-radius: 4px 4px 0 0 }
+.mfl.foc { background: var(--fl); border-bottom: 1.5px solid var(--fb); border-radius: 4px 4px 0 0 }
 .mff, .mfx { flex: 1; min-width: 0; padding: 4px 2px 2px; border: 0; background: transparent; font-family: Kalam, 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 18px; color: var(--hw); outline: 0; line-height: 1.35 }
 .mfx { padding-left: 2px } .mf .exf.mff { color: var(--hw); background: rgba(13, 153, 255, .07) }
 .mfiw { position: relative; flex: 1; min-width: 0; display: flex } .mfiw .mff { width: 100% }
@@ -261,6 +261,8 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 .mfltr.on { border-color: var(--hw); background: #fde0e0; color: var(--hw) } .mfltr:disabled { cursor: default }
 .m-match .mfl { min-height: 32px } .m-match .mff, .m-match .mfx { text-align: center }
 .mfbl { display: flex; flex-wrap: wrap; gap: 6px }
+/* 25.11.2026: разметка не прыгает при нажатии — плашки слов всплывают поверх строк ниже, а не раздвигают их; рамка поля в фокусе той же толщины */
+.mfbl { position: absolute; z-index: 5; left: 28px; right: 0; top: 100%; margin-top: 3px; padding: 6px; border-radius: 12px; background: #fff; box-shadow: 0 6px 18px rgba(0, 0, 0, .14) }
 /* правка */
 .mfdel { position: absolute; right: -8px; top: 0; width: 18px; height: 18px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--hint); font-size: 9px; cursor: pointer; opacity: 0 }
 .mfr:hover > .mfdel, .mfs:hover > .mfdel { opacity: 1 } @media (hover: none) { .mfdel { opacity: 1 } }
@@ -274,7 +276,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mfch { font-size: 17px; padding: 5px 14px } .mfch.sm { font-size: 16px }
   .mfi { font-size: 18px } .mfq { font-size: 19px } .mfrep { font-size: 16px } .mfhr { font-size: 17px }
   .mff, .mfx { font-size: 24px } .m-order .mff, .m-order .mfx { font-size: 21px } .mfok { font-size: 21px } .mfhint { font-size: 16px }
-  .two .mfrows { display: block; columns: 2; column-gap: 60px } .two .mfr { break-inside: avoid; margin-bottom: 14px }
+  .two:not(.m-match) .mfrows { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: column; grid-template-rows: repeat(var(--half), auto); column-gap: 60px; row-gap: 14px }          /* две колонки — строки делим поровну сами (CSS columns перекладывали строку из колонки в колонку, когда высота менялась) */
   .inl .mfr { grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1.25fr); align-items: end; column-gap: 12px }
   .inl .mfr > .mfq { grid-column: 2; grid-row: 1 } .inl .mfr > .mfl { grid-column: 3; grid-row: 1 }
   .inl .mfr > .mfi { padding-bottom: 6px; align-self: end }
