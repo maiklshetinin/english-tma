@@ -34,8 +34,8 @@ const ago = (t) => {
 const word = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'элемент' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'элемента' : 'элементов')
 // 25.11.2026 (макет «Вкладка «Курсы» — выбор курса», вариант B): курсы — ряд вкладок шириной с колонку курса (620px), все видны сразу, как плитки;
 // не влезли — ряд листается вбок, правый край плавно гаснет; выбранный — тёмный; у выбранного — карандаш и корзина. «+» — новый курс
-const COLORS = ['#a560e8', '#ff9600', '#1cb0f6', '#ff4b4b', '#58cc02', '#ce82ff', '#2b70c9']
-const colorOf = (i) => COLORS[i % COLORS.length]
+// 25.11.2026 (макет E2): все курсы одного цвета; выбранный — на сиреневой подложке; карандаш и корзина — в строке прогресса под курсами (TeacherPath)
+defineExpose({ open, removeSel: () => { const c = list.value?.find((x) => x.id === props.selected); if (c) remove(c) } })
 const row = ref(null), moreR = ref(false), moreL = ref(false)
 function edges() { const el = row.value; if (!el) return; moreL.value = el.scrollLeft > 2; moreR.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 2 }
 let ro = null
@@ -58,10 +58,7 @@ async function remove(c) {
         <div v-for="(c, i) in list" :key="c.id" class="cc" :class="{ on: c.id === selected }" role="tab" :aria-selected="c.id === selected" tabindex="0"
           :title="`${c.title} · ${c.count} ${word(c.count)}${c.updatedAt ? ' · изменён ' + ago(c.updatedAt) : ''}\nНажмите — посмотреть ниже, дважды — открыть в редакторе`"
           @click="emit('update:selected', c.id)" @dblclick="open(c.id)" @keydown.enter="open(c.id)">
-          <span class="ic" :style="{ background: colorOf(i) }"><AppIcon name="route" :size="26" />
-            <button class="cb ed" title="Редактировать курс" aria-label="Редактировать курс" @click.stop="open(c.id)" @dblclick.stop><AppIcon name="pencil" :size="11" /></button>
-            <button class="cb del" title="Удалить курс" aria-label="Удалить курс" @click.stop="remove(c)" @dblclick.stop><AppIcon name="trash" :size="11" /></button>
-          </span>
+          <span class="ic"><AppIcon name="route" :size="26" /></span>
           <b>{{ c.title }}</b>
         </div>
         <button class="new" type="button" title="Новый курс" aria-label="Новый курс" @click="open('new')"><span class="ic"><AppIcon name="plus" :size="22" /></span><small>Новый курс</small></button>
@@ -82,25 +79,21 @@ async function remove(c) {
 .cl { display: grid; gap: 6px; width: 100%; max-width: 620px; margin: 0 auto 4px }
 .ch { display: flex; align-items: flex-start; min-width: 0 }
 .sk { flex: 1; height: 84px; border-radius: 18px; background: var(--surface); opacity: .6 }
-.grid { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 14px 10px; padding: 9px 9px 2px }          /* отступ — чтобы значки в углах иконок не обрезались */
+.grid { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px 4px; padding: 2px 0 }
 @media (max-width: 719px) {
-  .grid { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scroll-behavior: smooth; scroll-snap-type: x proximity; scrollbar-width: none; gap: 8px }
+  .grid { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scroll-behavior: smooth; scroll-snap-type: x proximity; scrollbar-width: none; gap: 2px }
   .grid::-webkit-scrollbar { display: none } .grid > * { scroll-snap-align: start }
   .grid.fr { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent) }
   .grid.fl { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%); mask-image: linear-gradient(90deg, transparent, #000 12%) }
   .grid.fl.fr { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 85%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 85%, transparent) }
 }
-.cc, .new { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; width: 76px; padding: 0; border: 0; background: none; font: inherit; color: var(--text); cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent }
-.ic { position: relative; display: grid; place-items: center; width: 60px; height: 60px; box-sizing: border-box; border-radius: 16px; color: #fff; transition: transform .12s, box-shadow .15s }
+.cc, .new { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; width: 86px; box-sizing: border-box; padding: 8px 4px; border: 0; border-radius: 18px; background: none; font: inherit; color: var(--text); cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; transition: background .15s }
+.ic { position: relative; display: grid; place-items: center; width: 60px; height: 60px; box-sizing: border-box; border-radius: 14px; background: var(--purple); color: #fff; transition: transform .12s }
 .cc:hover .ic { transform: translateY(-2px) } .cc:active .ic { transform: scale(.96) }
-.cc.on .ic { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px #1f2328 } html[data-theme='dark'] .cc.on .ic { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px #f1f3f5 }
+.cc.on { background: #f1e8fd } html[data-theme='dark'] .cc.on { background: rgba(165, 96, 232, .2) }          /* выбранный — мягкая подложка, без обводки */
 .cc b { width: 100%; font-size: 11.5px; font-weight: 700; line-height: 1.2; text-align: center; color: var(--hint); overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
 .cc.on b { font-weight: 900; color: var(--text) }
-.cb { position: absolute; top: -7px; display: none; place-items: center; width: 22px; height: 22px; padding: 0; border: 2px solid var(--card); border-radius: 50%; background: #1f2328; color: #fff; cursor: pointer }
-.cb.ed { left: -7px } .cb.del { right: -7px; background: #e5484d }
-.cc.on .cb { display: grid }          /* телефон: значки — у выбранного */
-@media (hover: hover) { .cc .cb { display: none } .cc:hover .cb { display: grid } }          /* мышь: значки — при наведении на любой курс */
-.new { color: var(--hint) } .new .ic { border: 2px dashed var(--border); color: var(--hint) } .new small { font-size: 11.5px; font-weight: 700 }
+.new { color: var(--hint) } .new .ic { border: 2px dashed var(--border); background: none; color: var(--hint) } .new small { font-size: 11.5px; font-weight: 700 }
 .new:hover .ic { border-color: var(--blue); color: var(--blue) }
 .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 24px } .empty span { max-width: 420px; color: var(--hint); font-size: 14px }
 </style>

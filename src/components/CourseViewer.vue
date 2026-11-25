@@ -378,7 +378,9 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
     <div v-else class="cr">
       <!-- преподаватель: одна тонкая строка — прогресс и кружок «Сбросить моё прохождение» (подпись — в подсказке); курс уже выделен карточкой выше -->
       <div v-if="!student && !of" class="tbar">
+        <b class="tnm">{{ course.title }}</b>          <!-- 25.11.2026: какой курс выбран — тут; карандаш и корзина — рядом (слот actions, TeacherPath) -->
         <b>{{ done }} из {{ total }} · {{ total ? Math.round(done / total * 100) : 0 }}%</b><span class="tpr"><i :style="{ width: (total ? done / total * 100 : 0) + '%' }" /></span>
+        <slot name="actions" />
         <button v-if="done" class="trs" title="Сбросить моё прохождение" aria-label="Сбросить моё прохождение" @click="resetMine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></svg></button>
       </div>
       <template v-else>
@@ -543,7 +545,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .cr { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; width: 100%; max-width: 620px; margin: 6px auto 0 }          /* minmax(0) — длинное название модуля не раздвигает курс шире телефона (21.11.2026) */
 .ctl { margin: 0; font-size: 30px; font-weight: 900 }
 .tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px }
-.tbar > b { white-space: nowrap } .tpr { flex: 1; min-width: 80px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden } .tpr i { display: block; height: 100%; background: #1fbe78; transition: width .3s }
+.tbar > b { white-space: nowrap } .tbar > .tnm { max-width: 40%; overflow: hidden; text-overflow: ellipsis; font-weight: 900 } .tpr { flex: 1; min-width: 80px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden } .tpr i { display: block; height: 100%; background: #1fbe78; transition: width .3s }
 .trs { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card); font: inherit; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; white-space: nowrap } .trs:hover { background: var(--surface) }
 .trs svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .cpill { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 14px; font-size: 16px }
