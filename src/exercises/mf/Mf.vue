@@ -49,6 +49,16 @@ const st = (k) => (done.value ? (res.value[k] ? 'ok' : 'bad') : '')
 // «?» в конце (25.11.2026, замечания Стаси): не плашкой и не у края строки, а сразу за последним словом; у «Порядка слов» — сам, если в скобках был «?»
 const postOf = (r) => s.value.post || (mode.value === 'order' && /\?\s*\)?\s*$/.test(r.q ?? '') ? '?' : '')
 const tail = (v, r) => { const t = postOf(r); return t && (v ?? '').trim() && !(v ?? '').trim().endsWith(t) ? t : '' }
+// «?» — только когда в строке уже все слова из скобок (нажали последнюю плашку), и ровно за последней буквой: меряем текст поля его же шрифтом
+const allIn = (r, n) => mode.value !== 'order' || mfWords(r.q).every((w) => usedW(w, String(n)))
+let cvs = null
+function tailAt(n) {
+  const el = typeof document !== 'undefined' && document.getElementById(fid(n)); if (!el) return { visibility: 'hidden' }
+  const cs = getComputedStyle(el), font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+  const c = (cvs ??= document.createElement('canvas').getContext('2d')); c.font = font
+  const w = c.measureText((A.value[n] ?? '').replace(/\s+$/, '')).width
+  return { left: el.offsetLeft + parseFloat(cs.paddingLeft) + w - el.scrollLeft + 1 + 'px', top: el.offsetTop + 'px', height: el.offsetHeight + 'px', font }
+}
 const blurLater = () => setTimeout(() => { if (!document.activeElement?.closest?.('.mf')) foc.value = null }, 120)
 
 // правка: строки и разделы
@@ -154,7 +164,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
                 <textarea v-if="p.edit" class="exf mff" rows="1" :value="r.a ?? ''" placeholder="ответ (варианты через /)" @input="r.a = $event.target.value; ed.changed()" />
                 <span v-else-if="r.ex" class="mfx">{{ mfFirst(r.a) }}{{ tail(mfFirst(r.a), r) }}</span>
                 <template v-else>
-                  <span class="mfiw"><input :id="fid(n)" class="mff" :class="st(String(n))" :value="A[n] ?? ''" :readonly="done || mode === 'match'" autocomplete="off" spellcheck="false" autocapitalize="off" @focus="foc = String(n)" @blur="blurLater" @input="setA(String(n), $event.target.value)" /><span v-if="tail(A[n], r)" class="mfpg" :class="st(String(n))" aria-hidden="true"><i>{{ (A[n] ?? '').replace(/\s+$/, '') }}</i>{{ tail(A[n], r) }}</span></span>
+                  <span class="mfiw"><input :id="fid(n)" class="mff" :class="st(String(n))" :value="A[n] ?? ''" :readonly="done || mode === 'match'" autocomplete="off" spellcheck="false" autocapitalize="off" @focus="foc = String(n)" @blur="blurLater" @input="setA(String(n), $event.target.value)" /><span v-if="tail(A[n], r) && allIn(r, n)" class="mfpg" :class="st(String(n))" :style="tailAt(n)" aria-hidden="true">{{ tail(A[n], r) }}</span></span>
                   <span v-if="!done && foc === String(n)" class="mfk">
                     <button v-if="step.copy && !(A[n] ?? '').trim()" type="button" class="mfhint" @pointerdown.prevent @click="setA(String(n), plain(r.q))"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="11" height="11" rx="1.5" /></svg>Скопировать</button>
                     <button v-for="h in step.hints ?? []" v-show="!usedW(h, String(n))" :key="h" type="button" class="mfhint" @pointerdown.prevent @click="ins(h, String(n))">{{ h }}</button>
@@ -229,8 +239,9 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 .mff, .mfx { flex: 1; min-width: 0; padding: 4px 2px 2px; border: 0; background: transparent; font-family: Kalam, 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 18px; color: var(--hw); outline: 0; line-height: 1.35 }
 .mfx { padding-left: 2px } .mf .exf.mff { color: var(--hw); background: rgba(13, 153, 255, .07) }
 .mfiw { position: relative; flex: 1; min-width: 0; display: flex } .mfiw .mff { width: 100% }
-.mfpg { position: absolute; left: 0; bottom: 0; max-width: 100%; overflow: hidden; padding: 4px 2px 2px; font-family: Kalam, 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 18px; line-height: 1.35; white-space: pre; color: var(--hw); pointer-events: none }
-.mfpg i { font-style: normal; visibility: hidden } .mfpg.ok { color: #1a9a5c } .mfpg.bad { opacity: .75 }
+.mfpg { position: absolute; display: flex; align-items: center; white-space: pre; color: var(--hw); pointer-events: none }
+.m-order .mfl { min-height: 30px } .m-order .mff { padding: 2px 2px 1px; line-height: 1.2 }          /* 25.11.2026: строка ввода «Порядка слов» ниже */
+.mfpg.ok { color: #1a9a5c } .mfpg.bad { opacity: .75 }
 .mfl { flex-wrap: wrap } .mfl > .mfok { flex: 1 1 100%; align-self: auto; padding: 0 2px 2px }
 .mff.ok { color: #1a9a5c } .mff.bad { color: var(--hw); text-decoration: line-through; opacity: .75 }
 .mfok { flex: none; align-self: center; font-style: normal; font-family: Kalam, 'Segoe Print', cursive; font-size: 17px; color: #1a9a5c }
@@ -262,7 +273,7 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mfbs { grid-auto-flow: column; grid-auto-columns: 1fr }
   .mfch { font-size: 17px; padding: 5px 14px } .mfch.sm { font-size: 16px }
   .mfi { font-size: 18px } .mfq { font-size: 19px } .mfrep { font-size: 16px } .mfhr { font-size: 17px }
-  .mff, .mfx { font-size: 24px } .mfok { font-size: 21px } .mfhint { font-size: 16px }
+  .mff, .mfx { font-size: 24px } .m-order .mff, .m-order .mfx { font-size: 21px } .mfok { font-size: 21px } .mfhint { font-size: 16px }
   .two .mfrows { display: block; columns: 2; column-gap: 60px } .two .mfr { break-inside: avoid; margin-bottom: 14px }
   .inl .mfr { grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1.25fr); align-items: end; column-gap: 12px }
   .inl .mfr > .mfq { grid-column: 2; grid-row: 1 } .inl .mfr > .mfl { grid-column: 3; grid-row: 1 }
