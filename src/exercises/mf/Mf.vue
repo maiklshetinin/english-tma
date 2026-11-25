@@ -46,6 +46,9 @@ const fid = (k) => 'mf-' + s.value.id + '-' + String(k).replace('.', '_')
 /** слово уже в ответах — плашка бледнеет пунктиром */
 const usedW = (w, k) => { const lw = w.toLowerCase(); return (k != null ? [A.value[k] ?? ''] : Object.values(A.value)).some((v) => (' ' + v.toLowerCase() + ' ').includes(' ' + lw + ' ') || v.toLowerCase().includes(lw)) }
 const st = (k) => (done.value ? (res.value[k] ? 'ok' : 'bad') : '')
+// «?» в конце (25.11.2026, замечания Стаси): не плашкой и не у края строки, а сразу за последним словом; у «Порядка слов» — сам, если в скобках был «?»
+const postOf = (r) => s.value.post || (mode.value === 'order' && /\?\s*\)?\s*$/.test(r.q ?? '') ? '?' : '')
+const tail = (v, r) => { const t = postOf(r); return t && (v ?? '').trim() && !(v ?? '').trim().endsWith(t) ? t : '' }
 const blurLater = () => setTimeout(() => { if (!document.activeElement?.closest?.('.mf')) foc.value = null }, 120)
 
 // правка: строки и разделы
@@ -149,17 +152,16 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
               <div v-else class="mfl" :class="{ foc: foc === String(n) && !done }">
                 <b v-if="r.pre" class="mfpre">{{ r.pre }}</b>
                 <textarea v-if="p.edit" class="exf mff" rows="1" :value="r.a ?? ''" placeholder="ответ (варианты через /)" @input="r.a = $event.target.value; ed.changed()" />
-                <span v-else-if="r.ex" class="mfx">{{ mfFirst(r.a) }}</span>
+                <span v-else-if="r.ex" class="mfx">{{ mfFirst(r.a) }}{{ tail(mfFirst(r.a), r) }}</span>
                 <template v-else>
-                  <input :id="fid(n)" class="mff" :class="st(String(n))" :value="A[n] ?? ''" :readonly="done || mode === 'match'" autocomplete="off" spellcheck="false" autocapitalize="off" @focus="foc = String(n)" @blur="blurLater" @input="setA(String(n), $event.target.value)" />
+                  <span class="mfiw"><input :id="fid(n)" class="mff" :class="st(String(n))" :value="A[n] ?? ''" :readonly="done || mode === 'match'" autocomplete="off" spellcheck="false" autocapitalize="off" @focus="foc = String(n)" @blur="blurLater" @input="setA(String(n), $event.target.value)" /><span v-if="tail(A[n], r)" class="mfpg" :class="st(String(n))" aria-hidden="true"><i>{{ (A[n] ?? '').replace(/\s+$/, '') }}</i>{{ tail(A[n], r) }}</span></span>
                   <span v-if="!done && foc === String(n)" class="mfk">
                     <button v-if="step.copy && !(A[n] ?? '').trim()" type="button" class="mfhint" @pointerdown.prevent @click="setA(String(n), plain(r.q))"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="11" height="11" rx="1.5" /></svg>Скопировать</button>
                     <button v-for="h in step.hints ?? []" v-show="!usedW(h, String(n))" :key="h" type="button" class="mfhint" @pointerdown.prevent @click="ins(h, String(n))">{{ h }}</button>
                   </span>
                 </template>
-                <b v-if="step.post" class="mfpost">{{ step.post }}</b>
                 <small v-if="r.h" class="mfhr">{{ r.h }}</small>
-                <em v-if="st(String(n)) === 'bad'" class="mfok">{{ mfFirst(r.a) }}</em>
+                <em v-if="!r.ex && st(String(n)) === 'bad'" class="mfok">{{ mfFirst(r.a) }}{{ tail(mfFirst(r.a), r) }}</em>
               </div>
               <!-- буквы для сопоставления -->
               <div v-if="mode === 'match' && !p.edit" class="mflt"><button v-for="l in letters" :key="l" type="button" class="mfltr" :class="{ on: (r.ex ? r.a : A[n]) === l }" :disabled="r.ex || done" @click="setA(String(n), l)">{{ l }}</button></div>
@@ -226,6 +228,10 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 .mfl.foc { background: var(--fl); border-bottom: 2px solid var(--fb); border-radius: 4px 4px 0 0 }
 .mff, .mfx { flex: 1; min-width: 0; padding: 4px 2px 2px; border: 0; background: transparent; font-family: Kalam, 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 18px; color: var(--hw); outline: 0; line-height: 1.35 }
 .mfx { padding-left: 2px } .mf .exf.mff { color: var(--hw); background: rgba(13, 153, 255, .07) }
+.mfiw { position: relative; flex: 1; min-width: 0; display: flex } .mfiw .mff { width: 100% }
+.mfpg { position: absolute; left: 0; bottom: 0; max-width: 100%; overflow: hidden; padding: 4px 2px 2px; font-family: Kalam, 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; font-size: 18px; line-height: 1.35; white-space: pre; color: var(--hw); pointer-events: none }
+.mfpg i { font-style: normal; visibility: hidden } .mfpg.ok { color: #1a9a5c } .mfpg.bad { opacity: .75 }
+.mfl { flex-wrap: wrap } .mfl > .mfok { flex: 1 1 100%; align-self: auto; padding: 0 2px 2px }
 .mff.ok { color: #1a9a5c } .mff.bad { color: var(--hw); text-decoration: line-through; opacity: .75 }
 .mfok { flex: none; align-self: center; font-style: normal; font-family: Kalam, 'Segoe Print', cursive; font-size: 17px; color: #1a9a5c }
 .mfpre { flex: none; align-self: center; font-weight: 600 } .mfpost { flex: none; align-self: center; font-weight: 800 }

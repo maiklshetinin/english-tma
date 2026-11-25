@@ -60,7 +60,7 @@ export function mfRich(t?: string) {
     /^\*\*.+\*\*$/.test(x) ? { x: x.slice(2, -2), c: 'b' } : /^==.+==$/.test(x) ? { x: x.slice(2, -2), c: 'mk' } : /^!!.+!!$/.test(x) ? { x: x.slice(2, -2), c: 'rd' } : /^__.+__$/.test(x) ? { x: x.slice(2, -2), c: 'wv' } : { x, c: '' })
 }
 /** Слова в скобках для «Собери вопрос»: «(the children / what / are / doing?)» → ['the children', 'what', 'are', 'doing?'] */
-export const mfWords = (q?: string) => (q ?? '').replace(/^\s*\(|\)\s*$/g, '').split('/').map((x) => x.trim()).filter(Boolean)
+export const mfWords = (q?: string) => (q ?? '').replace(/^\s*\(|\)\s*$/g, '').split('/').map((x) => x.trim().replace(/\s*\?$/, '')).filter(Boolean)          // «?» — не в плашке, он сам встаёт в конце (Mf.vue postOf)
 /** Первый вариант ответа — для «правильно: …» */
 export const mfFirst = (a?: string) => (a ?? '').split('/')[0].trim()
 /** Какая это плитка вкладки «Красный Мерфи» — по виду экрана (для значка и тегов на ветке урока) */
