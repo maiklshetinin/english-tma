@@ -301,6 +301,8 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
 .m-match:not(.ed) .mfrows { display: none }          /* буквы — прямо в списке 1–5 */
 .mfml li > .mflt { grid-column: 2; margin: 2px 0 6px }
 /* ===== колонки упражнений (телефон) ===== */
+.mf.t-mf31 .mfr { grid-template-columns: 22px minmax(0, .9fr) minmax(0, 1.1fr); align-items: end; column-gap: 8px }          /* 3.1: и на телефоне фраза и поле — одной строкой */
+.mf.t-mf31 .mfr > .mfq { grid-column: 2; grid-row: 1 } .mf.t-mf31 .mfr > .mfl { grid-column: 3; grid-row: 1 } .mf.t-mf31 .mfr > .mfi { padding-bottom: 6px; align-self: end }
 .mf.t-mf112 .mfrows { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: column; grid-template-rows: repeat(var(--r2), auto); column-gap: 14px }
 .m-match .mfl { min-height: 32px } .m-match .mff, .m-match .mfx { text-align: center }
 .mfbl { display: flex; flex-wrap: wrap; gap: 6px }
