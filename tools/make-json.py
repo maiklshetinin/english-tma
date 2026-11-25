@@ -16,6 +16,8 @@
     python tools/make-json.py kpball "ДЗ 8.pdf"        # рядом появится папка «ДЗ 8.kpball» — по файлу на вопрос
     python tools/make-json.py kpballive "ДЗ 8.pdf"    # то же для «шара Live» (папка json/шар live/)
     python tools/make-json.py talkptt "json/мост/ДЗ 8. Кухня.json"   # можно из готового JSON
+    python tools/make-json.py pl-kp-1                  # ID с номером: "type": "pl-kp-1", папка json/мост-1/
+В меню .bat можно ввести номер, ID из списка, название целиком или ID с номером (25.11.2026).
 PDF разбирает tools/lib/kp-json.py — вопросы, эталоны и звёзды у всех типов одинаковые. Новый тип — одна строка в TYPES.
 """
 import argparse, json, os, re, subprocess, sys, tempfile
@@ -52,14 +54,37 @@ def show_list():
         print(f'  {i:>2}. {k:<12} {t:<34} → json/{folder}/')
 
 
-def pick():
-    print('Какое упражнение сделать из PDF?\n'); show_list()
-    v = input('\nНомер или ID: ').strip()
+def resolve(v):
+    """Номер / ID / название из списка → ID. ID с номером (pl-kp-1) — вариант упражнения из списка,
+    в JSON будет "type": "pl-kp-1", файлы — в json/<папка>-1/ (25.11.2026). Без подтверждения"""
+    v = v.strip()
     keys = list(TYPES)
     if v.isdigit() and 1 <= int(v) <= len(keys): return keys[int(v) - 1]
     if v in TYPES: return v
     if 'pl-' + v in TYPES: return 'pl-' + v          # старый ID без языка
-    sys.exit(f'Нет такого упражнения: {v}')
+    low = v.lower()
+    by_name = [k for k, (t, _) in TYPES.items() if t.lower() == low]
+    if by_name: return by_name[0]                    # написали название целиком: «Разговор · рация»
+    m = re.fullmatch(r'(.+?)-(\d+)', v)              # ID из списка + номер: pl-kp-1 / kp-1 (25.11.2026)
+    if m:
+        base = m.group(1) if m.group(1) in TYPES else 'pl-' + m.group(1)
+        if base in TYPES:
+            vid = f'{base}-{m.group(2)}'
+            t, folder = TYPES[base]
+            TYPES[vid] = (f'{t} · вариант {m.group(2)}', f'{folder}-{m.group(2)}')   # папка json/мост-1/
+            return vid
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+', v):
+        sys.exit(f'Нет такого упражнения: {v}\nСвой ID — латиницей, цифрами и - _ . (например pl-kp-1)')
+    TYPES[v] = ('свой ID', v)                         # совсем свой ID — папка json/<ID>/
+    return v
+
+
+def pick():
+    print('Какое упражнение сделать из PDF?\n'); show_list()
+    print('\n  Можно ID с номером: pl-kp-1 → "type": "pl-kp-1", папка json/мост-1/')
+    v = input('\nНомер или ID: ').strip()
+    if not v: sys.exit('Ничего не выбрано')
+    return resolve(v)
 
 
 def lesson(src):
@@ -136,10 +161,7 @@ def one(typ, src, out):
 
 if ARGS.list:
     show_list(); sys.exit(0)
-typ = ARGS.type or pick()
-if typ not in TYPES and 'pl-' + typ in TYPES: typ = 'pl-' + typ          # старый ID без языка
-if typ not in TYPES:
-    print(f'Нет упражнения «{typ}». Есть:'); show_list(); sys.exit(2)
+typ = resolve(ARGS.type) if ARGS.type else pick()
 if ARGS.src:
     one(typ, ARGS.src, ARGS.out or re.sub(r'\.(pdf|json)$', '', ARGS.src, flags=re.I) + f'.{typ}')
 else:                                          # пакетный режим: tools/pdf/*.pdf → tools/json/<папка>/
