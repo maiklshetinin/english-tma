@@ -355,5 +355,5 @@ const right = computed(() => { const f = fields.value; return f.filter((x) => re
   .mfst { font-size: 17px } .mfv { width: 150px; height: 150px; margin-top: -162px }
 }
 /* экран Мёрфи шире обычного: на планшете и компьютере — как страница книги */
-:global(.lp .body.x-mf) { max-width: 1040px }
+:global(.lp .body.x-mf), :global(.lp:not(.embedded):not(.single) .body.x-mf) { max-width: 1200px }          /* 25.11.2026: шире — на 1440 предложения в строку (общее правило плеера 760px было сильнее) */
 </style>

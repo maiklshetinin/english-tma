@@ -330,7 +330,8 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 }
 /* нижняя панель (микрофон, «Готово», статус) — той же ширины, что окно и список, а не шире (25.11.2026) */
 :global(.lp:has(.kball.v2:not(.idle)) .kpt), :global(.lp:has(.kball.v2:not(.idle)) .kcst) { max-width: 916px; margin-left: auto !important; margin-right: auto !important }
-:global(.lp:has(.kball.tx:not(.idle)) .kpt), :global(.lp:has(.kball.tx:not(.idle)) .kcst) { max-width: 916px; margin-left: auto !important; margin-right: auto !important }          /* «· текст»: подвал шириной с экран ответа (25.11.2026) */
+@media (min-width: 561px) { :global(.lp:has(.kball.tx:not(.idle)) .kpt), :global(.lp:has(.kball.tx:not(.idle)) .kcst) { max-width: 916px; margin-left: auto !important; margin-right: auto !important } }
+:global(.lp:has(.kball.tx) .fb) { min-width: 0; grid-template-columns: minmax(0, 1fr) }          /* 25.11.2026: на телефоне подвал уезжал за правый край (auto-поля в сетке) — ширина подвала только на компьютере */          /* «· текст»: подвал шириной с экран ответа (25.11.2026) */
 /* темы нового вида — на весь экран урока */
 :global(.lp:has(.kball.v2.th-white:not(.idle))), :global(.lp:has(.kball.v2.th-white:not(.idle)) .body), :global(.lp:has(.kball.v2.th-white:not(.idle)) .foot:not(.good):not(.bad)) { background: #f5f6f8 !important }
 :global(.lp:has(.kball.v2.th-sphere:not(.idle))), :global(.lp:has(.kball.v2.th-sphere:not(.idle)) .body), :global(.lp:has(.kball.v2.th-sphere:not(.idle)) .foot:not(.good):not(.bad)) { background: #090b10 !important; color: #f1f5f9 }
