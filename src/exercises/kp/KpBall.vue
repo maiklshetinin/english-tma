@@ -5,7 +5,7 @@
 // В правке — список блоков и кнопка «Нарезать эталон» (Gemini) — пишет блоки в экран (keys в JSON).
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useEdit } from '../ctx'
-import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, blocksMsg, liveCached } from '../../utils/kpball'
+import { quickBlocks, matchLocal, splitBlocks, coverBlocks, netOf, openBallLive, refCover } from '../../utils/kpball'
 const props = defineProps({ step: { type: Object, required: true }, text: { type: String, default: '' }, final: { type: String, default: '' }, done: Boolean, edit: Boolean, idle: Boolean })          // text — всё сказанное (с черновиком), final — только готовые («чёрные») куски
 const ed = useEdit()
 // Темы шара (24.11.2026): белая (тест), «Космос» — тёмная панель со звёздами, слова светятся; «Как у Марии» — бежево-коричневая, цвета домашек
@@ -25,28 +25,29 @@ const sc = ref({})          // Live (шар Live): i → оценка блока
 const isLive = computed(() => !!props.step.ballLive)
 const pct = computed(() => isLive.value ? livePct.value : (blocks.value.length ? Math.round((blocks.value.reduce((a, _, i) => a + (ok.value.has(i) ? 1 : sc.value[i] || 0), 0) / blocks.value.length) * 100) : 0))
 const missing = computed(() => isLive.value ? missedL.value : blocks.value.map((b, i) => (ok.value.has(i) ? null : b.label)).filter(Boolean))
-// ---------- шар Live v3 (25.11.2026): без нарезки. Эталон — целиком в Live; модель сама присылает найденные в нём куски (ref) и процент.
+// ---------- шар Live v3 (25.11.2026): без нарезки. Эталон — целиком в Live; модель ТОЛЬКО присылает найденные в нём куски (ref, дословно).
+// Процент и «не прозвучало» — здесь, на фронте (refCover): какие слова эталона покрыты найденными кусками. Нейросеть процент не считает.
 // В шаре: найденные куски — светятся; пока не «Готово» — для вида размытые начала предложений эталона (ничего не подсказывают); после «Готово» —
-// не прозвучавшее (summary) — красным. Под шаром: «Засчитано» сразу, «Не засчитано» — только после «Готово»
-const livePct = ref(0), found = ref([]), missedL = ref([]), summed = ref(false)          // found: [{ ref, said, at }]
+// непокрытые куски эталона — красным. Под шаром: «Засчитано» сразу, «Не прозвучало» — только после «Готово»
+const found = ref([])          // [{ ref, said, at }]
+const cov = computed(() => refCover(props.step.ideal || '', found.value.map((x) => x.ref)))
+const livePct = computed(() => cov.value.pct), missedL = computed(() => cov.value.missed)
 const hiddenS = () => String(props.step.ideal || '').replace(/\*\*|==|_/g, '').split(/[.!?;\n]+/).map((x) => x.trim().split(/\s+/).slice(0, 6).join(' ')).filter((x) => x.length > 3).slice(0, 10)
-const liveRes = () => { netOf(props.step.id).res = { pct: livePct.value, missed: [...missedL.value], total: found.value.length + missedL.value.length, ok: found.value.length,
-  note: `Засчитано фраз эталона: ${found.value.length}` + (summed.value ? ` · не прозвучало: ${missedL.value.length}` : '') } }          // итог — для «Готово» (LessonPlayer.aiCheck)
+const liveRes = () => { netOf(props.step.id).res = { pct: livePct.value, missed: [...missedL.value], total: found.value.length, ok: found.value.length,
+  note: `Засчитано кусков эталона: ${found.value.length} · покрыто ${livePct.value}% текста эталона` } }          // итог — для «Готово» (LessonPlayer.aiCheck)
 function rebuild(fresh = []) {          // шар Live: блоки шара = найденное + (размытое | не прозвучавшее)
-  const f = found.value, tail = summed.value ? missedL.value : props.done ? [] : hiddenS()
+  const f = found.value, tail = props.done ? missedL.value : hiddenS()
   blocks.value = [...f.map((x) => ({ label: x.ref, words: [] })), ...tail.map((t) => ({ label: t, words: [] }))]
   const inf = {}; f.forEach((x, i) => { inf[i] = { said: x.said, fix: '', note: '', at: x.at } }); info.value = inf; sc.value = {}
   const all = new Set(f.map((_, i) => i)), old = new Set([...all].filter((i) => !fresh.includes(i)))
   ok.value = old; byAi.value = new Set(old); light(fresh, true)
 }
-function onLiveFound(list, percent) {
+function onLiveFound(list) {
   liveChecked.value = true
   const have = new Set(found.value.map((x) => x.ref.toLowerCase())), at = Date.now(), add = list.filter((x) => !have.has(x.ref.toLowerCase())).map((x, k) => ({ ...x, at: at - k }))
-  if (percent > livePct.value) livePct.value = percent
   const start = found.value.length; found.value = [...found.value, ...add]
   rebuild(add.map((_, k) => start + k)); liveRes()
 }
-function onLiveSummary(missed, percent) { missedL.value = missed; summed.value = true; if (percent) livePct.value = percent; rebuild(); liveRes() }
 
 
 // ---------- сфера ----------
@@ -133,13 +134,13 @@ function fill(b) {          // блоки «наливаются» в шар п�
   clearInterval(fillTm); let k = 0; blocks.value = []
   fillTm = setInterval(() => { k++; blocks.value = b.slice(0, k); if (k >= b.length) { clearInterval(fillTm); fillTm = 0 } }, 260)
 }
-function resetSay() { liveChecked.value = false; livePct.value = 0; found.value = []; missedL.value = []; summed.value = false; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) }
+function resetSay() { liveChecked.value = false; found.value = []; ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) }
 function startLive(keep = false) {          // keep — переподключение: засчитанное остаётся, вся речь уходит заново
   lv?.stop(); if (keep) { sentWords = sentN.value = 0; busyL = againL = false; clearTimeout(busyTm) } else resetSay()
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
   try {
     lv = openBallLive({ id, question: q, ideal,
-      onCover: onLiveFound, onSummary: onLiveSummary,
+      onCover: onLiveFound,
       onTurn: () => { busyL = false; asking.value = false; clearTimeout(busyTm); if (againL) { againL = false; coverLive() } } })
   } catch (e) { netOf(id).cover = { st: 'err', txt: String(e.message || e) }; return }
   fast.value = false; netOf(id).split = { st: 'off', txt: '' }; if (!keep) rebuild(); liveRes()          // v3: блоков нет — эталон уже в системной инструкции
@@ -164,9 +165,9 @@ watch(() => props.final, () => {          // сказал — помолчал: 
 watch(() => props.text, onText)
 watch(() => props.done, async (d) => {
   clearInterval(missTm)
-  if (!d) { if (isLive.value) { resetSay(); summed.value = false }
+  if (!d) { if (isLive.value) resetSay()
     ok.value = new Set(); byAi.value = new Set(); info.value = {}; sc.value = {}; sentWords = sentN.value = 0; netOf(props.step.id).cover = { st: 'off', txt: 'ждёт речь' }; if (isLive.value && !props.idle && !props.edit) startLive(); return }
-  if (isLive.value) rebuild()          // шар Live: размытое уходит, не прозвучавшее (summary) — уже пришло к «Готово»
+  if (isLive.value) rebuild()          // шар Live: размытое уходит — на его месте непокрытые куски эталона (refCover)
   else if (wc(props.text) > sentWords) await cover()          // последняя сверка — по всему ответу
   missTm = setInterval(() => { const m = blocks.value.map((_, i) => i).filter((i) => !ok.value.has(i)); if (m.length) { face(m[missI++ % m.length]); hit.value = -1 } }, 1800)          // по очереди — что не прозвучало
 })
@@ -194,20 +195,21 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 <template>
   <div class="kball" :class="['th-' + theme, { idle }]" @pointerdown.stop>
     <div v-if="!idle" class="kbth" role="radiogroup" aria-label="Тема шара"><button v-for="x in THEMES" :key="x.k" type="button" role="radio" :aria-checked="theme === x.k" class="kbt" :class="['t-' + x.k, { on: theme === x.k }]" :title="'Тема: ' + x.t" @click="theme = x.k" /></div>
-    <div ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
+    <!-- шар Live (25.11.2026): самого шара нет — только процент и списки (шар — лишнее); в правке и миниатюре — показываем, как пример -->
+    <div v-if="!isLive || edit || idle" ref="box" class="kbs" aria-hidden="true" @pointerdown="grab"><i v-if="theme === 'sphere'" class="kbhalo" />
       <span v-for="(b, i) in blocks" :key="i + b.label" :ref="(el) => { els[i] = el }" class="kbw" :class="{ ok: ok.has(i), part: !ok.has(i) && sc[i] > 0, ai: byAi.has(i), fx: !!info[i]?.fix, miss: done && !ok.has(i), hit: hit === i }">{{ b.label }}</span>
     </div>
     <div class="kbp" :title="'Процент — доля раскрытых блоков эталона. Зелёные — сказано дословно, с точкой — засчитала Gemini по смыслу'">
       <b>{{ pct }}%</b><span class="kbbar"><i :style="{ width: pct + '%' }" /></span>
-      <small v-if="isLive && !edit">{{ idle ? 'пример' : 'засчитано фраз: ' + found.length }}</small>
+      <small v-if="isLive && !edit">{{ idle ? 'пример' : 'засчитано кусков: ' + found.length }}</small>
       <small v-else>{{ ok.size }} из {{ blocks.length }} блоков<template v-if="fast && !edit"> · {{ idle ? 'пример' : 'нарезаю эталон…' }}</template></small>
       <button v-if="!edit && !idle && !done && !isLive" type="button" class="kbgo" :disabled="asking || !hasNew" :title="'Отправить всё сказанное в чат через мост: какие смысловые блоки засчитаны и где ошибки'" @click="cover"><i class="kbdot" />{{ asking ? 'Чат сверяет…' : 'Отправить на проверку' }}</button>
     </div>
-    <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kb2" :class="{ one: !(done && summed) }">
+    <div v-if="isLive && (liveChecked || done) && !edit && !idle" class="kb2" :class="{ one: !done }">
       <section class="kb2s ok"><h4>Засчитано · {{ got.length }}</h4>
         <ul v-if="got.length" class="kbl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><b>✓ {{ x.label }}</b><span v-if="x.said" class="kbs1">«{{ x.said }}»</span></li></ul>
         <p v-else class="kb2e">пока ничего</p></section>
-      <section v-if="done && summed" class="kb2s no"><h4>Не прозвучало · {{ missedL.length }}</h4>
+      <section v-if="done" class="kb2s no"><h4>Не прозвучало · {{ missedL.length }}</h4>
         <ul v-if="missedL.length" class="kbl"><li v-for="(m, k) in missedL" :key="k"><b>✕ {{ m }}</b></li></ul>
         <p v-else class="kb2e">всё сказано</p></section>
     </div>
