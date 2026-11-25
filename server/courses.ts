@@ -139,6 +139,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (INTERACTIVE.includes(type) && typeof r.topic === 'string' && /^[a-z0-9-]{1,40}$/.test(r.topic)) out.topic = r.topic
     // подсветка главы на доске: hl 'none' — без неё, hlw — вместе с ветками экранов, hlc — цвет (#rrggbb, по умолчанию зелёный)
     if (type === 'unit' && r.hl === 'none') out.hl = 'none'
+    if (type === 'unit' && r.look === 'sq') out.look = 'sq'          // 25.11.2026: уроки Chapter у ученика — квадратиками (как иконки iPhone), линия-путь та же
     if (type === 'unit' && r.hlw === true) out.hlw = true
     if (type === 'unit' && typeof r.hlc === 'string' && /^#[0-9a-f]{6}$/i.test(r.hlc)) out.hlc = r.hlc.toLowerCase()
     if (type === 'unit' && typeof r.hlo === 'number' && r.hlo >= 0 && r.hlo <= 100) out.hlo = Math.round(r.hlo)          // прозрачность плашки, %

@@ -234,7 +234,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(loose && x.grp ? { grp: x.grp } : {}), ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.type === 'unit' && x.hlo != null ? { hlo: x.hlo } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.topic ? { topic: x.topic } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(loose && x.grp ? { grp: x.grp } : {}), ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.look === 'sq' ? { look: 'sq' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.type === 'unit' && x.hlo != null ? { hlo: x.hlo } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.topic ? { topic: x.topic } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -1328,6 +1328,8 @@ const titleEdit = ref(false)
 function editTitle() { titleEdit.value = true; nextTick(() => document.querySelector('[data-ctitle]')?.select()) }
 const chMenu = ref(null)                 // открытый список в меню главы: 'color'
 // вид подсветки: 'rail' — рельс главы, 'wide' — с ветками, 'none' — без подсветки; цвет — отдельно
+// 25.11.2026: как ученик видит уроки Chapter — кружками (как было) или квадратиками, как иконки iPhone; линия-путь та же
+function setLook(u, v) { if (v === 'sq') u.look = 'sq'; else delete u.look; save() }
 function setHl(u, how) { delete u.hl; delete u.hlw; if (how === 'none') u.hl = 'none'; if (how === 'wide') u.hlw = true; save() }
 function setHlc(u, c) { if (c === HL_DEF) delete u.hlc; else u.hlc = c; if (u.hl === 'none') delete u.hl; chMenu.value = null; save() }
 const hlHow = (u) => (u.hl === 'none' ? 'none' : u.hlw ? 'wide' : 'rail')
@@ -1908,6 +1910,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <button class="cbw" :class="{ on: hlHow(x) === 'rail' }" title="Подсветить только рельс Chapter: заголовок, уроки и чекпоинт" @click="setHl(x, 'rail')">Рельс</button>
               <button class="cbw" :class="{ on: hlHow(x) === 'wide' }" title="Подсветить весь Chapter — вместе с ветками экранов уроков" @click="setHl(x, 'wide')">С ветками</button>
               <button class="cbw" :class="{ on: hlHow(x) === 'none' }" title="Без подсветки" @click="setHl(x, 'none')">Без</button>
+              <i class="nb-s" />
+              <button class="cbw" :class="{ on: x.look !== 'sq' }" title="Уроки у ученика — кружками" @click="setLook(x, '')">Кружки</button>
+              <button class="cbw" :class="{ on: x.look === 'sq' }" title="Уроки у ученика — квадратиками, как иконки iPhone (фото влезает целиком)" @click="setLook(x, 'sq')">Квадратики</button>
             </div>
             <!-- правка прямо в заголовке: курсор в тексте; ✓ (или Enter, или нажатие мимо) — готово, Esc — вернуть как было -->
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop>
@@ -1966,6 +1971,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <button class="cbw" :class="{ on: hlHow(x) === 'rail' }" title="Подсветить только рельс Chapter: заголовок, уроки и чекпоинт" @click="setHl(x, 'rail')">Рельс</button>
               <button class="cbw" :class="{ on: hlHow(x) === 'wide' }" title="Подсветить весь Chapter — вместе с ветками экранов уроков" @click="setHl(x, 'wide')">С ветками</button>
               <button class="cbw" :class="{ on: hlHow(x) === 'none' }" title="Без подсветки" @click="setHl(x, 'none')">Без</button>
+              <i class="nb-s" />
+              <button class="cbw" :class="{ on: x.look !== 'sq' }" title="Уроки у ученика — кружками" @click="setLook(x, '')">Кружки</button>
+              <button class="cbw" :class="{ on: x.look === 'sq' }" title="Уроки у ученика — квадратиками, как иконки iPhone (фото влезает целиком)" @click="setLook(x, 'sq')">Квадратики</button>
             </div>
             <!-- правка прямо в заголовке: курсор в тексте; ✓ (или Enter, или нажатие мимо) — готово, Esc — вернуть как было -->
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop>

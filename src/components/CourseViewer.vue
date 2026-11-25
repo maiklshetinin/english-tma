@@ -404,7 +404,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
         <p v-else-if="!repeatAll.steps.length" class="psub">Слова и упражнения вернутся сюда сами, когда начнут забываться.</p>
       </div>
       <template v-for="u in units" :key="u.id">
-      <section class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
+      <section class="un" :class="{ all: u.tasks.length && u.pct === 100, sq: u.look === 'sq' }">
         <template v-if="u.title">
           <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b><svg v-if="u.tasks.length && u.pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
           <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em :style="{ left: u.pct + '%', transform: `translate(-${u.pct}%, -50%)` }">{{ u.pct }}%</em></div>
@@ -481,7 +481,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <div v-else class="ckp">
               <p class="ckh">Ошибка в уроке → экран уходит в чекпоинт своей Chapter. Слова и упражнения, которым пора по FSRS, — в «Повторение».</p>
               <template v-for="u in units" :key="'p' + u.id">
-                <section class="un" :class="{ all: u.tasks.length && u.pct === 100 }">
+                <section class="un" :class="{ all: u.tasks.length && u.pct === 100, sq: u.look === 'sq' }">
                   <template v-if="u.title">
                     <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b></div>
                     <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em :style="{ left: u.pct + '%', transform: `translate(-${u.pct}%, -50%)` }">{{ u.pct }}%</em></div>
@@ -569,6 +569,8 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .vrow.current:not(.peek) { margin: 0 -14px; padding-left: 20px; padding-right: 14px; border-radius: 18px; background: #eef4fd } .vrow.current:not(.peek)::before { left: 59px }
 .bead.photo { border-radius: 16px }
 .ic { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
+.un.sq .bead, .un.sq .bead.photo { border-radius: 20%; box-shadow: none !important; animation: none }          /* 25.11.2026: Chapter «Квадратики» — уроки квадратиками без обводки, как иконки iPhone */
+.un.sq .bead.todo { background: #eef0f3 } .un.sq .bead .vid, .un.sq .bead .vid.img.round { border-radius: 20% }
 .vid { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #000 } .vid.img { border-radius: 16px } .vid.img.round { border-radius: 50% }
 .bead.todo .vid { filter: grayscale(1); opacity: .6 }
 .ok { position: absolute; left: 50%; bottom: -12px; width: 22px; height: 22px; margin-left: -11px; pointer-events: none; z-index: 2 }
