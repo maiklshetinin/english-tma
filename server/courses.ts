@@ -25,7 +25,7 @@ export interface Step { id: string; kind: string; [k: string]: unknown }
 export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; look?: 'sq'; hlw?: true; hlc?: string; hlo?: number; grp?: string; x?: number; y?: number; steps?: Step[]; topic?: string }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
-export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; templates?: { id: string; t: string; d: string; step: Step }[]; presets?: Record<string, Record<string, unknown>>; updatedAt?: number; assigned?: string[] }
+export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; templates?: { id: string; t: string; d: string; step: Step }[]; thumbs?: Record<string, string>; presets?: Record<string, Record<string, unknown>>; updatedAt?: number; assigned?: string[] }
 // Настройки упражнений курса (21.11.2026, «{ }» на плитке меню Exercise; src/exercises/presets.ts): промпты и настройки «Ответа по
 // смыслу» и «Разговора» на весь курс. Хранятся как поля экрана своего шаблона — те же проверки, что у экрана, без вопроса и эталона
 export const PRESET_TPLS: Record<string, Record<string, unknown>> = { kp: { kind: 'kp' }, kpfile: { kind: 'kp', dic: 'file' }, kpapi: { kind: 'kp', engine: 'api' },
@@ -172,7 +172,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     return out
   }
   const pub = (id: string, d: Record<string, any>): Course => ({ id, title: d.title ?? '', mode: d.mode === 'line' ? 'line' : 'wave', progress: d.progress ?? 0,
-    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], ink: d.ink ?? [], templates: d.templates ?? [], presets: d.presets ?? {}, updatedAt: d.updatedAt?.toMillis?.() ?? undefined, assigned: d.assigned ?? [] })          // assigned — кому назначен (learn.ts)
+    items: d.items ?? [], loose: d.loose ?? [], notes: d.notes ?? [], ink: d.ink ?? [], templates: d.templates ?? [], presets: d.presets ?? {}, thumbs: d.thumbs ?? {}, updatedAt: d.updatedAt?.toMillis?.() ?? undefined, assigned: d.assigned ?? [] })          // assigned — кому назначен (learn.ts)
   const found = async (id: string) => {
     const s = await col().doc(id).get()
     if (!s.exists) throw fail(404, 'course not found')
@@ -232,11 +232,16 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
         if (kn.n) { const nm = str((raw as any).name, 60).trim(); if (nm) o.name = nm }
         if (Object.keys(o).length || kn.n) presets[key] = o
       }
+      // свои превью плиток меню (25.11.2026): id шаблона → ключ картинки в хранилище; не больше 300
+      const thumbs: Record<string, string> = {}
+      if (b.thumbs && typeof b.thumbs === 'object' && !Array.isArray(b.thumbs)) for (const [k, v] of Object.entries(b.thumbs as Record<string, unknown>).slice(0, 300)) {
+        if (/^[A-Za-z0-9_-]{1,60}$/.test(k) && typeof v === 'string' && v.length <= 600 && (isOurKey(v) || isMediaUrl(v))) thumbs[k] = v
+      }
       const ref = col().doc(id), s = await ref.get()
       if (!s.exists && (await col().get()).size >= COURSES_MAX) throw fail(413, 'too many courses')
       const tasks = items.filter((x) => x.type !== 'unit').length
       const doc = { updatedBy: uid, title: str(b.title, 120) || 'Без названия', mode: b.mode === 'line' ? 'line' : 'wave',
-        progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, notes, ink, templates, presets, updatedAt: FieldValue.serverTimestamp() }
+        progress: Math.max(0, Math.min(tasks, num(b.progress))), items, loose, notes, ink, templates, presets, thumbs, updatedAt: FieldValue.serverTimestamp() }
       // 24.11.2026: курс уже есть — update, а не set({ merge: true }): merge сливает вложенные поля (presets), и удалённый пресет
       // или сброшенная настройка возвращались из базы. update меняет поле целиком; teacherId, createdAt, assigned не трогает
       if (s.exists) await ref.update(doc)
@@ -250,8 +255,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     },
     async remove(rawId: unknown) { const id = checkId(rawId); await found(id); await col().doc(id).delete() },
     /** Ключи файлов курса (кружки, фото, файлы экранов уроков) — чтобы после удаления курса почистить хранилище */
-    filesOf: (c: Pick<Course, 'items' | 'loose'>) => [...c.items, ...c.loose].flatMap((x) => [x.file, ...(x.steps ?? []).flatMap((s) =>
-      [s.image, s.audio, s.video, s.exAudio, ...((s.opts as Record<string, unknown>[] | undefined) ?? []).flatMap((o) => [o.image, o.audio])])])
+    filesOf: (c: Pick<Course, 'items' | 'loose'> & { thumbs?: Record<string, string> }) => [...c.items, ...c.loose].flatMap((x) => [x.file, ...(x.steps ?? []).flatMap((s) =>
+      [s.image, s.audio, s.video, s.exAudio, ...((s.opts as Record<string, unknown>[] | undefined) ?? []).flatMap((o) => [o.image, o.audio])])]).concat(Object.values(c.thumbs ?? {}))
       .filter((k): k is string => typeof k === 'string' && isOurKey(k)),
   }
 }

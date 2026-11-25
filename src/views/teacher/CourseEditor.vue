@@ -173,7 +173,7 @@ const save = () => {
 // ---------- Ctrl+Z / Ctrl+Shift+Z: история правок (как в Figma) ----------
 // Снимок курса — перед правкой; набор текста склеивается в один шаг (пауза 0,6 с). Удаления без подтверждений: их отменяет Ctrl+Z,
 // поэтому файлы удалённого из хранилища убираем только при уходе из редактора (и только если они больше нигде не нужны).
-const snap = () => JSON.stringify({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items, loose: doc.loose, notes: doc.notes ?? [], ink: doc.ink ?? [], presets: doc.presets ?? {} })
+const snap = () => JSON.stringify({ title: doc.title, mode: doc.mode, progress: doc.progress, items: doc.items, loose: doc.loose, notes: doc.notes ?? [], ink: doc.ink ?? [], presets: doc.presets ?? {}, thumbs: doc.thumbs ?? {} })
 const undoS = [], redoS = []; let base = null, restoring = false, histT = 0
 function histMark() {                                     // первый save после паузы — фиксируем «как было»
   if (base == null) return
@@ -201,14 +201,14 @@ let remote = false, shareT = 0
 const cleanNote = (n) => ({ id: n.id, x: Math.round(n.x), y: Math.round(n.y), text: n.text ?? '', color: n.color, ...(n.by ? { by: n.by } : {}), ...(n.sz && n.sz !== 's' ? { sz: n.sz } : {}), ...(n.font ? { font: n.font } : {}), ...(n.b ? { b: true } : {}), ...(n.st ? { st: true } : {}), ...(n.list ? { list: true } : {}), ...(n.nob ? { nob: true } : {}) })
 const cleanInk = (k) => ({ id: k.id, c: k.c, w: k.w, p: k.p.map(Math.round) })
 const payload = () => ({ title: doc.title, mode: 'line', progress: doc.progress, items: doc.items.map(x => clean(x)), loose: doc.loose.map(x => clean(x, true)), notes: (doc.notes ?? []).map(cleanNote), ink: (doc.ink ?? []).map(cleanInk),
-  templates: (doc.templates ?? []).map(t => ({ id: t.id, t: t.t, d: t.d, step: stepsOut([t.step])[0] })), presets: doc.presets ?? {} })          // presets — общие настройки упражнений курса («{ }» на плитке)          // templates — свои упражнения из конструктора (меню «Exercise» → «Мои»)
+  templates: (doc.templates ?? []).map(t => ({ id: t.id, t: t.t, d: t.d, step: stepsOut([t.step])[0] })), presets: doc.presets ?? {}, thumbs: doc.thumbs ?? {} })          // thumbs — свои превью плиток меню (25.11.2026); presets — общие настройки упражнений курса («{ }» на плитке)          // templates — свои упражнения из конструктора (меню «Exercise» → «Мои»)
 function share() { clearTimeout(shareT); shareT = setTimeout(() => liveSend({ t: 'doc', doc: payload() }), 120) }
 const offDoc = onLive('doc', ({ doc: d }) => {
   if (!d || !Array.isArray(d.items)) return
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))
   const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
   remote = true
-  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], ink: d.ink ?? [], templates: d.templates ?? doc.templates ?? [], presets: d.presets ?? doc.presets ?? {}, dirty: false })
+  Object.assign(doc, { title: d.title, mode: d.mode, progress: d.progress, items: d.items.map(keep), loose: (d.loose ?? []).map(keep), notes: d.notes ?? [], ink: d.ink ?? [], templates: d.templates ?? doc.templates ?? [], presets: d.presets ?? doc.presets ?? {}, thumbs: d.thumbs ?? doc.thumbs ?? {}, dirty: false })
   nextTick(() => { remote = false })
   clearTimeout(pt); if (online) sync.value = 'saved'       // коллега сам сохранил это в базу
   try { localStorage.setItem(KEY, JSON.stringify(doc)) } catch { /* приватный режим */ }
@@ -284,7 +284,7 @@ const fromServer = (c) => {
   settle()
   const local = new Map([...doc.items, ...doc.loose].map(x => [x.id, x]))       // локальные видео (ещё не в S3) не теряем
   const keep = (x) => chName({ ...x, ...(local.get(x.id)?.media && !x.file ? { media: local.get(x.id).media } : {}), ...(x.steps ? { steps: keepLocalFiles(x.steps, local.get(x.id)?.steps) } : {}) })
-  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], templates: c.templates ?? [], presets: c.presets ?? {}, dirty: false })
+  Object.assign(doc, { id: c.id, title: c.title, mode: c.mode, progress: c.progress, items: c.items.map(keep), loose: c.loose.map(keep), notes: c.notes ?? [], ink: c.ink ?? [], templates: c.templates ?? [], presets: c.presets ?? {}, thumbs: c.thumbs ?? {}, dirty: false })
   localStorage.setItem(KEY, JSON.stringify(doc)); sync.value = 'saved'; histReset()
   if (ensureChapter(doc)) save()
 }
@@ -645,6 +645,40 @@ const archSet = computed(() => new Set(arch.value))
 // кнопка «В архив» (в «Архиве» — «Вернуть в меню») в правом углу ряда вкладок. Esc / ✕ / другая вкладка — снять выделение
 const trSel = ref('')
 watch(() => trayTab.value, () => { trSel.value = '' })
+// Превью плиток меню (25.11.2026): своя картинка вместо живой миниатюры — любой скриншот / фото. Выбрали плитку → «🖼 Превью» в углу,
+// или перетащили картинку на плитку, или Ctrl+V при выбранной плитке. Картинка режется по центру под плитку (4:5) и сжимается;
+// хранится в хранилище курса (doc.thumbs[id шаблона] = ключ файла), видна на любом устройстве. «Сбросить превью» — снова живая
+const THUMB_W = 372, THUMB_H = 468          // плитка 124×156, втрое — чётко на любых экранах
+const thumbOf = (id) => doc.thumbs?.[id] || ''
+const thumbBusy = ref('')
+async function thumbCut(file) {
+  const bmp = await createImageBitmap(file), r = THUMB_W / THUMB_H
+  let sw = bmp.width, sh = bmp.height
+  if (sw / sh > r) sw = Math.round(sh * r); else sh = Math.round(sw / r)
+  const c = document.createElement('canvas'); c.width = THUMB_W; c.height = THUMB_H
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'
+  g.drawImage(bmp, Math.round((bmp.width - sw) / 2), 0, sw, sh, 0, 0, THUMB_W, THUMB_H)          // по ширине — центр, по высоте — от верха (шапка экрана важнее)
+  const b = await new Promise((ok) => c.toBlob(ok, 'image/webp', 0.86))
+  return new File([b], 'thumb.webp', { type: 'image/webp' })
+}
+async function thumbSet(id, file) {
+  if (!id || !file || !/^image\//.test(file.type)) return
+  if (!storageOn.value) return showToast('Превью хранится в хранилище курса, а оно сейчас недоступно', null, 'bad')
+  thumbBusy.value = id
+  try {
+    const f = await thumbCut(file), key = await sendFile(f, 'thumb:' + id)
+    const old = thumbOf(id); doc.thumbs = { ...(doc.thumbs ?? {}), [id]: key }; save()
+    if (old) dropRefs([old])
+    showToast('Превью плитки поставлено')
+  } catch (e) { showToast('Не удалось поставить превью: ' + (e.message || e), null, 'bad') }
+  finally { thumbBusy.value = '' }
+}
+function thumbDrop(id) { const old = thumbOf(id); if (!old) return; const t = { ...(doc.thumbs ?? {}) }; delete t[id]; doc.thumbs = t; save(); dropRefs([old]) }
+const thumbIn = ref(null)
+function thumbPick() { thumbIn.value?.click() }
+function thumbFile(e) { const f = e.target.files?.[0]; e.target.value = ''; if (f) thumbSet(trSel.value, f) }
+function thumbPaste(e) { if (!trSel.value || tray.value !== 'inter') return; const f = [...(e.clipboardData?.files ?? [])].find((x) => /^image\//.test(x.type)); if (f) { e.preventDefault(); e.stopPropagation(); thumbSet(trSel.value, f) } }
+onMounted(() => addEventListener('paste', thumbPaste, true)); onUnmounted(() => removeEventListener('paste', thumbPaste, true))
 const trEsc = (e) => { if (e.key === 'Escape') trSel.value = '' }
 onMounted(() => addEventListener('keydown', trEsc)); onUnmounted(() => removeEventListener('keydown', trEsc))
 function toArch(id) { if (!archSet.value.has(id)) arch.value = [...arch.value, id] }
@@ -2110,14 +2144,14 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <div class="xg S pvaddw"><button type="button" class="pvadd" :disabled="!pvNext(pvOpen)" @click="pvAdd(pvOpen)"><span>＋</span>Новый пресет<small>→ {{ typeId(pvOpen) }}-{{ pvNext(pvOpen) }}</small></button></div>
           </div>
         </div>
-        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : b.k === 'murphy' ? 'Упражнения по красному Мёрфи — собираем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i><i v-if="b.k === 'arch' && arch.length">{{ arch.length }}</i></button><button type="button" class="xarb" :class="{ back: trayTab === 'arch' }" :disabled="!trSel" :title="trSel ? (trayTab === 'arch' ? 'Вернуть выбранную плитку в меню' : 'Убрать выбранную плитку из меню в архив (вернуть можно на вкладке «Архив»). ID шаблона: ' + trSel) : 'Нажмите на плитку — и сюда, чтобы убрать её в архив'" @click="trayTab === 'arch' ? fromArch(trSel) : toArch(trSel); trSel = ''"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg>{{ trayTab === 'arch' ? 'Вернуть в меню' : 'В архив' }}<template v-if="trSel">: <code>{{ typeId(trSel) }}</code><span class="xarx" title="Снять выделение (Esc)" @click.stop="trSel = ''">✕</span></template><small v-else>· выберите плитку</small></button></div>
+        <div class="xtabs" role="tablist"><button v-for="b in TRAY_TABS" :key="b.k" role="tab" class="xtab" :class="{ on: trayTab === b.k }" @click="trayTab = b.k">{{ b.t }}<em v-if="b.exp" class="xexp" :title="b.k === 'page' ? 'Вид как на странице учебника — пробуем' : b.k === 'kp' ? 'Ответ своими словами, проверяет Gemini — пробуем' : b.k === 'murphy' ? 'Упражнения по красному Мёрфи — собираем' : 'Упражнения Насти по учебнику — пробуем, могут поменяться'">тест</em><i v-if="b.k === 'mine' && mineItems.length">{{ mineItems.length }}</i><i v-if="b.k === 'arch' && arch.length">{{ arch.length }}</i></button><button type="button" class="xarb" :class="{ back: trayTab === 'arch' }" :disabled="!trSel" :title="trSel ? (trayTab === 'arch' ? 'Вернуть выбранную плитку в меню' : 'Убрать выбранную плитку из меню в архив (вернуть можно на вкладке «Архив»). ID шаблона: ' + trSel) : 'Нажмите на плитку — и сюда, чтобы убрать её в архив'" @click="trayTab === 'arch' ? fromArch(trSel) : toArch(trSel); trSel = ''"><svg v-if="trayTab === 'arch'" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg><svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg>{{ trayTab === 'arch' ? 'Вернуть в меню' : 'В архив' }}<template v-if="trSel">: <code>{{ typeId(trSel) }}</code><span class="xarx" title="Снять выделение (Esc)" @click.stop="trSel = ''">✕</span></template><small v-else>· выберите плитку</small></button><button type="button" class="xarb xthb" :disabled="!trSel || !!thumbBusy" :title="'Своя картинка на плитку вместо живой миниатюры: скриншот экрана или любое фото. Лучше всего — экран 460×580 (DevTools → размер 460 × 580 → Capture screenshot), можно и любой 4:5. Ещё: перетащите картинку на плитку или Ctrl+V'" @click="thumbPick"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></svg>{{ thumbBusy ? 'Загружаю…' : 'Превью' }}</button><button v-if="trSel && thumbOf(trSel)" type="button" class="xarb xthb x" title="Убрать своё превью — снова живая миниатюра" @click="thumbDrop(trSel)">Сбросить превью</button><input ref="thumbIn" type="file" accept="image/*" hidden @change="thumbFile" /></div>
         <!-- мини-окошки: как выглядит экран -->
         <div class="xrow" :class="{ wrap: ONE_TABS.includes(trayTab) }">
         <p v-if="trayTab === 'murphy' && !XGROUPS.length" class="xarn">Здесь будут упражнения по красному Мёрфи (English Grammar in Use) — пока пусто.</p>
         <p v-if="trayTab === 'arch' && !XGROUPS.length" class="xarn">В архиве пусто. Нажмите на плашку в другой вкладке, потом «В архив» справа в ряду вкладок — она переедет сюда.</p>          <!-- Karta Polaka: группы по одной плашке — переносятся рядами по ширине окна, без горизонтального скролла (21.11.2026) -->
         <div v-for="g in XGROUPS" :key="g.k" class="xg" :class="[g.k, { bk: g.book }]"><div v-if="!ONE_TABS.includes(trayTab)" class="xgh"><b>{{ g.t }}<em v-if="g.exp" class="xexp" title="Новые упражнения по учебнику — пробуем, могут поменяться">тестовые</em></b><small>{{ g.d }}</small></div><div class="xgc" :style="{ gridTemplateColumns: `repeat(${g.cols}, 132px)` }">
-        <div v-for="t in g.items" :key="t.id" class="miw" :class="{ pvon: pvOpen === t.id, tsel: trSel === t.id }" @click="trSel = t.id"><span class="mtag"><code :class="{ on: copiedId === typeId(t.id) }" :title="copiedId === typeId(t.id) ? 'Скопировано' : (typeId(t.id) !== t.id ? 'ID упражнения: язык (зашит в тип) и тип' : 'ID упражнения') + ' — так оно называется в JSON (type) и в tools/make-json.py. Нажмите — скопировать'" @pointerdown.stop @click.stop="copyId(typeId(t.id))">{{ copiedId === typeId(t.id) ? '✓ ' + typeId(t.id) : typeId(t.id) }}</code><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button><button v-else-if="t.id !== 'lesson'" class="mjs" :title="'Образец JSON экрана «' + t.t + '» — посмотреть, что в нём задаётся'" :aria-label="'JSON упражнения «' + t.t + '»'" @pointerdown.stop @click.stop="smpOpen(t.id)">{ }</button></span><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : PRESET_SET.has(t.id) ? 'Нажмите — пресеты сверху. Потяните — на доску' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
-          <ExerciseMini :id="t.base || t.id" size="rail" />          <!-- 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
+        <div v-for="t in g.items" :key="t.id" class="miw" :class="{ pvon: pvOpen === t.id, tsel: trSel === t.id, tdrop: thumbBusy === t.id }" @click="trSel = t.id" @dragover.prevent @drop.prevent="trSel = t.id; thumbSet(t.id, $event.dataTransfer?.files?.[0])"><span class="mtag"><code :class="{ on: copiedId === typeId(t.id) }" :title="copiedId === typeId(t.id) ? 'Скопировано' : (typeId(t.id) !== t.id ? 'ID упражнения: язык (зашит в тип) и тип' : 'ID упражнения') + ' — так оно называется в JSON (type) и в tools/make-json.py. Нажмите — скопировать'" @pointerdown.stop @click.stop="copyId(typeId(t.id))">{{ copiedId === typeId(t.id) ? '✓ ' + typeId(t.id) : typeId(t.id) }}</code><button v-if="PRESET_SET.has(t.id)" class="mjs" :title="'Общие промпты и настройки «' + t.t + '» для всего курса — действуют на все такие экраны без своих'" :aria-label="'Настройки упражнения «' + t.t + '» в курсе'" :class="{ on: !!doc.presets?.[t.id] }" @pointerdown.stop @click.stop="preOpen(t.id)">{ }</button><button v-else-if="t.id !== 'lesson'" class="mjs" :title="'Образец JSON экрана «' + t.t + '» — посмотреть, что в нём задаётся'" :aria-label="'JSON упражнения «' + t.t + '»'" @pointerdown.stop @click.stop="smpOpen(t.id)">{ }</button></span><button class="mi" :title="t.id === 'lesson' ? 'Сразу 7 экранов-образцов: новые слова, выбор, пары, подсказка, «собери фразу»' : PRESET_SET.has(t.id) ? 'Нажмите — пресеты сверху. Потяните — на доску' : KINDS[t.kind].d" @pointerdown.prevent="trayDown($event, t.id)">
+          <span v-if="thumbOf(t.id)" class="mthumb"><img :src="resolveRef(thumbOf(t.id), 'image')" alt="" draggable="false" /></span><ExerciseMini v-else :id="t.base || t.id" size="rail" />          <!-- 25.11.2026: своё превью (doc.thumbs) — вместо живой миниатюры. 18.11.2026: все миниатюры — из ExerciseMini (мини-скриншоты), те же, что на ветке урока -->
           <small :title="t.t + ' — ' + t.d + (BOOK[t.id] ? '\nВ учебнике: ' + BOOK[t.id].en + (BOOK[t.id].also ? '\nТакже: ' + BOOK[t.id].also : '') : '')"><b>{{ t.t }}</b><span>{{ t.d }}</span></small>          <!-- 24.11.2026: серое описание под названием вернули; сверху — тег-ID -->
           <span v-if="skillsT(t).length" class="skl"><i v-for="k in skillsT(t)" :key="k" class="chip" :class="k">{{ SKILL_T[k] }}</i><span v-if="t.id === 'kp'" class="xai" title="Проверяет ChatGPT, Gemini или Claude — тот, что открыт у вас во вкладке с мостом"><img v-for="a in AI_SITES" :key="a" :src="aiIcon(a)" :alt="a" /></span></span>          <!-- 19.11.2026: «Ответ по смыслу» — значки чатов в строку с навыком -->
         </button>
@@ -2597,6 +2631,9 @@ async function reset() { if (!(await ask('Вернуть пример курса
 .xarb svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
 .xarb code { font: 700 12px ui-monospace, Menlo, monospace } .xarx { margin-left: 2px; width: 18px; height: 18px; border-radius: 5px; background: #fff; color: #999; display: grid; place-items: center; font-size: 10px }
 .miw.tsel { box-shadow: 0 0 0 3px #0d99ff; border-radius: 12px }
+.xthb { margin-left: 0; background: #eef4fd; color: #1d5fb0; box-shadow: inset 0 0 0 1.5px #9cc7f2 } .xthb.x { background: #f4f4f5; color: #666; box-shadow: inset 0 0 0 1.5px #ddd }
+.mthumb { display: block; width: 124px; height: 156px; border-radius: 10px; overflow: hidden; border: 1px solid #e3e3e3; background: #fff } .mthumb img { display: block; width: 100%; height: 100%; object-fit: cover }
+.miw.tdrop { opacity: .55 }
 .xtab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--hint); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer }
 .xtab:hover { color: var(--text) } .xtab.on { border-color: #b5d4f4; background: #e6f1fb; color: #185fa5 }
 .xtab i { min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--surface); color: var(--hint); font-size: 11px; font-style: normal; line-height: 18px; text-align: center }
