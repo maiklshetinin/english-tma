@@ -277,11 +277,11 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
           lg('app', `за реплику голоса ${(voiceMs / 1000).toFixed(1).replace('.', ',')} с · шум ${Math.round(floor * 100)} % · порог ${Math.round(thr * 100)} % · пик ${Math.round(lvMax * 100)} %`)
         }
         if (fresh && voiceMs < QUIET_MS) {          // тишина — «сверяй» не отправляем
-          talking = false; hearH = null; L.ph = ''; mute = true; sess.talkEnd()          // реплику закрываем (иначе Live ждёт её конца), но ответ на неё не засчитаем
+          talking = false; hearH = null; L.ph = ''; mute = true; answered = false; loops = 0; sess.talkEnd()          // реплику закрываем (иначе Live ждёт её конца), но ответ на неё не засчитаем
           lg('app', `тишина: голоса ${(voiceMs / 1000).toFixed(1).replace('.', ',')} с — ответ модели на эту реплику не засчитаем`)
           n.cover = { st: 'on', txt: 'ничего не услышал — скажите ещё раз' }; return
         }
-        talking = false; sess.talkEnd(); lg('mic', 'микрофон выключен — Live сверяет всё сказанное'); wait = true; think(); n.cover = { st: 'busy', txt: 'сверяет речь' }
+        talking = false; answered = false; loops = 0; sess.talkEnd(); lg('mic', 'микрофон выключен — Live сверяет всё сказанное'); wait = true; think(); n.cover = { st: 'busy', txt: 'сверяет речь' }
         clearTimeout(waitTm); waitTm = setTimeout(endWait, 12_000)          // ответа нет 12 с — не держим
         return
       }
@@ -289,7 +289,7 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
       if (closed || !sess || !ready) throw new Error('Live не подключён')
       hearH = h; if (!micOn) { micOn = true; await sess.listen() }
       if (hearH !== h) return          // отпустили, пока микрофон включался — реплики не было
-      talking = true; L.ph = 'rec'; sess.talkStart(); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; voiceMs = 0; lvMax = 0; lvs = []; mute = false; answered = false; loops = 0; lvAt = Date.now(); heard = ''; pend = null; turnDone = false; clearTimeout(pendTm); n.cover = { st: 'on', txt: 'слушает' }          // включили — звук пошёл в Live
+      talking = true; L.ph = 'rec'; sess.talkStart(); lg('mic', 'микрофон включён — звук идёт в Live'); heardV = false; voiceMs = 0; lvMax = 0; lvs = []; mute = false; answered = true; loops = 0; lvAt = Date.now(); heard = ''; pend = null; turnDone = false; clearTimeout(pendTm); n.cover = { st: 'on', txt: 'слушает' }          // включили — звук пошёл в Live
     },
   }
   liveSessions[id] = api
@@ -306,14 +306,14 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
       me = sess = startTalk({ key, model: m, system: fresh ? system + '\n\nЕсли ученик ничего не сказал (тишина, шум, неразборчиво) — вызови функцию nothing, а не cover. Никогда не присылай в cover куски эталона, которых ученик не произносил.' : system, lang: 'pl-PL', temperature: 0.2, tools: ballTools(tool, fix, fresh), extra, micLater: true, quiet: true, manual: true, on: {
         state: (st, info) => { if (me && me !== sess) return; if (st === 'live') { if (info) return; n.cover = { st: 'on', txt: 'Live на связи · ждёт речь' } } else if (st === 'error') fail('Live: ' + (info || 'ошибка')); else if (st === 'ended' && !closed) fail('Live: соединение закрыто') },
         ready: () => { ready = true; readyOk?.(); lg('send', 'соединение готово · ' + modelId + ' · инструкция (ballPrompt): ' + String(system).replace(/\s+/g, ' ').slice(0, 300) + '…', false, system); flush() },
-        turn: () => { if (mute && !talking) mute = false; if ((guard || fresh) && pend) { turnDone = true; later(heard ? 600 : 1500) } if (!(fresh && loops)) lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
+        turn: () => { if (mute && !talking) mute = false; if ((guard || fresh) && pend && !turnDone) { turnDone = true;          /* 26.11.2026: только первый конец хода — повторные «ход окончен» (модель гоняет по кругу) откладывали засчитывание на секунды */ later(heard ? 600 : 1500) } if (!(fresh && loops)) lg('turn', 'модель закончила ход · ' + ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'); hearH?.turn?.(); if (L.ph === 'think') L.ph = talking ? 'rec' : ''; if (wait) endWait(); onTurn?.() },
         text: (role, t) => { if (role === 'me') { if (guard || fresh) { heard += t; if (pend && turnDone) later(600) } lg('heard', t, true); hearH?.text?.(t) } else lg('said', t, true) },          // said — модель заговорила вместо функции (не должна)
         level: (v) => { const now = Date.now(); if (talking) { lvs.push([v, Math.min(now - lvAt, 250)]); if (v > lvMax) lvMax = v } lvAt = now; if (talking && v > 0.06 && !heardV) { heardV = true; lg('voice', 'микрофон слышит голос') } hearH?.level?.(v) },          // громкость микрофона (идёт только пока он включён) — по ней видно, что говорят
         tool: (name, args) => {
           const sec = ((Date.now() - t0) / 1000).toFixed(1).replace('.', ',') + ' с'
           // одна сессия (26.11.2026): на реплику — ОДИН ответ модели. Повторы без новой реплики (модель гоняет nothing / cover по кругу) —
           // молча гасим: ответ функции с SILENT, в журнал — одна строка
-          if (fresh) { if (answered) { if (!loops++) lg('app', 'модель повторяет ответ без новой реплики — не засчитываем, дальше молча'); return { $silent: true, ok: true } } answered = true }
+          if (fresh) { if (answered || talking) { if (!loops++) lg('app', talking ? 'модель ответила, пока микрофон включён (хвост прошлой реплики) — не засчитываем' : 'модель повторяет ответ без новой реплики — не засчитываем, дальше молча'); return { $silent: true, ok: true } } answered = true }          // 26.11.2026: ответ принимаем только ПОСЛЕ выключения микрофона — запоздалый повтор прошлой реплики съедал ответ на новую
           if (name === 'cover') {
             lg('cover', JSON.stringify(args).slice(0, 400) + ' · ' + sec, false, JSON.stringify(args, null, 1))
             const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim(), fix: String(x?.fix ?? '').trim() })).filter((x) => x.ref)
