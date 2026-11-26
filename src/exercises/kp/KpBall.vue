@@ -51,11 +51,17 @@ const msgsDesc = computed(() => [...msgs.value].reverse())
 const peek = ref(new Set())
 function look(k) { const s = new Set(peek.value); s.add(k); peek.value = s; setTimeout(() => { const t = new Set(peek.value); t.delete(k); peek.value = t }, 3000) }
 const partPct = (parts) => { const n = parts.length, on = parts.filter((w) => w.on).length; return n ? { on, n, p: Math.round((on / n) * 100) } : null }
-const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [], out: !!cov.value.items?.[i]?.out })).sort((a, b) => b.at - a.at))
+const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [], out: !!cov.value.items?.[i]?.out, gain: gains.value[i] ?? 0 })).sort((a, b) => b.at - a.at))
 // 26.11.2026: процент — по эталону: засчитанный кусок идёт в процент целиком (как раньше, refCover); несказанные слова только размыты, на процент не влияют
 const refCov = computed(() => (tx.value ? refCover(props.step.ideal || '', found.value.map((x) => x.ref)) : cov.value))
 const livePct = computed(() => refCov.value.pct), missedL = computed(() => refCov.value.missed)
-const partShare = (parts) => { const n = cov.value.words?.length || 0; return n && parts.length ? Math.max(1, Math.round((parts.length / n) * 100)) : 0 }          // сколько процентов эталона дал этот кусок
+// 26.11.2026: «+N%» — сколько этот кусок ДОБАВИЛ к проценту: только слова эталона, которые до него ещё никто не закрыл (по порядку, как сказаны).
+// Повторил уже засчитанное — «уже засчитано», без процентов (раньше показывал свою долю целиком, будто прибавил ещё)
+const gains = computed(() => {
+  if (!tx.value) return []
+  const done = []; let n = 0
+  return found.value.map((x) => { const h = refCover(props.step.ideal || '', [x.ref]).hit; n = h.length; let g = 0; h.forEach((v, j) => { if (v && !done[j]) { done[j] = true; g++ } }); return n ? (g ? Math.max(1, Math.round((g / n) * 100)) : 0) : 0 })
+})
 const hiddenS = () => String(props.step.ideal || '').replace(/\*\*|==|_/g, '').split(/[.!?;\n]+/).map((x) => x.trim().split(/\s+/).slice(0, 6).join(' ')).filter((x) => x.length > 3).slice(0, 10)
 const liveRes = () => { netOf(props.step.id).res = { pct: livePct.value, missed: [...missedL.value], total: found.value.length, ok: found.value.length,
   note: `Засчитано кусков эталона: ${found.value.length} · покрыто ${livePct.value}% текста эталона` } }          // итог — для «Готово» (LessonPlayer.aiCheck)
@@ -236,7 +242,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
       <ul v-if="tx && txFeed.length" class="kbmsg2">          <!-- 25.11.2026: строки — кусок эталона (несказанное размыто), под ним — как сказали, справа — сколько слов куска сказано -->
         <li v-for="(x, k) in txFeed" :key="x.i" class="kbr" :class="{ nw: k === 0 && !done }"><i class="kbrd" />
           <span class="kbrr"><template v-for="(w, j) in x.parts" :key="j"><span :class="w.on ? '' : peek.has(x.i + ':' + j) ? 'pk' : 'kbtxh2'" @click="!w.on && look(x.i + ':' + j)">{{ w.w }}</span>{{ ' ' }}</template></span>
-          <b v-if="!x.out && partShare(x.parts)" class="kbrp full" :title="`этот кусок засчитан — ${partShare(x.parts)}% эталона (из общего процента); несказанные слова в нём только размыты`">+{{ partShare(x.parts) }}%</b>
+          <b v-if="!x.out && x.gain" class="kbrp full" :title="`этот кусок прибавил ${x.gain}% к проценту эталона; несказанные слова в нём только размыты`">+{{ x.gain }}%</b><b v-else-if="!x.out" class="kbrp was" title="Эта часть эталона уже была засчитана раньше — к проценту ничего не прибавилось">уже засчитано</b>
           <span v-if="x.said" class="kbrs">{{ x.said }}</span></li>
       </ul>
       <ul v-else-if="!tx && got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
@@ -389,7 +395,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kbr { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 1px 10px; align-items: baseline; padding: 6px 12px; border-radius: 10px; background: #fff }
 .kbr.nw { box-shadow: inset 0 0 0 1.5px #cd8a30 } .kbrd { width: 6px; height: 6px; border-radius: 50%; background: #e8c48e; align-self: center } .kbr.nw .kbrd { background: #cd8a30 }
 .kbrr { font-size: 15px; font-weight: 800; color: #351a05; line-height: 1.4; min-width: 0 } .kbrs { grid-column: 2 / 4; font-size: 13px; font-weight: 600; color: #a08a72; line-height: 1.35 }
-.kbrp { padding: 1px 7px; border-radius: 999px; background: #fdf0e0; color: #c2590a; font-size: 11.5px; font-weight: 900; white-space: nowrap } .kbrp.full { background: #e9f7e0; color: #2e8b00 }
+.kbrp { padding: 1px 7px; border-radius: 999px; background: #fdf0e0; color: #c2590a; font-size: 11.5px; font-weight: 900; white-space: nowrap } .kbrp.full { background: #e9f7e0; color: #2e8b00 } .kbrp.was { background: #f3ece2; color: #9a8268 }
 .kbr.bad { background: #fff7f5 } .kbr.bad .kbrd { background: #e5484d } .kbr.bad s { color: #b3261e; font-weight: 700 } .kbr.bad .kbrp { background: #fdecea; color: #b3261e } .kbr.bad .kbrs { color: #b3261e; opacity: .8 }
 .kbr.none { background: transparent; padding: 2px 12px } .kbr.none .kbrs { grid-column: 2 / 4; font-size: 12.5px }
 .kbmh { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 12px 12px 12px 4px; background: #fbeedb; color: #5c4632; font-size: 14px; font-weight: 600; line-height: 1.4 }
