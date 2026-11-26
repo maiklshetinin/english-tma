@@ -376,6 +376,8 @@ function resumeOf(x, u) {
   if (!(at > 0 && at < list.length)) return null
   return { at, n: list.length, name: stepName(list[at]) }
 }
+// 26.11.2026: урок оборвался — кружок и карточка оранжевые (макет «Продолжить с места»), а не цвета типа урока
+const rsSt = (x, u) => (resumeOf(x, u) ? { '--c': '#ff9600', '--d': '#c26a00' } : { '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d })
 function onStepRes(st) { const x = open.value; if (!x || x.virtual || props.of) return; const k = steps.value.findIndex((s) => s.id === st?.id); if (k >= 0) resumeLoc[x.id] = k }
 // ↓ только здесь, после steps: сразу читает simMobile → steps (выше по файлу steps ещё не объявлен — курс не открывался вовсе, если «Графики» были включены)
 watch(simMobile, (on) => document.documentElement.classList.toggle('sim-mobile', on), { immediate: true })
@@ -443,10 +445,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
           <div class="uh"><b>{{ u.title }}<template v-if="u.sub">: {{ u.sub }}</template></b><svg v-if="u.tasks.length && u.pct === 100" viewBox="0 0 24 24" class="uok"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.3l3 3 6-6.5" /></svg></div>
           <div class="ubar"><i :style="{ width: u.pct + '%' }" /><em :style="{ left: u.pct + '%', transform: `translate(-${u.pct}%, -50%)` }">{{ u.pct }}%</em></div>
         </template>
-        <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1, peek: peek === x.id }]" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }">
-          <button class="bead" :class="[x.type, state(x), { open: inline === x.id }]" @pointerenter="hover($event, true)" @pointerleave="hover($event, false)" :style="{ '--c': (T[x.type] ?? T.lesson).c, '--d': (T[x.type] ?? T.lesson).d }" :title="(T[x.type] ?? T.lesson).t" @click="tap(x)">
+        <div v-for="(x, k) in u.tasks" :key="x.id" class="vrow" :class="[state(x), { first: k === 0, last: k === u.tasks.length - 1, peek: peek === x.id, rs: !!resumeOf(x, u) }]" :style="rsSt(x, u)">
+          <button class="bead" :class="[x.type, state(x), { open: inline === x.id, rs: !!resumeOf(x, u) }]" @pointerenter="hover($event, true)" @pointerleave="hover($event, false)" :style="rsSt(x, u)" :title="(T[x.type] ?? T.lesson).t" @click="tap(x)">
             <video v-if="(x.type === 'video' || x.ck === 'video') && fileOf(x)" :src="fileOf(x)" class="vid" muted loop playsinline preload="metadata" />
             <img v-else-if="(x.type === 'photo' || x.ck === 'photo') && fileOf(x)" :src="fileOf(x)" class="vid img" :class="{ round: x.ck }" alt="" />
+            <svg v-else-if="resumeOf(x, u)" viewBox="0 0 24 24" class="ic rsi"><path d="M8 5.5v13l10.5-6.5z" /></svg>          <!-- оборвался — оранжевый с «▶», как на макете «Продолжить с места» -->
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
@@ -747,6 +750,9 @@ html.sim-mobile nav.nav { display: none }
 /* «С места» (26.11.2026) */
 .rsm { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; margin-top: 6px; padding: 4px 9px; border-radius: 9px; background: #fff4e5; color: #b25e00; font-size: 12px; font-weight: 800; line-height: 1.3 }
 .rsm svg { flex: none; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.6 }
+.bead.rs { box-shadow: 0 0 0 3px #fff, 0 0 0 6px #ff9600, 0 0 0 12px rgba(255, 150, 0, .18) } .rsi { fill: currentColor; stroke: none; width: 26px; height: 26px; margin-left: 3px }
+.vrow.rs .pv .rsp { color: #fff !important; opacity: 1 } .vrow.rs .pv .rsb { background: rgba(255, 255, 255, .35) } .vrow.rs .pv .rsb i { background: #fff }          /* на оранжевой карточке — белым */
+.vrow.rs .pv .rsg .rso { background: var(--card); box-shadow: 0 3px 0 rgba(0, 0, 0, .12) }
 .rsb { height: 8px; margin: 6px 0 2px; border-radius: 5px; background: #eee; overflow: hidden } .rsb i { display: block; height: 100%; border-radius: 5px; background: #ff9600 }
 .rsp { color: #b25e00 !important; font-weight: 700 } .rsg { display: flex; gap: 8px } .rsg .pgo { margin: 0 } .rsg .rso { flex: 1; background: #ff9600; box-shadow: 0 4px 0 #d97f00 }
 </style>
