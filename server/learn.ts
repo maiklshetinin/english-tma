@@ -192,6 +192,17 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
     },
 
     /** Ученик: заход в урок — в журнал (по ходу урока) */
+    /** «С места» (26.11.2026): по каждому уроку курса — последний заход: закончен ли и какие экраны в нём сделаны (свой журнал; преподаватель — свой) */
+    async resume(user: TokenUser, rawId: unknown) {
+      const who = await whoOf(user), cid = String(rawId ?? '')
+      const items: Record<string, { at: number; fin: boolean; done: string[] }> = {}
+      for (const d of (await logs().where('who', '==', who).get()).docs) {
+        const r = d.data() as RunLog; if (r.course !== cid) continue
+        const p = items[r.item]; if (p && p.at >= r.at) continue
+        items[r.item] = { at: r.at, fin: !!r.fin, done: Object.entries(r.steps ?? {}).filter(([, s]) => s.ok === true || s.ok === false || !!s.x || s.sc != null || (s.t ?? 0) > 0).map(([id]) => id) }
+      }
+      return { items }
+    },
     async log(user: TokenUser, rawId: unknown, input: unknown) {
       const sid = await me(user)
       return writeLog(sid, await mineCourse(sid, rawId), input)

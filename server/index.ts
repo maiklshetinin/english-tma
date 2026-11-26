@@ -303,6 +303,7 @@ app.get('/my/courses', requireUser, wrap(async (req, res) => res.json(await lear
 app.get('/my/courses/:id', requireUser, wrap(async (req, res) => res.json(await learn.myCourse(req.user, req.params.id))))
 app.post('/my/courses/:id/done', requireUser, wrap(async (req, res) => res.json(await learn.done(req.user, req.params.id, req.body))))      // { itemId, ok, all, sec }
 // Журнал заходов в уроки (learn.ts): пишется по ходу урока — { run, itemId, at, sec, n, fin, steps: { <экран>: { ok, sec, t, x?, sc? } } }
+app.get('/my/courses/:id/resume', requireUser, wrap(async (req, res) => res.json(await learn.resume(req.user, req.params.id))))          // «С места» — где оборвались уроки курса
 app.post('/my/courses/:id/log', requireUser, wrap(async (req, res) => res.json(await learn.log(req.user, req.params.id, req.body))))
 app.post('/courses/:id/run/log', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.teacherLog(req.user, req.params.id, req.body))))
 app.get('/progress/log', requireUser, wrap(async (req, res) => res.json(await learn.runLogs(req.user, req.query.studentId))))      // ?studentId= — преподаватель смотрит ученика

@@ -8,7 +8,7 @@ import { API, apiRequest, fb, isDemo } from '../firebase'
 import { theme } from '../composables/useTelegram'
 import { useCourseMedia } from '../composables/useCourseMedia'
 import LessonPlayer from './LessonPlayer.vue'
-import { makeRunLog, saveLocal } from '../utils/runlog'
+import { makeRunLog, saveLocal, readLocal, isDone } from '../utils/runlog'
 import { setPresets } from '../exercises/presets'
 import ReviewChart from './ReviewChart.vue'
 import { topicById, detectTopic, wordsOnly, screenKey } from '../utils/skills'
@@ -102,6 +102,7 @@ const done = computed(() => Math.min(mine.value.done, total.value))
 // ученик прошёл задание (урок — по «Готово» в итоге; кружок, фото, занятие — кнопкой) → на сервер, «Сейчас» переезжает дальше
 let t0 = 0
 async function finish(x, sc = {}) {
+  if (x) resumeLoc[x.id] = -1          // урок дошёл до конца — «остановились» больше не показываем
   if (rlog && open.value === x) rlog.finish()          // журнал: заход закончен («Готово»)
   if (props.of || !x || x.virtual) return          // «Повторение» в прогресс курса не пишется
   const body = { itemId: x.id, ok: sc.ok ?? 0, all: sc.all ?? 0, sec: Number.isFinite(sc.sec) ? Math.min(86400, sc.sec) : t0 ? Math.min(86400, Math.round((Date.now() - t0) / 1000)) : 0,          /* урок — сумма времён выполнения упражнений (плеер), 24.11.2026 */ ...(x.type !== 'checkpoint' && misses.size ? { miss: [...misses] } : {}) }
@@ -353,6 +354,29 @@ const rvWords = computed(() => Object.keys(snap).map(k => review.items[k] && { .
 // при наведении кружок тихо проигрывается
 const hover = (e, on) => { const v = e.currentTarget.querySelector('video'); if (!v) return; if (on) v.play().catch(() => {}); else { v.pause(); v.currentTime = 0 } }
 const steps = computed(() => (open.value ? stepsOf(open.value) : []))
+// «С места» (26.11.2026): урок оборвался — под ним «Остановились: упражнение N из M · «…»», карточка — «Продолжить с N-го / Заново».
+// Где остановились — по журналу заходов (сервер, GET /my/courses/:id/resume; без сервера — журнал этого браузера); по ходу урока — resumeLoc.
+// В Chapter выключается кнопкой «С места» (u.rs === 'off')
+const resumeSrv = ref({}), resumeLoc = reactive({})
+async function loadResume() {
+  if (props.of || !props.id) return
+  try {
+    if (online) { const r = await apiRequest(`/my/courses/${props.id}/resume`); resumeSrv.value = r?.items ?? {}; return }
+    const m = {}; for (const r of readLocal()) if (r.course === props.id && (!m[r.item] || m[r.item].at < r.at)) m[r.item] = { at: r.at, fin: !!r.fin, done: (r.steps ?? []).filter(isDone).map((s) => String(s.id)) }
+    resumeSrv.value = m
+  } catch { /* нет журнала — просто без «с места» */ }
+}
+watch(() => props.id, loadResume, { immediate: true })
+const stepName = (s) => String(s?.text || stepWord(s) || exName(s) || '').replace(/\s+/g, ' ').trim().slice(0, 80)
+function resumeOf(x, u) {
+  if (props.of || u?.rs === 'off' || !ready(x) || x.type === 'checkpoint' || x.virtual || state(x) === 'done') return null
+  const list = stepsOf(x); let at
+  if (x.id in resumeLoc) at = resumeLoc[x.id]
+  else { const r = resumeSrv.value[x.id]; if (!r || r.fin) return null; const ds = new Set((r.done ?? []).map(String)); let mx = -1; list.forEach((s, k) => { if (ds.has(String(s.id))) mx = k }); at = mx + 1 }
+  if (!(at > 0 && at < list.length)) return null
+  return { at, n: list.length, name: stepName(list[at]) }
+}
+function onStepRes(st) { const x = open.value; if (!x || x.virtual || props.of) return; const k = steps.value.findIndex((s) => s.id === st?.id); if (k >= 0) resumeLoc[x.id] = k }
 // ↓ только здесь, после steps: сразу читает simMobile → steps (выше по файлу steps ещё не объявлен — курс не открывался вовсе, если «Графики» были включены)
 watch(simMobile, (on) => document.documentElement.classList.toggle('sim-mobile', on), { immediate: true })
 watch(open, (x) => setQ({ l: x?.virtual ? null : x?.id, s: null }))
@@ -426,7 +450,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
-          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<span v-if="x.sub" class="csub">{{ x.sub }}</span><small>{{ [(T[x.type] ?? T.lesson).t, qnOf(x, u), ready(x) ? `≈ ${lessonMin(stepsOf(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
+          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<span v-if="x.sub" class="csub">{{ x.sub }}</span><small>{{ [(T[x.type] ?? T.lesson).t, qnOf(x, u), ready(x) ? `≈ ${lessonMin(stepsOf(x))} мин` : ''].filter(Boolean).join(' · ') }}</small><span v-if="resumeOf(x, u)" class="rsm"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>Остановились: упражнение {{ resumeOf(x, u).at + 1 }} из {{ resumeOf(x, u).n }}<template v-if="resumeOf(x, u).name"> · «{{ resumeOf(x, u).name }}»</template></span></div>
           <!-- карточка урока перед стартом -->
           <div v-if="peek === x.id" class="pv" @click.stop>
             <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ [(T[x.type] ?? T.lesson).t, qnOf(x, u)].filter(Boolean).join(' · ') }}</small><small v-if="ready(x)">≈ {{ lessonMin(stepsOf(x)) }} мин</small></div>
@@ -446,6 +470,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
               <button class="pgo ghost" @click="go(x)">Пройти заново</button>
             </template>
             <button v-else-if="!of && state(x) === 'todo'" class="pgo" disabled title="Курс проходится по порядку — и учеником, и преподавателем">Сначала пройдите предыдущие</button>
+            <template v-else-if="resumeOf(x, u)">
+              <div class="rsb"><i :style="{ width: Math.round((resumeOf(x, u).at / resumeOf(x, u).n) * 100) + '%' }" /></div>
+              <p class="rsp">Остановились на упражнении {{ resumeOf(x, u).at + 1 }} из {{ resumeOf(x, u).n }}<template v-if="resumeOf(x, u).name"> — «{{ resumeOf(x, u).name }}»</template></p>
+              <div class="rsg"><button class="pgo rso" @click="go(x, resumeOf(x, u).at)">Продолжить с {{ resumeOf(x, u).at + 1 }}-го</button><button class="pgo ghost" @click="resumeLoc[x.id] = -1; go(x)">Заново</button></div>
+            </template>
             <button v-else class="pgo" @click="go(x)">Поехали!</button>
             </template>
           </div>
@@ -527,7 +556,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             </div>
           </div>
         </template>
-        <LessonPlayer v-if="steps.length" :key="open.id" :start="startAt" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @step="curStep = $event; rlog?.step($event?.id)" @done="finish(open, $event)" @close="open = null" />
+        <LessonPlayer v-if="steps.length" :key="open.id" :start="startAt" :steps="steps" :resolve="resolve" closable close-text="К курсу" :track="!of" :review="of ? null : rvWords" :ck-log="of ? null : ckLog" @answer="onAnswer" @step="curStep = $event; rlog?.step($event?.id); onStepRes($event)" @done="finish(open, $event)" @close="open = null" />
         <div v-else class="sh">
           <BackButton class="x" to="К курсу (Esc)" @click="open = null" />
           <template v-if="open.type === 'video'"><video v-if="fileOf(open)" class="kr" :src="fileOf(open)" controls autoplay playsinline /><p v-else>Кружок ещё не загружен</p><b>{{ open.title }}</b></template>
@@ -710,4 +739,9 @@ html.sim-mobile nav.nav { display: none }
 .rpt.all.due { background: #7b4df0; box-shadow: none; color: #fff } .rpt.all.due:hover, .rpt.all.due.on { background: #6c3fe0 }
 .rpt.all.due .rpt-t p { color: rgba(255, 255, 255, .85) } .rpt.all.due .rpi { background: rgba(255, 255, 255, .18); box-shadow: none } .rpt.all.due .rpi svg { stroke: #fff }
 .rpn { margin-left: auto; flex: none; display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; box-sizing: border-box; border-radius: 99px; background: #fff; color: #6c3fe0; font-size: 14px; font-weight: 900 }
+/* «С места» (26.11.2026) */
+.rsm { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; margin-top: 6px; padding: 4px 9px; border-radius: 9px; background: #fff4e5; color: #b25e00; font-size: 12px; font-weight: 800; line-height: 1.3 }
+.rsm svg { flex: none; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.6 }
+.rsb { height: 8px; margin: 6px 0 2px; border-radius: 5px; background: #eee; overflow: hidden } .rsb i { display: block; height: 100%; border-radius: 5px; background: #ff9600 }
+.rsp { color: #b25e00 !important; font-weight: 700 } .rsg { display: flex; gap: 8px } .rsg .pgo { margin: 0 } .rsg .rso { flex: 1; background: #ff9600; box-shadow: 0 4px 0 #d97f00 }
 </style>

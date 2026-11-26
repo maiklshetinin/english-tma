@@ -234,7 +234,7 @@ onUnmounted(() => { offDoc(); offCur(); offSel(); clearInterval(tickT); clearTim
 const online = !isDemo && !!API && !!fb
 const sync = ref(online ? 'saving' : 'local'), storageOn = ref(false)
 let pt = 0, busy = false
-const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(loose && x.grp ? { grp: x.grp } : {}), ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.look === 'sq' ? { look: 'sq' } : {}), ...(x.type === 'unit' && x.qn === 'off' ? { qn: 'off' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.type === 'unit' && x.hlo != null ? { hlo: x.hlo } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.topic ? { topic: x.topic } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
+const clean = (x, loose) => ({ id: x.id, type: x.type, title: x.title ?? '', ...(loose && x.grp ? { grp: x.grp } : {}), ...(x.type === 'unit' && x.hl === 'none' ? { hl: 'none' } : {}), ...(x.type === 'unit' && x.look === 'sq' ? { look: 'sq' } : {}), ...(x.type === 'unit' && x.qn === 'off' ? { qn: 'off' } : {}), ...(x.type === 'unit' && x.rs === 'off' ? { rs: 'off' } : {}), ...(x.type === 'unit' && x.hlw ? { hlw: true } : {}), ...(x.type === 'unit' && x.hlc ? { hlc: x.hlc } : {}), ...(x.type === 'unit' && x.hlo != null ? { hlo: x.hlo } : {}), ...(x.sub != null ? { sub: x.sub } : {}), ...(x.topic ? { topic: x.topic } : {}), ...(x.file ? { file: x.file } : {}), ...(x.ck && !MEDIA.includes(x.type) ? { ck: x.ck } : {}), ...((INTERACTIVE.includes(x.type) || x.type === 'screen') && x.steps?.length ? { steps: stepsOut(x.steps) } : {}), ...(loose ? { x: x.x, y: x.y } : {}) })
 function push(delay = 900) {
   if (!online) return
   clearTimeout(pt); pt = setTimeout(async () => {
@@ -1382,6 +1382,7 @@ const chMenu = ref(null)                 // открытый список в м�
 // 25.11.2026: как ученик видит уроки Chapter — кружками (как было) или квадратиками, как иконки iPhone; линия-путь та же
 // Кружки / Квадратики главы (25.11.2026): и на доске редактора уроки и чекпоинт главы — квадратиками
 const sqIds = computed(() => { const out = new Set(); let on = false; for (const x of order.value) { if (x.type === 'unit') on = x.look === 'sq'; else if (on) out.add(x.id) } return out })
+function setRs(u) { if (u.rs === 'off') delete u.rs; else u.rs = 'off'; save() }          // 26.11.2026: урок оборвался — у ученика «продолжить с места» (вкл / выкл)
 function setQn(u) { if (u.qn === 'off') delete u.qn; else u.qn = 'off'; save() }          // 26.11.2026: номера вопросов серой строкой под уроками у ученика — вкл / выкл
 function setLook(u, v) { if (v === 'sq') u.look = 'sq'; else delete u.look; save() }
 function setHl(u, how) { delete u.hl; delete u.hlw; if (how === 'none') u.hl = 'none'; if (how === 'wide') u.hlw = true; save() }
@@ -1969,6 +1970,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <button class="cbw" :class="{ on: x.look === 'sq' }" title="Уроки у ученика — квадратиками, как иконки iPhone (фото влезает целиком)" @click="setLook(x, 'sq')">Квадратики</button>
               <i class="nb-s" />
               <button class="cbw" :class="{ on: x.qn !== 'off' }" title="Под уроками у ученика — серой строкой номера вопросов из урока («вопросы 1–5»). Нажать — выключить / включить" @click="setQn(x)">№ вопросов</button>
+              <button class="cbw" :class="{ on: x.rs !== 'off' }" title="Урок оборвался — у ученика под ним «Остановились: упражнение N из M», нажал на урок — «Продолжить с N-го» или «Заново». Нажать — выключить / включить" @click="setRs(x)">С места</button>
             </div>
             <!-- правка прямо в заголовке: курсор в тексте; ✓ (или Enter, или нажатие мимо) — готово, Esc — вернуть как было -->
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop>
@@ -2032,6 +2034,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <button class="cbw" :class="{ on: x.look === 'sq' }" title="Уроки у ученика — квадратиками, как иконки iPhone (фото влезает целиком)" @click="setLook(x, 'sq')">Квадратики</button>
               <i class="nb-s" />
               <button class="cbw" :class="{ on: x.qn !== 'off' }" title="Под уроками у ученика — серой строкой номера вопросов из урока («вопросы 1–5»). Нажать — выключить / включить" @click="setQn(x)">№ вопросов</button>
+              <button class="cbw" :class="{ on: x.rs !== 'off' }" title="Урок оборвался — у ученика под ним «Остановились: упражнение N из M», нажал на урок — «Продолжить с N-го» или «Заново». Нажать — выключить / включить" @click="setRs(x)">С места</button>
             </div>
             <!-- правка прямо в заголовке: курсор в тексте; ✓ (или Enter, или нажатие мимо) — готово, Esc — вернуть как было -->
             <div v-if="renaming === x.id" class="uh ren" @pointerdown.stop>

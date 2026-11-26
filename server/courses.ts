@@ -22,7 +22,7 @@ const within = (v: unknown, lo: number, hi: number, int = false) => (typeof v ==
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-1e6, Math.min(1e6, v))) : 0)
 
 export interface Step { id: string; kind: string; [k: string]: unknown }
-export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; look?: 'sq'; qn?: 'off'; hlw?: true; hlc?: string; hlo?: number; grp?: string; x?: number; y?: number; steps?: Step[]; topic?: string }
+export interface CourseItem { id: string; type: string; title: string; sub?: string; file?: string; ck?: 'photo' | 'video'; hl?: 'none'; look?: 'sq'; qn?: 'off'; rs?: 'off'; hlw?: true; hlc?: string; hlo?: number; grp?: string; x?: number; y?: number; steps?: Step[]; topic?: string }
 export interface Note { id: string; x: number; y: number; text: string; color: string }
 export interface Ink { id: string; c: string; w: number; p: number[] }
 export interface Course { id: string; title: string; mode: 'wave' | 'line'; progress: number; items: CourseItem[]; loose: CourseItem[]; notes: Note[]; ink: Ink[]; templates?: { id: string; t: string; d: string; step: Step }[]; thumbs?: Record<string, string>; cover?: string; presets?: Record<string, Record<string, unknown>>; updatedAt?: number; assigned?: string[] }
@@ -151,7 +151,8 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     if (INTERACTIVE.includes(type) && typeof r.topic === 'string' && /^[a-z0-9-]{1,40}$/.test(r.topic)) out.topic = r.topic
     // подсветка главы на доске: hl 'none' — без неё, hlw — вместе с ветками экранов, hlc — цвет (#rrggbb, по умолчанию зелёный)
     if (type === 'unit' && r.hl === 'none') out.hl = 'none'
-    if (type === 'unit' && r.qn === 'off') out.qn = 'off'          // 26.11.2026: номера вопросов под уроками выключены
+    if (type === 'unit' && r.qn === 'off') out.qn = 'off'
+    if (type === 'unit' && r.rs === 'off') out.rs = 'off'          // 26.11.2026: «продолжить с места» в Chapter выключено          // 26.11.2026: номера вопросов под уроками выключены
     if (type === 'unit' && r.look === 'sq') out.look = 'sq'          // 25.11.2026: уроки Chapter у ученика — квадратиками (как иконки iPhone), линия-путь та же
     if (type === 'unit' && r.hlw === true) out.hlw = true
     if (type === 'unit' && typeof r.hlc === 'string' && /^#[0-9a-f]{6}$/i.test(r.hlc)) out.hlc = r.hlc.toLowerCase()
