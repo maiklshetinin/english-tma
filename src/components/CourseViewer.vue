@@ -125,6 +125,14 @@ async function resetMine() {
 const markDone = (x) => { finish(x); peek.value = null; inline.value = null }
 const canMark = (x) => !props.of && state(x) === 'current'
 const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
+// 26.11.2026: серой строкой под уроком — номера вопросов из его экранов (поле n), «вопросы 1–5»; в Chapter можно выключить (u.qn === 'off')
+function qnOf(x, u) {
+  if (u?.qn === 'off' || !ready(x)) return ''
+  const ns = stepsOf(x).map((s) => Number(s?.n)).filter((v) => Number.isFinite(v) && v > 0); if (!ns.length) return ''
+  const u2 = [...new Set(ns)].sort((p, q) => p - q), a = u2[0], b = u2.at(-1)
+  if (u2.length === 1) return `вопрос ${a}`
+  return b - a === u2.length - 1 ? `вопросы ${a}–${b}` : `вопросы ${u2.join(', ')}`          // по порядку — «1–5», вразброс — «2, 5, 9»
+}
 
 // ---------- Чекпоинт собирается сам ----------
 // Экраны учителя (если положил) + экраны из уроков этой Chapter, где ученик ошибся (прогресс с сервера; в «Как видит ученик» — ошибки
@@ -418,10 +426,10 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <svg v-else viewBox="0 0 24 24" class="ic" v-html="(T[x.type] ?? T.lesson).ic" />
             <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
           </button>
-          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<span v-if="x.sub" class="csub">{{ x.sub }}</span><small>{{ [(T[x.type] ?? T.lesson).t, ready(x) ? `≈ ${lessonMin(stepsOf(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
+          <div class="cap" role="button" tabindex="0" @click="tap(x)" @keydown.enter="tap(x)"><span v-if="state(x) === 'current'" class="start" :style="{ '--c': (T[x.type] ?? T.lesson).c }">Сейчас</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<span v-if="x.sub" class="csub">{{ x.sub }}</span><small>{{ [(T[x.type] ?? T.lesson).t, qnOf(x, u), ready(x) ? `≈ ${lessonMin(stepsOf(x))} мин` : ''].filter(Boolean).join(' · ') }}</small></div>
           <!-- карточка урока перед стартом -->
           <div v-if="peek === x.id" class="pv" @click.stop>
-            <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ (T[x.type] ?? T.lesson).t }}</small><small v-if="ready(x)">≈ {{ lessonMin(stepsOf(x)) }} мин</small></div>
+            <div class="pth"><small><svg viewBox="0 0 24 24" v-html="(T[x.type] ?? T.lesson).ic" />{{ [(T[x.type] ?? T.lesson).t, qnOf(x, u)].filter(Boolean).join(' · ') }}</small><small v-if="ready(x)">≈ {{ lessonMin(stepsOf(x)) }} мин</small></div>
             <b>{{ x.title || (T[x.type] ?? T.lesson).t }}</b>
             <p v-if="x.sub" class="psub">{{ x.sub }}</p>
             <template v-if="!ready(x)">
@@ -494,7 +502,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
                       <svg v-if="state(x) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
                       <em v-if="missItems(x).length" class="mb">{{ missItems(x).length }}</em>
                     </span>
-                    <div class="cap"><span v-if="open.id === x.id" class="start" style="--c: #1cb0f6">Открыт</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ (T[x.type] ?? T.lesson).t }}</small></div>
+                    <div class="cap"><span v-if="open.id === x.id" class="start" style="--c: #1cb0f6">Открыт</span>{{ x.title || (T[x.type] ?? T.lesson).t }}<small>{{ [(T[x.type] ?? T.lesson).t, qnOf(x, u)].filter(Boolean).join(' · ') }}</small></div>
                     <div class="sd">
                       <template v-if="x.type === 'checkpoint' && ckInfo(x.id)">
                         <div class="sbx ck"><h4>{{ ckInfo(x.id).fromErrors ? 'Из ошибок' : ckInfo(x.id).items.length ? 'Ошибок нет — авто' : 'Пусто' }} · {{ ckInfo(x.id).items.length + ckInfo(x.id).own }} {{ plural(ckInfo(x.id).items.length + ckInfo(x.id).own, 'экран', 'экрана', 'экранов') }}</h4>
