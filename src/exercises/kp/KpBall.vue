@@ -52,7 +52,10 @@ const peek = ref(new Set())
 function look(k) { const s = new Set(peek.value); s.add(k); peek.value = s; setTimeout(() => { const t = new Set(peek.value); t.delete(k); peek.value = t }, 3000) }
 const partPct = (parts) => { const n = parts.length, on = parts.filter((w) => w.on).length; return n ? { on, n, p: Math.round((on / n) * 100) } : null }
 const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [] })).sort((a, b) => b.at - a.at))
-const livePct = computed(() => cov.value.pct), missedL = computed(() => cov.value.missed)
+// 26.11.2026: процент — по эталону: засчитанный кусок идёт в процент целиком (как раньше, refCover); несказанные слова только размыты, на процент не влияют
+const refCov = computed(() => (tx.value ? refCover(props.step.ideal || '', found.value.map((x) => x.ref)) : cov.value))
+const livePct = computed(() => refCov.value.pct), missedL = computed(() => refCov.value.missed)
+const partShare = (parts) => { const n = cov.value.words?.length || 0; return n && parts.length ? Math.max(1, Math.round((parts.length / n) * 100)) : 0 }          // сколько процентов эталона дал этот кусок
 const hiddenS = () => String(props.step.ideal || '').replace(/\*\*|==|_/g, '').split(/[.!?;\n]+/).map((x) => x.trim().split(/\s+/).slice(0, 6).join(' ')).filter((x) => x.length > 3).slice(0, 10)
 const liveRes = () => { netOf(props.step.id).res = { pct: livePct.value, missed: [...missedL.value], total: found.value.length, ok: found.value.length,
   note: `Засчитано кусков эталона: ${found.value.length} · покрыто ${livePct.value}% текста эталона` } }          // итог — для «Готово» (LessonPlayer.aiCheck)
@@ -71,7 +74,7 @@ function onLiveFound(list, meta = null) {
   if (tx.value) add.forEach((_, k) => {          // журнал колонкой (25.11.2026): что приложение сделало с куском — сколько слов открыто, что осталось размытым
     const it = cov.value.items?.[start + k]; if (!it) return
     const off = it.parts.filter((w) => !w.on).map((w) => w.w)
-    ballLog(props.step.id, 'app', it.parts.length ? `открыто ${it.parts.length - off.length} из ${it.parts.length} слов` + (off.length ? ` · не сказано — размыто, в процент не идёт: «${off.join(' ')}»` : ' · всё сказано') : 'кусок не найден в эталоне — не засчитан')
+    ballLog(props.step.id, 'app', it.parts.length ? `открыто ${it.parts.length - off.length} из ${it.parts.length} слов` + (off.length ? ` · не сказано — размыто (в процент кусок идёт целиком): «${off.join(' ')}»` : ' · всё сказано') : 'кусок не найден в эталоне — не засчитан')
   })
   if (tx.value && list.length && !add.length) ballLog(props.step.id, 'app', 'повтор — уже засчитано раньше')
   if (tx.value && meta) msgs.value = [...msgs.value, { at, heard: meta.heard || '', idx: add.map((_, k) => start + k), bad: meta.bad || [], rep: list.length - add.length }]
@@ -233,7 +236,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
       <ul v-if="tx && txFeed.length" class="kbmsg2">          <!-- 25.11.2026: строки — кусок эталона (несказанное размыто), под ним — как сказали, справа — сколько слов куска сказано -->
         <li v-for="(x, k) in txFeed" :key="x.i" class="kbr" :class="{ nw: k === 0 && !done }"><i class="kbrd" />
           <span class="kbrr"><template v-for="(w, j) in x.parts" :key="j"><span :class="w.on ? '' : peek.has(x.i + ':' + j) ? 'pk' : 'kbtxh2'" @click="!w.on && look(x.i + ':' + j)">{{ w.w }}</span>{{ ' ' }}</template></span>
-          <template v-for="pp in [partPct(x.parts)]" :key="'p'"><b v-if="pp" class="kbrp" :class="{ full: pp.p === 100 }" :title="`сказано ${pp.on} из ${pp.n} слов куска — несказанное размыто и в процент не идёт`">{{ pp.on }}/{{ pp.n }} · {{ pp.p }}%</b></template>
+          <b v-if="partShare(x.parts)" class="kbrp full" :title="`этот кусок засчитан — ${partShare(x.parts)}% эталона (из общего процента); несказанные слова в нём только размыты`">+{{ partShare(x.parts) }}%</b>
           <span v-if="x.said" class="kbrs">{{ x.said }}</span></li>
       </ul>
       <ul v-else-if="!tx && got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
