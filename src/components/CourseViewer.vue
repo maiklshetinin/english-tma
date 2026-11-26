@@ -629,7 +629,7 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
 .kbig { display: block; width: 260px; height: 260px; border-radius: 50%; object-fit: cover; background: #000; cursor: pointer; box-shadow: 0 0 0 4px #fff, 0 0 0 7px #2aabee }
 .pbig { display: block; max-width: 100%; max-height: 420px; border-radius: 16px }
 .bead.open { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 0 0 12px color-mix(in srgb, var(--c) 18%, transparent) }
-.cap { flex: 0 1 auto; display: grid; justify-items: start; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 17px; font-weight: 800; color: var(--text); cursor: pointer }
+.cap { flex: 1 1 0; min-width: 0; display: grid; justify-items: start; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; font-size: 17px; font-weight: 800; color: var(--text); cursor: pointer }
 .csub { font-size: 15px; font-weight: 500; color: #3b4048 } .pv .psub { margin: -2px 0 0; font-size: 16px; font-weight: 500; opacity: 1 }
 .cap small { font-size: 14px; font-weight: 500; color: #4b5563 }
 .start { margin-bottom: 4px; padding: 2px 8px; border-radius: 6px; background: var(--c); color: #fff; font-size: 10px; font-weight: 900; text-transform: uppercase }
@@ -748,6 +748,7 @@ html.sim-mobile nav.nav { display: none }
 .rpt.all.due .rpt-t p { color: rgba(255, 255, 255, .85) } .rpt.all.due .rpi { background: rgba(255, 255, 255, .18); box-shadow: none } .rpt.all.due .rpi svg { stroke: #fff }
 .rpn { margin-left: auto; flex: none; display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; box-sizing: border-box; border-radius: 99px; background: #fff; color: #6c3fe0; font-size: 14px; font-weight: 900 }
 /* «С места» (26.11.2026) */
+/* 26.11.2026: длинная плашка «Остановились…» сталкивала подпись под кружок — подпись теперь занимает остаток строки (flex 1, min-width 0), плашка переносится */
 .rsm { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; margin-top: 6px; padding: 4px 9px; border-radius: 9px; background: #fff4e5; color: #b25e00; font-size: 12px; font-weight: 800; line-height: 1.3 }
 .rsm svg { flex: none; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.6 }
 .bead.rs { box-shadow: 0 0 0 3px #fff, 0 0 0 6px #ff9600, 0 0 0 12px rgba(255, 150, 0, .18) } .rsi { fill: currentColor; stroke: none; width: 26px; height: 26px; margin-left: 3px }
