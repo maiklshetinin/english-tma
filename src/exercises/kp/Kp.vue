@@ -605,6 +605,7 @@ function jsApply() {
 .kq { display: flex; align-items: center; gap: 14px; min-height: 84px }
 /* вопрос — как заголовок вопроса в ответах домашки: номер и текст на подложке, звезда наползает слева */
 .kqw { position: relative; flex: 1; min-width: 0; display: flex; align-items: center }
+.kq:has(.kqtx) { min-height: 0 }          /* 26.11.2026: без пустоты под вопросом — ниже сразу эталон / список */
 .kqw.kqtx { align-items: stretch; border-radius: 10px; background: #f2dab5 } .kqw.kqtx .kqt { background: transparent }
 .kqg { flex: none; display: flex; align-items: center; gap: 6px; margin: 6px 0; padding: 0 12px; border-left: 1px solid rgba(123, 66, 36, .18) }
 .kqg svg { width: 34px; height: 19px; overflow: visible } .kqg .tr { fill: none; stroke: rgba(0, 0, 0, .1); stroke-width: 13; stroke-linecap: round }
@@ -811,7 +812,7 @@ function jsApply() {
 /* 22.11.2026: эталон — всплывающая подсказка поверх экрана, места в потоке не занимает */
 .krb { flex: none; margin-left: 6px; height: 34px; padding: 0 12px; border: 0; border-radius: 17px; background: #f2dab5; color: #7b4224; font-family: var(--font); font-size: 13px; font-weight: 800; cursor: pointer }
 .krb:disabled { opacity: .45; cursor: default } .krb.on { background: #e9c99a }
-.krb.kx { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: 12px; background: #f6e2c4; color: #7b4224 } .krb.kx:hover { background: #f0d3a8 }
+.krb.kx { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: 12px; background: #f2dab5; color: #7b4224 } .krb.kx:hover { background: #ebcd9f }          /* 26.11.2026: скрыт — цвет плашки вопроса */
 .kxp { flex: none; margin-left: 6px; padding: 3px 9px; border-radius: 999px; background: #fff6e8; box-shadow: inset 0 0 0 1px #f1dcbc; color: #cd8a30; font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums } .kxp.bad { color: #d92d20 }          /* «· текст»: процент — в строке вопроса */
 .krb.kx.on { background: #7b4224; color: #fff } .krb.kx svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round }
 .krp { position: absolute; left: 0; right: 0; top: calc(100% + 8px); z-index: 20; max-height: 60vh; overflow: auto; box-sizing: border-box; padding: 12px 38px 12px 14px; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(53, 26, 5, .22), 0 0 0 1px #ecd9b8; animation: kdd .18s ease-out }

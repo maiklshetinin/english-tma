@@ -367,7 +367,8 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .th-sphere .kblvf, .th-space .kblvf { color: #cbd5e1 } .th-sphere .kfx s, .th-space .kfx s { background: rgba(229, 72, 77, .15); color: #fca5a5 } .th-sphere .kfx ins, .th-space .kfx ins { background: rgba(26, 127, 75, .25); color: #86efac }
 .kblvl.no li { background: #fff7f5 }
 /* «· текст» (kpblurtext): карточка эталона под размытием */
-.kbtx { margin: 4px 0 12px; padding: 16px 20px 18px; border-radius: 20px; background: #fff6e8; border: 1px solid #f1dcbc; display: flex; flex-direction: column; gap: 12px }
+.kball.tx { margin-top: 10px } .kball.tx .kblv { margin-top: 0 }          /* 26.11.2026: под вопросом зазор 10px */
+.kbtx { margin: 0 0 10px; padding: 16px 20px 18px; border-radius: 20px; background: #fff6e8; border: 1px solid #f1dcbc; display: flex; flex-direction: column; gap: 12px }
 .kbtx.shut { padding-bottom: 14px }
 .kbtxh { display: flex; align-items: center; gap: 14px } .kbtxp { font-size: 34px; font-weight: 900; color: #cd8a30; line-height: 1 } .kbtxp.bad { color: #d92d20 }
 .kbtxb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px } .kbtxb .kbbar { display: block; height: 8px; border-radius: 4px; background: #f4dcb8; overflow: hidden } .kbtxb .kbbar i { display: block; height: 100%; background: #cd8a30; border-radius: 4px; transition: width .4s }
