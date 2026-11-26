@@ -196,10 +196,15 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
     async resume(user: TokenUser, rawId: unknown) {
       const who = await whoOf(user), cid = String(rawId ?? '')
       const items: Record<string, { at: number; fin: boolean; done: string[] }> = {}
-      for (const d of (await logs().where('who', '==', who).get()).docs) {
-        const r = d.data() as RunLog; if (r.course !== cid) continue
-        const p = items[r.item]; if (p && p.at >= r.at) continue
-        items[r.item] = { at: r.at, fin: !!r.fin, done: Object.entries(r.steps ?? {}).filter(([, s]) => s.ok === true || s.ok === false || !!s.x || s.sc != null || (s.t ?? 0) > 0).map(([id]) => id) }
+      // 26.11.2026: «Продолжить с N-го» — новый заход, в нём только экраны с N-го. Поэтому сделанное берём из всех заходов после последнего
+      // законченного (fin), а не из одного последнего: открыл и сразу вышел — место не теряется
+      const runs = (await logs().where('who', '==', who).get()).docs.map((d) => d.data() as RunLog).filter((r) => r.course === cid).sort((a, b) => b.at - a.at)
+      const stop = new Set<string>()
+      for (const r of runs) {
+        if (stop.has(r.item)) continue
+        const p = items[r.item] ??= { at: r.at, fin: !!r.fin, done: [] }
+        if (r.fin) { stop.add(r.item); continue }
+        for (const [id, s] of Object.entries(r.steps ?? {})) if ((s.ok === true || s.ok === false || !!s.x || s.sc != null || (s.t ?? 0) > 0) && !p.done.includes(id)) p.done.push(id)
       }
       return { items }
     },

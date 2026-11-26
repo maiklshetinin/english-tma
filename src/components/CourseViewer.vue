@@ -361,7 +361,7 @@ const resumeSrv = ref({}), resumeLoc = reactive({})
 async function loadResume() {
   if (props.of || !props.id) return
   try {
-    if (online) { const r = await apiRequest(`/my/courses/${props.id}/resume`); resumeSrv.value = r?.items ?? {}; return }
+    if (online) { const r = await apiRequest(`/my/courses/${props.id}/resume`); resumeSrv.value = r?.ok ? (await r.json()).items ?? {} : {}; return }          // 26.11.2026: был ответ без .json() — после перезагрузки «с места» пропадало
     const m = {}; for (const r of readLocal()) if (r.course === props.id && (!m[r.item] || m[r.item].at < r.at)) m[r.item] = { at: r.at, fin: !!r.fin, done: (r.steps ?? []).filter(isDone).map((s) => String(s.id)) }
     resumeSrv.value = m
   } catch { /* нет журнала — просто без «с места» */ }
