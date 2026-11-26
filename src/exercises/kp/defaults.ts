@@ -159,7 +159,7 @@ function kpCode(s: any): KpCfg {
   return o
 }
 /** шаблон экрана — по нему настройки курса (presets) */
-export const kpTpl = (s: any) => (s?.ballLive === true ? (s?.ballText === true ? (s?.ballFlow === true ? 'kpballflow' : s?.ballSess === true ? 'kpballsess' : 'kpballtext') : s?.ballFix === true ? 'kpballfix' : s?.ballV2 === true ? 'kpballive2' : 'kpballive') : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
+export const kpTpl = (s: any) => (s?.ballLive === true ? (s?.ballText === true ? (s?.ballFlow === true ? 'kpblurtext3' : s?.ballSess === true ? 'kpblurtext2' : 'kpblurtext') : s?.ballFix === true ? 'kpballfix' : s?.ballV2 === true ? 'kpballive2' : 'kpballive') : kpApi(s) ? 'kpapi' : kpFile(s) ? 'kpfile' : 'kp')          // шар Live — свои настройки курса (25.11.2026)
 /** Действующие настройки экрана: умолчания кода ← настройки упражнения в курсе ← свои поля экрана */
 export function kpCfg(s: any): KpCfg {
   const mine: any = {}

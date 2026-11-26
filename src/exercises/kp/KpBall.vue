@@ -18,7 +18,7 @@ const THEMES_OLD = [{ k: 'sphere', t: 'Сфера' }, { k: 'white', t: 'Бела
 // «Шар Live · новый вид» (ballV2, 25.11.2026, макет «Шар Live — экран ответа»): три темы на весь экран — коричневая, светлая, чёрная (= «Сфера»);
 // по умолчанию чёрная (плитку видно среди остальных), помнится отдельно от старого шара
 const v2 = computed(() => !!props.step.ballV2)
-// «Шар Live · текст» (ballText, kpballtext, 25.11.2026, макет «Без шара»): шара нет — эталон текстом под размытием; проявляются только
+// «Шар Live · текст» (ballText, kpblurtext, 25.11.2026, макет «Без шара»): шара нет — эталон текстом под размытием; проявляются только
 // сказанные слова (saidCover: кусок от модели длиннее сказанного — лишнее размыто и в процент не идёт). Текст можно свернуть (помнится).
 // Засчитанное без речи отсекает openBallLive (guard). Тема — коричневая
 const tx = computed(() => !!props.step.ballText)
@@ -363,7 +363,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
 .kfx ins { text-decoration: none; color: #1a7f4b; font-weight: 800; font-size: 13.5px; padding: 0 4px; border-radius: 4px; background: #e3f6ea }
 .th-sphere .kblvf, .th-space .kblvf { color: #cbd5e1 } .th-sphere .kfx s, .th-space .kfx s { background: rgba(229, 72, 77, .15); color: #fca5a5 } .th-sphere .kfx ins, .th-space .kfx ins { background: rgba(26, 127, 75, .25); color: #86efac }
 .kblvl.no li { background: #fff7f5 }
-/* «· текст» (kpballtext): карточка эталона под размытием */
+/* «· текст» (kpblurtext): карточка эталона под размытием */
 .kbtx { margin: 4px 0 12px; padding: 16px 20px 18px; border-radius: 20px; background: #fff6e8; border: 1px solid #f1dcbc; display: flex; flex-direction: column; gap: 12px }
 .kbtx.shut { padding-bottom: 14px }
 .kbtxh { display: flex; align-items: center; gap: 14px } .kbtxp { font-size: 34px; font-weight: 900; color: #cd8a30; line-height: 1 } .kbtxp.bad { color: #d92d20 }

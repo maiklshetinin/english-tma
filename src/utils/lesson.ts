@@ -222,9 +222,9 @@ export const TEMPLATES: { id: string; kind: StepKind; t: string; d: string; make
   { id: 'kpball', kind: 'kp', t: 'Ответ по смыслу · шар', d: 'Шар смысловых блоков · тест', make: () => ({ ...fishStep('kp'), ball: true }) },          // 24.11.2026, тест: utils/kpball.js, exercises/kp/KpBall.vue
   { id: 'kpballive', kind: 'kp', t: 'Ответ по смыслу · шар Live', d: 'Шар слушает сам через Live, без моста · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true }) },
   { id: 'kpballive2', kind: 'kp', t: 'Шар Live · новый вид', d: 'Вопрос и процент в окне шара, три темы · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true, ballV2: true }) },          // 25.11.2026, тест: макет «Шар Live — экран ответа»          // 24.11.2026, тест: utils/kpball.js (openBallLive), exercises/kp/KpBall.vue
-  { id: 'kpballtext', kind: 'kp', t: 'Live · текст под блюром', d: 'Эталон под размытием — открываются только сказанные слова; без речи — отсекается · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true, ballText: true }) },          // 25.11.2026, макет «Без шара»
-  { id: 'kpballsess', kind: 'kp', t: 'Live · текст под блюром · сессия на реплику', d: 'То же, но каждое нажатие — своя Live-сессия: нажал — открылась, ответила — закрылась · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true, ballText: true, ballSess: true }) },          // 26.11.2026
-  { id: 'kpballflow', kind: 'kp', t: 'Live · текст под блюром · поток', d: 'Микрофон включается один раз — говоришь подряд, Live засчитывает по паузам; отрезки проверяются фильтрами · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true, ballText: true, ballFlow: true }) },          // 26.11.2026
+  { id: 'kpblurtext', kind: 'kp', t: 'Live · текст под блюром', d: 'Эталон под размытием — открываются только сказанные слова; без речи — отсекается · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true, ballText: true }) },          // 25.11.2026, макет «Без шара»
+  { id: 'kpblurtext2', kind: 'kp', t: 'Live · текст под блюром · сессия на реплику', d: 'То же, но каждое нажатие — своя Live-сессия: нажал — открылась, ответила — закрылась · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true, ballText: true, ballSess: true }) },          // 26.11.2026
+  { id: 'kpblurtext3', kind: 'kp', t: 'Live · текст под блюром · поток', d: 'Микрофон включается один раз — говоришь подряд, Live засчитывает по паузам; отрезки проверяются фильтрами · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true, ballText: true, ballFlow: true }) },          // 26.11.2026
   { id: 'kpballfix', kind: 'kp', t: 'Шар Live · разбор ошибок', d: 'Как новый вид + ошибки зачёркнуты, сверху — как правильно · тест', make: () => ({ ...fishStep('kp'), ball: true, ballLive: true, ballV2: true, ballFix: true }) },          // 25.11.2026, тест: cover присылает ещё fix (exercises/kp/defaults.ts BALL3)
   { id: 'kpapi', kind: 'kp', t: 'Ответ по смыслу · Gemini API', d: 'Без моста, напрямую · тест', make: () => ({ ...fishStep('kp'), engine: 'api' }) },          // 20.11.2026, эксперимент: utils/kpcheck.js
   { id: 'talk', kind: 'talk', t: 'Разговор с Gemini', d: 'Живой диалог голосом', make: () => fishStep('talk') },          // 20.11.2026, эксперимент: Live API
@@ -278,7 +278,7 @@ for (const id of BOOK_TPL) {
 export const SKILL_T: Record<string, string> = { L: 'Слух', R: 'Чтение', W: 'Письмо', S: 'Речь' }
 /** Цвета тегов — как плашки в меню упражнений (.chip.L … в CourseEditor / LessonRail) */
 export const SKILL_C: Record<string, string> = { L: '#1cb0f6', R: '#a560e8', W: '#ff9600', S: '#58cc02' }
-export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpfile: ['S'], kpball: ['S'], kpballive: ['S'], kpballive2: ['S'], kpballfix: ['S'], kpballtext: ['S'], kpballsess: ['S'], kpballflow: ['S'], kpapi: ['S'], talk: ['S', 'L'], talkava: ['S', 'L'], talkptt: ['S', 'L'], talkptt2: ['S', 'L'], talkvn: ['S', 'L'], talkexam: ['S', 'L'], es_talk: ['S', 'L'], es_talkptt: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
+export const SKILLS: Record<string, string[]> = { choice: ['L'], audiotest: ['L'], pairs: ['R'], sayword: ['S'], fill: ['L'], type: ['W'], order: ['W'], answer: ['S', 'W'], kp: ['S'], kpfile: ['S'], kpball: ['S'], kpballive: ['S'], kpballive2: ['S'], kpballfix: ['S'], kpblurtext: ['S'], kpblurtext2: ['S'], kpblurtext3: ['S'], kpapi: ['S'], talk: ['S', 'L'], talkava: ['S', 'L'], talkptt: ['S', 'L'], talkptt2: ['S', 'L'], talkvn: ['S', 'L'], talkexam: ['S', 'L'], es_talk: ['S', 'L'], es_talkptt: ['S', 'L'], stt: ['S'], translate: ['W'], brackets: ['W'], sort: ['W'], odd: ['R'], bkword: ['W'], bkpick: ['R'], bkpic: ['R'], bkqa: ['W'], bkfree: ['W'] }
 for (const id of BOOK_TPL) SKILLS['pg_' + id] = SKILLS[id]
 for (const id of MF_IDS) SKILLS[id] = id === 'mfinfo' || id === 'mf314' ? ['R'] : ['W']          // «Учебник 1:1» — те же навыки
 /** Какой это шаблон из меню «Exercise» (TEMPLATES) — по типу экрана и его настройкам: для миниатюры и тегов на ветке урока */
@@ -286,19 +286,15 @@ for (const id of MF_IDS) SKILLS[id] = id === 'mfinfo' || id === 'mf314' ? ['R'] 
 // Карта поляка (Ответ по смыслу, разговоры, транскрипция) — польский; рация Busuu — английский; es_… — испанский. Остальные (choice, pairs…) — без языка, как были.
 // Внутри (экраны в курсах, пресеты в базе) — прежние ID без языка (kp, talkptt-1): старые курсы и JSON читаются как раньше.
 export type TplLang = 'pl' | 'en' | 'es' | ''
-const PL_TPL = new Set(['kp', 'kpfile', 'kpball', 'kpballive', 'kpballive2', 'kpballfix', 'kpballtext', 'kpballsess', 'kpballflow', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkvn', 'talkexam', 'stt'])
+const PL_TPL = new Set(['kp', 'kpfile', 'kpball', 'kpballive', 'kpballive2', 'kpballfix', 'kpblurtext', 'kpblurtext2', 'kpblurtext3', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkvn', 'talkexam', 'stt'])
 export const tplLang = (id: string): TplLang => (id.startsWith('es_') ? 'es' : PL_TPL.has(id) ? 'pl' : id === 'talkptt2' ? 'en' : '')
 /** ID шаблона → ID с языком: kp → pl-kp, es_talk → es-talk, talkptt2 → en-talkptt2; без ИИ — как есть (choice) */
-// 26.11.2026: у трёх «текстов под блюром» — понятные ID для тега и JSON (pl-kpblurtext, …2, …3); внутри (настройки курса, сервер) — прежние,
-// старые ID в JSON-файлах (pl-kpballtext и т. д.) тоже принимаются
-const SHOW_ID: Record<string, string> = { kpballtext: 'kpblurtext', kpballsess: 'kpblurtext2', kpballflow: 'kpblurtext3' }
-const FROM_SHOW: Record<string, string> = Object.fromEntries(Object.entries(SHOW_ID).map(([a, b]) => [b, a]))
-export const typeId = (id: string) => (id.startsWith('es_') ? 'es-' + id.slice(3) : tplLang(id) ? tplLang(id) + '-' + (SHOW_ID[id] ?? id) : id)
+export const typeId = (id: string) => (id.startsWith('es_') ? 'es-' + id.slice(3) : tplLang(id) ? tplLang(id) + '-' + id : id)
 /** «pl-kp», «es-talkptt», старое «kp» → ID шаблона; язык не тот — null */
 export function tplFromType(t: string): string | null {
   const m = /^(pl|en|es)-(.+)$/.exec(String(t))
-  if (!m) { const id0 = FROM_SHOW[t] ?? t; return TEMPLATES.some((x) => x.id === id0) ? id0 : null }
-  const id = m[1] === 'es' ? 'es_' + m[2] : FROM_SHOW[m[2]] ?? m[2]
+  if (!m) return TEMPLATES.some((x) => x.id === t) ? t : null
+  const id = m[1] === 'es' ? 'es_' + m[2] : m[2]
   return TEMPLATES.some((x) => x.id === id) && tplLang(id) === m[1] ? id : null
 }
 export function tplOf(s: Step): string {
@@ -308,7 +304,7 @@ export function tplOf(s: Step): string {
   // а в меню и на ветке — «Собери фразу» и «Повтори слово»
   if (s.kind === 'order') return 'order'
   if (s.kind === 'speak') return 'sayword'
-  if (s.kind === 'kp' && s.ball && s.ballLive) return s.ballText ? (s.ballFlow ? 'kpballflow' : s.ballSess ? 'kpballsess' : 'kpballtext') : s.ballFix ? 'kpballfix' : s.ballV2 ? 'kpballive2' : 'kpballive'
+  if (s.kind === 'kp' && s.ball && s.ballLive) return s.ballText ? (s.ballFlow ? 'kpblurtext3' : s.ballSess ? 'kpblurtext2' : 'kpblurtext') : s.ballFix ? 'kpballfix' : s.ballV2 ? 'kpballive2' : 'kpballive'
   if (s.kind === 'kp' && s.ball) return 'kpball'
   if (s.kind === 'kp' && (s.engine === 'api' || s.engine === 'live')) return 'kpapi'
   if (s.kind === 'talk' && s.lang === 'es-ES') return s.ptt ? 'es_talkptt' : 'es_talk'          // испанский — свой тип (24.11.2026)

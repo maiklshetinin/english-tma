@@ -178,7 +178,7 @@ export function refCover(ideal, refs) {
   const pct = words.length ? Math.round((hit.filter(Boolean).length / words.length) * 100) : 0
   return { pct, hit, words, missed, placed }
 }
-/** «Шар Live · текст» (kpballtext, 25.11.2026): засчитываются только СКАЗАННЫЕ слова. Кусок (ref) ищем в эталоне как refCover,
+/** «Шар Live · текст» (kpblurtext, 25.11.2026): засчитываются только СКАЗАННЫЕ слова. Кусок (ref) ищем в эталоне как refCover,
  *  но из его слов открываем лишь те, чьи основы есть в said (что сказал ученик): модель вернула кусок длиннее сказанного — лишнее
  *  остаётся размытым и в процент не идёт. said пустой — как раньше, весь кусок. → { pct, hit, words, missed, items: [{ idx: [номера слов эталона], parts: [{ w, on }] }] } */
 const NUM_W = ['jed', 'jeden', 'dwa', 'dwie', 'dwu', 'dwó', 'trz', 'czt', 'czw', 'pię', 'pią', 'sze', 'szó', 'sie', 'sió', 'osi', 'ósm', 'dzi', 'set', 'tys', 'pierw', 'drug', 'trze', 'dwud', 'trzyd', 'jedena', 'dwuna', 'kilk']          // начала польских числительных
@@ -210,7 +210,7 @@ export function saidCover(ideal, found) {
 /** Live-сессия шара. system, tool — из JSON экрана; onCover([{ ref, said }]) — найденные куски эталона; onTurn() — модель договорила.
  *  → { send(text), stop(), alive, model }. Сообщения до готовности сессии ждут в очереди */
 const liveSessions = {}          // id экрана → api открытой Live-сессии (микрофон диктовки берёт её же)
-export function openBallLive({ id, question, ideal, system, tool, fix = false, guard = false, fresh = false, perTurn = false, flow = false, extra = null, onCover, onTurn }) {          // flow — «· поток» (kpballflow, 26.11.2026): микрофон включён один раз, Live сам режет речь по паузам; каждый отрезок проверяем фильтрами          // perTurn — «· сессия на реплику» (kpballsess, 26.11.2026): нажал микрофон — сессия открылась, ответила — закрылась          // fresh — «· текст» (25.11.2026): после каждого ответа связь рвём и открываем новую — один запрос, один ответ          // guard — «· текст» (25.11.2026): засчитанное без речи отсекаем (см. ниже)          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
+export function openBallLive({ id, question, ideal, system, tool, fix = false, guard = false, fresh = false, perTurn = false, flow = false, extra = null, onCover, onTurn }) {          // flow — «· поток» (kpblurtext3, 26.11.2026): микрофон включён один раз, Live сам режет речь по паузам; каждый отрезок проверяем фильтрами          // perTurn — «· сессия на реплику» (kpblurtext2, 26.11.2026): нажал микрофон — сессия открылась, ответила — закрылась          // fresh — «· текст» (25.11.2026): после каждого ответа связь рвём и открываем новую — один запрос, один ответ          // guard — «· текст» (25.11.2026): засчитанное без речи отсекаем (см. ниже)          // system, tool — из JSON экрана (ballPrompt с подставленными вопросом и эталоном, ballTool); onCover([{ ref, said }])
   const n = netOf(id), key = firstKey()
   if (!key) throw new Error('Нужен ключ Gemini в профиле')
   let sess = null, ready = false, closed = false, modelName = '', modelId = '', t0 = Date.now()
@@ -226,7 +226,7 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
   // Голоса меньше 0,3 с — модель НЕ спрашиваем (в тишине она подсовывала кусок эталона): связь закрываем, открываем новую
   let voiceMs = 0, lvAt = 0, lvMax = 0, lvs = [], lastVoice = 0, mute = false, answered = true, loops = 0          // answered — на эту реплику модель уже ответила (до первой реплики — тоже: «от себя» не принимаем)          // mute — реплика была тишиной: её ответ отбрасываем (26.11.2026: одна сессия на экран, без пересоздания)          // lvs — [громкость, мс] за реплику: шум на iPhone (автоусиление) выше 6 % — голос считаем над «полом» шума
   const QUIET_MS = 300
-  // guard (kpballtext, 25.11.2026, v2): модель иногда сама «выплёвывает» засчитанное, когда ученик ничего не говорил. Принимаем куски
+  // guard (kpblurtext, 25.11.2026, v2): модель иногда сама «выплёвывает» засчитанное, когда ученик ничего не говорил. Принимаем куски
   // только в окне реплики: микрофон включён, или его выключили и ждём ответ (wait), или 3,5 с после ответа (hearUntil) — как устроено у
   // «нового вида». Вне окна (никто не нажимал микрофон) — отсекаем и пишем в журнал. Голос и расшифровку больше не требуем: у Live в этом
   // режиме их может не быть (v1 из-за этого отсекала настоящие ответы)
