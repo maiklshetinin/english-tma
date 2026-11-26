@@ -130,7 +130,7 @@ const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 function qnOf(x, u) {
   if (u?.qn === 'off' || !ready(x)) return ''
   const ns = stepsOf(x).map((s) => Number(s?.n)).filter((v) => Number.isFinite(v) && v > 0); if (!ns.length) return ''
-  const u2 = [...new Set(ns)]          // в порядке экранов урока (26.11.2026: переставили 2, 1 — так и пишем)
+  const u2 = ns          // в порядке экранов урока, повторы тоже (26.11.2026: 2, 1 и 1, 2, 1 — так и пишем)
   if (u2.length === 1) return `вопрос ${u2[0]}`
   return u2.every((v, k) => !k || v === u2[k - 1] + 1) ? `вопросы ${u2[0]}–${u2.at(-1)}` : `вопросы ${u2.join(', ')}`          // подряд по возрастанию — «1–5», иначе как идут — «2, 1», «2, 5, 9»
 }

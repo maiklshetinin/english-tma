@@ -1385,7 +1385,7 @@ const chMenu = ref(null)                 // открытый список в м�
 const qnOffIds = computed(() => { const out = new Set(); let off = false; for (const x of order.value) { if (x.type === 'unit') off = x.qn === 'off'; else if (off) out.add(x.id) } return out })
 function qnEd(x) {
   if (!INTERACTIVE.includes(x.type) || !x.steps?.length || qnOffIds.value.has(x.id)) return ''
-  const ns = x.steps.map((s) => Number(s?.n)).filter((v) => Number.isFinite(v) && v > 0), u2 = [...new Set(ns)], no = x.steps.length - ns.length          // в порядке экранов на ветке
+  const ns = x.steps.map((s) => Number(s?.n)).filter((v) => Number.isFinite(v) && v > 0), u2 = ns, no = x.steps.length - ns.length          // в порядке экранов на ветке, повторы тоже
   const q = !u2.length ? '' : u2.length === 1 ? `вопрос ${u2[0]}` : u2.every((v, k) => !k || v === u2[k - 1] + 1) ? `вопросы ${u2[0]}–${u2.at(-1)}` : `вопросы ${u2.join(', ')}`
   return [q, u2.length && no ? `${no} без №` : ''].filter(Boolean).join(' · ')
 }
