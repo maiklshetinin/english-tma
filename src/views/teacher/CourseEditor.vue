@@ -1381,6 +1381,14 @@ const chMenu = ref(null)                 // открытый список в м�
 // вид подсветки: 'rail' — рельс главы, 'wide' — с ветками, 'none' — без подсветки; цвет — отдельно
 // 25.11.2026: как ученик видит уроки Chapter — кружками (как было) или квадратиками, как иконки iPhone; линия-путь та же
 // Кружки / Квадратики главы (25.11.2026): и на доске редактора уроки и чекпоинт главы — квадратиками
+// «№ вопросов» (26.11.2026): и в редакторе под уроком — те же «вопросы 1–5», живьём по экранам ветки; экраны без номера (n) — «N без №», чтобы сразу видно, откуда цифры
+const qnOffIds = computed(() => { const out = new Set(); let off = false; for (const x of order.value) { if (x.type === 'unit') off = x.qn === 'off'; else if (off) out.add(x.id) } return out })
+function qnEd(x) {
+  if (!INTERACTIVE.includes(x.type) || !x.steps?.length || qnOffIds.value.has(x.id)) return ''
+  const ns = x.steps.map((s) => Number(s?.n)).filter((v) => Number.isFinite(v) && v > 0), u2 = [...new Set(ns)].sort((p, q) => p - q), no = x.steps.length - ns.length
+  const a = u2[0], b = u2.at(-1), q = !u2.length ? '' : u2.length === 1 ? `вопрос ${a}` : b - a === u2.length - 1 ? `вопросы ${a}–${b}` : `вопросы ${u2.join(', ')}`
+  return [q, u2.length && no ? `${no} без №` : ''].filter(Boolean).join(' · ')
+}
 const sqIds = computed(() => { const out = new Set(); let on = false; for (const x of order.value) { if (x.type === 'unit') on = x.look === 'sq'; else if (on) out.add(x.id) } return out })
 function setRs(u) { if (u.rs === 'off') delete u.rs; else u.rs = 'off'; save() }          // 26.11.2026: урок оборвался — у ученика «продолжить с места» (вкл / выкл)
 function setQn(u) { if (u.qn === 'off') delete u.qn; else u.qn = 'off'; save() }          // 26.11.2026: номера вопросов серой строкой под уроками у ученика — вкл / выкл
@@ -1945,7 +1953,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <video v-if="x.type === 'video' && x.file && mediaUrl({ file: x.file })" :src="mediaUrl({ file: x.file })" class="vid" muted loop playsinline preload="metadata" />
               <img v-else-if="x.type === 'photo' && x.file && mediaUrl({ file: x.file })" :src="mediaUrl({ file: x.file })" class="vid img" alt="" draggable="false" />
               <svg v-if="!MEDIA.includes(x.type) || !x.file || !mediaUrl({ file: x.file })" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
-              <em class="cap">{{ x.title }}<small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : '', INTERACTIVE.includes(x.type) ? topicLbl(x) : ''].filter(Boolean).join(' · ') }}</small></em>
+              <em class="cap">{{ x.title }}<small>{{ [T[x.type].t, qnEd(x), x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : '', INTERACTIVE.includes(x.type) ? topicLbl(x) : ''].filter(Boolean).join(' · ') }}</small></em>
             </template>
           </div>
         </template>
@@ -1969,7 +1977,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <button class="cbw" :class="{ on: x.look !== 'sq' }" title="Уроки у ученика — кружками" @click="setLook(x, '')">Кружки</button>
               <button class="cbw" :class="{ on: x.look === 'sq' }" title="Уроки у ученика — квадратиками, как иконки iPhone (фото влезает целиком)" @click="setLook(x, 'sq')">Квадратики</button>
               <i class="nb-s" />
-              <button class="cbw" :class="{ on: x.qn !== 'off' }" title="Под уроками у ученика — серой строкой номера вопросов из урока («вопросы 1–5»). Нажать — выключить / включить" @click="setQn(x)">№ вопросов</button>
+              <button class="cbw" :class="{ on: x.qn !== 'off' }" title="Номера вопросов серой строкой под уроками — у ученика и здесь, в редакторе: берутся сами из номера экрана (поле n, «10.» перед вопросом). По порядку — «вопросы 1–5», вразброс — «вопросы 2, 5, 9». Экраны без номера здесь видно как «1 без №» (ученику не показываем). Нажать — выключить / включить" @click="setQn(x)">№ вопросов</button>
               <button class="cbw" :class="{ on: x.rs !== 'off' }" title="Урок оборвался — у ученика под ним «Остановились: упражнение N из M», нажал на урок — «Продолжить с N-го» или «Заново». Нажать — выключить / включить" @click="setRs(x)">С места</button>
             </div>
             <!-- правка прямо в заголовке: курсор в тексте; ✓ (или Enter, или нажатие мимо) — готово, Esc — вернуть как было -->
@@ -1987,7 +1995,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
             <svg v-if="!covK(x) || !mediaUrl(x)" viewBox="0 0 24 24" class="ic" v-html="T[x.type].ic" />
             <svg v-if="stateOf(x, i) === 'done'" viewBox="0 0 24 24" class="ok"><circle cx="12" cy="12" r="11" /><path d="M7 12.3l3.2 3.2 6.3-6.8" /></svg>
             <em class="cap"><span v-if="stateOf(x, i) === 'current'" class="start">Сейчас</span><template v-if="renaming === x.id && !peekOf(x)"><span class="rrow lren" @pointerdown.stop><input v-model="x.title" :data-ren="x.id" class="rin" placeholder="Название урока" @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><button class="upen fin-ok" title="Готово (Enter) · Esc — отменить" @pointerdown.prevent @click.stop="renameDone"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></button></span><input v-if="INTERACTIVE.includes(x.type)" v-model="x.sub" class="rin sub lren" placeholder="о чём урок, например: знакомство и приветствия" @pointerdown.stop @keydown.enter="renameDone" @keydown.esc="renameCancel" @blur="blurRen" @input="save" /><select v-if="INTERACTIVE.includes(x.type)" class="rin tsel lren" title="Тема грамматики — для вкладки Review «Грамматика и навыки»" :value="x.topic ?? ''" @pointerdown.stop @change="setTopic(x, $event.target.value)" @keydown.esc="renameCancel" @blur="blurRen"><option value="">Тема: авто — {{ detectTopic(x.title)?.t ?? 'не нашлась по названию' }}</option><option value="none">Без темы грамматики</option><optgroup v-for="lv in TLVLS" :key="lv" :label="lv"><option v-for="t in TOPICS.filter(t => t.lvl === lv)" :key="t.id" :value="t.id">{{ t.t }}</option></optgroup></select></template>
-              <template v-else><span class="ctl">{{ x.title }}<button class="upen" title="Переименовать урок" @pointerdown.stop @dblclick.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button></span><span v-if="x.sub" class="csub">{{ x.sub }}</span></template><small>{{ [T[x.type].t, x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
+              <template v-else><span class="ctl">{{ x.title }}<button class="upen" title="Переименовать урок" @pointerdown.stop @dblclick.stop @click.stop="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button></span><span v-if="x.sub" class="csub">{{ x.sub }}</span></template><small>{{ [T[x.type].t, qnEd(x), x.steps?.length ? screens(x.steps.length) : '', x.steps?.length ? `≈ ${lessonMin(x.steps)} мин` : ''].filter(Boolean).join(' · ') }}</small></em>
             <!-- обложка выбранного урока: фото или кружок, как в Busuu -->
             <div v-if="sel === x.id && BRANCH.includes(x.type) && !drag.on" class="cov" @pointerdown.stop @dblclick.stop>
               <button title="Переименовать (Enter)" @click="rename(x)"><svg viewBox="0 0 24 24"><path d="M14.6 6.1l3.3 3.3" /><path d="M4.5 19.5l.8-3.9 10.4-10.4a2 2 0 0 1 2.9 0l.2.2a2 2 0 0 1 0 2.9L8.4 18.7z" /></svg></button>
@@ -2033,7 +2041,7 @@ async function reset() { if (!(await ask('Вернуть пример курса
               <button class="cbw" :class="{ on: x.look !== 'sq' }" title="Уроки у ученика — кружками" @click="setLook(x, '')">Кружки</button>
               <button class="cbw" :class="{ on: x.look === 'sq' }" title="Уроки у ученика — квадратиками, как иконки iPhone (фото влезает целиком)" @click="setLook(x, 'sq')">Квадратики</button>
               <i class="nb-s" />
-              <button class="cbw" :class="{ on: x.qn !== 'off' }" title="Под уроками у ученика — серой строкой номера вопросов из урока («вопросы 1–5»). Нажать — выключить / включить" @click="setQn(x)">№ вопросов</button>
+              <button class="cbw" :class="{ on: x.qn !== 'off' }" title="Номера вопросов серой строкой под уроками — у ученика и здесь, в редакторе: берутся сами из номера экрана (поле n, «10.» перед вопросом). По порядку — «вопросы 1–5», вразброс — «вопросы 2, 5, 9». Экраны без номера здесь видно как «1 без №» (ученику не показываем). Нажать — выключить / включить" @click="setQn(x)">№ вопросов</button>
               <button class="cbw" :class="{ on: x.rs !== 'off' }" title="Урок оборвался — у ученика под ним «Остановились: упражнение N из M», нажал на урок — «Продолжить с N-го» или «Заново». Нажать — выключить / включить" @click="setRs(x)">С места</button>
             </div>
             <!-- правка прямо в заголовке: курсор в тексте; ✓ (или Enter, или нажатие мимо) — готово, Esc — вернуть как было -->
