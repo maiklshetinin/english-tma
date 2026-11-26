@@ -26,6 +26,7 @@ export interface Opt { w: string; t?: string; image?: string; audio?: string; k?
 export interface SortItem { w: string; c: number; k?: string; a?: string; ex?: boolean }          // «Заполни таблицу» (tw): a — что вписать (bag → bags, варианты через /), ex — образец (зачёркнут в банке, вписан в таблицу)
 export interface Pair { a: string; b: string }
 export interface Step {
+  src?: Record<string, unknown>;          // 26.11.2026: «Исходник» — объект экрана, как его перетащили / вставили JSON-ом
   id: string; kind: StepKind
   word?: string; tr?: string; ex?: string; exTr?: string            // «Новое слово»
   image?: string; audio?: string; video?: string; exAudio?: string   // свои файлы или из карточки (в «Выбери ответ» audio — свой звук вопроса; exAudio — озвучка примера)
@@ -492,7 +493,7 @@ export function keepLocalFiles(incoming: Step[] | undefined, local: Step[] | und
 // ---------- JSON экранов (17.11.2026): скопировать экран как JSON (образец для ИИ, обмен) и собрать экраны из JSON ----------
 /** Экран → JSON для копирования: без id и без файлов «только в этом браузере» */
 export function stepJson(s: Step): Omit<Step, 'id'> {
-  const { id: _id, ...rest } = stepsOut([s])[0]
+  const { id: _id, src: _src, ...rest } = stepsOut([s])[0] as any          // src — «Исходник», в правке JSON не показываем (свой вид справа)
   // 23.11.2026: как на плитке — у «Ответа по смыслу» и «Разговора» все настройки упражнения с действующими значениями
   // (своё экрана ← курс ← умолчание): видно, что можно поменять. «Применить» оставит у экрана только то, что отличается от курса
   // (kpFields / talkFields) — не трогали, значит экран и дальше берёт общее из курса
@@ -514,6 +515,7 @@ export function applyStepJson(s: Step, text: string): string {
   const r = stepsFromJson(text)
   if (!r?.steps.length) return 'Экран не собрался — проверьте поля'
   const ns: any = r.steps[0], old: any = s
+  if (old.src) ns.src = old.src; else delete ns.src          // «Исходник» — как пришёл при перетаскивании, правка JSON его не меняет
   for (const k of ['image', 'audio', 'video', 'exAudio']) if (typeof old[k] === 'string' && /^(idb|blob):/.test(old[k]) && raw[k] === old[k]) ns[k] = old[k]
   for (const k of Object.keys(old)) if (k !== 'id') delete old[k]
   Object.assign(old, { ...ns, id: s.id })
@@ -636,6 +638,7 @@ export function stepsFromJson(text: string): { steps: Step[]; bad: number } | nu
   const list0 = Array.isArray(v) ? v : Array.isArray(v?.steps) ? v.steps : v?.kind || v?.type ? [v] : null
   const list = list0?.map((o: any) => (root && o && typeof o === 'object' && !o.kind && !o.type ? { ...o, type: root } : o))
   if (!list?.length || !list.some((o: any) => o?.kind || o?.type)) return null
-  const steps = list.map(stepFrom).filter(Boolean) as Step[]
+  // 26.11.2026: «Исходник» — каждому экрану его объект ровно как пришёл (перетащили / вставили JSON): окно JSON показывает его как есть
+  const steps = list.map((o: any, k: number) => { const s: any = stepFrom(o); const raw = list0?.[k]; if (s && raw && typeof raw === 'object' && !Array.isArray(raw) && JSON.stringify(raw).length <= 8000) s.src = JSON.parse(JSON.stringify(raw)); return s }).filter(Boolean) as Step[]
   return { steps: steps.slice(0, STEPS_MAX), bad: list.length - steps.length }
 }

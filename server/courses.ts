@@ -56,6 +56,7 @@ export function makeCourses({ db, FieldValue }: CoursesDeps) {
     const o: Step = { id: String(r.id), kind }
     if (kind === 'intro') { for (const k of ['word', 'tr']) put(o, k, str(r[k], 120)); for (const k of ['ex', 'exTr']) put(o, k, str(r[k], 300)) }
     for (const k of ['image', 'audio', 'video', 'exAudio']) put(o, k, ref(r[k]))
+    if (r.src && typeof r.src === 'object' && !Array.isArray(r.src)) { const j = JSON.stringify(r.src); if (j.length <= 8000) o.src = JSON.parse(j) }          // 26.11.2026: «Исходник» — JSON экрана, как его перетащили на доску
     if (typeof r.bk === 'string' && /^[a-z]{2,12}$/.test(r.bk)) o.bk = r.bk
     if (r.bs === 'page') o.bs = 'page'          // вид «Как в учебнике» (страница); без него — Настин
     if (Number.isInteger(r.bn) && (r.bn as number) > 0 && (r.bn as number) < 100) o.bn = r.bn          // номер задания, как в учебнике          // из какого задания учебника (группа «Тест · упражнения Насти»)

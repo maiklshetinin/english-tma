@@ -94,5 +94,8 @@ defineExpose({ focus, goLine })
 .jx :deep(.ln.bad)::before { color: #d92d20; font-weight: 800 }
 .jx :deep(.jk) { color: #185fa5 } .jx :deep(.js) { color: #3b6d11 } .jx :deep(.jn) { color: #ba7517 } .jx :deep(.jl) { color: #9747ff }
 .jx :deep(.jp) { color: #c2410c; font-weight: 700 }
+.jx.vs { background: linear-gradient(90deg, #f3ecd8 var(--gut), #fdf6e3 var(--gut)); border-color: #e6dfc8 } .jx.vs pre { color: #657b83 } .jx.vs textarea { caret-color: #073642 }          /* «Как VS Code» — Solarized Light (26.11.2026) */
+.jx.vs textarea::selection { background: rgba(147, 161, 161, .3) } .jx.vs :deep(.ln)::before { color: #b8b0a0 } .jx.vs:focus-within { border-color: #93c5fd }
+.jx.vs :deep(.jk) { color: #268bd2 } .jx.vs :deep(.js) { color: #2aa198 } .jx.vs :deep(.jn) { color: #d33682 } .jx.vs :deep(.jl) { color: #cb4b16 } .jx.vs :deep(.jp) { color: #b58900 }
 .jx.dark :deep(.jk) { color: #9cdcfe } .jx.dark :deep(.js) { color: #ce9178 } .jx.dark :deep(.jn) { color: #b5cea8 } .jx.dark :deep(.jl) { color: #569cd6 } .jx.dark :deep(.jp) { color: #ffcb6b }
 </style>

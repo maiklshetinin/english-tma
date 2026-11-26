@@ -7,10 +7,10 @@
 // подсвечен, нет — серым (нажать — вставить с действующим значением); «Применить» не пройдёт с неизвестным ключом, без обязательного
 // или с значением не того вида. Ключи, что были в JSON при открытии, — всегда свои. kind — каким должен остаться тип экрана.
 // readonly — только посмотреть (экран чужого курса). how — { parts: [{ to, text }], warn: [], own?: [] } или null (нет панели); note — строка над сборкой; error — ошибка от родителя.
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import JsonEdit from './JsonEdit.vue'
 import { checkKeys, blankOf } from '../exercises/schema'
-import { jsonTheme, flipJsonTheme } from '../utils/jsonTheme.js'
+import { jsonTheme, setJsonTheme, JSON_THEMES } from '../utils/jsonTheme.js'
 import { TEMPLATES, typeId } from '../utils/lesson'
 
 const props = defineProps({
@@ -20,6 +20,7 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },          // только посмотреть: без «Применить», поле не правится
   schema: { type: Array, default: null }, kind: { type: String, default: '' },
   tpl: { type: String, default: '' },          // ID шаблона (24.11.2026): строка «тип: talkptt · Разговор · рация · по полям: kind, ptt…» под заголовком
+  source: { type: Object, default: null },          // «Исходник» (26.11.2026): JSON экрана ровно как его перетащили на доску (step.src)
   reqs: { type: Array, default: null },          // «Запрос в API» (24.11.2026, exercises/requests.ts): [{ to, via, body, note?, own? }] — по тексту в поле          // что принимает упражнение (schema.ts)
 })
 const emit = defineEmits(['update:modelValue', 'apply', 'close'])
@@ -41,6 +42,7 @@ const sideOf = computed(() => {
   if (side.value === 'none') return ''
   if (side.value === 'how' && props.how) return 'how'
   if (side.value === 'req' && props.reqs) return 'req'
+  if (side.value === 'src' && srcTab.value) return 'src'
   if (props.schema) return 'keys'
   return props.how && howOn.value ? 'how' : ''
 })
@@ -103,7 +105,20 @@ function ownReq(name) {
 // ---------- «Что принимает»: ключи упражнения ----------
 let first = {}; try { first = JSON.parse(start) ?? {} } catch { /* */ }
 const known = computed(() => { if (!props.schema) return null; const s = [...props.schema]; for (const k of Object.keys(first)) if (!s.some((x) => x.key === k)) s.push({ key: k, type: 'any', label: 'было в JSON при открытии' }); return s })
+// «Исходник» (26.11.2026): из чего собран экран — как он приходит из tools/json (make-json.py): тип + данные вопроса, с комментариями
+// Показываем ровно тот объект, что перетащили (props.source): свои поля не добавляем; комментарии — только подписи к ним
+const SRC = { type: 'ID упражнения — серый тег на плитке в меню Exercise; шаблон, промпты и настройки — из него и «{ }» курса', kind: 'вид экрана', text: 'вопрос — его видит ученик',
+  ideal: 'эталон: ==…== выделение, **…** жирное', star: 'обязательный вопрос — красная ★', n: 'номер в домашке → на ветке и «вопросы 1–5» на пути' }
+const srcObj = computed(() => props.source ?? null)
+const srcTab = computed(() => !!props.source || !!tplInfo.value)
+const srcNote = (k) => SRC[k] ?? (props.schema ?? []).find((x) => x.key === k)?.label ?? ''
+const srcHtml = computed(() => { const o = srcObj.value; if (!o) return ''
+  const ks = Object.keys(o), val = (v) => { const j = JSON.stringify(v, null, 2).replace(/\n/g, '\n  '); return `<span class="${typeof v === 'string' ? 'hs' : typeof v === 'number' ? 'hn' : 'hl'}">${esc(j)}</span>` }
+  return '{\n' + ks.map((k, i) => `${srcNote(k) ? `  <span class="hc">// ${esc(srcNote(k))}</span>\n` : ''}  <span class="hk">"${esc(k)}"</span>: ${val(o[k])}${i < ks.length - 1 ? ',' : ''}`).join('\n') + '\n}' })
+const copiedSrc = ref(false)
+function copySrc() { try { navigator.clipboard?.writeText(JSON.stringify(srcObj.value, null, 2)); copiedSrc.value = true; setTimeout(() => { copiedSrc.value = false }, 1400) } catch { /* */ } }
 const obj = computed(() => { if (!parsed.value.ok) return null; try { return JSON.parse(softNl(text.value)) } catch { return null } })
+watch(obj, (v) => { if (v) lastObj = v }, { immediate: true })          // «Исходник»: JSON с ошибкой — показываем последний верный
 const issues = computed(() => (known.value && obj.value ? checkKeys(obj.value, known.value, props.kind || undefined) : []))
 const badKeys = computed(() => new Set(issues.value.map((x) => x.key)))
 const has = (k) => !!obj.value && typeof obj.value === 'object' && k in obj.value
@@ -142,15 +157,13 @@ onMounted(() => nextTick(() => ed.value?.focus()))
           <div class="jm-t"><b>{{ title }}</b><small v-if="sub">{{ sub }}</small>
             <span v-if="tplInfo" class="jm-tp" title="Отдельного поля «тип» в JSON нет: приложение узнаёт упражнение по этим полям (src/utils/lesson.ts → tplOf). Поменяете их — экран станет другим упражнением. Все ID — tools/make-json.py --list">тип <code>{{ tplInfo.id }}</code> · {{ tplInfo.t }}<template v-if="tplInfo.keys.length"> · задаётся полями <code v-for="k in tplInfo.keys" :key="k">{{ k }}</code></template></span></div>
           <span class="sp" />
-          <button class="jb ic" :title="jsonTheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'" @click="flipJsonTheme">
-            <svg v-if="jsonTheme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>
-            <svg v-else viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
-          </button>
+          <span class="jm-th" role="radiogroup" aria-label="Тема кода"><button v-for="[v, t] in JSON_THEMES" :key="v" type="button" :class="{ on: jsonTheme === v }" :title="'Тема кода — ' + t + ' (одна на всё приложение)'" @click="setJsonTheme(v)">{{ t }}</button></span>
           <button class="jb ic x" title="Закрыть (Esc)" @click="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
         </header>
         <div class="jm-bar">
           <button v-if="!readonly" class="jb" title="Расставить отступы (Shift+Alt+F)" @click="fmt">Форматировать</button>
           <button class="jb" :class="{ on: wrap }" title="Переносить длинные строки (Alt+Z)" @click="flipWrap">Перенос строк</button>
+          <button v-if="srcTab" class="jb" :class="{ on: sideOf === 'src' }" title="Из чего собран этот экран — как он приходит из tools/json: тип и данные вопроса, с комментариями к полям" @click="sideOf === 'src' ? setSide('none') : setSide('src')">Исходник</button>
           <button v-if="schema" class="jb" :class="{ on: sideOf === 'keys' }" title="Какие ключи принимает это упражнение — справа; нажмите на ключ: есть — перейти, нет — вставить" @click="sideOf === 'keys' ? setSide('none') : setSide('keys')">Что принимает</button>
           <button v-if="how" class="jb" :class="{ on: sideOf === 'how' }" title="Что из этого JSON уйдёт в чат и в модели — обновляется, пока печатаете" @click="sideOf === 'how' ? setSide('none') : setSide('how')">Как собирается</button>
           <button v-if="reqs" class="jb" :class="{ on: sideOf === 'req' }" title="Объекты, которые уходят в API, — как их видит программист; пока печатаете — обновляются" @click="sideOf === 'req' ? setSide('none') : setSide('req')">Запрос в API</button>
@@ -168,6 +181,15 @@ onMounted(() => nextTick(() => ed.value?.focus()))
               </button>
               <span class="kbr0">}</span>
             </div>
+          </aside>
+          <aside v-else-if="sideOf === 'src'" class="jm-how jm-src">
+            <p class="n">Из чего собран этот экран — как он приходит из <code>tools/json/…</code> (Сделать JSON.bat). Только данные вопроса; всё остальное — промпты, флаги, модели — из шаблона упражнения и «{ }» курса.</p>
+            <template v-if="srcObj">
+              <div class="rqh"><b>Исходник — как перетащили на доску</b><button type="button" class="rqc" title="Ровно этот JSON, без комментариев — как файл в tools/json" @click="copySrc">{{ copiedSrc ? '✓' : 'Копировать' }}</button></div>
+              <pre class="rqb" v-html="srcHtml" />
+              <p class="n">Поля — ровно те, что были в файле, ничего не добавлено. Комментарии — только подписи, в JSON их нет. Правка JSON слева исходник не меняет.</p>
+            </template>
+            <p v-else class="w">Исходника нет: экран собран в редакторе или перетащен до 26.11.2026, когда исходник ещё не запоминался. Перетащите JSON-файл на доску заново — у нового экрана он будет.</p>
           </aside>
           <aside v-else-if="sideOf === 'req'" class="jm-how jm-req">
             <p class="n">Ровно эти объекты уходят по сети — собраны из JSON слева. Свои поля — в <code>"request": {{ '{' }} "имя": {{ '{' }} … } }</code>: лягут поверх (вложенное сливается, <code>null</code> — убрать поле). Имя — у каждого запроса справа.</p>
@@ -210,6 +232,15 @@ onMounted(() => nextTick(() => ed.value?.focus()))
 .jm-bg { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: 20px; background: rgba(15, 18, 24, .45); backdrop-filter: blur(2px) }
 .jm { width: min(1320px, 100%); height: min(920px, calc(100vh - 40px)); display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 18px; background: #fff; color: #222; box-shadow: 0 24px 80px rgba(0, 0, 0, .35); font-family: inherit; text-align: left }
 .jm.dark { background: #252526; color: #ddd }
+/* тема «Как VS Code» (26.11.2026) — Solarized Light */
+.jm.vs { background: #fdf6e3; color: #586e75 } .jm.vs .jm-t b { color: #073642 } .jm.vs .jb { background: #efe7d3; color: #586e75 } .jm.vs .jb:hover { background: #e6dcc3 } .jm.vs .jb.on, .jm.vs .jb.ap { background: #1cb0f6; color: #fff }
+.jm.vs .jm-how { background: #eee8d5 } .jm.vs .jm-how pre { background: #fdf6e3; border-color: #e6dfc8 } .jm.vs .kobj { background: #fdf6e3; border-color: #e6dfc8 } .jm.vs .kline:hover { background: #f3ecd8 }
+.jm.vs .rqb :deep(.hk) { color: #268bd2 } .jm.vs .rqb :deep(.hs) { color: #2aa198 } .jm.vs .rqb :deep(.hn) { color: #d33682 } .jm.vs .rqb :deep(.hl) { color: #cb4b16 } .jm.vs .jm-how pre.rqb { color: #657b83 }
+.jm-src .rqb :deep(.hc) { color: #9aa0a6; font-style: italic } .jm.vs .jm-src .rqb :deep(.hc) { color: #93a1a1 } .jm.dark .jm-src .rqb :deep(.hc) { color: #6a9955 }
+.jm-src .rqb { font-size: 12.5px; line-height: 1.7 }
+.jm-th { display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: #f0f1f3 } .jm-th button { border: 0; border-radius: 8px; padding: 5px 9px; background: none; color: #6b7280; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer }
+.jm-th button.on { background: #fff; color: #1f2937; box-shadow: 0 1px 2px rgba(0, 0, 0, .12) } .jm.dark .jm-th { background: #3a3d41 } .jm.dark .jm-th button { color: #bbb } .jm.dark .jm-th button.on { background: #1e1e1e; color: #fff }
+.jm.vs .jm-th { background: #efe7d3 } .jm.vs .jm-th button { color: #657b83 } .jm.vs .jm-th button.on { background: #fdf6e3; color: #b58900 }
 header { display: flex; align-items: center; gap: 8px } .jm-t { display: grid; gap: 2px; min-width: 0 }
 .jm-tp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; font-size: 12px; font-weight: 700; color: #6b7a99 } .jm-tp code { padding: 1px 6px; border-radius: 5px; background: rgba(75, 141, 248, .12); color: #2f6fe0; font: 700 11.5px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace }
 .jm-t b { font-size: 17px; font-weight: 900 } .jm-t small { font-size: 12.5px; color: #8a8f98; font-weight: 600 }
