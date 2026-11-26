@@ -160,8 +160,12 @@ export function refWords(ideal) { return plain(ideal).split(/\s+/).filter(Boolea
  *  (подряд ≥ 3 слов), в порядке эталона. → { pct, hit: boolean[], words, missed: string[], placed: boolean[] (какие ref нашлись в эталоне) } */
 export function refCover(ideal, refs) {
   const words = refWords(ideal), hit = words.map(() => false), placed = []
-  for (const r of refs) {
-    const rs = String(r).split(/\s+/).map(stem).filter(Boolean); if (!rs.length) { placed.push(false); continue }
+  // 26.11.2026: кусок из нескольких предложений («…Boże Narodzenie. Trwa cztery tygodnie…») — окно не переходит через точку, и длинный кусок
+  // целиком не находился (всё размыто, 0 %). Теперь кусок режем по предложениям и ищем каждое отдельно; нашлось хоть одно — кусок на месте
+  for (const r0 of refs) {
+    const segs = String(r0).split(/(?<=[.!?])\s+/).filter((x) => x.trim()); let any = false
+    for (const r of segs.length ? segs : [String(r0)]) {
+    const rs = String(r).split(/\s+/).map(stem).filter(Boolean); if (!rs.length) continue
     const L = rs.length; let best = -1, bm = []
     // окно — от слова i, длиной до L + 2, не дальше конца предложения; каждое слово куска засчитывается один раз (две «Kalendarz» подряд — не два совпадения)
     for (let i = 0; i < words.length; i++) {
@@ -169,8 +173,10 @@ export function refCover(ideal, refs) {
       const m = []; for (let k = 0; k < L + 2 && i + k < words.length; k++) { const st = words[i + k].s; if (left.get(st)) { left.set(st, left.get(st) - 1); m.push(i + k) } if (/[.!?]$/.test(words[i + k].w)) break }          // +2 слова запаса: модель пропустила или вставила слово
       if (m.length > best) { best = m.length; bm = m }
     }
-    const ok = best >= Math.max(1, Math.ceil(L * 0.6)); placed.push(ok)
+    const ok = best >= Math.max(1, Math.ceil(L * 0.6)); if (ok) any = true
     if (ok) { bm.forEach((j) => { hit[j] = true }); for (let j = bm[0]; j < bm.at(-1); j++) hit[j] = true }          // дыры внутри куска (предлоги и т.п.) — тоже покрыты
+    }
+    placed.push(any)
   }
   const missed = []; let run = []
   const end = () => { if (run.length >= 3) missed.push(run.join(' ').replace(/[,;:]$/, '')); run = [] }
@@ -193,7 +199,7 @@ export function saidCover(ideal, found) {
   const words = refWords(ideal), hit = words.map(() => false), items = []
   for (const f of found) {
     const one = refCover(ideal, [f.ref])
-    if (!one.placed[0]) { items.push({ idx: [], parts: String(f.ref).split(/\s+/).filter(Boolean).map((w) => ({ w, on: false })) }); continue }
+    if (!one.placed[0]) { items.push({ out: true, idx: [], parts: String(f.ref).split(/\s+/).filter(Boolean).map((w) => ({ w, on: false })) }); continue }
     const said = String(f.said || '').trim(), ss = new Set((said || f.ref).split(/\s+/).map(stem).filter(Boolean))
     const saidNum = /\d/.test(said) || said.toLowerCase().split(/\s+/).some((w) => NUM_W.some((p) => w.startsWith(p)))          // число сказано словом: «szóstego» = 6
     const pre = [...said.matchAll(/\d+/g)].flatMap((m) => numPre(m[0]))          // цифры в сказанном → какие слова эталона они означают

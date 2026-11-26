@@ -51,7 +51,7 @@ const msgsDesc = computed(() => [...msgs.value].reverse())
 const peek = ref(new Set())
 function look(k) { const s = new Set(peek.value); s.add(k); peek.value = s; setTimeout(() => { const t = new Set(peek.value); t.delete(k); peek.value = t }, 3000) }
 const partPct = (parts) => { const n = parts.length, on = parts.filter((w) => w.on).length; return n ? { on, n, p: Math.round((on / n) * 100) } : null }
-const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [] })).sort((a, b) => b.at - a.at))
+const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [], out: !!cov.value.items?.[i]?.out })).sort((a, b) => b.at - a.at))
 // 26.11.2026: процент — по эталону: засчитанный кусок идёт в процент целиком (как раньше, refCover); несказанные слова только размыты, на процент не влияют
 const refCov = computed(() => (tx.value ? refCover(props.step.ideal || '', found.value.map((x) => x.ref)) : cov.value))
 const livePct = computed(() => refCov.value.pct), missedL = computed(() => refCov.value.missed)
@@ -236,7 +236,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
       <ul v-if="tx && txFeed.length" class="kbmsg2">          <!-- 25.11.2026: строки — кусок эталона (несказанное размыто), под ним — как сказали, справа — сколько слов куска сказано -->
         <li v-for="(x, k) in txFeed" :key="x.i" class="kbr" :class="{ nw: k === 0 && !done }"><i class="kbrd" />
           <span class="kbrr"><template v-for="(w, j) in x.parts" :key="j"><span :class="w.on ? '' : peek.has(x.i + ':' + j) ? 'pk' : 'kbtxh2'" @click="!w.on && look(x.i + ':' + j)">{{ w.w }}</span>{{ ' ' }}</template></span>
-          <b v-if="partShare(x.parts)" class="kbrp full" :title="`этот кусок засчитан — ${partShare(x.parts)}% эталона (из общего процента); несказанные слова в нём только размыты`">+{{ partShare(x.parts) }}%</b>
+          <b v-if="!x.out && partShare(x.parts)" class="kbrp full" :title="`этот кусок засчитан — ${partShare(x.parts)}% эталона (из общего процента); несказанные слова в нём только размыты`">+{{ partShare(x.parts) }}%</b>
           <span v-if="x.said" class="kbrs">{{ x.said }}</span></li>
       </ul>
       <ul v-else-if="!tx && got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
