@@ -309,6 +309,15 @@ app.post('/courses/:id/run/log', requireUser, requireTeacher, wrap(async (req, r
 app.get('/progress/log', requireUser, wrap(async (req, res) => res.json(await learn.runLogs(req.user, req.query.studentId))))      // ?studentId= — преподаватель смотрит ученика
 app.post('/progress/log/remove', requireUser, requireTeacher, wrap(async (req, res) => res.json(await learn.removeLogs(req.user, req.body))))      // { studentId?, runs? } — весь журнал или выбранные заходы
 app.get('/courses', requireUser, requireTeacher, wrap(async (req, res) => res.json({ courses: await courses.list(), storage: storage.ready })))
+// Архив курсов (26.11.2026): у каждого преподавателя свой — id курсов в users/{uid}.courseArch. Курс только прячется из ряда «Курсы»; ученикам он остаётся
+app.get('/me/course-archive', requireUser, requireTeacher, wrap(async (req, res) => { const d = await db.collection('users').doc(req.user.uid).get(); res.json({ ids: (d.get('courseArch') as string[] | undefined) ?? [] }) }))
+app.post('/me/course-archive', requireUser, requireTeacher, wrap(async (req, res) => {          // { id, on } → { ids }
+  const id = String(req.body?.id ?? '').slice(0, 200), on = req.body?.on !== false
+  if (!id) throw fail(400, 'id')
+  const ref = db.collection('users').doc(req.user.uid)
+  await ref.set({ courseArch: on ? FieldValue.arrayUnion(id) : FieldValue.arrayRemove(id) }, { merge: true })
+  res.json({ ids: ((await ref.get()).get('courseArch') as string[] | undefined) ?? [] })
+}))
 app.get('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.get(req.params.id))))
 app.put('/courses/:id', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.put(req.user.uid, req.params.id, req.body))))
 app.post('/courses/:id/cover', requireUser, requireTeacher, wrap(async (req, res) => res.json(await courses.setCover(req.params.id, req.body))))      // { cover: ключ | null } — картинка на иконке курса (25.11.2026)
