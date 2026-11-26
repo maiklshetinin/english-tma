@@ -369,7 +369,7 @@ async function loadResume() {
 watch(() => props.id, loadResume, { immediate: true })
 const stepName = (s) => String(s?.text || stepWord(s) || exName(s) || '').replace(/\s+/g, ' ').trim().slice(0, 80)
 function resumeOf(x, u) {
-  if (props.of || u?.rs === 'off' || !ready(x) || x.type === 'checkpoint' || x.virtual || state(x) === 'done') return null
+  if (props.of || u?.rs === 'off' || !ready(x) || x.type === 'checkpoint' || x.virtual) return null          // 26.11.2026: и у пройденного — проходил заново и вышел на середине
   const list = stepsOf(x); let at
   if (x.id in resumeLoc) at = resumeLoc[x.id]
   else { const r = resumeSrv.value[x.id]; if (!r || r.fin) return null; const ds = new Set((r.done ?? []).map(String)); let mx = -1; list.forEach((s, k) => { if (ds.has(String(s.id))) mx = k }); at = mx + 1 }
@@ -466,6 +466,11 @@ const edit = () => router.push({ name: 'courses', query: { id: props.id } })
             <p v-if="x.type === 'checkpoint'" class="cka">{{ ckParts(x).fromErrors ? `Собран сам: ${ckParts(x).auto.length} — где ${student ? 'вы ошибались' : of ? 'ученик ошибался' : 'были ошибки'} в уроках Chapter` : `Собран сам из уроков Chapter: ${ckParts(x).auto.length}` }}{{ ckParts(x).own.length ? ` + ${ckParts(x).own.length} от преподавателя` : '' }}</p>
             <!-- пройденный — как в Busuu: повторить навыки (в разработке) или пройти урок заново -->
             <template v-if="state(x) === 'done'">
+              <template v-if="resumeOf(x, u)">
+                <div class="rsb"><i :style="{ width: Math.round((resumeOf(x, u).at / resumeOf(x, u).n) * 100) + '%' }" /></div>
+                <p class="rsp">Проходили заново и остановились на упражнении {{ resumeOf(x, u).at + 1 }} из {{ resumeOf(x, u).n }}<template v-if="resumeOf(x, u).name"> — «{{ resumeOf(x, u).name }}»</template></p>
+                <button class="pgo rso" @click="go(x, resumeOf(x, u).at)">Продолжить с {{ resumeOf(x, u).at + 1 }}-го</button>
+              </template>
               <button v-if="!of" class="pgo" title="Коротко: до 10 заданий только по этому уроку — где ошибались, что забывается, слабые слова" @click="skillsReview(x)">Повторить навыки</button>
               <button class="pgo ghost" @click="go(x)">Пройти заново</button>
             </template>
