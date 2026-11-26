@@ -130,9 +130,9 @@ const ready = (x) => INTERACTIVE.includes(x.type) && stepsOf(x).length > 0
 function qnOf(x, u) {
   if (u?.qn === 'off' || !ready(x)) return ''
   const ns = stepsOf(x).map((s) => Number(s?.n)).filter((v) => Number.isFinite(v) && v > 0); if (!ns.length) return ''
-  const u2 = [...new Set(ns)].sort((p, q) => p - q), a = u2[0], b = u2.at(-1)
-  if (u2.length === 1) return `вопрос ${a}`
-  return b - a === u2.length - 1 ? `вопросы ${a}–${b}` : `вопросы ${u2.join(', ')}`          // по порядку — «1–5», вразброс — «2, 5, 9»
+  const u2 = [...new Set(ns)]          // в порядке экранов урока (26.11.2026: переставили 2, 1 — так и пишем)
+  if (u2.length === 1) return `вопрос ${u2[0]}`
+  return u2.every((v, k) => !k || v === u2[k - 1] + 1) ? `вопросы ${u2[0]}–${u2.at(-1)}` : `вопросы ${u2.join(', ')}`          // подряд по возрастанию — «1–5», иначе как идут — «2, 1», «2, 5, 9»
 }
 
 // ---------- Чекпоинт собирается сам ----------
