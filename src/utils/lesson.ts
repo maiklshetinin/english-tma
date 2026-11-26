@@ -289,12 +289,16 @@ export type TplLang = 'pl' | 'en' | 'es' | ''
 const PL_TPL = new Set(['kp', 'kpfile', 'kpball', 'kpballive', 'kpballive2', 'kpballfix', 'kpballtext', 'kpballsess', 'kpballflow', 'kpapi', 'talk', 'talkava', 'talkptt', 'talkvn', 'talkexam', 'stt'])
 export const tplLang = (id: string): TplLang => (id.startsWith('es_') ? 'es' : PL_TPL.has(id) ? 'pl' : id === 'talkptt2' ? 'en' : '')
 /** ID шаблона → ID с языком: kp → pl-kp, es_talk → es-talk, talkptt2 → en-talkptt2; без ИИ — как есть (choice) */
-export const typeId = (id: string) => (id.startsWith('es_') ? 'es-' + id.slice(3) : tplLang(id) ? tplLang(id) + '-' + id : id)
+// 26.11.2026: у трёх «текстов под блюром» — понятные ID для тега и JSON (pl-kpblurtext, …2, …3); внутри (настройки курса, сервер) — прежние,
+// старые ID в JSON-файлах (pl-kpballtext и т. д.) тоже принимаются
+const SHOW_ID: Record<string, string> = { kpballtext: 'kpblurtext', kpballsess: 'kpblurtext2', kpballflow: 'kpblurtext3' }
+const FROM_SHOW: Record<string, string> = Object.fromEntries(Object.entries(SHOW_ID).map(([a, b]) => [b, a]))
+export const typeId = (id: string) => (id.startsWith('es_') ? 'es-' + id.slice(3) : tplLang(id) ? tplLang(id) + '-' + (SHOW_ID[id] ?? id) : id)
 /** «pl-kp», «es-talkptt», старое «kp» → ID шаблона; язык не тот — null */
 export function tplFromType(t: string): string | null {
   const m = /^(pl|en|es)-(.+)$/.exec(String(t))
-  if (!m) return TEMPLATES.some((x) => x.id === t) ? t : null
-  const id = m[1] === 'es' ? 'es_' + m[2] : m[2]
+  if (!m) { const id0 = FROM_SHOW[t] ?? t; return TEMPLATES.some((x) => x.id === id0) ? id0 : null }
+  const id = m[1] === 'es' ? 'es_' + m[2] : FROM_SHOW[m[2]] ?? m[2]
   return TEMPLATES.some((x) => x.id === id) && tplLang(id) === m[1] ? id : null
 }
 export function tplOf(s: Step): string {

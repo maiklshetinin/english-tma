@@ -38,6 +38,10 @@ TYPES = {
     'pl-talkptt':  ('Разговор · рация',                    'рация'),
     'pl-talkvn':   ('Рация · голосовые',                   'голосовые'),
     'pl-talkexam': ('Собеседование · рация',               'собеседование'),
+    # 26.11.2026: три «текста под блюром» (в приложении — Live · текст под блюром)
+    'pl-kpblurtext':  ('Live · текст под блюром',                     'pl-kpblurtext'),
+    'pl-kpblurtext2': ('Live · текст под блюром · сессия на реплику', 'pl-kpblurtext2'),
+    'pl-kpblurtext3': ('Live · текст под блюром · поток',             'pl-kpblurtext3'),
 }
 
 ap = argparse.ArgumentParser(description='PDF домашки Karta Polaka → JSON экранов: тип + вопрос + эталон')

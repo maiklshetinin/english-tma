@@ -46,6 +46,11 @@
 | 9 | `talkptt2` | Разговор · рация (Busuu) | `json/рация busuu/` |
 | 10 | `talkvn` | Рация · голосовые | `json/голосовые/` |
 | 11 | `talkexam` | Собеседование · рация | `json/собеседование/` |
+| 12 | `kpblurtext` | Live · текст под блюром | `json/pl-kpblurtext/` |
+| 13 | `kpblurtext2` | Live · текст под блюром · сессия на реплику | `json/pl-kpblurtext2/` |
+| 14 | `kpblurtext3` | Live · текст под блюром · поток | `json/pl-kpblurtext3/` |
+
+Старые ID этих трёх (`pl-kpballtext`, `pl-kpballsess`, `pl-kpballflow`) в уже сделанных файлах приложение тоже понимает (26.11.2026).
 
 Новое упражнение — одна строка в `TYPES` в начале `make-json.py`.
 
