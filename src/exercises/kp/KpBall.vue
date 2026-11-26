@@ -163,7 +163,7 @@ function startLive() {
   const id = props.step.id, q = props.step.text || '', ideal = props.step.ideal || ''
   try {
     const c = kpReady(kpCfg(props.step))          // промпт и функция — из JSON экрана (ballPrompt, ballTool), 25.11.2026
-    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, fix: props.step.ballFix === true, guard: false, fresh: tx.value, perTurn: props.step.ballSess === true,          /* «· текст»: после каждого ответа — новая связь, один запрос — один ответ */          /* 25.11.2026: проверка «была ли речь» по расшифровке ломала засчитывание (Live расшифровывает польский кириллицей) — как у «нового вида», без неё */ extra: reqOf(c, 'ballLive'), onCover: onLiveFound })
+    lv = openBallLive({ id, question: q, ideal, system: fillT(c.ballPrompt, { question: q, reference: kpPlain(ideal) }), tool: c.ballTool, fix: props.step.ballFix === true, guard: false, fresh: tx.value, perTurn: props.step.ballSess === true, flow: props.step.ballFlow === true,          /* «· текст»: после каждого ответа — новая связь, один запрос — один ответ */          /* 25.11.2026: проверка «была ли речь» по расшифровке ломала засчитывание (Live расшифровывает польский кириллицей) — как у «нового вида», без неё */ extra: reqOf(c, 'ballLive'), onCover: onLiveFound })
   } catch (e) { netOf(id).cover = { st: 'err', txt: String(e.message || e) }; return }
   fast.value = false; netOf(id).split = { st: 'off', txt: '' }; rebuild(); liveRes()
 }

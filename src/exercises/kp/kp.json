@@ -11,7 +11,8 @@
     "kpballive2",
     "kpballfix",
     "kpballtext",
-    "kpballsess"
+    "kpballsess",
+    "kpballflow"
   ],
   "fields": {
     "head": {
@@ -149,6 +150,10 @@
     "ballSess": {
       "type": "bool",
       "label": "Сессия на реплику: нажали микрофон — Live-сессия открылась, ответила — закрылась (текст под блюром)"
+    },
+    "ballFlow": {
+      "type": "bool",
+      "label": "Поток: микрофон включается один раз, Live засчитывает по паузам (текст под блюром)"
     }
   },
   "check": "button",
@@ -180,6 +185,9 @@
       "S"
     ],
     "kpballsess": [
+      "S"
+    ],
+    "kpballflow": [
       "S"
     ]
   },

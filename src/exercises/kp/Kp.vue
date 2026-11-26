@@ -261,7 +261,7 @@ function liveLine0() { const n = props.step.ballLive && ballNet[props.step.id]; 
   // 25.11.2026: что сейчас — слушает → (выключили микрофон) Gemini ищет совпадения (секундомер) → засчитано за N с
   const L = n.lv, tk = lvNow.value, last = L?.last ? (L.last.n ? `засчитано ${L.last.n}` : 'нового нет') + ' за ' + sec1(L.last.ms) + ' с' + (n.cut ? ` · отсечено ${n.cut} (без речи)` : '') : ''          // отсечено — «· текст», guard в utils/kpball.js
   if (L?.ph === 'think') return { st: 'connecting', t: name + ' · Gemini ищет совпадения… ' + sec1(tk - L.at) + ' с' }
-  if (dic.value === 'live') return { st: 'rec', t: name + ' · слушает · выключите микрофон — сверит', s: last }
+  if (dic.value === 'live') return { st: 'rec', t: name + (props.step.ballFlow ? ' · слушает · засчитывает по паузам — говорите подряд' : ' · слушает · выключите микрофон — сверит'), s: last }
   if (n.split.st === 'busy') return { st: 'connecting', t: name + ' · режет эталон на блоки' }
   if (last) return { st: 'open', t: name + ' · ' + last }
   return { st: n.cover.st === 'busy' ? 'connecting' : n.cover.st === 'on' ? 'open' : '', t: name + ' · ' + (n.cover.st === 'busy' ? (n.cover.txt === 'открываю сессию…' ? n.cover.txt : 'сверяет речь') : n.cover.txt || 'ждёт речь') } }
