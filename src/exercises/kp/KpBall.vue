@@ -84,7 +84,7 @@ function onLiveFound(list, meta = null) {
   if (tx.value) add.forEach((_, k) => {          // журнал колонкой (25.11.2026): что приложение сделало с куском — сколько слов открыто, что осталось размытым
     const it = cov.value.items?.[start + k]; if (!it) return
     const off = it.parts.filter((w) => !w.on).map((w) => w.w)
-    ballLog(props.step.id, 'app', it.parts.length ? `открыто ${it.parts.length - off.length} из ${it.parts.length} слов` + (off.length ? ` · не сказано — размыто (в процент кусок идёт целиком): «${off.join(' ')}»` : ' · всё сказано') : 'кусок не найден в эталоне — не засчитан')
+    ballLog(props.step.id, 'app', it.parts.length ? `открыто ${it.parts.length - off.length} из ${it.parts.length} слов` + (off.length ? ` · не сказано — размыто (в процент не идёт): «${off.join(' ')}»` : ' · всё сказано') : 'кусок не найден в эталоне — не засчитан')
   })
   if (tx.value && list.length && !add.length) ballLog(props.step.id, 'app', 'повтор — уже засчитано раньше')
   if (tx.value && meta) msgs.value = [...msgs.value, { at, heard: meta.heard || '', idx: add.map((_, k) => start + k), bad: meta.bad || [], rep: list.length - add.length }]
@@ -246,7 +246,7 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(fqTm); clearInte
       <ul v-if="tx && txFeed.length" class="kbmsg2">          <!-- 25.11.2026: строки — кусок эталона (несказанное размыто), под ним — как сказали, справа — сколько слов куска сказано -->
         <li v-for="(x, k) in txFeed" :key="x.i" class="kbr" :class="{ nw: k === 0 && !done }"><i class="kbrd" />
           <span class="kbrr"><template v-for="(w, j) in x.parts" :key="j"><span :class="w.on ? '' : peek.has(x.i + ':' + j) ? 'pk' : 'kbtxh2'" @click="!w.on && look(x.i + ':' + j)">{{ w.w }}</span>{{ ' ' }}</template></span>
-          <b v-if="!x.out && x.gain" class="kbrp full" :title="`этот кусок прибавил ${x.gain}% к проценту эталона; несказанные слова в нём только размыты`">+{{ x.gain }}%</b><b v-else-if="!x.out" class="kbrp was" title="Эта часть эталона уже была засчитана раньше — к проценту ничего не прибавилось">уже засчитано</b>
+          <b v-if="!x.out && x.gain" class="kbrp full" :title="`этот кусок прибавил ${x.gain}% к проценту эталона; несказанные слова в нём размыты и не считаются`">+{{ x.gain }}%</b><b v-else-if="!x.out" class="kbrp was" title="Эта часть эталона уже была засчитана раньше — к проценту ничего не прибавилось">уже засчитано</b>
           <span v-if="x.said" class="kbrs">{{ x.said }}</span></li>
       </ul>
       <ul v-else-if="!tx && got.length" class="kblvl"><li v-for="(x, k) in got" :key="x.i" :class="{ nw: k === 0 && !done }"><i v-if="k === 0 && !done" class="kblvd" /><b v-else class="kblvc">✓</b><span class="kblvr">{{ x.label }}</span><span v-if="x.said && step.ballFix" class="kblvf"><template v-for="(d, j) in fixDiff(x.said, x.fix)" :key="j"><span v-if="d.t != null">{{ d.t }} </span><span v-else class="kfx"><ins v-if="d.ins">{{ d.ins }}</ins><s v-if="d.del">{{ d.del }}</s><s v-else class="kfx0">&nbsp;</s></span> </template></span><span v-else-if="x.said" class="kblvs">{{ x.said }}</span></li></ul>
