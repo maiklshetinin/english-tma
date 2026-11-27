@@ -70,7 +70,7 @@ app.use((req, res, next) => {                              // строка в л
 })
 // Правки в реальном времени: после удачной правки (не GET) остальным преподавателям — «перезагрузите это» (live.ts)
 const LIVE_SKIP = new Set(['courses', 'media', 'me', 'ping', 'auth', 'dev', 'ai'])        // курсы синхронизируются сами, остальное — не данные
-const CACHE_KEEP = new Set(['lessons', 'schedule', 'courses', 'media', 'me', 'ping', 'notes', 'ai'])      // уроки сбрасывают кэш сами и точечно (schedule.ts), остальное кэш не трогает
+const CACHE_KEEP = new Set(['lessons', 'schedule', 'courses', 'media', 'me', 'ping', 'notes', 'ai', 'auth', 'srs', 'review', 'my', 'progress', 'dev'])     // уроки сбрасывают кэш сами и точечно (schedule.ts), остальное кэш не трогает
 app.use((req, res, next) => {
   res.on('finish', () => {
     const what = req.path.split('/')[1] || ''
