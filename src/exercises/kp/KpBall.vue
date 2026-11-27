@@ -53,14 +53,18 @@ function look(k) { const s = new Set(peek.value); s.add(k); peek.value = s; setT
 const partPct = (parts) => { const n = parts.length, on = parts.filter((w) => w.on).length; return n ? { on, n, p: Math.round((on / n) * 100) } : null }
 const txFeed = computed(() => found.value.map((x, i) => ({ ...x, i, parts: cov.value.items?.[i]?.parts ?? [], out: !!cov.value.items?.[i]?.out, gain: gains.value[i] ?? 0 })).sort((a, b) => b.at - a.at))
 // 26.11.2026: процент — по эталону: засчитанный кусок идёт в процент целиком (как раньше, refCover); несказанные слова только размыты, на процент не влияют
-const refCov = computed(() => (tx.value ? refCover(props.step.ideal || '', found.value.map((x) => x.ref)) : cov.value))
+// 27.11.2026: ОТМЕНЕНО — процент должен совпадать с закраской: слово размыто (не сказано) — в процент не идёт, иначе «100%» при размытом слове.
+// Теперь и в тексте, и без него процент и «не прозвучало» берутся из cov (в тексте — saidCover: считаются только СКАЗАННЫЕ слова)
+const refCov = computed(() => cov.value)
 const livePct = computed(() => refCov.value.pct), missedL = computed(() => refCov.value.missed)
 // 26.11.2026: «+N%» — сколько этот кусок ДОБАВИЛ к проценту: только слова эталона, которые до него ещё никто не закрыл (по порядку, как сказаны).
 // Повторил уже засчитанное — «уже засчитано», без процентов (раньше показывал свою долю целиком, будто прибавил ещё)
 const gains = computed(() => {
   if (!tx.value) return []
   const done = []; let n = 0
-  return found.value.map((x) => { const h = refCover(props.step.ideal || '', [x.ref]).hit; n = h.length; let g = 0; h.forEach((v, j) => { if (v && !done[j]) { done[j] = true; g++ } }); return n ? (g ? Math.max(1, Math.round((g / n) * 100)) : 0) : 0 })
+  // 27.11.2026: «+N%» считаем по тем же словам, что и закраску (saidCover.items[i].idx) — только сказанные, а не весь кусок
+  n = cov.value.words.length
+  return found.value.map((_, i) => { let g = 0; (cov.value.items?.[i]?.idx ?? []).forEach((j) => { if (!done[j]) { done[j] = true; g++ } }); return n ? (g ? Math.max(1, Math.round((g / n) * 100)) : 0) : 0 })
 })
 const hiddenS = () => String(props.step.ideal || '').replace(/\*\*|==|_/g, '').split(/[.!?;\n]+/).map((x) => x.trim().split(/\s+/).slice(0, 6).join(' ')).filter((x) => x.length > 3).slice(0, 10)
 const liveRes = () => { netOf(props.step.id).res = { pct: livePct.value, missed: [...missedL.value], total: found.value.length, ok: found.value.length,
