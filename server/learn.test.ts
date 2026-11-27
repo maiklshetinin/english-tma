@@ -3,6 +3,7 @@ import { store, db, FieldValue } from './fake-db.js'
 import { makeCourses } from './courses.js'
 import { makeLearn } from './learn.js'
 import type { TokenUser } from './types.js'
+import { cacheStats } from './cache.js'
 
 const C = makeCourses({ db, FieldValue })
 const L = makeLearn({ db, FieldValue, get: (id) => C.get(id), filesOf: (c) => C.filesOf(c), now: () => 1000 })
@@ -126,5 +127,17 @@ await L.assign('k1', { studentId: 's1', on: true })
 await L.reset('s1', { what: 'all' })
 ok('сброс всего: журнал тоже', !store.has('lessonLogs/s1_run0001'))
 ok('сброс всего: прохождение и словарь ученика удалены', !store.has('courseProgress/s1') && !store.has('review/s1'))
+
+// --- кэш журнала: повторные чтения не ходят в базу, запись видна сразу ---
+{
+  await L.log(masha, 'k1', { run: 'cache001', itemId: 'a', at: 900, sec: 1, n: 1, steps: {} })
+  await L.runLogs(masha); const r0 = cacheStats.reads
+  await L.runLogs(masha); await L.resume(masha, 'k1'); await L.exercisesDone(masha); await L.runLogs(masha)
+  ok('кэш журнала: журнал, «С места» и аналитика повторно — 0 чтений базы', cacheStats.reads === r0)
+  await L.log(masha, 'k1', { run: 'cache002', itemId: 'a', at: 901, sec: 1, n: 1, steps: {} })
+  ok('кэш журнала: новый заход виден сразу и без перечитывания журнала', (await L.runLogs(masha)).runs.some((r) => r.run === 'cache002') && cacheStats.reads === r0)
+  await L.removeLogs(teacher, { studentId: 's1', runs: ['cache001'] })
+  ok('кэш журнала: удалённый заход пропал', !(await L.runLogs(masha, undefined)).runs.some((r) => r.run === 'cache001'))
+}
 
 if (bad) { console.log(`\n${bad} FAIL`); process.exit(1) } else console.log('\nall passed')

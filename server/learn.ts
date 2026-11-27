@@ -12,6 +12,7 @@ import type { Firestore, FieldValue as FV } from 'firebase-admin/firestore'
 import { fail } from './errors.js'
 import { makeAccess } from './access.js'
 import { id as cleanId } from './clean.js'
+import { cached, dropCache, patchCache } from './cache.js'
 import type { TokenUser } from './types.js'
 import type { Course, CourseItem } from './courses.js'
 
@@ -64,6 +65,11 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
   }
   const runsOf = async (sid: string): Promise<Record<string, CourseRun>> => (await progress().doc(sid).get()).data()?.c ?? {}
   const logs = () => db.collection('lessonLogs')
+  // Журнал who целиком — из памяти сервера (cache.ts): раньше каждое «С места», «Журнал» (раз в 10 с) и «Аналитика» читали из базы все его заходы (~300 документов).
+  // Правки журнала идут только отсюда: writeLog дописывает заход в кэш, остальное — сбрасывает его (logsDrop)
+  const logKey = (who: string) => 'logs:' + who
+  const logsOf = async (who: string): Promise<RunLog[]> => (await cached(db, logKey(who), async () => (await logs().where('who', '==', who).get()).docs.map((d) => d.data() as RunLog))).map((r) => ({ ...r }))
+  const logsDrop = (who: string) => dropCache(db, logKey(who))
   /** чей прогресс смотрим: свой; преподаватель с studentId — ученика, без — своё прохождение (teacher_<uid>) */
   const whoOf = async (user: TokenUser, studentId?: unknown) => studentId != null && studentId !== ''
     ? (user.role === 'teacher' ? cleanId(studentId, 'student id') : (() => { throw fail(403, 'forbidden') })())
@@ -71,7 +77,7 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
   /** стереть журнал who (весь или одного курса) — вместе со сбросом прогресса */
   async function dropLogs(who: string, course?: string) {
     const docs = (await logs().where('who', '==', who).get()).docs.filter((d) => !course || d.data().course === course)
-    for (let i = 0; i < docs.length; i += 400) { const b = db.batch(); docs.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit() }
+    try { for (let i = 0; i < docs.length; i += 400) { const b = db.batch(); docs.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit() } } finally { logsDrop(who) }
   }
 
   /** Записать заход в урок в журнал (весь заход целиком — повтор той же пачки ничего не портит) */
@@ -105,6 +111,7 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
       if (old?.fin) doc.fin = true                                       // законченный заход назад «в процессе» не становится
       tx.set(ref, doc)
     })
+    patchCache<RunLog[]>(db, logKey(who), (rows) => [...rows.filter((r) => r.run !== runId), doc])          // заход в кэше — на месте, без перечитывания журнала
     return { ok: true }
   }
 
@@ -198,7 +205,7 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
       const items: Record<string, { at: number; fin: boolean; done: string[] }> = {}
       // 26.11.2026: «Продолжить с N-го» — новый заход, в нём только экраны с N-го. Поэтому сделанное берём из всех заходов после последнего
       // законченного (fin), а не из одного последнего: открыл и сразу вышел — место не теряется
-      const runs = (await logs().where('who', '==', who).get()).docs.map((d) => d.data() as RunLog).filter((r) => r.course === cid).sort((a, b) => b.at - a.at)
+      const runs = (await logsOf(who)).filter((r) => r.course === cid).sort((a, b) => b.at - a.at)
       const stop = new Set<string>()
       for (const r of runs) {
         if (stop.has(r.item)) continue
@@ -225,14 +232,14 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
         const rid = String(b.run ?? ''), sid = String(b.step)
         if (!RUN_RE.test(rid) || !sid || sid.length > 64) throw fail(400, 'bad step')
         const ref = logs().doc(`${who}_${rid}`)          // id начинается с who — чужой заход так не тронуть
-        await db.runTransaction(async (tx) => {
+        try { await db.runTransaction(async (tx) => {
           const old = (await tx.get(ref)).data() as RunLog | undefined
           if (!old || !(sid in old.steps)) return
           const steps = { ...old.steps }; delete steps[sid]
           const vals = Object.values(steps), answered = vals.some((x) => x.ok !== null || !!x.x || x.sc != null || x.t > 0)
           if (!answered) { tx.delete(ref); return }          // отвеченных экранов не осталось — заход пустой
           tx.set(ref, { ...old, steps, sec: vals.reduce((a, x) => a + (x.sec || 0), 0), ok: vals.filter((x) => x.ok === true).length, all: vals.filter((x) => x.ok !== null).length })
-        })
+        }) } finally { logsDrop(who) }
         return { ok: true }
       }
       if (b.runs == null) { await dropLogs(who); return { ok: true } }
@@ -241,13 +248,13 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
       if (ids.some((r) => !RUN_RE.test(r))) throw fail(400, 'bad run')
       const batch = db.batch()
       for (const r of ids) batch.delete(logs().doc(`${who}_${r}`))      // id начинается с who — чужой заход так не удалить
-      await batch.commit()
+      try { await batch.commit() } finally { logsDrop(who) }
       return { ok: true }
     },
     /** «Журнал» (Review): заходы в уроки — новые сверху, до 300; свой, преподаватель с studentId — ученика */
     async runLogs(user: TokenUser, studentId?: unknown) {
       const who = await whoOf(user, studentId)
-      const all = (await logs().where('who', '==', who).get()).docs.map((d) => d.data() as RunLog)
+      const all = await logsOf(who)
       const tries: Record<string, number> = {}
       for (const r of [...all].sort((a, b) => a.at - b.at)) (r as RunLog & { try?: number }).try = tries[`${r.course}/${r.item}`] = (tries[`${r.course}/${r.item}`] ?? 0) + 1
       const recent = all.sort((a, b) => b.at - a.at).slice(0, 300), cs = new Map<string, Course | null>()
@@ -318,7 +325,7 @@ export function makeLearn({ db, FieldValue, get, filesOf, now = Date.now }: Lear
      *  Вид — как у пройденного урока с одним экраном: так считают те же функции (utils/progress.ts) */
     async exercisesDone(user: TokenUser, studentId?: unknown) {
       const who = await whoOf(user, studentId)
-      const all = (await logs().where('who', '==', who).get()).docs.map((d) => d.data() as RunLog), cs = new Map<string, Course | null>()
+      const all = await logsOf(who), cs = new Map<string, Course | null>()
       const out: LessonDone[] = []
       for (const r of all) {
         if (!cs.has(r.course)) cs.set(r.course, await get(r.course).catch(() => null))

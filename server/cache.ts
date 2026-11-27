@@ -25,6 +25,13 @@ export function cached<T>(db: object, key: string, load: () => Promise<T>, ttl =
   v.then((x) => { e.n = docsIn(x); cacheStats.reads += e.n }, () => { if (m.get(key) === e) m.delete(key) })          // ошибка чтения — не запоминаем
   return v
 }
+/** Поправить уже закэшированное значение на месте (после записи) — чтобы не перечитывать всё из базы. Нет записи в кэше — ничего не делает */
+export function patchCache<T>(db: object, key: string, fn: (v: T) => T): void {
+  const m = stores.get(db), e = m?.get(key); if (!m || !e) return
+  const nv = (e.v as Promise<T>).then(fn)
+  nv.catch(() => { if (m.get(key) === e) m.delete(key) })          // не получилось (или чтение упало) — запись не держим
+  e.v = nv
+}
 /** Сколько сейчас записей в кэше */
 export const cacheSize = (db: object) => stores.get(db)?.size ?? 0
 
