@@ -345,7 +345,7 @@ export function openBallLive({ id, question, ideal, system, tool, fix = false, g
           if (fresh && !flow) { if (answered || talking) { if (!loops++) lg('app', talking ? 'модель ответила, пока микрофон включён (хвост прошлой реплики) — не засчитываем' : 'модель повторяет ответ без новой реплики — не засчитываем, дальше молча'); return { $silent: true, ok: true } } answered = true }          // 26.11.2026: ответ принимаем только ПОСЛЕ выключения микрофона — запоздалый повтор прошлой реплики съедал ответ на новую
           if (name === 'cover') {
             lg('cover', JSON.stringify(args).slice(0, 400) + ' · ' + sec, false, JSON.stringify(args, null, 1))
-            const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim().slice(0, 120), said: String(x?.said ?? '').trim(), fix: String(x?.fix ?? '').trim() })).filter((x) => x.ref)
+            const got = (Array.isArray(args?.found) ? args.found : []).map((x) => ({ ref: String(x?.ref ?? '').trim(), said: String(x?.said ?? '').trim(), fix: String(x?.fix ?? '').trim() })).filter((x) => x.ref)
             n.cover = { st: 'on', txt: (got.length ? `найдено ${got.length}` : 'нового нет') + ` · ${sec}` }
             if (L.ph === 'think') L.last = { n: got.length, ms: Date.now() - L.at }
             if (guard && got.length && !(talking || wait || Date.now() < hearUntil)) {          // вне окна реплики — модель сама, без речи
