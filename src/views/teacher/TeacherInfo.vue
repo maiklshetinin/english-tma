@@ -36,7 +36,7 @@ const shown = computed(() => monthsRange(span.value))      // показанны
 async function load() {
   lessons.value = null; err.value = ''
   if (isDemo) { const r = months.value ? range.value : monthsRange(18); lessons.value = demoLessons(r.from, r.to); return }
-  students.loadArchived().catch(() => {})                      // имена учеников из архива — для выгрузки
+  // имена учеников из архива — для выгрузки: приходят к открытию вкладки (stores/screens.ts), здесь не перечитываем при каждой смене периода
   const get = async ({ from, to }) => {
     const r = await apiRequest(`/lessons/range?from=${from}&to=${to}`)
     if (!r.ok) throw new Error(`Не удалось загрузить уроки (${r.status})`)

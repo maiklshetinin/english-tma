@@ -4,11 +4,11 @@
 // без сервера (демо) — один курс из этого браузера.
 import { ask } from '../composables/useDialog'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { API, apiRequest, fb, isDemo } from '../firebase'
 import { showToast } from '../composables/useToast'
 import AppIcon from './AppIcon.vue'
-const router = useRouter()
+const router = useRouter(), route = useRoute()
 const props = defineProps({ selected: { type: String, default: null } })
 const emit = defineEmits(['update:selected'])
 const online = !isDemo && !!API && !!fb
@@ -22,7 +22,6 @@ async function load() {
   try { const r = await apiRequest('/courses'); if (!r.ok) throw new Error(`(${r.status})`); list.value = (await r.json()).courses; err.value = '' }
   catch (e) { err.value = e.message; list.value ??= [] }
 }
-onMounted(load)
 // Архив (26.11.2026, макет «Курсы: убрать в архив»): у каждого преподавателя свой — сервер, users/{uid}.courseArch; без сети — этот браузер.
 // Курс в архиве не показывается в ряду; в конце ряда — плитка «Архив» (если там что-то есть), нажали — ряд показывает архивные, «← Все курсы» — назад
 const ARCH = 'tma.courseArch.v1', arch = ref([]), archView = ref(false)
@@ -30,7 +29,11 @@ async function loadArch() {
   if (!online) { try { arch.value = JSON.parse(localStorage.getItem(ARCH)) || [] } catch { arch.value = [] } return }
   try { const r = await apiRequest('/me/course-archive'); if (r.ok) arch.value = (await r.json()).ids ?? [] } catch { /* без сети — пусто */ }
 }
-onMounted(loadArch)
+// 27.11.2026: открыт урок (#/path?c=…&l=…) — ряд курсов закрыт уроком и не нужен: обновление страницы внутри урока не читает ни список, ни архив.
+// Закрыли урок (или урока и не было) — читаем один раз.
+let listed = false
+const start = () => { if (listed || route.query.l) return; listed = true; load(); loadArch() }
+onMounted(start); watch(() => !!route.query.l, start)      // после монтирования (ниже — наблюдатель за выбором курса), как и раньше
 async function setArch(id, on) {
   const was = arch.value
   arch.value = on ? [...new Set([...was, id])] : was.filter((x) => x !== id)

@@ -22,9 +22,7 @@ import { initActivity, activityTab } from './composables/useActivity'
 import { startVisits } from './composables/useVisits'
 import { isDemo } from './firebase'
 import { useStudentsStore } from './stores/students'
-import { useScheduleStore } from './stores/schedule'
-import { useGroupsStore } from './stores/groups'
-import { useContentStore } from './stores/content'
+import { CHANGED, inLesson, loadNeeds, refresh, screenNeeds, setCurrent, startRefresh, stopRefresh, unread } from './stores/screens'
 import { redirectFor, goUp } from './router'
 import { useBackButton } from './composables/useBackButton'
 import { useAuthStore } from './stores/auth'
@@ -53,12 +51,28 @@ watch(() => route.meta.tab, (t) => { if (t !== 'courses') setWhere(String(t || '
 watch(() => auth.status === 'ready', (ok) => { if (ok && !isDemo) startVisits() }, { immediate: true })          // лог заходов — всегда (useVisits.js)
 watch(() => auth.status === 'ready', (ok) => { if (ok && !isDemo) initActivity(auth.isTeacher ? 'teacher' : 'student', () => String(route.meta.tab || '')) }, { immediate: true })
 watch(() => route.meta.tab, () => activityTab())
-const RELOAD = { students: () => useStudentsStore().load(), schedule: () => useScheduleStore().load(), groups: () => useGroupsStore().load(),
-  paths: () => useContentStore().load(), presets: () => useContentStore().load(), decks: () => useContentStore().load(), content: () => useContentStore().load() }
+// Данные читаются по экрану, а не при входе (stores/screens.ts): что нужно открытой вкладке — читается при входе на неё (и один раз, пока свежее),
+// внутри открытого урока (#/path?l=…) — ничего лишнего. Первый вход на вкладку ждёт данные (заставка), повторный — открывается сразу.
+const gate = ref(false)
+let gateSeq = 0
+const screen = computed(() => [auth.role, route.name, route.meta.tab, route.params.id ? 'card' : ''].join('|'))      // «вкладка» (карточка ученика — отдельный экран)
+function loadScreen(tabChanged) {
+  if (!booted.value || auth.status !== 'ready') return
+  const needs = screenNeeds(route, auth.role)
+  setCurrent(needs)
+  const p = loadNeeds(needs)
+  if (!tabChanged) return                  // закрыли урок — вкладка под ним дочитывается фоном, без заставки (иначе курс пересоберётся)
+  const my = ++gateSeq
+  gate.value = unread(needs).length > 0
+  if (gate.value) p.finally(() => { if (my === gateSeq) gate.value = false })
+}
+watch(() => [booted.value, auth.status, screen.value], () => loadScreen(true), { immediate: true })
+watch(() => inLesson(route), () => loadScreen(false))
+watch(() => auth.status === 'ready', (ok) => (ok ? startRefresh() : stopRefresh()), { immediate: true })      // вернулся в приложение → заново то, что нужно экрану
 const pending = new Map(), later = new Set()
-const reload = (what) => { const fn = RELOAD[what]; if (!fn) return; clearTimeout(pending.get(what)); pending.set(what, setTimeout(() => fn()?.catch?.(() => {}), 1500)) }
+const reload = (what) => { clearTimeout(pending.get(what)); pending.set(what, setTimeout(() => refresh(CHANGED[what]), 1500)) }
 onLive('changed', ({ what }) => {          // несколько правок подряд — одна перезагрузка; если никого нет за экраном — когда вернётся
-  if (!RELOAD[what]) return
+  if (!CHANGED[what]) return
   if (active.value) reload(what); else later.add(what)
 })
 onActive(() => { for (const w of later) reload(w); later.clear() })
@@ -67,7 +81,12 @@ const seen = (id, at) => { const s = useStudentsStore().byId(id); if (s && at > 
 onLive('seen', ({ id, at }) => seen(id, at))
 onLive('hello', ({ seen: m }) => { for (const [id, at] of Object.entries(m ?? {})) seen(id, at) })
 const demo = import.meta.env.DEV || new URLSearchParams(location.search).has('demo')
-onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(location.search).get('role'); if (demo && (r === 'teacher' || r === 'student')) auth.setRole(r) }).finally(() => { booted.value = true }))
+onMounted(() => auth.authenticate().then(async () => {
+  const r = new URLSearchParams(location.search).get('role')
+  if (!(demo && (r === 'teacher' || r === 'student'))) return
+  if (r === 'student' && auth.status === 'ready') await loadNeeds(['students'])      // у преподавателя список учеников теперь читается по экрану: режиму «ученик» нужно, чьими глазами смотреть
+  auth.setRole(r)
+}).finally(() => { booted.value = true }))
 </script>
 
 <template>
@@ -83,7 +102,10 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
     <div class="shell">
       <!-- вверху справа: кнопка темы (у всех; в редакторе курсов — своя панель) и кто сейчас здесь (преподаватель) -->
       <PresenceBar v-if="route.name !== 'courses'" :presence="auth.isTeacher" theme />
-      <main><RouterView v-slot="{ Component, route: r }"><component :is="Component" :key="auth.role + r.meta.tab" /></RouterView></main>
+      <main>
+        <div v-if="gate || !booted" class="gate"><div class="spin" aria-label="Загрузка" /></div>
+        <RouterView v-else v-slot="{ Component, route: r }"><component :is="Component" :key="auth.role + r.meta.tab" /></RouterView>
+      </main>
     </div>
     <BottomNav /><Toast /><DragGhost /><GlobalCursors v-if="auth.isTeacher && route.name !== 'courses'" /><ScreenNotes v-if="auth.isTeacher && route.name !== 'courses'" />
   </template>
@@ -96,6 +118,7 @@ onMounted(() => auth.authenticate().then(() => { const r = new URLSearchParams(l
 <style>
 .shell { padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)) }
 .splash { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 12px; max-width: 360px; margin: 20vh auto 0; text-align: center }
+.gate { min-height: 50vh; display: grid; place-content: center }
 .spin { width: 40px; height: 40px; border-radius: 50%; border: 5px solid var(--border); border-top-color: var(--green); animation: r .8s linear infinite }
 @keyframes r { to { transform: rotate(360deg) } }
 @media (min-width: 1024px) { .shell { padding-left: 124px } .page { padding-bottom: 40px } }

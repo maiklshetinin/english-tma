@@ -4,7 +4,6 @@
 // В демо-режиме (`npm run dev` вне Telegram) сервера нет — всё остаётся в памяти.
 // Форма данных — `Lesson` из server/types.ts.
 import { defineStore } from 'pinia'
-import { refreshOnReturn } from '../composables/useActive'
 import { computed, ref } from 'vue'
 import type { Lesson, ScheduleResponse } from '../../server/types'
 import { apiRequest, isDemo } from '../firebase'
@@ -75,7 +74,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     weeks.value = await call<string[]>('/schedule/weeks', undefined, 'Не удалось загрузить список недель')
   }
   const set = (items: Lesson[]) => { lessons.value = items }
-  const clear = () => { stopRefresh(); lessons.value = []; history.value = [] }
+  const clear = () => { lessons.value = []; history.value = [] }
 
   // История уроков одного ученика за всё время — для календаря по месяцам (GET /lessons/history).
   // Две живые недели берутся из lessons (там свежие правки), остальное — из history.
@@ -93,10 +92,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     for (const l of lessons.value) if (l.studentIds.includes(studentId)) m.set(l.id, l)
     return [...m.values()].sort((a, b) => a.date.localeCompare(b.date) || a.hour - b.hour)
   }
-
-  let off: (() => void) | null = null
-  function startRefresh() { stopRefresh(); off = refreshOnReturn(() => load().catch(() => {})) }      // перечитать, когда человек вернулся в приложение
-  function stopRefresh() { off?.(); off = null }
 
   function sync(task: () => Promise<unknown>) {      // поставить запрос в очередь; при ошибке — тост и перечитывание, когда очередь опустеет
     if (isDemo) return
@@ -171,5 +166,5 @@ export const useScheduleStore = defineStore('schedule', () => {
     sync(async () => { if (!isTmp(lesson.id)) await call(`/lessons/${encodeURIComponent(lesson.id)}`, { method: 'DELETE' }, 'Не удалось убрать урок') })
   }
 
-  return { lessons, lessonMap, weeks, loadWeek, loadWeeks, history, loadHistory, allOf, load, set, clear, startRefresh, stopRefresh, create, createTrial, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
+  return { lessons, lessonMap, weeks, loadWeek, loadWeeks, history, loadHistory, allOf, load, set, clear, create, createTrial, move, swap, setDone, setStudents, setCanceled, setDetails, remove }
 })

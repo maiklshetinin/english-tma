@@ -63,4 +63,12 @@ describe('content store', () => {
     const c = useContentStore(); await c.load(); c.clear()
     expect(usePathStore().presets).toEqual([]); expect(useDecksStore().list).toEqual([]); expect(useSrsStore().users).toEqual({})
   })
+  it('loadContent и loadSrs читаются по отдельности: путь и колоды без прогресса слов и наоборот', async () => {
+    useStudentsStore().set([{ id: 's1', name: 'Маша' } as never])
+    const c = useContentStore()
+    await c.loadContent()
+    expect(apiRequest.mock.calls.map((x) => x[0])).toEqual(['/content']); expect(useSrsStore().users).toEqual({})
+    await c.loadSrs()
+    expect(apiRequest.mock.calls.map((x) => x[0])).toEqual(['/content', '/srs']); expect(useSrsStore().of('s1')!.log['2026-10-26']).toBe(3)
+  })
 })

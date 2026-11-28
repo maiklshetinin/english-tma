@@ -9,6 +9,7 @@ import { algo, ALGO_KEY as ALGO } from './algo'
 export { algo }
 import type { Step } from '../utils/lesson'
 import { apiRequest, isDemo, API, fb } from '../firebase'
+import { FRESH_MS } from './lazy'
 
 const KEY = 'tma.review.v1', PEND = 'tma.review.pending.v1', OWNER = 'tma.review.owner.v1'
 const BATCH = 200                                     // как REVIEW_LIMITS.batch на сервере
@@ -52,10 +53,14 @@ async function pushNow() {
   finally { busy = false }
 }
 
-/** Загрузить свой словарь с сервера (при открытии Review и просмотра курса). owner — кто вошёл: сменился — чужое не отправляем */
-export async function syncReview(owner?: string | number | null) {
+/** Загрузить свой словарь с сервера (при открытии Review и просмотра курса). owner — кто вошёл: сменился — чужое не отправляем.
+ *  Словарь у каждого свой и правится отсюда, поэтому прочитанный меньше минуты назад заново не читается (вход на Review и в курс подряд — один запрос);
+ *  force — прочитать в любом случае. */
+let pulledAt = 0
+export async function syncReview(owner?: string | number | null, o: { force?: boolean } = {}) {
   if (!online()) { review.sync = 'local'; return }
   const me = owner == null ? null : String(owner), was = read<string | null>(OWNER, null)
+  if (!o.force && pulledAt && Date.now() - pulledAt < FRESH_MS && !(me && was !== me)) { loadAlgo(); if (pending.size && !busy) later(0); return }
   if (me && was !== me) {
     if (was !== null) { review.items = {}; pending.clear() }            // в этом браузере был другой пользователь
     else Object.keys(review.items).forEach((k) => pending.add(k))      // первый раз с сервером — словарь из браузера переезжает в базу
@@ -68,7 +73,7 @@ export async function syncReview(owner?: string | number | null) {
     if (!r.ok) throw new Error(String(r.status))
     const srv = ((await r.json()) as { items?: Record<string, RItem> }).items ?? {}
     for (const k of pending) if (review.items[k]) srv[k] = review.items[k]      // ещё не отправленное — новее серверного
-    review.items = srv; save(); review.sync = 'synced'
+    review.items = srv; save(); review.sync = 'synced'; pulledAt = Date.now()
     if (pending.size) later(0)
   } catch { review.sync = 'error' }
 }
@@ -98,7 +103,7 @@ export function toggleFav(key: string, from?: { step: Step; lesson?: string; cou
  *  true — очищено (без сервера — только в этом браузере), false — сервер не ответил. */
 export async function resetReview(): Promise<boolean> {
   clearTimeout(timer); await inflight.catch(() => {})
-  review.items = {}; pending.clear(); save()
+  review.items = {}; pending.clear(); save(); pulledAt = 0
   if (!online()) return true
   try { const r = await apiRequest('/review/reset', { method: 'POST', body: '{}' }); return r.ok } catch { return false }
 }

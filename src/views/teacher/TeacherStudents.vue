@@ -12,13 +12,11 @@ import { useGroups } from '../../composables/useGroups'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
 import { usePathStore } from '../../stores/path'
-import { useContentStore } from '../../stores/content'
 import { useScheduleStore } from '../../stores/schedule'
 import { apiRequest, isDemo } from '../../firebase'
 import { fmtMoney } from '../../utils/price'
 import { refreshOnReturn } from '../../composables/useActive'
 const pathStore = usePathStore()
-const contentStore = useContentStore()
 const studentStore = useStudentsStore()
 const adding = ref(false)
 const route = useRoute(), router = useRouter()
@@ -44,8 +42,8 @@ const rate = (s) => s.price || 0
 const sort = ref(null)        // { k: 'r' | 'm' | 'a', dir: -1 | 1 }
 function sortBy(k) { const s0 = sort.value; sort.value = !s0 || s0.k !== k ? { k, dir: -1 } : s0.dir === -1 ? { k, dir: 1 } : null }
 const arrow = (k) => (sort.value?.k === k ? (sort.value.dir === -1 ? '↓' : '↑') : '⇅')
-onMounted(() => { studentStore.load().catch(() => {}); contentStore.load().catch(() => {}); loadEarn() })
-refreshOnReturn(loadEarn)      // подтянуть новых учеников, статусы «В приложении» и отметки учеников в пути
+onMounted(loadEarn)      // ученики, путь, расписание и группы приходят к открытию вкладки (stores/screens.ts); здесь — только доход по месяцам
+refreshOnReturn(loadEarn)      // доход — заново, когда человек вернулся в приложение (учеников, путь и расписание читает stores/screens.ts)
 // Группы — сверху, каждая своим блоком на жёлтой подложке (группы жёлтые везде, как в панели на «Главной»); ниже — «Индивидуально».
 // Ученик из нескольких групп показан в каждой. Группы — отдельная сущность (stores/groups), состав меняется в панели на «Главной».
 const groups = useGroups()

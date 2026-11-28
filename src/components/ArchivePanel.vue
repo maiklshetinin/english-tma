@@ -1,9 +1,9 @@
 <script setup>
-// Раздел «Архив» на вкладке «Ученики»: архивные ученики, «Вернуть» и «Удалить навсегда».
+// Раздел «Архив» на вкладке «Ученики»: архивные ученики, «Вернуть» и «Удалить навсегда». Список приходит к открытию вкладки (stores/screens.ts).
 //  • Вернуть: ученик снова в списке и «ждёт приглашения» — сразу показываем новую ссылку (старый аккаунт доступ потерял при архивации).
 //  • Удалить навсегда: двойное нажатие. Сервер удаляет запись, путь и прогресс слов; будущие уроки — без него,
 //    проведённые остаются в истории с его именем и ценой.
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import Avatar from './Avatar.vue'
 import AppIcon from './AppIcon.vue'
 import { useStudentsStore } from '../stores/students'
@@ -12,7 +12,6 @@ import { copyText, shareInvite } from '../composables/useShare'
 const studentStore = useStudentsStore()
 const open = ref(false), busy = ref(''), confirmId = ref(''), back = ref(null)      // back: { name, url } — кого только что вернули
 const items = computed(() => studentStore.archived)
-onMounted(() => { studentStore.loadArchived().catch(() => {}) })
 const since = (iso) => iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : ''
 
 async function restore(st) {

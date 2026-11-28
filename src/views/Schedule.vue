@@ -6,11 +6,13 @@ import LessonsList from '../components/LessonsList.vue'
 import LessonCalendar from '../components/LessonCalendar.vue'
 import { useAuthStore } from '../stores/auth'
 import { useScheduleStore } from '../stores/schedule'
+import { load } from '../stores/lazy'
 const auth = useAuthStore()
 const { openChat } = useTelegram()
 const isTeacher = computed(() => auth.role === 'teacher')
-// При открытии вкладки перечитываем: преподаватель мог отметить урок проведённым. Ученику — ещё и вся история (календарь по месяцам).
-onMounted(() => { const s = useScheduleStore(); s.load().catch(() => {}); if (!isTeacher.value) s.loadHistory().catch(() => {}) })
+// Две живые недели приходят к открытию вкладки (stores/screens.ts: при входе — если ещё не читались, и когда человек вернулся в приложение).
+// Ученику — ещё и вся история (календарь по месяцам); читается один раз, пока свежая (stores/lazy.ts).
+onMounted(() => { if (!isTeacher.value) load('history', () => useScheduleStore().loadHistory()).catch(() => {}) })
 </script>
 <template>
   <div class="page wide">

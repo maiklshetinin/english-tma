@@ -15,7 +15,9 @@ import { session } from './session'
 import { useContentStore } from './content'
 import { useStudentsStore } from './students'
 import { useScheduleStore } from './schedule'
-import { useGroupsStore, groupsFromLessons } from './groups'
+import { useGroupsStore } from './groups'
+import { resetLazy } from './lazy'
+import { need, stopRefresh } from './screens'
 
 export type AuthStatus = 'loading' | 'login' | 'ready' | 'error'
 /** Профиль из Telegram (поля названы так, как их называет Telegram). */
@@ -64,21 +66,17 @@ export const useAuthStore = defineStore('auth', () => {
     const c = (await fbUser.getIdTokenResult()).claims as unknown as SessionClaims
     user.value = { id: Number(String(fbUser.uid).replace('tg:', '')), first_name: c.tgName, username: c.tgUsername, photo_url: c.tgPhoto }
     if (c.role === 'student') currentStudentId.value = c.studentId
-    const students = useStudentsStore(), schedule = useScheduleStore(), content = useContentStore()
-    await students.load()                                   // ученики с сервера (для ученика — только его запись)
-    students.startRefresh()                                  // при возвращении в приложение; «в сети» преподавателю приходит по живому соединению
-    if (c.role === 'student') startSeen()
-    if (c.role === 'student' && !students.list.length) throw new Error('Ваша запись не найдена или в архиве. Попросите преподавателя прислать новое приглашение.')
+    const students = useStudentsStore()
+    // 27.11.2026: при входе читается только то, без чего не войти. Остальное (ученики и архив у преподавателя, расписание, группы,
+    // путь и колоды, прогресс слов) — когда открывается экран, которому оно нужно (stores/screens.ts, App.vue): обновление страницы
+    // внутри урока больше не тянет данные других вкладок.
+    if (c.role === 'student') {
+      await need('students')                                // для ученика — только его запись: нет записи (архив, удалён) — не пускаем; экран её заново не просит (кэш, stores/lazy.ts)
+      if (!students.list.length) throw new Error('Ваша запись не найдена или в архиве. Попросите преподавателя прислать новое приглашение.')
+      startSeen()                                           // «в сети» преподавателю приходит от ученика раз в минуту (у преподавателя — по живому соединению, useLive)
+    }
     // Что сохранять на сервер: только преподаватель правит путь, колоды и пресеты; прогресс повторений — свой собственный
     session.canEdit = c.role === 'teacher'; session.ownKey = c.role === 'teacher' ? 'teacher' : c.studentId
-    await content.load().catch((e: Error) => showToast(e.message, null, 'bad'))          // путь, колоды, пресеты и прогресс слов
-    content.startRefresh()
-    const sched = schedule.load().then(() => true, () => { showToast('Не удалось загрузить расписание', null, 'bad'); return false })      // уроки двух недель (для ученика — только его)
-    // Группы учеников (преподаватель). Старые группы из расписания переносятся на сервер один раз — поэтому после расписания
-    if (c.role === 'teacher') sched.then((ok) => useGroupsStore().load(ok ? () => groupsFromLessons(schedule.lessons, new Set(students.list.map(s => s.id))) : undefined))
-      .catch((e: Error) => showToast(e.message, null, 'bad'))
-    if (c.role === 'teacher') students.loadArchived().catch(() => {})      // архивные — чтобы проведённые уроки с ними показывались (серым, «в архиве»)
-    schedule.startRefresh()
     setRole(c.role); isTeacher.value = c.role === 'teacher'; isDev.value = c.dev === true
     syncAvatar()
   }
@@ -117,7 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
-    await signOut(fb!); useStudentsStore().clear(); useScheduleStore().clear(); useGroupsStore().clear(); useContentStore().clear()
+    await signOut(fb!); stopRefresh(); resetLazy(); useStudentsStore().clear(); useScheduleStore().clear(); useGroupsStore().clear(); useContentStore().clear()
     session.canEdit = false; session.ownKey = null
     user.value = null; isTeacher.value = false; isDev.value = false; status.value = 'login'
   }

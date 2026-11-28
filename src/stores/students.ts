@@ -1,9 +1,8 @@
 // Ученики. Сайт НЕ обращается к Firestore напрямую: всё идёт через наш сервер (Render), а он проверяет роль и работает с базой.
 // Форма данных — `Student` из server/types.ts (то, что отдаёт сервер). Realtime нет, поэтому список перечитывается:
-// после входа, после каждого действия, при возврате в приложение и при открытии вкладки «Ученики».
+// после каждого действия и — по требованию экрана — при открытии вкладок, которым он нужен, и при возврате в приложение (stores/screens.ts).
 // Путь, колоды и повторения — в stores/path.ts, decks.ts, srs.ts; расписание — в stores/schedule.ts.
 import { defineStore } from 'pinia'
-import { refreshOnReturn } from '../composables/useActive'
 import { ref } from 'vue'
 import type { ArchivedStudent, CreateStudentResponse, InviteResponse, Student, StudentInput } from '../../server/types'
 import { apiRequest } from '../firebase'
@@ -23,26 +22,18 @@ async function call<T>(path: string, opts: RequestInit | undefined, what: string
 
 export const useStudentsStore = defineStore('students', () => {
   const list = ref<Student[]>([])
-  const archived = ref<(ArchivedStudent & { archived?: boolean })[]>([])        // раздел «Архив» (грузится на вкладке «Ученики»)
+  const archived = ref<(ArchivedStudent & { archived?: boolean })[]>([])        // архивные: раздел «Архив» и подписи в истории уроков (грузятся, когда экрану это нужно — stores/screens.ts)
 
   const byId = (id: string | null | undefined) => list.value.find((s) => s.id === id)
   /** Активный или архивный ученик (для истории уроков). У архивного — поле archived: true. */
   const findAny = (id: string | null | undefined): (Student & { archived?: boolean }) | undefined => byId(id) ?? archived.value.find((s) => s.id === id)
   const set = (items: Student[]) => { list.value = [...items].sort((a, b) => a.name.localeCompare(b.name, 'ru')) }
-  const clear = () => { stopRefresh(); list.value = []; archived.value = [] }
+  const clear = () => { list.value = []; archived.value = [] }
 
   async function load(): Promise<Student[]> {
     set((await call<Student[]>('/students', undefined, 'Не удалось загрузить учеников')).map(normalize))
     return list.value
   }
-
-  let off: (() => void) | null = null
-  /** Перечитать список, когда человек вернулся в приложение (а не по таймеру: «в сети» приходит по живому соединению — useLive). */
-  function startRefresh() {
-    stopRefresh()
-    off = refreshOnReturn(() => load().catch(() => {}))
-  }
-  function stopRefresh() { off?.(); off = null }
 
   /** Новый ученик: сервер создаёт запись (если указан ник — сразу ищет фото в Telegram) и ссылку-приглашение. Telegram-аккаунт привяжется, когда он откроет ссылку. */
   async function add({ name, level, packageSize, username, price }: StudentInput): Promise<string> {
@@ -96,5 +87,5 @@ export const useStudentsStore = defineStore('students', () => {
     await Promise.all([loadArchived().catch(() => {}), useScheduleStore().load().catch(() => {})])
   }
 
-  return { list, archived, byId, findAny, set, clear, load, loadArchived, startRefresh, stopRefresh, add, update, invite, setUsername, setPrice, archive, restore, purge }
+  return { list, archived, byId, findAny, set, clear, load, loadArchived, add, update, invite, setUsername, setPrice, archive, restore, purge }
 })

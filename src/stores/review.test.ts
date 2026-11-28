@@ -69,4 +69,14 @@ describe('stores/review', () => {
     release(); expect(await done).toBe(true)
     expect(order).toEqual(['save', 'reset']); expect(review.items).toEqual({})
   })
+  it('словарь, прочитанный меньше минуты назад, заново не читается (Review и курс подряд); force и время — читают', async () => {
+    apiRequest.mockImplementation(() => ok({ items: {} }))
+    const { syncReview } = await import('./review')
+    const gets = () => apiRequest.mock.calls.filter((c) => c[0] === '/review' && !c[1]?.method).length
+    await syncReview(1); await syncReview(1)
+    expect(gets()).toBe(1)
+    await syncReview(1, { force: true }); expect(gets()).toBe(2)
+    await vi.advanceTimersByTimeAsync(61_000)
+    await syncReview(1); expect(gets()).toBe(3)
+  })
 })

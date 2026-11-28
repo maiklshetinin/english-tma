@@ -28,9 +28,11 @@ import BackButton from '../../components/BackButton.vue'
 import StudentDetail from './StudentDetail.vue'
 import { useStudentsStore } from '../../stores/students'
 import { useScheduleStore, needsStatus } from '../../stores/schedule'
+import { need } from '../../stores/screens'
 const studentStore = useStudentsStore()
 const route = useRoute(), router = useRouter()
 const scheduleStore = useScheduleStore()
+const needSchedule = (o) => need('schedule', o)
 const { haptic } = useTelegram()
 
 // Текущая и следующая недели — «живые» (их отдаёт scheduleStore.load); даты подставляются сами (и обновляются при смене недели)
@@ -341,8 +343,9 @@ const pick = (sid) => { const { date, hour } = sheet.value.slot; sheet.value = n
 const openStudent = (id) => { sheet.value = null; router.push({ name: 'home', params: { id } }) }
 
 // Расписание и недели впереди; когда всё пришло — автоподстановка (если включена). Не загрузилось — не подставляем: неизвестно, что занято.
-const loadAll = () => { ready.value = false; loadMonthPast().catch(() => {}); return Promise.all([scheduleStore.load(), loadAhead()]).then(() => { ready.value = true; runAuto() }).catch(() => {}) }
-onMounted(() => { setDropHandler(onDrop); loadAll() })      // при открытии вкладки перечитываем расписание
+// fresh: при открытии вкладки расписание берётся из общего кэша (читалось меньше минуты назад — повторно не просим), при смене недели и месяца — всегда заново
+const loadAll = (fresh = false) => { ready.value = false; loadMonthPast().catch(() => {}); return Promise.all([fresh ? needSchedule({ force: true }) : needSchedule(), loadAhead()]).then(() => { ready.value = true; runAuto() }).catch(() => {}) }
+onMounted(() => { setDropHandler(onDrop); loadAll() })
 onUnmounted(() => setDropHandler(null))
 // Шапка недели на компьютере (18.11.2026): сама меряет, влезает ли в строку, и сжимается по шагам — без угадывания ширин.
 // 0 — всё как есть; 1 — без подписей «авто» и «Статус»; 2 — деньги коротко (без «из …» и потерь, они в подсказке); 3 — деньги второй строкой, обе рядом
@@ -364,7 +367,7 @@ onMounted(() => {
 })
 onUnmounted(() => { whRo?.disconnect(); whMo?.disconnect(); cancelAnimationFrame(whRaf) })
 watch(week, (w, was) => { if (was < 0) loadMonthPast().catch(() => {}) })                 // вернулись из прошлых недель — там могли править уроки месяца
-watch(() => w1.value[0] + monthEnd.value, loadAll)                                      // новая неделя или новый месяц — перечитать и подставить                    // наступила новая неделя: «следующая» стала «текущей», подгружаем новую «следующую»
+watch(() => w1.value[0] + monthEnd.value, () => loadAll(true))                                      // новая неделя или новый месяц — перечитать и подставить                    // наступила новая неделя: «следующая» стала «текущей», подгружаем новую «следующую»
 </script>
 
 <template>
